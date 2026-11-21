@@ -83,7 +83,7 @@ pub fn presign(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSVa
     defer args.deinit();
 
     let path_or_blob = PathOrBlob.fromJSNoCopy(globalThis, &args)?;
-    errdefer {
+    defer {
         if (path_or_blob == .path) {
             path_or_blob.path.deinit();
         }
@@ -113,7 +113,7 @@ pub fn unlink(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSVal
     defer args.deinit();
 
     let path_or_blob = PathOrBlob.fromJSNoCopy(globalThis, &args)?;
-    errdefer {
+    defer {
         if (path_or_blob == .path) {
             path_or_blob.path.deinit();
         }
@@ -144,7 +144,7 @@ pub fn write(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSValu
     defer args.deinit();
 
     let path_or_blob = PathOrBlob.fromJSNoCopy(globalThis, &args)?;
-    errdefer {
+    defer {
         if (path_or_blob == .path) {
             path_or_blob.path.deinit();
         }
@@ -186,7 +186,7 @@ pub fn size(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSValue
     defer args.deinit();
 
     let path_or_blob = PathOrBlob.fromJSNoCopy(globalThis, &args)?;
-    errdefer {
+    defer {
         if (path_or_blob == .path) {
             path_or_blob.path.deinit();
         }
@@ -219,7 +219,7 @@ pub fn exists(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSVal
     defer args.deinit();
 
     let path_or_blob = PathOrBlob.fromJSNoCopy(globalThis, &args)?;
-    errdefer {
+    defer {
         if (path_or_blob == .path) {
             path_or_blob.path.deinit();
         }
@@ -432,6 +432,7 @@ export class S3BlobStatTask {
             .global = globalThis,
         });
         task.store.ref();
+        errdefer task.deinit();
         const promise = task.promise.value();
         const s3_store = &blob.store.?.data.s3;
         const credentials = s3_store.getCredentials();
@@ -443,7 +444,7 @@ export class S3BlobStatTask {
             proxy_url = proxy.href;
         }
 
-        S3.stat(credentials, path, @ptrCast(&S3BlobStatTask.onS3ExistsResolved), task, proxy_url, s3_store.request_payer)?;
+        S3.stat(credentials, path, unsafe { @ptrCast(&S3BlobStatTask.onS3ExistsResolved) }, task, proxy_url, s3_store.request_payer)?;
         return promise;
     }
 
@@ -454,6 +455,7 @@ export class S3BlobStatTask {
             .global = globalThis,
         });
         task.store.ref();
+        errdefer task.deinit();
         const promise = task.promise.value();
         const s3_store = &blob.store.?.data.s3;
         const credentials = s3_store.getCredentials();
@@ -465,7 +467,7 @@ export class S3BlobStatTask {
             proxy_url = proxy.href;
         }
 
-        S3.stat(credentials, path, @ptrCast(&S3BlobStatTask.onS3StatResolved), task, proxy_url, s3_store.request_payer)?;
+        S3.stat(credentials, path, unsafe { @ptrCast(&S3BlobStatTask.onS3StatResolved) }, task, proxy_url, s3_store.request_payer)?;
         return promise;
     }
 
@@ -476,6 +478,7 @@ export class S3BlobStatTask {
             .global = globalThis,
         });
         task.store.ref();
+        errdefer task.deinit();
         const promise = task.promise.value();
         const s3_store = &blob.store.?.data.s3;
         const credentials = s3_store.getCredentials();
@@ -487,7 +490,7 @@ export class S3BlobStatTask {
             proxy_url = proxy.href;
         }
 
-        S3.stat(credentials, path, @ptrCast(&S3BlobStatTask.onS3SizeResolved), task, proxy_url, s3_store.request_payer)?;
+        S3.stat(credentials, path, unsafe { @ptrCast(&S3BlobStatTask.onS3SizeResolved) }, task, proxy_url, s3_store.request_payer)?;
         return promise;
     }
 
@@ -528,7 +531,9 @@ pub fn getPresignUrlFrom(*_: *Blob, globalThis: *JSGlobalObject, extra_options: 
                 expires = @as(usize, expires_);
             }
         }
-        credentialsWithOptions = s3.getCredentialsWithOptions(options, globalThis)?;
+        const new_creds = s3.getCredentialsWithOptions(options, globalThis)?;
+        credentialsWithOptions.deinit();
+        credentialsWithOptions = new_creds;
     }
     const path = s3.path();
 
@@ -578,7 +583,7 @@ pub fn getBucketName(_: *const Blob): ([]const u8)? {
 
 pub fn getPresignUrl(*_: *Blob, globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSValue {
     const args = callframe.arguments_old(1);
-    return getPresignUrlFrom(this, globalThis, if (args.len > 0) args.ptr[0] else null);
+    return getPresignUrlFrom(this, globalThis, if (args.len > 0) unsafe { args.ptr[0] } else null);
 }
 
 @c fn getStat(*_: *Blob, globalThis: *JSGlobalObject, _: *CallFrame): JSValue {
@@ -591,7 +596,7 @@ pub fn stat(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSValue
     defer args.deinit();
 
     let path_or_blob = PathOrBlob.fromJSNoCopy(globalThis, &args)?;
-    errdefer {
+    defer {
         if (path_or_blob == .path) {
             path_or_blob.path.deinit();
         }

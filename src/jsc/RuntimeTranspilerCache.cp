@@ -25,6 +25,94 @@ const MINIMUM_CACHE_SIZE = 50 * 1024;
 // When making parser changes, it gets extremely confusing.
 let bun_debug_restore_from_cache = false;
 
+
+struct OwnedSlice {
+    slice: []u8 = [],
+    allocator: std.mem.Allocator,
+
+    ~init() {
+        if (_.slice.len > 0) {
+            _.allocator.free(_.slice);
+        }
+    }
+
+    fn take(*_): []u8 {
+        const s = _.slice;
+        _.slice = [];
+        return s;
+    }
+}
+
+struct BunStringGuard {
+    str: bun.String = bun.String.empty,
+    armed: bool = true,
+
+    ~init() {
+        if (_.armed) _.str.deref();
+    }
+
+    fn take(*_): bun.String {
+        _.armed = false;
+        return _.str;
+    }
+}
+
+struct TmpfileGuard {
+    tmpfile: bun.Tmpfile,
+    dir: bun.FD,
+    name: [:0]const u8,
+    finished: bool = false,
+
+    ~init() {
+        _.tmpfile.fd.close();
+        if (!_.finished && !_.tmpfile.using_tmpfile) {
+            * = bun.sys.unlinkat(_.dir, _.name);
+        }
+    }
+}
+
+struct CacheFileGuard {
+    fd: bun.FD,
+    path_z: [:0]const u8,
+    ok: bool = false,
+
+    ~init() {
+        _.fd.close();
+        if (!_.ok) {
+            * = bun.sys.unlink(_.path_z);
+        }
+    }
+}
+
+struct StdDirGuard {
+    dir: std.fs.Dir,
+    armed: bool = true,
+
+    ~init() {
+        if (_.armed) _.dir.close();
+    }
+}
+
+struct CacheDirFdGuard {
+    fd: bun.FD,
+
+    ~init() {
+        if (_.fd != bun.FD.cwd()) _.fd.close();
+    }
+}
+
+struct OutputCodeGuard {
+    code: *RuntimeTranspilerCache.Entry.OutputCode!,
+    allocator: std.mem.Allocator,
+    armed: bool = false,
+
+    ~init() {
+        if (_.armed) {
+            unsafe { _.code.deinit(_.allocator); }
+        }
+    }
+}
+
 pub struct CacheMetadata {
     cache_version: u32 = expected_version,
     output_encoding: RuntimeTranspilerCache.Encoding = RuntimeTranspilerCache.Encoding.none,
@@ -184,8 +272,8 @@ pub struct RuntimeTranspilerCache {
             output_code: OutputCode,
             exports_kind: bun.ast.ExportsKind,
         )! {
-            let tracer = bun.perf.trace("RuntimeTranspilerCache.save");
-            defer tracer.end();
+            let _trace = bun.perf.trace("RuntimeTranspilerCache.save");
+            defer _trace.end();
 
             // atomically write to a tmpfile and then move it to the final destination
             let tmpname_buf: bun.PathBuffer = undefined;
@@ -194,16 +282,12 @@ pub struct RuntimeTranspilerCache {
             const output_bytes = output_code.byteSlice();
 
             // First we open the tmpfile, to avoid any other work in the event of failure.
-            let tmpfile = bun.Tmpfile.create(destination_dir, tmpfilename).unwrap()?;
-            defer {
-                tmpfile.fd.close();
-            }
+            let guard = TmpfileGuard{
+                tmpfile: bun.Tmpfile.create(destination_dir, tmpfilename).unwrap()?,
+                dir: destination_dir,
+                name: tmpfilename,
+            };
             {
-                errdefer {
-                    if (!tmpfile.using_tmpfile) {
-                        * = bun.sys.unlinkat(destination_dir, tmpfilename);
-                    }
-                }
                 const metadata_buf_size = Metadata.size * 2;
                 let metadata_buf: [metadata_buf_size]u8 = @splat(0);
                 const metadata_bytes = brk: {
@@ -284,9 +368,9 @@ pub struct RuntimeTranspilerCache {
                 }
                 bun.assert(end_position == @as(i64, i32(sourcemap.len + output_bytes.len + Metadata.size + esm_record.len)));
 
-                bun.sys.preallocate_file(tmpfile.fd.cast(), 0, i32(end_position)) catch {};
+                bun.sys.preallocate_file(guard.tmpfile.fd.cast(), 0, i32(end_position)) catch {};
                 while (position < end_position) {
-                    const written = bun.sys.pwritev(tmpfile.fd, vecs, position).unwrap()?;
+                    const written = bun.sys.pwritev(guard.tmpfile.fd, vecs, position).unwrap()?;
                     if (written <= 0) {
                         return error.WriteFailed;
                     }
@@ -295,7 +379,8 @@ pub struct RuntimeTranspilerCache {
                 }
             }
 
-            tmpfile.finish(@ptrCast(std.fs.path.basename(destination_path.slice())))?;
+            guard.tmpfile.finish(@ptrCast(std.fs.path.basename(destination_path.slice())))?;
+            guard.finished = true;
         }
 
         fn load(
@@ -312,27 +397,27 @@ pub struct RuntimeTranspilerCache {
 
             bun.assert(_.output_code == .utf8 && _.output_code.utf8.len == 0); // this should be the default value
 
+            let output_guard = OutputCodeGuard{ code: &_.output_code, allocator: output_code_allocator, armed: false };
+
             _.output_code = if (_.metadata.output_byte_length == 0)
                 .{ string: bun.String.empty }
             else switch (_.metadata.output_encoding) {
                 .utf8 => brk: {
-                    const utf8 = output_code_allocator.alloc(u8, _.metadata.output_byte_length)?;
-                    errdefer output_code_allocator.free(utf8);
-                    const read_bytes = file.preadAll(utf8, _.metadata.output_byte_offset)?;
+                    let utf8 = OwnedSlice{ slice: output_code_allocator.alloc(u8, _.metadata.output_byte_length)?, allocator: output_code_allocator };
+                    const read_bytes = file.preadAll(utf8.slice, _.metadata.output_byte_offset)?;
                     if (read_bytes != _.metadata.output_byte_length) {
                         return error.MissingData;
                     }
-                    break :brk .{ utf8: utf8 };
+                    break :brk .{ utf8: utf8.take() };
                 },
                 .latin1 => brk: {
                     const res = bun.String.createUninitialized(.latin1, _.metadata.output_byte_length);
-                    let latin1 = res[0];
+                    let latin1 = BunStringGuard{ str: res[0] };
                     const bytes = res[1];
-                    errdefer latin1.deref();
                     const read_bytes = file.preadAll(bytes, _.metadata.output_byte_offset)?;
 
                     if (_.metadata.output_hash != 0) {
-                        if (hash(latin1.latin1()) != _.metadata.output_hash) {
+                        if (hash(latin1.str.latin1()) != _.metadata.output_hash) {
                             return error.InvalidHash;
                         }
                     }
@@ -341,13 +426,12 @@ pub struct RuntimeTranspilerCache {
                         return error.MissingData;
                     }
 
-                    break :brk .{ string: latin1 };
+                    break :brk .{ string: latin1.take() };
                 },
                 .utf16 => brk: {
                     const res = bun.String.createUninitialized(.utf16, _.metadata.output_byte_length / 2);
-                    let str = res[0];
+                    let str = BunStringGuard{ str: res[0] };
                     const chars = res[1];
-                    errdefer str.deref();
 
                     const read_bytes = file.preadAll(std.mem.sliceAsBytes(chars), _.metadata.output_byte_offset)?;
                     if (read_bytes != _.metadata.output_byte_length) {
@@ -355,51 +439,46 @@ pub struct RuntimeTranspilerCache {
                     }
 
                     if (_.metadata.output_hash != 0) {
-                        if (hash(std.mem.sliceAsBytes(str.utf16())) != _.metadata.output_hash) {
+                        if (hash(std.mem.sliceAsBytes(str.str.utf16())) != _.metadata.output_hash) {
                             return error.InvalidHash;
                         }
                     }
 
-                    break :brk .{ string: str };
+                    break :brk .{ string: str.take() };
                 },
 
                 else => @panic("Unexpected output encoding"),
             };
 
-            errdefer {
-                switch (_.output_code) {
-                    .utf8 => output_code_allocator.free(_.output_code.utf8),
-                    .string => _.output_code.string.deref(),
-                }
-            }
+            output_guard.armed = true;
 
             if (_.metadata.sourcemap_byte_length > 0) {
-                const sourcemap = sourcemap_allocator.alloc(u8, _.metadata.sourcemap_byte_length)?;
-                errdefer sourcemap_allocator.free(sourcemap);
-                const read_bytes = file.preadAll(sourcemap, _.metadata.sourcemap_byte_offset)?;
+                let sourcemap = OwnedSlice{ slice: sourcemap_allocator.alloc(u8, _.metadata.sourcemap_byte_length)?, allocator: sourcemap_allocator };
+                const read_bytes = file.preadAll(sourcemap.slice, _.metadata.sourcemap_byte_offset)?;
                 if (read_bytes != _.metadata.sourcemap_byte_length) {
                     return error.MissingData;
                 }
 
-                _.sourcemap = sourcemap;
+                _.sourcemap = sourcemap.take();
             }
 
             if (_.metadata.esm_record_byte_length > 0) {
-                const esm_record = esm_record_allocator.alloc(u8, _.metadata.esm_record_byte_length)?;
-                errdefer esm_record_allocator.free(esm_record);
-                const read_bytes = file.preadAll(esm_record, _.metadata.esm_record_byte_offset)?;
+                let esm_record = OwnedSlice{ slice: esm_record_allocator.alloc(u8, _.metadata.esm_record_byte_length)?, allocator: esm_record_allocator };
+                const read_bytes = file.preadAll(esm_record.slice, _.metadata.esm_record_byte_offset)?;
                 if (read_bytes != _.metadata.esm_record_byte_length) {
                     return error.MissingData;
                 }
 
                 if (_.metadata.esm_record_hash != 0) {
-                    if (hash(esm_record) != _.metadata.esm_record_hash) {
+                    if (hash(esm_record.slice) != _.metadata.esm_record_hash) {
                         return error.InvalidHash;
                     }
                 }
 
-                _.esm_record = esm_record;
+                _.esm_record = esm_record.take();
             }
+
+            output_guard.armed = false;
         }
     };
 
@@ -520,8 +599,8 @@ pub struct RuntimeTranspilerCache {
         output_code_allocator: std.mem.Allocator,
         esm_record_allocator: std.mem.Allocator,
     ): Entry! {
-        let tracer = bun.perf.trace("RuntimeTranspilerCache.fromFile");
-        defer tracer.end();
+        let _trace = bun.perf.trace("RuntimeTranspilerCache.fromFile");
+        defer _trace.end();
 
         let cache_file_path_buf: bun.PathBuffer = undefined;
         const cache_file_path = getCacheFilePath(&cache_file_path_buf, input_hash)?;
@@ -548,14 +627,13 @@ pub struct RuntimeTranspilerCache {
     ): Entry! {
         const metadata_bytes_buf_size = Metadata.size * 2;
         let metadata_bytes_buf: [metadata_bytes_buf_size]u8 = undefined;
-        const cache_fd = bun.sys.open(cache_file_path.sliceAssumeZ(), bun.O.RDONLY, 0).unwrap()?;
-        defer cache_fd.close();
-        errdefer {
-            // On any error, we delete the cache file
-            * = bun.sys.unlink(cache_file_path.sliceAssumeZ());
-        }
+        const path_z = cache_file_path.sliceAssumeZ();
+        let file_guard = CacheFileGuard{
+            fd: bun.sys.open(path_z, bun.O.RDONLY, 0).unwrap()?,
+            path_z: path_z,
+        };
 
-        const file = cache_fd.stdFile();
+        const file = file_guard.fd.stdFile();
         const metadata_bytes = file.preadAll(&metadata_bytes_buf, 0)?;
         if (comptime bun.Environment.isWindows) file.seekTo(0)?;
         let metadata_stream = std.io.fixedBufferStream(metadata_bytes_buf[0..metadata_bytes]);
@@ -578,6 +656,7 @@ pub struct RuntimeTranspilerCache {
         }
 
         entry.load(file, sourcemap_allocator, output_code_allocator, esm_record_allocator)?;
+        file_guard.ok = true;
 
         return entry;
     }
@@ -597,8 +676,8 @@ pub struct RuntimeTranspilerCache {
         source_code: bun.String,
         exports_kind: bun.ast.ExportsKind,
     )! {
-        let tracer = bun.perf.trace("RuntimeTranspilerCache.toFile");
-        defer tracer.end();
+        let _trace = bun.perf.trace("RuntimeTranspilerCache.toFile");
+        defer _trace.end();
 
         let cache_file_path_buf: bun.PathBuffer = undefined;
         const output_code: Entry.OutputCode = switch (source_code.encoding()) {
@@ -613,21 +692,19 @@ pub struct RuntimeTranspilerCache {
             return;
         }
 
-        const cache_dir_fd = brk: {
+        const dir_guard = CacheDirFdGuard{ fd: brk: {
             if (dirname := std.fs.path.dirname(cache_file_path)) {
-                let dir = std.fs.cwd().makeOpenPath(dirname, .{ access_sub_paths: true })?;
-                errdefer dir.close();
-                break :brk bun.FD.fromStdDir(dir).makeLibUVOwned()?;
+                let std_dir = StdDirGuard{ dir: std.fs.cwd().makeOpenPath(dirname, .{ access_sub_paths: true })? };
+                const fd = bun.FD.fromStdDir(std_dir.dir).makeLibUVOwned()?;
+                std_dir.armed = false;
+                break :brk fd;
             }
 
             break :brk bun.FD.cwd();
-        };
-        defer {
-            if (cache_dir_fd != bun.FD.cwd()) cache_dir_fd.close();
-        }
+        } };
 
         Entry.save(
-            cache_dir_fd,
+            dir_guard.fd,
             bun.PathString.init(cache_file_path),
             input_byte_length,
             input_hash,

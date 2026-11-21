@@ -32,6 +32,7 @@ pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 comptime {
     const f = jsc.toJSHostFn(Bun__fetchPreconnect_);
     _ = &f;
@@ -56,9 +57,24 @@ fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @Type
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
 fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == __CpErr) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return __CpErr{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return __CpErr{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return __CpErr{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return __CpErr.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return __CpErr.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return __CpErr{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
 fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .array and @typeInfo(@typeInfo(__T).pointer.child).array.child == u8)) { return val[0..]; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const bun = @import("bun");
 const Output = @import("bun").Output;
@@ -76,6 +92,7 @@ const Method = @import("../../http_types/Method.zig").Method;
 const DataURL = @import("../../resolver/data_url.zig").DataURL;
 pub const FetchTaskletMod = @import("./fetch/FetchTasklet.zig");
 const ServerConfig = @import("../server/ServerConfig.zig").ServerConfig;
+pub const UrlMod = @import("../../url/url.zig");
 pub const StringOrURL = struct {
     
 pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; return self_ptr; }
@@ -109,6 +126,8 @@ const Body = webcore.Body;
 const Request = webcore.Request;
 const Response = webcore.Response;
 pub const FetchTasklet = FetchTaskletMod.FetchTasklet;
+const PercentEncoding = UrlMod.PercentEncoding;
+const PosixToWinNormalizer = bun.path.PosixToWinNormalizer;
 const s3 = bun.S3;
 const ZigURL = bun.URL;
 pub export const fetch_error_no_args = "fetch() expects a string but received no arguments.";
@@ -931,6 +950,67 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
         if (globalThis.hasException()) {
             return JSValue.zero;
         }
+        if ((url_type != .remote)) {
+            var path_buf: bun.PathBuffer = undefined;
+            _ = &path_buf;
+            var path_buf2: bun.PathBuffer = undefined;
+            _ = &path_buf2;
+            var stream = std.io.fixedBufferStream((&path_buf2));
+            _ = &stream;
+            var url_path_decoded: []const u8 = path_buf2[0..(blk_catch_8: { break :blk_catch_8 ((PercentEncoding.decode(@TypeOf((&stream.writer())), (&stream.writer()), (switch (url_type) {
+.file => url.path,
+.blob => url.href["blob:".len..],
+.remote => unreachable,
+}))) catch |e| { _ = &e; return globalThis.throwError(e, "Failed to decode file url"); }); })];
+            _ = &url_path_decoded;
+            var url_string = bun.String.empty;
+            _ = &url_string;
+            defer {
+            _ = url_string.deref();
+            }
+            const blob_to_use = blob: {
+            if ((url_type == URLType.blob)) {
+                if (jsc.WebCore.ObjectURLRegistry.singleton().resolveAndDupe(url_path_decoded)) |resolved| {
+                    _ = &resolved;
+                    url_string = (blk_catch_9: { break :blk_catch_9 ((bun.String.createFormat("blob:{s}", .{ url_path_decoded })) catch |e| { _ = &e; break :blk_catch_9 bun.handleOom(e); }); });
+                    break :blob resolved;
+                } else {
+                    const err = globalThis.toTypeError(.INVALID_ARG_VALUE, "Failed to resolve blob:{s}", .{ url_path_decoded });
+                    return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err);
+                }
+            }
+            const temp_file_path = brk: {
+            if (std.fs.path.isAbsolute(url_path_decoded)) {
+                if (Environment.isWindows) {
+                    if ((url_path_decoded[0] == 47)) {
+                        url_path_decoded = url_path_decoded[1..];
+                    }
+                    break :brk (blk_catch_10: { break :blk_catch_10 ((PosixToWinNormalizer.resolveCWDWithExternalBufZ((&path_buf), url_path_decoded)) catch |e| { _ = &e; return globalThis.throwError(e, "Failed to resolve file url"); }); });
+                }
+                break :brk url_path_decoded;
+            }
+            var cwd_buf: bun.PathBuffer = undefined;
+            _ = &cwd_buf;
+            const cwd = (if (Environment.isWindows) (blk_catch_11: { break :blk_catch_11 ((bun.getcwd((&cwd_buf))) catch |e| { _ = &e; return globalThis.throwError(e, "Failed to resolve file url"); }); }) else globalThis.bunVM().transpiler.fs.top_level_dir);
+            var parts: [3][]const u8 = undefined;
+            _ = &parts;
+            parts[cp_cast_int(usize, 0)] = globalThis.bunVM().main;
+            parts[cp_cast_int(usize, 1)] = "../";
+            parts[cp_cast_int(usize, 2)] = url_path_decoded;
+            const fullpath = bun.path.joinAbsStringBuf(cwd, (&path_buf), (&parts), .auto);
+            if (Environment.isWindows) {
+                break :brk (blk_catch_12: { break :blk_catch_12 ((PosixToWinNormalizer.resolveCWDWithExternalBufZ((&path_buf2), fullpath)) catch |e| { _ = &e; return globalThis.throwError(e, "Failed to resolve file url"); }); });
+            }
+            break :brk fullpath;
+};
+            url_string = jsc.URL.fileURLFromString(bun.String.borrowUTF8(temp_file_path));
+            var pathlike = jsc.Node.PathOrFileDescriptor{ .path = .{ .encoded_slice = ZigString.Slice.init(bun.default_allocator, try bun.default_allocator.dupe(u8, temp_file_path)) } };
+            _ = &pathlike;
+            break :blob Blob.findOrCreateFileFromPath((&pathlike), globalThis, true);
+};
+            const response = bun.new(Response, Response.init(Response.Init{ .status_code = 200 }, Body{ .value = .{ .Blob = blob_to_use } }, url_string.clone(), false));
+            return JSPromise.resolvedPromiseValue(globalThis, response.toJS(globalThis));
+        }
         if (((proxy != null) and (unix_socket_path.length() > 0))) {
             var err = globalThis.toTypeError(.INVALID_ARG_VALUE, fetch_error_proxy_unix, .{});
             _ = &err;
@@ -948,7 +1028,7 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
         _ = &promise;
         var promise_val = promise.value();
         _ = &promise_val;
-        _ = (blk_catch_8: { break :blk_catch_8 ((FetchTasklet.queue(allocator, globalThis, (&.{ .method = method, .url = url, .headers = ((headers) orelse (Headers{ .allocator = allocator })), .body = body, .disable_keepalive = disable_keepalive, .disable_timeout = disable_timeout, .disable_decompression = disable_decompression, .reject_unauthorized = reject_unauthorized, .redirect_type = redirect_type, .verbose = verbose, .proxy = proxy, .proxy_headers = proxy_headers, .url_proxy_buffer = url_proxy_buffer, .signal = signal, .globalThis = globalThis, .ssl_config = ssl_config, .hostname = hostname, .upgraded_connection = upgraded_connection, .force_http2 = force_http2, .force_http3 = force_http3, .force_http1 = force_http1, .check_server_identity = (if (check_server_identity.isEmptyOrUndefinedOrNull()) .empty else .create(check_server_identity, globalThis)), .unix_socket_path = unix_socket_path }), promise)) catch |e| { _ = &e; break :blk_catch_8 bun.handleOom(e); }); });
+        _ = (blk_catch_13: { break :blk_catch_13 ((FetchTasklet.queue(allocator, globalThis, (&.{ .method = method, .url = url, .headers = ((headers) orelse (Headers{ .allocator = allocator })), .body = body, .disable_keepalive = disable_keepalive, .disable_timeout = disable_timeout, .disable_decompression = disable_decompression, .reject_unauthorized = reject_unauthorized, .redirect_type = redirect_type, .verbose = verbose, .proxy = proxy, .proxy_headers = proxy_headers, .url_proxy_buffer = url_proxy_buffer, .signal = signal, .globalThis = globalThis, .ssl_config = ssl_config, .hostname = hostname, .upgraded_connection = upgraded_connection, .force_http2 = force_http2, .force_http3 = force_http3, .force_http1 = force_http1, .check_server_identity = (if (check_server_identity.isEmptyOrUndefinedOrNull()) .empty else .create(check_server_identity, globalThis)), .unix_socket_path = unix_socket_path }), promise)) catch |e| { _ = &e; break :blk_catch_13 bun.handleOom(e); }); });
         url = .{};
         headers = null;
         proxy_headers = null;

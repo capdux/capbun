@@ -68,7 +68,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .array and @typeInfo(@typeInfo(__T).pointer.child).array.child == u8)) { return val[0..]; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const bun = @import("bun");
 const Output = @import("bun").Output;
@@ -150,6 +150,9 @@ _ = try self.promise.reject(globalThis, err.toJSWithAsyncStack(globalThis, self.
 pub fn exists(globalThis: *JSGlobalObject, blob: *Blob) JSTerminatedError!JSValue {
             const task = S3BlobStatTask.new(.{ .promise = JSPromise.Strong.init(globalThis), .store = blob.store.?, .global = globalThis });
             _ = task.store.ref();
+            errdefer {
+            _ = task.deinit();
+            }
             const promise = task.promise.value();
             const s3_store = (&blob.store.?.data.s3);
             const credentials = s3_store.getCredentials();
@@ -162,13 +165,19 @@ pub fn exists(globalThis: *JSGlobalObject, blob: *Blob) JSTerminatedError!JSValu
                 _ = &proxy;
                 proxy_url = proxy.href;
             }
-            _ = try S3.stat(credentials, path, @ptrCast((&S3BlobStatTask.onS3ExistsResolved)), task, proxy_url, s3_store.request_payer);
+            _ = try S3.stat(credentials, path, (blk: {
+            break :blk @ptrCast((&S3BlobStatTask.onS3ExistsResolved));
+
+}), task, proxy_url, s3_store.request_payer);
             return promise;
     }
 
 pub fn stat(globalThis: *JSGlobalObject, blob: *Blob) JSTerminatedError!JSValue {
             const task = S3BlobStatTask.new(.{ .promise = JSPromise.Strong.init(globalThis), .store = blob.store.?, .global = globalThis });
             _ = task.store.ref();
+            errdefer {
+            _ = task.deinit();
+            }
             const promise = task.promise.value();
             const s3_store = (&blob.store.?.data.s3);
             const credentials = s3_store.getCredentials();
@@ -181,13 +190,19 @@ pub fn stat(globalThis: *JSGlobalObject, blob: *Blob) JSTerminatedError!JSValue 
                 _ = &proxy;
                 proxy_url = proxy.href;
             }
-            _ = try S3.stat(credentials, path, @ptrCast((&S3BlobStatTask.onS3StatResolved)), task, proxy_url, s3_store.request_payer);
+            _ = try S3.stat(credentials, path, (blk: {
+            break :blk @ptrCast((&S3BlobStatTask.onS3StatResolved));
+
+}), task, proxy_url, s3_store.request_payer);
             return promise;
     }
 
 pub fn size(globalThis: *JSGlobalObject, blob: *Blob) JSTerminatedError!JSValue {
             const task = S3BlobStatTask.new(.{ .promise = JSPromise.Strong.init(globalThis), .store = blob.store.?, .global = globalThis });
             _ = task.store.ref();
+            errdefer {
+            _ = task.deinit();
+            }
             const promise = task.promise.value();
             const s3_store = (&blob.store.?.data.s3);
             const credentials = s3_store.getCredentials();
@@ -200,7 +215,10 @@ pub fn size(globalThis: *JSGlobalObject, blob: *Blob) JSTerminatedError!JSValue 
                 _ = &proxy;
                 proxy_url = proxy.href;
             }
-            _ = try S3.stat(credentials, path, @ptrCast((&S3BlobStatTask.onS3SizeResolved)), task, proxy_url, s3_store.request_payer);
+            _ = try S3.stat(credentials, path, (blk: {
+            break :blk @ptrCast((&S3BlobStatTask.onS3SizeResolved));
+
+}), task, proxy_url, s3_store.request_payer);
             return promise;
     }
 
@@ -271,7 +289,7 @@ pub fn presign(globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSVal
         }
         var path_or_blob = try PathOrBlob.fromJSNoCopy(globalThis, (&args));
         _ = &path_or_blob;
-        errdefer {
+        defer {
         {
             if ((path_or_blob == .path)) {
                 _ = path_or_blob.path.deinit();
@@ -309,7 +327,7 @@ pub fn unlink(globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSValu
         }
         var path_or_blob = try PathOrBlob.fromJSNoCopy(globalThis, (&args));
         _ = &path_or_blob;
-        errdefer {
+        defer {
         {
             if ((path_or_blob == .path)) {
                 _ = path_or_blob.path.deinit();
@@ -347,7 +365,7 @@ pub fn write(globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSValue
         }
         var path_or_blob = try PathOrBlob.fromJSNoCopy(globalThis, (&args));
         _ = &path_or_blob;
-        errdefer {
+        defer {
         {
             if ((path_or_blob == .path)) {
                 _ = path_or_blob.path.deinit();
@@ -390,7 +408,7 @@ pub fn size(globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSValue 
         }
         var path_or_blob = try PathOrBlob.fromJSNoCopy(globalThis, (&args));
         _ = &path_or_blob;
-        errdefer {
+        defer {
         {
             if ((path_or_blob == .path)) {
                 _ = path_or_blob.path.deinit();
@@ -428,7 +446,7 @@ pub fn exists(globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSValu
         }
         var path_or_blob = try PathOrBlob.fromJSNoCopy(globalThis, (&args));
         _ = &path_or_blob;
-        errdefer {
+        defer {
         {
             if ((path_or_blob == .path)) {
                 _ = path_or_blob.path.deinit();
@@ -605,7 +623,9 @@ pub fn getPresignUrlFrom(self: *Blob, globalThis: *JSGlobalObject, extra_options
                     expires = (if (comptime @typeInfo(@TypeOf(expires_)) == .@"enum") cp_cast_int(usize, @intFromEnum(expires_)) else cp_cast_int(usize, expires_));
                 }
             }
-            credentialsWithOptions = try s3.getCredentialsWithOptions(options, globalThis);
+            const new_creds = try s3.getCredentialsWithOptions(options, globalThis);
+            _ = credentialsWithOptions.deinit();
+            credentialsWithOptions = new_creds;
         }
         const path = s3.path();
         const result = (blk_catch_0: { break :blk_catch_0 ((credentialsWithOptions.credentials.signRequest(.{ .path = path, .method = method, .acl = credentialsWithOptions.acl, .storage_class = credentialsWithOptions.storage_class, .request_payer = credentialsWithOptions.request_payer, .content_disposition = credentialsWithOptions.content_disposition, .content_type = credentialsWithOptions.content_type }, false, .{ .expires = expires })) catch |sign_err| { _ = &sign_err; return S3.throwSignError(sign_err, globalThis); }); });
@@ -651,7 +671,10 @@ pub fn getBucket(self: *Blob, globalThis: *JSGlobalObject) callconv(.c) JSValue 
 
 pub fn getPresignUrl(self: *Blob, globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSValue {
         const args = callframe.arguments_old(1);
-        return getPresignUrlFrom(self, globalThis, (if ((args.len > 0)) args.ptr[0] else null));
+        return getPresignUrlFrom(self, globalThis, (if ((args.len > 0)) (blk: {
+        break :blk args.ptr[0];
+
+}) else null));
 }
 
 pub fn getStat(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) callconv(.c) JSValue {
@@ -667,7 +690,7 @@ pub fn stat(globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSValue 
         }
         var path_or_blob = try PathOrBlob.fromJSNoCopy(globalThis, (&args));
         _ = &path_or_blob;
-        errdefer {
+        defer {
         {
             if ((path_or_blob == .path)) {
                 _ = path_or_blob.path.deinit();

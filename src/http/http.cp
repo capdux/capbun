@@ -816,6 +816,9 @@ export @root @value struct HTTPClient {
     }
 
     fn isHTTPS(): bool {
+        if (proxy := _.http_proxy) {
+            return proxy.isHTTPS();
+        }
         return _.url.isHTTPS();
     }
 
@@ -1077,15 +1080,15 @@ export @root @value struct HTTPClient {
                 } else if (hash == transfer_encoding_header_hash) {
                     add_transfer_encoding = false;
                 } else if (hash == connection_header_hash) {
-                    override_connection_header = will_append;
+                    if (will_append) override_connection_header = true;
                 } else if (hash == user_agent_header_hash) {
-                    override_user_agent = will_append;
+                    if (will_append) override_user_agent = true;
                 } else if (hash == accept_header_hash) {
-                    override_accept_header = will_append;
+                    if (will_append) override_accept_header = true;
                 } else if (hash == host_header_hash) {
-                    override_host_header = will_append;
+                    if (will_append) override_host_header = true;
                 } else if (hash == accept_encoding_header_hash) {
-                    override_accept_encoding = will_append;
+                    if (will_append) override_accept_encoding = true;
                 }
 
                 if (will_append) {
@@ -1120,11 +1123,8 @@ export @root @value struct HTTPClient {
                 header_count += 1;
             }
 
-            if (!override_accept_encoding) {
-                request_headers_buf[header_count] = if (this.flags.disable_decompression)
-                    accept_encoding_header_no_compression
-                else
-                    accept_encoding_header;
+            if (!override_accept_encoding && !this.flags.disable_decompression) {
+                request_headers_buf[header_count] = accept_encoding_header;
                 header_count += 1;
             }
 

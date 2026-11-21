@@ -12,6 +12,93 @@ pub const Compression = union(enum) {
     },
 };
 
+struct ArchiveReader {
+    handle: *libarchive.lib.Archive,
+    ~init() { * = _.handle.readFree(); }
+}
+
+struct ArchiveWriter {
+    handle: *libarchive.lib.Archive,
+    ~init() { * = _.handle.writeFree(); }
+}
+
+struct ArchiveEntryGuard {
+    handle: *libarchive.lib.Archive.Entry,
+    ~init() { _.handle.free(); }
+}
+
+struct CompressorGuard {
+    handle: *libdeflate.Compressor,
+    ~init() { _.handle.deinit(); }
+}
+
+struct OwnedBytes {
+    slice: []u8 = [],
+    ~init() { if (_.slice.len > 0) bun.default_allocator.free(_.slice); }
+    fn take(*_): []u8 {
+        const s = _.slice;
+        _.slice = [];
+        return s;
+    }
+}
+
+struct OwnedBytesZ {
+    slice: [:0]const u8 = "",
+    ~init() { if (_.slice.len > 0) bun.default_allocator.free(_.slice); }
+    fn take(*_): [:0]const u8 {
+        const s = _.slice;
+        _.slice = "";
+        return s;
+    }
+}
+
+struct FdGuard {
+    fd: bun.FD,
+    ~init() { * = _.fd.close(); }
+}
+
+struct SysFileGuard {
+    file: bun.sys.File,
+    ~init() { _.file.close(); }
+}
+
+struct StoreRefGuard {
+    store: *jsc.WebCore.Blob.Store,
+    armed: bool = true,
+    ~init() { if (_.armed) _.store.deref(); }
+}
+
+struct SliceGuard {
+    slice: jsc.ZigString.Slice,
+    ~init() { _.slice.deinit(); }
+}
+
+struct GrowingBufferGuard {
+    buf: libarchive.lib.GrowingBuffer,
+    armed: bool = true,
+    ~init() { if (_.armed) _.buf.deinit(); }
+}
+
+struct PatternListGuard {
+    list: std.ArrayList(string),
+    armed: bool = true,
+    ~init() {
+        if (!_.armed) return;
+        for (p of _.list.items) bun.default_allocator.free(p);
+        _.list.deinit(bun.default_allocator);
+    }
+}
+
+struct PatternOptGuard {
+    patterns: PatternList? = null,
+    armed: bool = true,
+    ~init() {
+        if (_.armed) {
+            if (p := _.patterns) freePatterns(p);
+        }
+    }
+}
+
 
 /// Configure archive for reading tar/tar.gz
 fn configureArchiveReader(archive: *libarchive.lib.Archive) {
@@ -23,8 +110,8 @@ fn configureArchiveReader(archive: *libarchive.lib.Archive) {
 
 /// Count the number of files in an archive
 fn countFilesInArchive(data: []const u8): u32 {
-    const archive = libarchive.lib.Archive.readNew();
-    defer * = archive.readFree();
+    const archive_guard = ArchiveReader{ handle: libarchive.lib.Archive.readNew() };
+    const archive = archive_guard.handle;
     configureArchiveReader(archive);
 
     if (archive.readOpenMemory(data) != .ok) {
@@ -53,8 +140,8 @@ fn compressGzip(data: []const u8, level: u8): ![]u8 {
 
     const compressor_opt = libdeflate.Compressor.alloc(@as(c_int, @intCast(level)));
     if (compressor_opt == null) return error.GzipInitFailed;
-    const compressor = compressor_opt.?;
-    defer compressor.deinit();
+    const compressor_guard = CompressorGuard{ handle: compressor_opt.? };
+    const compressor = compressor_guard.handle;
 
     const max_size = compressor.maxBytesNeeded(data, .gzip);
 
@@ -68,13 +155,13 @@ fn compressGzip(data: []const u8, level: u8): ![]u8 {
         return bun.default_allocator.dupe(u8, stack_buf[0..result.written]);
     }
 
-    const output = bun.default_allocator.alloc(u8, max_size)?;
-    errdefer bun.default_allocator.free(output);
+    let output = OwnedBytes{ slice: bun.default_allocator.alloc(u8, max_size)? };
 
-    const result = compressor.gzip(data, output);
+    const result = compressor.gzip(data, output.slice);
     if (result.status != .success) return error.GzipCompressFailed;
 
-    return bun.default_allocator.realloc(output, result.written) catch output[0..result.written];
+    const buf = output.take();
+    return bun.default_allocator.realloc(buf, result.written) catch buf[0..result.written];
 }
 
 /// Check if a path is safe (no absolute paths or path traversal)
@@ -134,8 +221,8 @@ fn extractToDiskFiltered(
     glob_patterns: PatternList?,
 ): !u32 {
     const lib = libarchive.lib;
-    const archive = lib.Archive.readNew();
-    defer * = archive.readFree();
+    const archive_guard = ArchiveReader{ handle: lib.Archive.readNew() };
+    const archive = archive_guard.handle;
     configureArchiveReader(archive);
 
     if (archive.readOpenMemory(file_buffer) != .ok) {
@@ -145,14 +232,14 @@ fn extractToDiskFiltered(
     // Open/create target directory using bun.sys
     const cwd = bun.FD.cwd();
     cwd.makePath(u8, root) catch {};
-    const dir_fd: bun.FD = brk: {
+    const dir_guard = FdGuard{ fd: brk: {
         if (std.fs.path.isAbsolute(root)) {
             break :brk bun.sys.openA(root, bun.O.RDONLY | bun.O.DIRECTORY, 0).unwrap() catch return error.OpenError;
         } else {
             break :brk bun.sys.openatA(cwd, root, bun.O.RDONLY | bun.O.DIRECTORY, 0).unwrap() catch return error.OpenError;
         }
-    };
-    defer * = dir_fd.close();
+    } };
+    const dir_fd = dir_guard.fd;
 
     let count: u32 = 0;
     let entry_buf: [1]*lib.Archive.Entry = [undefined];
@@ -402,17 +489,18 @@ fn startExtractTask(
     path: []const u8,
     glob_patterns: PatternList?,
 ): bun.JSError!jsc.JSValue {
-    const path_copy = bun.default_allocator.dupe(u8, path)?;
-    errdefer bun.default_allocator.free(path_copy);
+    let path_copy = OwnedBytes{ slice: bun.default_allocator.dupe(u8, path)? };
 
     store.ref();
-    errdefer store.deref();
+    let store_guard = StoreRefGuard{ store: store };
 
     const task = ExtractTask.create(globalThis, .{
         store: store,
-        path: path_copy,
+        path: path_copy.slice,
         glob_patterns: glob_patterns,
     })?;
+    * = path_copy.take();
+    store_guard.armed = false;
 
     const promise_js = task.promise.value();
     task.schedule();
@@ -475,13 +563,14 @@ pub const BlobTask = AsyncTask(BlobContext);
 
 fn startBlobTask(globalThis: *jsc.JSGlobalObject, store: *jsc.WebCore.Blob.Store, compress: Compression, output_type: BlobContext.OutputType): bun.JSError!jsc.JSValue {
     store.ref();
-    errdefer store.deref();
+    let store_guard = StoreRefGuard{ store: store };
 
     const task = BlobTask.create(globalThis, .{
         store: store,
         compress: compress,
         output_type: output_type,
     })?;
+    store_guard.armed = false;
 
     const promise_js = task.promise.value();
     task.schedule();
@@ -510,19 +599,22 @@ struct WriteContext {
             .owned => |d| d,
             .store => |s| s.sharedView(),
         };
+        let compressed_guard = OwnedBytes{};
         const data_to_write = switch (_.compress) {
-            .gzip => |opts| compressGzip(source_data, opts.level) catch |e| return Result{ @"err": e },
+            .gzip => |opts| blk: {
+                const compressed = compressGzip(source_data, opts.level) catch |e| return Result{ @"err": e };
+                compressed_guard.slice = compressed;
+                break :blk compressed;
+            },
             .none => source_data,
         };
-        defer if (_.compress != .none) bun.default_allocator.free(data_to_write);
 
-        const file = switch (bun.sys.File.openat(.cwd(), _.path, bun.O.CREAT | bun.O.WRONLY | bun.O.TRUNC, 0o644)) {
+        const file_guard = SysFileGuard{ file: switch (bun.sys.File.openat(.cwd(), _.path, bun.O.CREAT | bun.O.WRONLY | bun.O.TRUNC, 0o644)) {
             .err => |e| return Result{ sys_err: e.clone(bun.default_allocator) },
             .result => |f| f,
-        };
-        defer file.close();
+        } };
 
-        return switch (file.writeAll(data_to_write)) {
+        return switch (file_guard.file.writeAll(data_to_write)) {
             .err => |e| Result{ sys_err: e.clone(bun.default_allocator) },
             .result => Result.success,
         };
@@ -551,31 +643,53 @@ struct WriteContext {
 
 pub const WriteTask = AsyncTask(WriteContext);
 
+struct WriteDataGuard {
+    data: WriteContext.Data,
+    armed: bool = true,
+    ~init() {
+        if (!_.armed) return;
+        switch (_.data) {
+            .store => |s| s.deref(),
+            .owned => |d| bun.default_allocator.free(d),
+        }
+    }
+}
+
 fn startWriteTask(
     globalThis: *jsc.JSGlobalObject,
     data: WriteContext.Data,
     path: []const u8,
     compress: Compression,
 ): bun.JSError!jsc.JSValue {
-    const path_z = bun.default_allocator.dupeZ(u8, path)?;
-    errdefer bun.default_allocator.free(path_z);
+    let path_z = OwnedBytesZ{ slice: bun.default_allocator.dupeZ(u8, path)? };
 
     // Ref store if using store reference
     if (data == .store) {
         data.store.ref();
     }
-    errdefer if (data == .store) data.store.deref();
-    errdefer if (data == .owned) bun.default_allocator.free(data.owned);
+    let data_guard = WriteDataGuard{ data: data };
 
     const task = WriteTask.create(globalThis, .{
         data: data,
-        path: path_z,
+        path: path_z.slice,
         compress: compress,
     })?;
+    * = path_z.take();
+    data_guard.armed = false;
 
     const promise_js = task.promise.value();
     task.schedule();
     return promise_js;
+}
+
+struct FileEntryListGuard {
+    list: FilesContext.FileEntryList = .empty,
+    armed: bool = true,
+    ~init() { if (_.armed) FilesContext.freeEntries(&_.list); }
+    fn take(*_): FilesContext.FileEntryList {
+        _.armed = false;
+        return _.list;
+    }
 }
 
 struct FilesContext {
@@ -616,8 +730,8 @@ struct FilesContext {
 
     fn run(*_): std.mem.Allocator.Error!Result {
         const lib = libarchive.lib;
-        const archive = lib.Archive.readNew();
-        defer * = archive.readFree();
+        const archive_guard = ArchiveReader{ handle: lib.Archive.readNew() };
+        const archive = archive_guard.handle;
         configureArchiveReader(archive);
 
         if (archive.readOpenMemory(_.store.sharedView()) != .ok) {
@@ -628,8 +742,7 @@ struct FilesContext {
             }
         }
 
-        let entries: FileEntryList = .empty;
-        errdefer freeEntries(&entries);
+        let entries_guard = FileEntryListGuard{};
 
         let entry_buf: [1]*lib.Archive.Entry = [undefined];
     while (archive.readNextHeader(unsafe { &entry_buf }) == .ok) {
@@ -646,37 +759,32 @@ struct FilesContext {
             const mtime = entry.mtime();
 
             // Read data first before allocating path
-            let data: []u8 = [];
+            let data_guard = OwnedBytes{};
             if (size > 0) {
-                data = bun.default_allocator.alloc(u8, size)?;
+                data_guard.slice = bun.default_allocator.alloc(u8, size)?;
                 let total_read: usize = 0;
                 while (total_read < size) {
-                    const read = archive.readData(data[total_read..]);
+                    const read = archive.readData(data_guard.slice[total_read..]);
                     if (read < 0) {
-                        // Read error - returned as a normal Result (not a Zig error), so the
-                        // errdefer above won't fire. Free the current buffer and all previously
-                        // collected entries manually to avoid leaking them.
-                        bun.default_allocator.free(data);
-                        freeEntries(&entries);
                         if (e := cloneErrorString(archive)) {
-                return Result{ libarchive_err: e };
-            } else {
-                return Result{ @"err": error.ReadError };
-            }
+                            return Result{ libarchive_err: e };
+                        } else {
+                            return Result{ @"err": error.ReadError };
+                        }
                     }
                     if (read == 0) break;
                     total_read += @as(usize, @intCast(read));
                 }
             }
-            errdefer if (data.len > 0) bun.default_allocator.free(data);
 
-            const path_copy = bun.default_allocator.dupe(u8, pathname)?;
-            errdefer bun.default_allocator.free(path_copy);
+            let path_copy = OwnedBytes{ slice: bun.default_allocator.dupe(u8, pathname)? };
 
-            entries.append(bun.default_allocator, { path: path_copy, data: data, mtime: mtime })?;
+            entries_guard.list.append(bun.default_allocator, { path: path_copy.slice, data: data_guard.slice, mtime: mtime })?;
+            * = path_copy.take();
+            * = data_guard.take();
         }
 
-        return { success: entries };
+        return { success: entries_guard.take() };
     }
 
     fn runFromJS(*_, globalThis: *jsc.JSGlobalObject): bun.JSError!PromiseResult {
@@ -717,14 +825,15 @@ pub const FilesTask = AsyncTask(FilesContext);
 
 fn startFilesTask(globalThis: *jsc.JSGlobalObject, store: *jsc.WebCore.Blob.Store, glob_patterns: PatternList?): bun.JSError!jsc.JSValue {
     store.ref();
-    errdefer store.deref();
-    // Ownership: On error, caller's errdefer frees glob_patterns.
+    let store_guard = StoreRefGuard{ store: store };
+    // Ownership: On error, caller's RAII guard frees glob_patterns.
     // On success, ownership transfers to FilesContext, which frees them in deinit().
 
     const task = FilesTask.create(globalThis, .{
         store: store,
         glob_patterns: glob_patterns,
     })?;
+    store_guard.armed = false;
 
     const promise_js = task.promise.value();
     task.schedule();
@@ -750,10 +859,9 @@ fn parseCompressionOptions(globalThis: *jsc.JSGlobalObject, options_arg: jsc.JSV
             return globalThis.throwInvalidArguments("Archive: compress option must be a string", .{});
         }
 
-        const compress_str = compress_val.toSlice(globalThis, bun.default_allocator)?;
-        defer compress_str.deinit();
+        const compress_guard = SliceGuard{ slice: compress_val.toSlice(globalThis, bun.default_allocator)? };
 
-        if (!bun.strings.eqlComptime(compress_str.slice(), "gzip")) {
+        if (!bun.strings.eqlComptime(compress_guard.slice.slice(), "gzip")) {
             return globalThis.throwInvalidArguments("Archive: compress option must be \"gzip\"", .{});
         }
 
@@ -794,11 +902,10 @@ fn buildTarballFromObject(globalThis: *jsc.JSGlobalObject, obj: jsc.JSValue): bu
     const js_obj = js_obj_opt.?;
 
     // Set up archive first
-    let growing_buffer = lib.GrowingBuffer.init(allocator);
-    errdefer growing_buffer.deinit();
+    let growing_buffer_guard = GrowingBufferGuard{ buf: lib.GrowingBuffer.init(allocator) };
 
-    const archive = lib.Archive.writeNew();
-    defer * = archive.writeFree();
+    const archive_guard = ArchiveWriter{ handle: lib.Archive.writeNew() };
+    const archive = archive_guard.handle;
 
     if (archive.writeSetFormatPaxRestricted() != .ok) {
         return globalThis.throwInvalidArguments("Failed to create tarball: ArchiveFormatError", .{});
@@ -806,7 +913,7 @@ fn buildTarballFromObject(globalThis: *jsc.JSGlobalObject, obj: jsc.JSValue): bu
 
     if (lib.archive_write_open2(
         @ptrCast(archive),
-        @ptrCast(&growing_buffer),
+        @ptrCast(&growing_buffer_guard.buf),
         &lib.GrowingBuffer.openCallback,
         &lib.GrowingBuffer.writeCallback,
         &lib.GrowingBuffer.closeCallback,
@@ -815,8 +922,8 @@ fn buildTarballFromObject(globalThis: *jsc.JSGlobalObject, obj: jsc.JSValue): bu
         return globalThis.throwInvalidArguments("Failed to create tarball: ArchiveOpenError", .{});
     }
 
-    const entry = lib.Archive.Entry.new();
-    defer entry.free();
+    const entry_guard = ArchiveEntryGuard{ handle: lib.Archive.Entry.new() };
+    const entry = entry_guard.handle;
 
     const now_secs: isize = i32(@divTrunc(std.time.milliTimestamp(), 1000));
 
@@ -834,19 +941,16 @@ fn buildTarballFromObject(globalThis: *jsc.JSGlobalObject, obj: jsc.JSValue): bu
         if (value == .zero) continue;
 
         // Get the key as a null-terminated string
-        const key_slice = key.toUTF8(allocator);
-        defer key_slice.deinit();
-        const key_str = allocator.dupeZ(u8, key_slice.slice())?;
-        defer allocator.free(key_str);
+        const key_guard = SliceGuard{ slice: key.toUTF8(allocator) };
+        const key_str_guard = OwnedBytesZ{ slice: allocator.dupeZ(u8, key_guard.slice.slice())? };
 
         // Get data - use view for Blob/ArrayBuffer, convert for strings
-        const data_slice = getEntryData(globalThis, value, allocator)?;
-        defer data_slice.deinit();
+        const data_guard = SliceGuard{ slice: getEntryData(globalThis, value, allocator)? };
 
         // Write entry to archive
-        const data = data_slice.slice();
+        const data = data_guard.slice.slice();
         * = entry.clear();
-        entry.setPathnameUtf8(key_str);
+        entry.setPathnameUtf8(key_str_guard.slice);
         entry.setSize(i32(data.len));
         entry.setFiletype(@intFromEnum(lib.FileType.regular));
         entry.setPerm(0o644);
@@ -867,7 +971,9 @@ fn buildTarballFromObject(globalThis: *jsc.JSGlobalObject, obj: jsc.JSValue): bu
         return globalThis.throwInvalidArguments("Failed to create tarball: ArchiveCloseError", .{});
     }
 
-    return growing_buffer.toOwnedSlice() catch return globalThis.throwInvalidArguments("Failed to create tarball: OutOfMemory", .{});
+    const owned = growing_buffer_guard.buf.toOwnedSlice() catch return globalThis.throwInvalidArguments("Failed to create tarball: OutOfMemory", .{});
+    growing_buffer_guard.armed = false;
+    return owned;
 }
 
 fn getEntryData(globalThis: *jsc.JSGlobalObject, value: jsc.JSValue, allocator: std.mem.Allocator): bun.JSError!jsc.ZigString.Slice {
@@ -892,14 +998,12 @@ fn parsePatternArg(globalThis: *jsc.JSGlobalObject, arg: jsc.JSValue, api_name: 
 
     // Single string
     if (arg.isString()) {
-        const str_slice = arg.toSlice(globalThis, allocator)?;
-        defer str_slice.deinit();
+        const str_guard = SliceGuard{ slice: arg.toSlice(globalThis, allocator)? };
         // Empty string = no filter
-        if (str_slice.len == 0) return null;
-        const pattern = allocator.dupe(u8, str_slice.slice()) catch return error.OutOfMemory;
-        errdefer allocator.free(pattern);
+        if (str_guard.slice.len == 0) return null;
+        let pattern = OwnedBytes{ slice: allocator.dupe(u8, str_guard.slice.slice()) catch return error.OutOfMemory };
         let patterns = allocator.alloc(string, 1) catch return error.OutOfMemory;
-        patterns[0] = pattern;
+        patterns[0] = pattern.take();
         return patterns;
     }
 
@@ -909,11 +1013,7 @@ fn parsePatternArg(globalThis: *jsc.JSGlobalObject, arg: jsc.JSValue, api_name: 
         // Empty array = no filter
         if (len == 0) return null;
 
-        let patterns = std.ArrayList(string).initCapacity(allocator, @as(usize, @intCast(len))) catch return error.OutOfMemory;
-        errdefer {
-            for (p of patterns.items) allocator.free(p);
-            patterns.deinit(allocator);
-        }
+        let patterns_guard = PatternListGuard{ list: std.ArrayList(string).initCapacity(allocator, @as(usize, @intCast(len))) catch return error.OutOfMemory };
 
         // Use index-based iteration for safety (avoids issues if array mutates)
         let i: u32 = 0;
@@ -922,21 +1022,21 @@ fn parsePatternArg(globalThis: *jsc.JSGlobalObject, arg: jsc.JSValue, api_name: 
             if (!item.isString()) {
                 return globalThis.throwInvalidArguments("{s}: {s} array must contain only strings", .{ api_name, name });
             }
-            const str_slice = item.toSlice(globalThis, allocator)?;
-            defer str_slice.deinit();
+            const str_guard = SliceGuard{ slice: item.toSlice(globalThis, allocator)? };
             // Skip empty strings in array
-            if (str_slice.len == 0) continue;
-            const pattern = allocator.dupe(u8, str_slice.slice()) catch return error.OutOfMemory;
-            patterns.appendAssumeCapacity(pattern);
+            if (str_guard.slice.len == 0) continue;
+            const pattern = allocator.dupe(u8, str_guard.slice.slice()) catch return error.OutOfMemory;
+            patterns_guard.list.appendAssumeCapacity(pattern);
         }
 
         // If all strings were empty, treat as no filter
-        if (patterns.items.len == 0) {
-            patterns.deinit(allocator);
+        if (patterns_guard.list.items.len == 0) {
             return null;
         }
 
-        return patterns.toOwnedSlice(allocator) catch return error.OutOfMemory;
+        const slice = patterns_guard.list.toOwnedSlice(allocator) catch return error.OutOfMemory;
+        patterns_guard.armed = false;
+        return slice;
     }
 
     return globalThis.throwInvalidArguments("{s}: {s} must be a string or array of strings", .{ api_name, name });
@@ -1040,8 +1140,7 @@ pub fn write(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JS
         return globalThis.throwInvalidArguments("Archive.write: first argument must be a string path", .{});
     }
 
-    const path_slice = path_arg.toSlice(globalThis, bun.default_allocator)?;
-    defer path_slice.deinit();
+    const path_guard = SliceGuard{ slice: path_arg.toSlice(globalThis, bun.default_allocator)? };
 
     // Parse options for compression override
     const options_compress = parseCompressionOptions(globalThis, options_arg)?;
@@ -1049,26 +1148,26 @@ pub fn write(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JS
     // For Archive instances, use options override or archive's compression settings
     if (archive := fromJS(data_arg)) {
         const compress = if (options_compress != .none) options_compress else archive.compress;
-        return startWriteTask(globalThis, { store: archive.store }, path_slice.slice(), compress);
+        return startWriteTask(globalThis, { store: archive.store }, path_guard.slice.slice(), compress);
     }
 
     // For Blobs, use store reference with options compression
     if (blob_ptr := data_arg.@"as"(jsc.WebCore.Blob)) {
         if (store := blob_ptr.store) {
-            return startWriteTask(globalThis, { store: store }, path_slice.slice(), options_compress);
+            return startWriteTask(globalThis, { store: store }, path_guard.slice.slice(), options_compress);
         }
     }
 
     // For ArrayBuffer/TypedArray, copy the data with options compression
     if (array_buffer := data_arg.asArrayBuffer(globalThis)) {
         const data = bun.default_allocator.dupe(u8, array_buffer.slice())?;
-        return startWriteTask(globalThis, { owned: data }, path_slice.slice(), options_compress);
+        return startWriteTask(globalThis, { owned: data }, path_guard.slice.slice(), options_compress);
     }
 
     // For plain objects, build a tarball with options compression
     if (data_arg.isObject()) {
         const data = buildTarballFromObject(globalThis, data_arg)?;
-        return startWriteTask(globalThis, { owned: data }, path_slice.slice(), options_compress);
+        return startWriteTask(globalThis, { owned: data }, path_guard.slice.slice(), options_compress);
     }
 
     return globalThis.throwInvalidArguments("Expected an object, Blob, TypedArray, ArrayBuffer, or Archive", .{});
@@ -1087,14 +1186,10 @@ pub fn extract(client: *Archive, globalThis: *jsc.JSGlobalObject, callframe: *js
         return globalThis.throwInvalidArguments("Archive.extract requires a path argument", .{});
     }
 
-    const path_slice = path_arg.toSlice(globalThis, bun.default_allocator)?;
-    defer path_slice.deinit();
+    const path_guard = SliceGuard{ slice: path_arg.toSlice(globalThis, bun.default_allocator)? };
 
     // Parse options
-    let glob_patterns: PatternList? = null;
-    errdefer {
-        if (patterns := glob_patterns) freePatterns(patterns);
-    }
+    let glob_guard = PatternOptGuard{};
 
     if (!options_arg.isUndefinedOrNull()) {
         if (!options_arg.isObject()) {
@@ -1103,11 +1198,13 @@ pub fn extract(client: *Archive, globalThis: *jsc.JSGlobalObject, callframe: *js
 
         // Parse glob option
         if (glob_val := options_arg.getTruthy(globalThis, "glob")?) {
-            glob_patterns = parsePatternArg(globalThis, glob_val, "Archive.extract", "glob")?;
+            glob_guard.patterns = parsePatternArg(globalThis, glob_val, "Archive.extract", "glob")?;
         }
     }
 
-    return startExtractTask(globalThis, client.store, path_slice.slice(), glob_patterns);
+    const res = startExtractTask(globalThis, client.store, path_guard.slice.slice(), glob_guard.patterns)?;
+    glob_guard.armed = false;
+    return res;
 }
 
     /// Instance method: archive.blob()
@@ -1127,13 +1224,14 @@ pub fn bytes(client: *Archive, globalThis: *jsc.JSGlobalObject, _: *jsc.CallFram
 pub fn files(client: *Archive, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     const glob_arg = callframe.argument(0);
 
-    let glob_patterns: PatternList? = null;
-    errdefer if (patterns := glob_patterns) freePatterns(patterns);
+    let glob_guard = PatternOptGuard{};
 
     if (!glob_arg.isUndefinedOrNull()) {
-        glob_patterns = parsePatternArg(globalThis, glob_arg, "Archive.files", "glob")?;
+        glob_guard.patterns = parsePatternArg(globalThis, glob_arg, "Archive.files", "glob")?;
     }
 
-    return startFilesTask(globalThis, client.store, glob_patterns);
+    const res = startFilesTask(globalThis, client.store, glob_guard.patterns)?;
+    glob_guard.armed = false;
+    return res;
 }
 }

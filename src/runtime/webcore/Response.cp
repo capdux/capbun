@@ -619,6 +619,7 @@ pub struct Init {
             json_value.jsonStringifyFast(globalThis, &str)?;
 
             if (globalThis.hasException()) {
+                str.deref();
                 return JSValue.zero;
             }
 
@@ -701,12 +702,9 @@ pub struct Init {
             url_string = url_string_value.getZigString(globalThis)?;
         }
         url_string_slice = url_string.toSlice(bun.default_allocator);
-        let did_succeed = false;
-        defer {
-            if (!did_succeed) {
-                response.#body.deinit(bun.default_allocator);
-                response.#init.deinit(bun.default_allocator);
-            }
+        errdefer {
+            response.#body.deinit(bun.default_allocator);
+            response.#init.deinit(bun.default_allocator);
         }
 
         if (arg_init := args.nextEat()) {
@@ -714,7 +712,6 @@ pub struct Init {
             } else if (arg_init.isNumber()) {
                 response.#init.status_code = validateRedirectStatusCode(globalThis, arg_init.toInt32())?;
             } else if (_init := Init.init(globalThis, arg_init)?) {
-                errdefer response.#init.deinit(bun.default_allocator);
                 response.#init = _init;
 
                 if (_init.status_code != 200) {
@@ -726,7 +723,6 @@ pub struct Init {
         if (globalThis.hasException()) {
             return error.JSError;
         }
-        did_succeed = true;
 
         response.#init.headers = response.getOrCreateHeaders(globalThis)?;
         let headers_ref = response.#init.headers.?;
@@ -771,6 +767,10 @@ pub struct Init {
                         #url: bun.String.empty,
                         #js_ref: .initWeak(js_this),
                     };
+                    errdefer {
+                        response.#body.deinit(bun.default_allocator);
+                        response.#init.deinit(bun.default_allocator);
+                    }
 
                     const credentials = blob.store.?.data.s3.getCredentials();
 
@@ -831,6 +831,7 @@ pub struct Init {
             #init: _init,
             #js_ref: .initWeak(js_this),
         });
+        errdefer bun.destroy(response);
 
         if (response.#body.value == .Blob &&
             response.#init.headers != null &&

@@ -1505,3 +1505,7 @@
 - **[2026-11-22] 全仓遗留隐式 `release()` 清零、`http.cp` `Content-Length` 与 `@property` 修复**：
   - 使用新版 `cpc`（`syntax-raii-20261121-v2`）全量重编仍含 `__CpChild, "release"` 的 24 个模块，彻底根除 `HTTPThread.connect` 对 `SSLConfig` 的 `tls.get()` 借用误析构（`27358.test.ts` mTLS keepalive 复用全绿）；
   - 删除 `http.cp:1075` 多余 `add_transfer_encoding = false;` 修复流式 `Content-Length`；`property.cp` 展开 `else return` 表达式修复 `@property` 解析；`s3/client.cp` 与 `copy_file.cp` 清理 `export const`。
+- **[2026-11-22] WebCore `blob:`/`FormData` 恢复、`http.isHTTPS()` 代理判空与 3 大模块 `~init()` RAII 化**：
+  - `Blob.cp` 与 `fetch.cp` 修复历史迁移遗漏：`fromDOMFormData`/`fromURLSearchParams` 原为空桩导致 `Response(FormData)` 丢失 `multipart/form-data` `Content-Type`，`fetchImpl` 缺失 `url_type != .remote` 导致 `fetch("blob:...")` 走远程连接报 `ConnectionRefused`；同时补齐 `DOMFormData.cp` `FormDataEntry` 导出与 `URLSearchParams.cp`/`DOMFormData.cp` `callconv(.c)` 回调；
+  - `http.cp` `isHTTPS()` 增加代理判断解决 HTTPS 代理隧道被当 HTTP 走 `onOpen` unreachable panic；`Blob.dupe*` 深拷贝 `content_type` 根除 ASan `use-after-poison`；
+  - `Archive.cp` / `pack_command.cp` / `RuntimeTranspilerCache.cp` 集中将 80+ 处手工 `defer`/`errdefer` 收敛为顶层 `~init()` RAII Guard（`bun.perf.trace` 因编译期字符串字面量约束保留 `defer _trace.end()`）。

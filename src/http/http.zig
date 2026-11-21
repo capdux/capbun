@@ -66,7 +66,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .array and @typeInfo(@typeInfo(__T).pointer.child).array.child == u8)) { return val[0..]; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const HTTPCertErrorMod = @import("./HTTPCertError.zig");
 pub const ProxyTunnelMod = @import("./ProxyTunnel.zig");
@@ -378,6 +378,10 @@ pub fn failFromH2(self: *HTTPClient, err: anyerror) void {
 }
 
 pub fn isHTTPS(self: HTTPClient) bool {
+        if (self.http_proxy) |proxy| {
+            _ = &proxy;
+            return proxy.isHTTPS();
+        }
         return self.url.isHTTPS();
 }
 
@@ -628,19 +632,29 @@ pub fn buildRequest(self: *HTTPClient, body_len: usize) picohttp.Request {
                     add_transfer_encoding = false;
                 } else {
                     if ((hash == connection_header_hash)) {
-                        override_connection_header = will_append;
+                        if (will_append) {
+                            override_connection_header = true;
+                        }
                     } else {
                         if ((hash == user_agent_header_hash)) {
-                            override_user_agent = will_append;
+                            if (will_append) {
+                                override_user_agent = true;
+                            }
                         } else {
                             if ((hash == accept_header_hash)) {
-                                override_accept_header = will_append;
+                                if (will_append) {
+                                    override_accept_header = true;
+                                }
                             } else {
                                 if ((hash == host_header_hash)) {
-                                    override_host_header = will_append;
+                                    if (will_append) {
+                                        override_host_header = true;
+                                    }
                                 } else {
                                     if ((hash == accept_encoding_header_hash)) {
-                                        override_accept_encoding = will_append;
+                                        if (will_append) {
+                                            override_accept_encoding = true;
+                                        }
                                     }
                                 }
                             }
@@ -669,8 +683,8 @@ pub fn buildRequest(self: *HTTPClient, body_len: usize) picohttp.Request {
             request_headers_buf[cp_cast_int(usize, header_count)] = picohttp.Header{ .name = host_header_name, .value = ((self.hostname) orelse (self.url.host)) };
             header_count = (header_count + 1);
         }
-        if ((!override_accept_encoding)) {
-            request_headers_buf[cp_cast_int(usize, header_count)] = (if (self.flags.disable_decompression) accept_encoding_header_no_compression else accept_encoding_header);
+        if (((!override_accept_encoding) and (!self.flags.disable_decompression))) {
+            request_headers_buf[cp_cast_int(usize, header_count)] = accept_encoding_header;
             header_count = (header_count + 1);
         }
         if (((body_len > 0) or self.method.hasRequestBody())) {

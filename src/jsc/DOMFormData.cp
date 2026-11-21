@@ -10,7 +10,7 @@ const ZigString = jsc.ZigString;
     fn WebCore__DOMFormData__cast_(JSValue0: JSValue, arg1: *VM): (*DOMFormData)?;
     fn WebCore__DOMFormData__create(arg0: *JSGlobalObject): JSValue;
     fn WebCore__DOMFormData__createFromURLQuery(arg0: *JSGlobalObject, arg1: *ZigString): JSValue;
-    fn WebCore__DOMFormData__toQueryString(arg0: *DOMFormData, arg1: *!, arg2: *const fn (arg0: *!, *ZigString));
+    fn WebCore__DOMFormData__toQueryString(arg0: *DOMFormData, arg1: *!, arg2: *const fn (arg0: *!, *ZigString) callconv(.c) void);
     fn WebCore__DOMFormData__fromJS(JSValue0: JSValue): (*DOMFormData)?;
     fn WebCore__DOMFormData__append(arg0: *DOMFormData, arg1: *ZigString, arg2: *ZigString);
     fn WebCore__DOMFormData__appendBlob(arg0: *DOMFormData, arg1: *JSGlobalObject, arg2: *ZigString, arg3: *!, arg4: *ZigString);
@@ -18,7 +18,7 @@ const ZigString = jsc.ZigString;
     fn DOMFormData__forEach(
         arg0: *DOMFormData,
         arg1: *!?,
-        arg2: *const fn (ctx_ptr: *!?, name: *ZigString, value_ptr: *!, filename: (*ZigString)?, is_blob: u8),
+        arg2: *const fn (ctx_ptr: *!?, name: *ZigString, value_ptr: *!, filename: (*ZigString)?, is_blob: u8) callconv(.c) void,
     );
 }
 
@@ -27,12 +27,13 @@ pub struct FormDataEntryFile {
     filename: ZigString,
 }
 
-pub union(enum) FormDataEntry {
+pub union(enum) TopFormDataEntry {
     string: ZigString,
     file: FormDataEntryFile,
 }
 
 @opaque pub struct DOMFormData {
+    pub const FormDataEntry = TopFormDataEntry;
     pub fn create(
         global: *JSGlobalObject,
     ): JSValue {
@@ -109,12 +110,12 @@ pub union(enum) FormDataEntry {
             ) {
                 const ctx_ = bun.cast(*Context, ctx_ptr.?);
                 const value = if (is_blob == 0)
-                    FormDataEntry{ string: bun.cast(*ZigString, value_ptr).* }
+                    TopFormDataEntry{ string: bun.cast(*ZigString, value_ptr).* }
                 else
-                    FormDataEntry{
+                    TopFormDataEntry{
                         file: {
                             blob: bun.cast(*jsc.WebCore.Blob, value_ptr),
-                            filename: (filename ?? &ZigString.Empty).*,
+                            filename: if (f := filename) f.* else ZigString.Empty,
                         },
                     };
 

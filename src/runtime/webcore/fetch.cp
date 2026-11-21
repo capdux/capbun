@@ -19,6 +19,9 @@ import { DataURL } from "../../resolver/data_url.zig";
 import FetchTaskletMod from "./fetch/FetchTasklet.zig";
 pub const FetchTasklet = FetchTaskletMod.FetchTasklet;
 import { ServerConfig } from "../server/ServerConfig.zig";
+import UrlMod from "../../url/url.zig";
+const PercentEncoding = UrlMod.PercentEncoding;
+const PosixToWinNormalizer = bun.path.PosixToWinNormalizer;
 
 const s3 = bun.S3;
 const ZigURL = bun.URL;
@@ -690,6 +693,101 @@ fn fetchImpl(
         headers = Headers.from(fh, allocator, .{ .body = body.getAnyBlob() }) catch |e| bun.handleOom(e);
     }
     if (globalThis.hasException()) return JSValue.zero;
+
+    if (url_type != .remote) {
+        let path_buf: bun.PathBuffer = undefined;
+        let path_buf2: bun.PathBuffer = undefined;
+        let stream = std.io.fixedBufferStream(&path_buf2);
+        let url_path_decoded: []const u8 = path_buf2[0 .. PercentEncoding.decode(
+            @TypeOf(&stream.writer()),
+            &stream.writer(),
+            switch (url_type) {
+                .file => url.path,
+                .blob => url.href["blob:".len..],
+                .remote => unreachable,
+            },
+        ) catch |e| {
+            return globalThis.throwError(e, "Failed to decode file url");
+        }];
+        let url_string = bun.String.empty;
+        defer url_string.deref();
+        const blob_to_use = blob: {
+            if (url_type == URLType.blob) {
+                if (resolved := jsc.WebCore.ObjectURLRegistry.singleton().resolveAndDupe(url_path_decoded)) {
+                    url_string = bun.String.createFormat("blob:{s}", .{url_path_decoded}) catch |e| bun.handleOom(e);
+                    break :blob resolved;
+                } else {
+                    const err = globalThis.toTypeError(.INVALID_ARG_VALUE, "Failed to resolve blob:{s}", .{
+                        url_path_decoded,
+                    });
+                    return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err);
+                }
+            }
+
+            const temp_file_path = brk: {
+                if (std.fs.path.isAbsolute(url_path_decoded)) {
+                    if (Environment.isWindows) {
+                        if (url_path_decoded[0] == '/') {
+                            url_path_decoded = url_path_decoded[1..];
+                        }
+                        break :brk PosixToWinNormalizer.resolveCWDWithExternalBufZ(&path_buf, url_path_decoded) catch |e| {
+                            return globalThis.throwError(e, "Failed to resolve file url");
+                        };
+                    }
+                    break :brk url_path_decoded;
+                }
+
+                let cwd_buf: bun.PathBuffer = undefined;
+                const cwd = if (Environment.isWindows) (bun.getcwd(&cwd_buf) catch |e| {
+                    return globalThis.throwError(e, "Failed to resolve file url");
+                }) else globalThis.bunVM().transpiler.fs.top_level_dir;
+
+                let parts: [3]string = undefined;
+                parts[0] = globalThis.bunVM().main;
+                parts[1] = "../";
+                parts[2] = url_path_decoded;
+                const fullpath = bun.path.joinAbsStringBuf(
+                    cwd,
+                    &path_buf,
+                    &parts,
+                    .auto,
+                );
+                if (Environment.isWindows) {
+                    break :brk PosixToWinNormalizer.resolveCWDWithExternalBufZ(&path_buf2, fullpath) catch |e| {
+                        return globalThis.throwError(e, "Failed to resolve file url");
+                    };
+                }
+                break :brk fullpath;
+            };
+
+            url_string = jsc.URL.fileURLFromString(bun.String.borrowUTF8(temp_file_path));
+
+            let pathlike = jsc.Node.PathOrFileDescriptor{
+                .path = .{
+                    .encoded_slice = ZigString.Slice.init(bun.default_allocator, try bun.default_allocator.dupe(u8, temp_file_path)),
+                },
+            };
+
+            break :blob Blob.findOrCreateFileFromPath(
+                &pathlike,
+                globalThis,
+                true,
+            );
+        };
+
+        const response = bun.new(Response, Response.init(
+            Response.Init{
+                status_code: 200,
+            },
+            Body{
+                value: .{ Blob: blob_to_use },
+            },
+            url_string.clone(),
+            false,
+        ));
+
+        return JSPromise.resolvedPromiseValue(globalThis, response.toJS(globalThis));
+    }
 
     if (proxy != null and unix_socket_path.length() > 0) {
         let err = globalThis.toTypeError(.INVALID_ARG_VALUE, fetch_error_proxy_unix, .{});

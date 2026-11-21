@@ -155,3 +155,18 @@
   - 修复 `src/css/rules/property.cp:182-188` `else return` 表达式被吞问题，`27117.test.ts`（`:root` + `@property`）**1/1 全绿**；
   - 用新版 `cpc` 全量重编全仓仍残留旧版隐式 `defer ... release()` 的 **24 个 `.cp` 模块**（含 `HTTPThread`、`Router`、`url`、`resolver`、`napi`、`Headers`、`SocketGroup`、`write_file` 等）并修正 `s3/client.cp` 与 `blob/copy_file.cp` 历史 `export const` -> `pub const`，全仓隐式 `release()` **归零 (0)**，`bun run zig:check` **5/5**，`27358.test.ts`（mTLS keepalive）**2/2 全绿**；
   - 完成 `test/regression/issue/` 全目录 353 文件及 `test/integration/` 扫描（均 0 崩溃）。
+- **[2026-11-22 01:21] 向 `cp_agy` 批量提交 5 项已实锤复现的 `cpc` 编译器缺陷工单**：
+  - `task-bun-20261122-orelse-assign-drop` (`/data/dev/cp/temp/repro_orelse_assign.cp`)：`lhs.field = expr orelse { ... }` 吞 `expr` 并请裁决 `orelse` 软关键字去留；
+  - `task-bun-20261122-loop-field-shadow` (`/data/dev/cp/temp/repro_loop_field_shadow.cp`)：`for (*ltr of _.ltr)` 循环变量与字段同名误 lowering 为 `self.ltr`；
+  - `task-bun-20261122-if-else-return-drop` (`/data/dev/cp/temp/repro_if_else_return_drop.cp`)：`if ... else if ... else return` 赋值报 `E0100` 且在方法体内静默吞语句；
+  - `task-bun-20261122-expr-walrus-drop` (`/data/dev/cp/temp/repro_expr_walrus_drop.cp`)：实参内 `if (v := opt) ... else null` 报 `E0111` 且在方法体内静默吞语句；
+  - `task-bun-20261122-ptr-opt-and-string-from` (`/data/dev/cp/temp/repro_ptr_opt_and_unsafe.cp`)：`ptrAs(([*:0]u8)?)` 误生成 `try [*:0]u8` 与 `string("")` 退化为 `@typeName(*const [0:0]u8)`。
+- **[2026-11-22 01:29] 向 `cp_agy` 提交工单 `task-bun-20261122-ptr-postfix-opt`**：复现文件 `/data/dev/cp/temp/repro_ptr_postfix_opt.cp`，上报 `*Foo?` 在 `cpc` 中生成为 `*?*Foo`（而非 `?*Foo`）导致传入 `*Foo` 类型不匹配，提请裁决 `*T?` vs `(*T)?` / `*T?!` 语义与编译期拦截提示；同步启动 2 路 RAII `~init()` 专项审查改造子智能体（`Archive`/`RuntimeTranspilerCache` 与 `WebCore`）。
+- **[2026-11-22 01:38] 向 `cp_agy` 提交工单 `task-bun-20261122-unsafe-e0209-gaps`**：复现文件 `/data/dev/cp/temp/repro_unsafe_leak_check.cp`，上报 `cpc` 在 `unsafe {}` 外部对 `[*]u8!` 下标 `p[0]`、切片 `p[0..1]`、`@ptrCast`、`@alignCast`、`@intFromPtr`、`@constCast(slice.ptr)` 共 6 类危险操作全部漏检放行（`EXIT=0` 未触发 `E0209`）。
+
+- **[2026-11-22 02:01] WebCore / HTTP / Archive / pack / RuntimeTranspilerCache RAII `~init()` 专项加固与历史桩函数恢复（103/103 全绿、`zig:check` 5/5）**：
+  - `src/http/http.cp`：`buildRequest` 恢复 `Accept-Encoding` 正常发送与 `override_*` 标记；`isHTTPS()` 补充 `http_proxy.isHTTPS()` 判定，根治 `fetch-proxy-tls-intern-race.test.ts` panic；
+  - `src/runtime/webcore/{Blob,Response,S3File}.cp`：修复 `Blob.dupe`/`dupeWithContentType` 对 `content_type_allocated` 深拷贝（消除 ASan `use-after-poison`）、补全 `Response`/`S3File` `errdefer` 与泄漏点并收窄 10+ 裸指针操作入 `unsafe {}`；恢复 `Blob.fromDOMFormData`/`fromURLSearchParams` 完整实现（`FormDataContext`、`URLSearchParamsConverter`）与 `DOMFormData.cp`/`URLSearchParams.cp` FFI 绑定；
+  - `src/runtime/webcore/fetch.cp`：恢复缺失的 `blob:` / `file:` 本地 URL 分支；
+  - `src/runtime/api/Archive.cp`、`src/cli/pack_command.cp`、`src/jsc/RuntimeTranspilerCache.cp`：以 `~init()` RAII Guard 批量替代手工 `defer`/`errdefer`（`Archive` 15 guards / `pack_command` 21 guards 清零 35/35 / `RuntimeTranspilerCache` 7 guards 清零 13/13）；
+  - 验证：`bun run zig:check` 5/5，`bun-pack.test.ts` (71/71)、`transpiler-cache.test.ts` (9/9)、`27061.test.ts` (6/6)、`blob.test.ts` (16/16)、`fetch-proxy-tls-intern-race.test.ts` (1/1) 共 **103/103 全绿**。

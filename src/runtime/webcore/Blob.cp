@@ -60,9 +60,101 @@ pub struct FileStreamWrapper {
     }
 }
 
+struct FormDataContext {
+    allocator: std.mem.Allocator,
+    joiner: StringJoiner,
+    boundary: []const u8,
+    failed: bool = false,
+    globalThis: *JSGlobalObject,
+
+    fn onEntry(*_, name: ZigString, entry: jsc.DOMFormData.FormDataEntry) {
+        if (_.failed) return;
+        const globalThis = _.globalThis;
+        const allocator = _.allocator;
+        let joiner = &_.joiner;
+        const boundary = _.boundary;
+
+        joiner.pushStatic("--");
+        joiner.pushStatic(boundary);
+        joiner.pushStatic("\r\n");
+
+        joiner.pushStatic("Content-Disposition: form-data; name=\"");
+        const name_slice = name.toSlice(allocator);
+        joiner.push(name_slice.slice(), name_slice.allocator.get());
+
+        switch (entry) {
+            .string => |value| {
+                joiner.pushStatic("\"\r\n\r\n");
+                const value_slice = value.toSlice(allocator);
+                joiner.push(value_slice.slice(), value_slice.allocator.get());
+            },
+            .file => |value| {
+                joiner.pushStatic("\"; filename=\"");
+                const filename_slice = value.filename.toSlice(allocator);
+                joiner.push(filename_slice.slice(), filename_slice.allocator.get());
+                joiner.pushStatic("\"\r\n");
+
+                let blob = value.blob;
+                const content_type = if (blob.content_type.len > 0) blob.content_type else "application/octet-stream";
+                joiner.pushStatic("Content-Type: ");
+                joiner.pushStatic(content_type);
+                joiner.pushStatic("\r\n\r\n");
+
+                if (store := blob.store) {
+                    if (blob.size == Blob.max_size) {
+                        blob.resolveSize();
+                    }
+                    switch (store.data) {
+                        .s3 => |_| {},
+                        .file => |file| {
+                            const res = jsc.Node.fs.NodeFS.readFile(
+                                globalThis.bunVM().nodeFS(),
+                                .{
+                                    .encoding = .buffer,
+                                    .path = file.pathlike,
+                                    .offset = blob.offset,
+                                    .max_size = blob.size,
+                                },
+                                .sync,
+                            );
+
+                            switch (res) {
+                                .err => |e| {
+                                    _.failed = true;
+                                    const js_err = e.toJS(globalThis) catch return;
+                                    const thrown_err = globalThis.throwValue(js_err);
+                                    * = thrown_err;
+                                },
+                                .result => |result| {
+                                    joiner.push(result.slice(), result.buffer.allocator);
+                                },
+                            }
+                        },
+                        .bytes => |_| {
+                            joiner.pushStatic(blob.sharedView());
+                        },
+                    }
+                }
+            },
+        }
+
+        joiner.pushStatic("\r\n");
+    }
+}
+
+struct URLSearchParamsConverter {
+    allocator: std.mem.Allocator,
+    buf: []u8 = "",
+    globalThis: *JSGlobalObject,
+
+    fn convert(*_, str: ZigString) {
+        _.buf = bun.handleOom(str.toOwnedSlice(_.allocator));
+    }
+}
+
 pub fn onFileStreamResolveRequestStream(globalThis: *JSGlobalObject, callframe: *CallFrame): JSValue ! JSError {
     let args = callframe.arguments_old(2);
-    let wrapper = args.ptr[args.len - 1].asPromisePtr(FileStreamWrapper);
+    let wrapper = unsafe { args.ptr[args.len - 1] }.asPromisePtr(FileStreamWrapper);
     defer wrapper.deinit();
     let strong = wrapper.readable_stream_ref;
     defer strong.deinit();
@@ -76,9 +168,9 @@ pub fn onFileStreamResolveRequestStream(globalThis: *JSGlobalObject, callframe: 
 
 pub fn onFileStreamRejectRequestStream(globalThis: *JSGlobalObject, callframe: *CallFrame): JSValue ! JSError {
     const args = callframe.arguments_old(2);
-    let wrapper = args.ptr[args.len - 1].asPromisePtr(FileStreamWrapper);
-    defer wrapper.sink.deref();
-    const err_val = args.ptr[0];
+    let wrapper = unsafe { args.ptr[args.len - 1] }.asPromisePtr(FileStreamWrapper);
+    defer wrapper.deinit();
+    const err_val = unsafe { args.ptr[0] };
 
     let strong = wrapper.readable_stream_ref;
     defer strong.deinit();
@@ -230,6 +322,12 @@ fn writeFileWithEmptySourceToDestination(ctx: *JSGlobalObject, destination_blob:
                 proxy_url = p.href;
             }
             destination_store.ref();
+            const wrapper = Wrapper.new(.{
+                .promise = promise,
+                .store = destination_store,
+                .global = ctx,
+            });
+            errdefer wrapper.deinit();
             S3.upload(
                 &aws_options.credentials,
                 s3.path(),
@@ -242,11 +340,7 @@ fn writeFileWithEmptySourceToDestination(ctx: *JSGlobalObject, destination_blob:
                 aws_options.storage_class,
                 aws_options.request_payer,
                 Wrapper.resolve,
-                Wrapper.new(.{
-                    .promise = promise,
-                    .store = destination_store,
-                    .global = ctx,
-                }),
+                wrapper,
             )?;
             return promise_value;
         },
@@ -411,11 +505,18 @@ pub fn writeFileWithSourceDestination(ctx: *JSGlobalObject, source_blob: *Blob, 
                         fn deinit(*_) {
                             _.promise.deinit();
                             _.store.deref();
+                            bun.destroy(_);
                         }
                     };
                     source_store.ref();
                     const promise = jsc.JSPromise.Strong.init(ctx);
                     const promise_value = promise.value();
+                    const wrapper = Wrapper.new(.{
+                        .store = source_store,
+                        .promise = promise,
+                        .global = ctx,
+                    });
+                    errdefer wrapper.deinit();
 
                     S3.upload(
                         &aws_options.credentials,
@@ -429,11 +530,7 @@ pub fn writeFileWithSourceDestination(ctx: *JSGlobalObject, source_blob: *Blob, 
                         aws_options.storage_class,
                         aws_options.request_payer,
                         Wrapper.resolve,
-                        Wrapper.new(.{
-                            .store = source_store,
-                            .promise = promise,
-                            .global = ctx,
-                        }),
+                        wrapper,
                     )?;
                     return promise_value;
                 }
@@ -992,7 +1089,7 @@ pub fn FileOpener(comptime This: type): type {
                     ctx.opened_fd = invalid_fd;
                     Callback(ctx, invalid_fd);
                 }
-                ctx.req.data = @ptrCast(ctx);
+                ctx.req.data = unsafe { @ptrCast(ctx) };
                 return;
             }
 
@@ -1055,12 +1152,12 @@ pub fn FileOpener(comptime This: type): type {
 pub fn FileCloser(comptime This: type): type {
     return struct {
         static fn scheduleClose(request: *io.Request): io.Action {
-            let ctx: *This = @alignCast(@fieldParentPtr("io_request", request));
+            let ctx: *This = unsafe { @alignCast(@fieldParentPtr("io_request", request)) };
             return io.Action{
                 .close = .{
                     .ctx = ctx,
                     .fd = ctx.opened_fd,
-                    .onDone = @ptrCast(&onIORequestClosed),
+                    .onDone = unsafe { @ptrCast(&onIORequestClosed) },
                     .poll = &ctx.io_poll,
                     .tag = This.io_tag,
                 },
@@ -1075,7 +1172,7 @@ pub fn FileCloser(comptime This: type): type {
 
         static fn onCloseIORequest(task: *jsc.WorkPoolTask) {
             debug("onCloseIORequest()", .{});
-            let ctx: *This = @alignCast(@fieldParentPtr("task", task));
+            let ctx: *This = unsafe { @alignCast(@fieldParentPtr("task", task)) };
             ctx.close_after_io = false;
             ctx.update();
         }
@@ -1545,7 +1642,7 @@ pub struct BlobExternalSharedDescriptor {
                                         if (Environment.isDebug) @panic("this shouldn't be reachable.");
                                         writer.print(
                                             comptime Output.prettyFmt(" (<r>fd<d>:<r> <yellow>0x{x}<r>)<r>", enable_ansi_colors),
-                                            .{@intFromPtr(handle)},
+                                            .{unsafe { @intFromPtr(handle) }},
                                         )?;
                                     },
                                 }
@@ -1691,6 +1788,11 @@ pub struct BlobExternalSharedDescriptor {
             };
             let t = bun.new(Task, .{ .ctx = ctx, .blob = _.dupe(), .vm = global.bunVM() });
             t.poll.ref(t.vm);
+            errdefer {
+                t.poll.unref(t.vm);
+                t.blob.deinit();
+                bun.destroy(t);
+            }
             const env = t.vm.transpiler.env;
             const cred = t.blob.store.?.data.s3.getCredentials();
             const path = t.blob.store.?.data.s3.path();
@@ -1701,9 +1803,9 @@ pub struct BlobExternalSharedDescriptor {
             const payer = t.blob.store.?.data.s3.request_payer;
             if (_.offset > 0 || _.size != Blob.max_size) {
                 const len: usize? = if (_.size != Blob.max_size) @intCast(_.size) else null;
-                bun.S3.downloadSlice(cred, path, @intCast(_.offset), len, @ptrCast(&Task.cb), t, proxy, payer)?;
+                bun.S3.downloadSlice(cred, path, @intCast(_.offset), len, unsafe { @ptrCast(&Task.cb) }, t, proxy, payer)?;
             } else {
-                bun.S3.download(cred, path, @ptrCast(&Task.cb), t, proxy, payer)?;
+                bun.S3.download(cred, path, unsafe { @ptrCast(&Task.cb) }, t, proxy, payer)?;
             }
             return;
         }
@@ -1903,12 +2005,16 @@ pub struct BlobExternalSharedDescriptor {
         if (store := _.store) {
             * = store.ref();
         }
+        const content_type = if (_.content_type_allocated)
+            bun.handleOom(default_allocator.dupe(u8, _.content_type))
+        else
+            _.content_type;
         return Blob{
             reported_estimated_size: _.reported_estimated_size,
             size: _.size,
             offset: _.offset,
             store: _.store,
-            content_type: _.content_type,
+            content_type: content_type,
             content_type_allocated: _.content_type_allocated,
             content_type_was_set: _.content_type_was_set,
             charset: _.charset,
@@ -1924,12 +2030,16 @@ pub struct BlobExternalSharedDescriptor {
         if (store := _.store) {
             * = store.ref();
         }
+        const content_type = if (preserve_type)
+            (if (_.content_type_allocated) bun.handleOom(default_allocator.dupe(u8, _.content_type)) else _.content_type)
+        else
+            "";
         return Blob{
             reported_estimated_size: _.reported_estimated_size,
             size: _.size,
             offset: _.offset,
             store: _.store,
-            content_type: if (preserve_type) _.content_type else "",
+            content_type: content_type,
             content_type_allocated: if (preserve_type) _.content_type_allocated else false,
             content_type_was_set: if (preserve_type) _.content_type_was_set else false,
             charset: _.charset,
@@ -2021,15 +2131,55 @@ pub struct BlobExternalSharedDescriptor {
     }
 
     static fn fromDOMFormData(globalThis: *JSGlobalObject, allocator: std.mem.Allocator, form_data: *DOMFormData): Blob {
-        * = allocator;
-        * = form_data;
-        return Blob.initEmpty(globalThis);
+        let arena_alloc = bun.ArenaAllocator.init(allocator);
+        defer arena_alloc.deinit();
+        let stack_allocator = std.heap.stackFallback(1024, arena_alloc.allocator());
+        const stack_mem_all = stack_allocator.get();
+
+        let hex_buf: [70]u8 = undefined;
+        const boundary = brk: {
+            let random = globalThis.bunVM().rareData().nextUUID().bytes;
+            break :brk std.fmt.bufPrint(&hex_buf, "----WebKitFormBoundary{x}", .{&random}) catch unreachable;
+        };
+
+        let context = FormDataContext{
+            allocator: allocator,
+            joiner: .{ .allocator = stack_mem_all },
+            boundary: boundary,
+            globalThis: globalThis,
+        };
+
+        form_data.forEach(FormDataContext, &context, FormDataContext.onEntry);
+        if (context.failed) {
+            context.joiner.deinit();
+            return Blob.initEmpty(globalThis);
+        }
+
+        context.joiner.pushStatic("--");
+        context.joiner.pushStatic(boundary);
+        context.joiner.pushStatic("--\r\n");
+
+        const store = BlobStore.init(bun.handleOom(context.joiner.done(allocator)), allocator);
+        let blob = Blob.initWithStore(store, globalThis);
+        blob.content_type = std.fmt.allocPrint(bun.default_allocator, "multipart/form-data; boundary={s}", .{boundary}) catch |e| bun.handleOom(e);
+        blob.content_type_allocated = true;
+        blob.content_type_was_set = true;
+        return blob;
     }
 
     static fn fromURLSearchParams(globalThis: *JSGlobalObject, allocator: std.mem.Allocator, search_params: *URLSearchParams): Blob {
-        * = allocator;
-        * = search_params;
-        return Blob.initEmpty(globalThis);
+        let converter = URLSearchParamsConverter{
+            allocator: allocator,
+            globalThis: globalThis,
+        };
+        search_params.toString(URLSearchParamsConverter, &converter, URLSearchParamsConverter.convert);
+        const url_store = BlobStore.init(converter.buf, allocator);
+        url_store.mime_type = MimeType.Compact.from(.@"application/x-www-form-urlencoded").toMimeType();
+
+        let blob = Blob.initWithStore(url_store, globalThis);
+        blob.content_type = url_store.mime_type.value;
+        blob.content_type_was_set = true;
+        return blob;
     }
 
     static fn findOrCreateFileFromPath(path_or_fd: *jsc.Node.PathOrFileDescriptor, globalThis: *JSGlobalObject, comptime check_s3: bool): Blob {
@@ -2604,7 +2754,7 @@ pub struct BlobExternalSharedDescriptor {
     fn getSlice(*_, globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSValue {
         const allocator = default_allocator;
         let arguments_ = callframe.arguments_old(3);
-        let args = arguments_.ptr[0..arguments_.len];
+        let args = unsafe { arguments_.ptr[0..arguments_.len] };
 
         if (_.size == 0) {
             const empty = Blob.initEmpty(globalThis);
@@ -2615,15 +2765,17 @@ pub struct BlobExternalSharedDescriptor {
         let relativeStart: i64 = 0;
         let relativeEnd: i64 = @as(i64, @intCast(_.size));
 
-        if (args.ptr[0].isString()) {
-            args.ptr[2] = args.ptr[0];
-            args.ptr[1] = .zero;
-            args.ptr[0] = .zero;
-            args.len = 3;
-        } else if (args.ptr[1].isString()) {
-            args.ptr[2] = args.ptr[1];
-            args.ptr[1] = .zero;
-            args.len = 3;
+        unsafe {
+            if (args.ptr[0].isString()) {
+                args.ptr[2] = args.ptr[0];
+                args.ptr[1] = .zero;
+                args.ptr[0] = .zero;
+                args.len = 3;
+            } else if (args.ptr[1].isString()) {
+                args.ptr[2] = args.ptr[1];
+                args.ptr[1] = .zero;
+                args.len = 3;
+            }
         }
 
         let args_iter = CallFrame.ArgumentsSlice.init(globalThis.bunVM(), args);
@@ -2929,6 +3081,7 @@ pub struct BlobExternalSharedDescriptor {
         }
 
         let sink = jsc.WebCore.FileSink.init(bun.invalid_fd, _.globalThis.bunVM().eventLoop());
+        errdefer sink.deref();
 
         let input_path: jsc.WebCore.PathOrFileDescriptor = brk: {
             if (store.data.file.pathlike == .fd) {
@@ -2957,7 +3110,6 @@ pub struct BlobExternalSharedDescriptor {
 
         switch (sink.start(stream_start)) {
             .err e => {
-                sink.deref();
                 return globalThis.throwValue(e.toJS(globalThis)?);
             },
             else => {},
@@ -3640,7 +3792,7 @@ pub struct BlobExternalSharedDescriptor {
     const blob = Blob.fromJS(value) orelse return null;
     const data = blob.sharedView();
     if (data.len == 0) return null;
-    return @constCast(data.ptr);
+    return unsafe { @constCast(data.ptr) };
 }
 
 @export @c fn Blob__getSize(value: JSValue): usize {
@@ -3653,7 +3805,7 @@ pub struct BlobExternalSharedDescriptor {
     if (ptr_arg == null || len == 0) {
         return Blob.new(Blob.initEmpty(globalThis));
     }
-    const bytes = bun.handleOom(default_allocator.dupe(u8, ptr_arg.?[0..len]));
+    const bytes = bun.handleOom(default_allocator.dupe(u8, unsafe { ptr_arg.?[0..len] }));
     const store = BlobStore.init(bytes, default_allocator);
     return Blob.new(Blob.initWithStore(store, globalThis));
 }
@@ -3673,7 +3825,7 @@ pub const MmapFreeInterface = if (Environment.isPosix) struct {
         return null;
     }
     static fn free(_: *!, buf: []u8, _: std.mem.Alignment, _: usize) {
-        sys.munmap(@ptrCast(@alignCast(buf))).unwrap() catch |e| {
+        sys.munmap(unsafe { @ptrCast(@alignCast(buf)) }).unwrap() catch |e| {
             Output.debugWarn("Blob mmap-store munmap failed: {}", .{e});
         };
     }
@@ -3690,7 +3842,7 @@ pub const MmapFreeInterface = if (Environment.isPosix) struct {
     if (!Environment.isPosix) {
         return Blob__fromBytesWithType(globalThis, ptr_arg, len, mime);
     }
-    const store = BlobStore.init(ptr_arg[0..len], .{
+    const store = BlobStore.init(unsafe { ptr_arg[0..len] }, .{
         ptr: undefined,
         vtable: MmapFreeInterface.vtable,
     });
