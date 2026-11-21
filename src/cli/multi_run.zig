@@ -648,8 +648,9 @@ pub fn run(ctx: Command.Context) !noreturn {
             _ = &package_json_iter;
             var packages = std.array_list.Managed(FilteredPackage).init(ctx.allocator);
             _ = &packages;
-            while (try package_json_iter.next()) |path| {
-                const dirpath = bun.path.dirname(path, .auto);
+            while (try package_json_iter.next()) |package_json_path| {
+                const dirpath = try ctx.allocator.dupe(u8, ((std.fs.path.dirname(package_json_path)) orelse (Global.crash())));
+                const path = bun.strings.withoutTrailingSlash(dirpath);
                 if ((ctx.workspaces and strings.eql(path, resolve_root))) {
                     continue;
                 }
@@ -666,7 +667,7 @@ pub fn run(ctx: Command.Context) !noreturn {
                 }
                 const pkg_scripts = pkgjson.scripts.?;
                 const pkg_PATH = try RunCommand.configurePathForRunWithPackageJsonDir(ctx, dirpath, (&this_transpiler), null, dirpath, ctx.debug.run_in_bun);
-                const pkg_name = (if (((if (@typeInfo(@TypeOf(pkgjson)) == .@"enum" or @typeInfo(@TypeOf(pkgjson)) == .@"union") @tagName(pkgjson) else pkgjson.name).len > 0)) (if (@typeInfo(@TypeOf(pkgjson)) == .@"enum" or @typeInfo(@TypeOf(pkgjson)) == .@"union") @tagName(pkgjson) else pkgjson.name) else bun.path.basename(dirpath));
+                const pkg_name = (if (((if (@typeInfo(@TypeOf(pkgjson)) == .@"enum" or @typeInfo(@TypeOf(pkgjson)) == .@"union") @tagName(pkgjson) else pkgjson.name).len > 0)) (if (@typeInfo(@TypeOf(pkgjson)) == .@"enum" or @typeInfo(@TypeOf(pkgjson)) == .@"union") @tagName(pkgjson) else pkgjson.name) else try ctx.allocator.dupe(u8, bun.path.relativePlatform(resolve_root, path, .posix, false)));
                 _ = try packages.append(.{ .name = pkg_name, .dirpath = dirpath, .scripts = pkg_scripts, .PATH = pkg_PATH });
             }
             for (script_names.items) |raw_name| {

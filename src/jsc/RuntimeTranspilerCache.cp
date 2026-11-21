@@ -25,6 +25,102 @@ const MINIMUM_CACHE_SIZE = 50 * 1024;
 // When making parser changes, it gets extremely confusing.
 let bun_debug_restore_from_cache = false;
 
+pub struct CacheMetadata {
+    cache_version: u32 = expected_version,
+    output_encoding: RuntimeTranspilerCache.Encoding = RuntimeTranspilerCache.Encoding.none,
+    module_type: RuntimeTranspilerCache.ModuleType = RuntimeTranspilerCache.ModuleType.none,
+
+    features_hash: u64 = 0,
+
+    input_byte_length: u64 = 0,
+    input_hash: u64 = 0,
+
+    output_byte_offset: u64 = 0,
+    output_byte_length: u64 = 0,
+    output_hash: u64 = 0,
+
+    sourcemap_byte_offset: u64 = 0,
+    sourcemap_byte_length: u64 = 0,
+    sourcemap_hash: u64 = 0,
+
+    esm_record_byte_offset: u64 = 0,
+    esm_record_byte_length: u64 = 0,
+    esm_record_hash: u64 = 0,
+
+    pub const size = brk: {
+        let count: usize = 0;
+        const @"meta": CacheMetadata = {};
+        const field_names = std.meta.fieldNames(CacheMetadata);
+        let i: usize = 0;
+        while (i < field_names.len) : (i += 1) {
+            count += @sizeOf(@TypeOf(@field(@"meta", field_names[i])));
+        }
+        break :brk count;
+    };
+
+    fn encode(writer: auto)! {
+        writer.writeInt(u32, _.cache_version, .little)?;
+        writer.writeInt(u8, @intFromEnum(_.module_type), .little)?;
+        writer.writeInt(u8, @intFromEnum(_.output_encoding), .little)?;
+
+        writer.writeInt(u64, _.features_hash, .little)?;
+
+        writer.writeInt(u64, _.input_byte_length, .little)?;
+        writer.writeInt(u64, _.input_hash, .little)?;
+
+        writer.writeInt(u64, _.output_byte_offset, .little)?;
+        writer.writeInt(u64, _.output_byte_length, .little)?;
+        writer.writeInt(u64, _.output_hash, .little)?;
+
+        writer.writeInt(u64, _.sourcemap_byte_offset, .little)?;
+        writer.writeInt(u64, _.sourcemap_byte_length, .little)?;
+        writer.writeInt(u64, _.sourcemap_hash, .little)?;
+
+        writer.writeInt(u64, _.esm_record_byte_offset, .little)?;
+        writer.writeInt(u64, _.esm_record_byte_length, .little)?;
+        writer.writeInt(u64, _.esm_record_hash, .little)?;
+    }
+
+    fn decode(*_, reader: auto)! {
+        _.cache_version = reader.readInt(u32, .little)?;
+        if (_.cache_version != expected_version) {
+            return error.StaleCache;
+        }
+
+        _.module_type = @enumFromInt(reader.readInt(u8, .little)?);
+        _.output_encoding = @enumFromInt(reader.readInt(u8, .little)?);
+
+        _.features_hash = reader.readInt(u64, .little)?;
+
+        _.input_byte_length = reader.readInt(u64, .little)?;
+        _.input_hash = reader.readInt(u64, .little)?;
+
+        _.output_byte_offset = reader.readInt(u64, .little)?;
+        _.output_byte_length = reader.readInt(u64, .little)?;
+        _.output_hash = reader.readInt(u64, .little)?;
+
+        _.sourcemap_byte_offset = reader.readInt(u64, .little)?;
+        _.sourcemap_byte_length = reader.readInt(u64, .little)?;
+        _.sourcemap_hash = reader.readInt(u64, .little)?;
+
+        _.esm_record_byte_offset = reader.readInt(u64, .little)?;
+        _.esm_record_byte_length = reader.readInt(u64, .little)?;
+        _.esm_record_hash = reader.readInt(u64, .little)?;
+
+        switch (_.module_type) {
+            .esm, .cjs => {},
+            // Invalid module type
+            else => return error.InvalidModuleType,
+        }
+
+        switch (_.output_encoding) {
+            .utf8, .utf16, .latin1 => {},
+            // Invalid encoding
+            else => return error.UnknownEncoding,
+        }
+    }
+}
+
 pub struct RuntimeTranspilerCache {
     input_hash: u64? = null,
     input_byte_length: u64? = null,
@@ -38,99 +134,7 @@ pub struct RuntimeTranspilerCache {
     esm_record_allocator: std.mem.Allocator,
 
     const seed = 42;
-    pub const Metadata = struct {
-        cache_version: u32 = expected_version,
-        output_encoding: Encoding = Encoding.none,
-        module_type: ModuleType = ModuleType.none,
-
-        features_hash: u64 = 0,
-
-        input_byte_length: u64 = 0,
-        input_hash: u64 = 0,
-
-        output_byte_offset: u64 = 0,
-        output_byte_length: u64 = 0,
-        output_hash: u64 = 0,
-
-        sourcemap_byte_offset: u64 = 0,
-        sourcemap_byte_length: u64 = 0,
-        sourcemap_hash: u64 = 0,
-
-        esm_record_byte_offset: u64 = 0,
-        esm_record_byte_length: u64 = 0,
-        esm_record_hash: u64 = 0,
-
-        pub const size = brk: {
-            let count: usize = 0;
-            const @"meta": Metadata = {};
-            for (std.meta.fieldNames(Metadata)) |name| {
-                count += @sizeOf(@TypeOf(@field(@"meta", name)));
-            }
-            break :brk count;
-        };
-
-        fn encode(writer: auto)! {
-            writer.writeInt(u32, _.cache_version, .little)?;
-            writer.writeInt(u8, @intFromEnum(_.module_type), .little)?;
-            writer.writeInt(u8, @intFromEnum(_.output_encoding), .little)?;
-
-            writer.writeInt(u64, _.features_hash, .little)?;
-
-            writer.writeInt(u64, _.input_byte_length, .little)?;
-            writer.writeInt(u64, _.input_hash, .little)?;
-
-            writer.writeInt(u64, _.output_byte_offset, .little)?;
-            writer.writeInt(u64, _.output_byte_length, .little)?;
-            writer.writeInt(u64, _.output_hash, .little)?;
-
-            writer.writeInt(u64, _.sourcemap_byte_offset, .little)?;
-            writer.writeInt(u64, _.sourcemap_byte_length, .little)?;
-            writer.writeInt(u64, _.sourcemap_hash, .little)?;
-
-            writer.writeInt(u64, _.esm_record_byte_offset, .little)?;
-            writer.writeInt(u64, _.esm_record_byte_length, .little)?;
-            writer.writeInt(u64, _.esm_record_hash, .little)?;
-        }
-
-        fn decode(*_, reader: auto)! {
-            _.cache_version = reader.readInt(u32, .little)?;
-            if (_.cache_version != expected_version) {
-                return error.StaleCache;
-            }
-
-            _.module_type = @enumFromInt(reader.readInt(u8, .little)?);
-            _.output_encoding = @enumFromInt(reader.readInt(u8, .little)?);
-
-            _.features_hash = reader.readInt(u64, .little)?;
-
-            _.input_byte_length = reader.readInt(u64, .little)?;
-            _.input_hash = reader.readInt(u64, .little)?;
-
-            _.output_byte_offset = reader.readInt(u64, .little)?;
-            _.output_byte_length = reader.readInt(u64, .little)?;
-            _.output_hash = reader.readInt(u64, .little)?;
-
-            _.sourcemap_byte_offset = reader.readInt(u64, .little)?;
-            _.sourcemap_byte_length = reader.readInt(u64, .little)?;
-            _.sourcemap_hash = reader.readInt(u64, .little)?;
-
-            _.esm_record_byte_offset = reader.readInt(u64, .little)?;
-            _.esm_record_byte_length = reader.readInt(u64, .little)?;
-            _.esm_record_hash = reader.readInt(u64, .little)?;
-
-            switch (_.module_type) {
-                .esm, .cjs => {},
-                // Invalid module type
-                else => return error.InvalidModuleType,
-            }
-
-            switch (_.output_encoding) {
-                .utf8, .utf16, .latin1 => {},
-                // Invalid encoding
-                else => return error.UnknownEncoding,
-            }
-        }
-    };
+    pub const Metadata = CacheMetadata;
 
     pub const Entry = struct {
         metadata: Metadata,

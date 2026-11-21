@@ -121,3 +121,8 @@
 - **[2026-11-21 22:10] `multi_run.cp` 进程回收修复里程碑（`multi-run.test.ts` 117/118 通关、0 崩溃）**：
   - 补全 `src/cli/multi_run.cp:124-137` `ProcessHandle.start()` 缺失的 `proc_ptr.setExitHandler(_)` 与 `proc_ptr.watchOrReap()`，彻底消除 `bun run --parallel` / `--sequential` `<defunct>` 僵尸进程挂死问题；
   - `test/cli/run/multi-run.test.ts` 从全线超时提升至 **117 pass / 1 fail / 0 crash (526 expect() calls, 50.32s)**；同步提交新版 `cpc` 重编后的 `src/install/npm.zig`（保留 `:bin` 标签）。
+- **[2026-11-21 22:16] 收到 `cp_agy` 重大语法变更广播 `syntax-raii-20261121` 并验收 ack**：`cpc` (Release) 升级 RAII 与所有权模型并已同步更新本仓库 `CP_PITFALLS.md`：(1) 采用唯一双重幂等析构 `~init()` + `drop(x)`，彻底根除对 `release()` / 裸指针 `*T!` / 字段读取 / 多参方法误注入 `defer` 析构；(2) 统一直接赋值三态与五态对象解构；(3) `&v` 回收为纯取址符直赋 `*T!`/`*const T!`；(4) 补齐饱和/环绕复合赋值及 `?? break :label`。
+- **[2026-11-21 22:23] `multi_run` / `RuntimeTranspilerCache` / `visit` / `lexer` 4 模块修复里程碑（4 大测试集 100% 全绿）**：
+  - 修复 `src/cli/multi_run.cp:624-648` workspace 包路径过滤与无 `name` 回退 `relativePlatform` 逻辑，`multi-run.test.ts` **118 pass / 0 fail (527 expect())** 100% 全绿通关；
+  - 修复 `src/jsc/RuntimeTranspilerCache.cp:63-70`（提升 `CacheMetadata` 并改写 `while` 索引循环恢复 `Metadata.size` 非零计算）、`src/js_parser/lexer.cp:3209-3226`（`isLatin1Identifier` 改用 `c0` + `while` + 范围 `if`）、`src/js_parser/ast/visit.cp:381-392`（`visitForLoopInit` 改用 `while` 索引遍历恢复 `visitBinding`），`transpiler-cache.test.ts` + `run-unicode.test.ts` **11/11 全绿 (130 expect())**，`syntax.test.ts` `#225` **2/2 全绿**；
+  - `test/cli/run` 第二批 22 文件扫出 666 pass / 0 crash（上述关键模块已修复）。

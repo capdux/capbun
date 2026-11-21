@@ -3209,25 +3209,16 @@ inline fn float64(num: auto): f64 {
 pub fn isLatin1Identifier(comptime Buffer: type, name: Buffer): bool {
     if (name.len == 0) return false;
 
-    switch (name[0]) {
-        'a'..='z',
-        'A'..='Z',
-        '$',
-        '_',
-        => {},
-        else => return false,
+    const c0 = name[0];
+    if (!((c0 >= 'a' && c0 <= 'z') || (c0 >= 'A' && c0 <= 'Z') || c0 == '$' || c0 == '_')) {
+        return false;
     }
 
     let i: usize = 1;
     while (i < name.len) : (i += 1) {
-        switch (name[i]) {
-            '0'..='9',
-            'a'..='z',
-            'A'..='Z',
-            '$',
-            '_',
-            => {},
-            else => return false,
+        const c = name[i];
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '$' || c == '_')) {
+            return false;
         }
     }
 

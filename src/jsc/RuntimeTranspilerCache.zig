@@ -39,7 +39,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -63,6 +63,93 @@ fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const bun = @import("bun");
+pub const CacheMetadata = struct {
+    cache_version: u32 = expected_version,
+    output_encoding: RuntimeTranspilerCache.Encoding = RuntimeTranspilerCache.Encoding.none,
+    module_type: RuntimeTranspilerCache.ModuleType = RuntimeTranspilerCache.ModuleType.none,
+    features_hash: u64 = 0,
+    input_byte_length: u64 = 0,
+    input_hash: u64 = 0,
+    output_byte_offset: u64 = 0,
+    output_byte_length: u64 = 0,
+    output_hash: u64 = 0,
+    sourcemap_byte_offset: u64 = 0,
+    sourcemap_byte_length: u64 = 0,
+    sourcemap_hash: u64 = 0,
+    esm_record_byte_offset: u64 = 0,
+    esm_record_byte_length: u64 = 0,
+    esm_record_hash: u64 = 0,
+
+pub fn encode(self: CacheMetadata, writer: anytype) !void {
+            _ = try writer.writeInt(u32, self.cache_version, .little);
+            _ = try writer.writeInt(u8, @intFromEnum(self.module_type), .little);
+            _ = try writer.writeInt(u8, @intFromEnum(self.output_encoding), .little);
+            _ = try writer.writeInt(u64, self.features_hash, .little);
+            _ = try writer.writeInt(u64, self.input_byte_length, .little);
+            _ = try writer.writeInt(u64, self.input_hash, .little);
+            _ = try writer.writeInt(u64, self.output_byte_offset, .little);
+            _ = try writer.writeInt(u64, self.output_byte_length, .little);
+            _ = try writer.writeInt(u64, self.output_hash, .little);
+            _ = try writer.writeInt(u64, self.sourcemap_byte_offset, .little);
+            _ = try writer.writeInt(u64, self.sourcemap_byte_length, .little);
+            _ = try writer.writeInt(u64, self.sourcemap_hash, .little);
+            _ = try writer.writeInt(u64, self.esm_record_byte_offset, .little);
+            _ = try writer.writeInt(u64, self.esm_record_byte_length, .little);
+            _ = try writer.writeInt(u64, self.esm_record_hash, .little);
+    }
+
+pub fn decode(self: *CacheMetadata, reader: anytype) !void {
+            self.cache_version = try reader.readInt(u32, .little);
+            if ((self.cache_version != expected_version)) {
+                return error.StaleCache;
+            }
+            self.module_type = @enumFromInt(try reader.readInt(u8, .little));
+            self.output_encoding = @enumFromInt(try reader.readInt(u8, .little));
+            self.features_hash = try reader.readInt(u64, .little);
+            self.input_byte_length = try reader.readInt(u64, .little);
+            self.input_hash = try reader.readInt(u64, .little);
+            self.output_byte_offset = try reader.readInt(u64, .little);
+            self.output_byte_length = try reader.readInt(u64, .little);
+            self.output_hash = try reader.readInt(u64, .little);
+            self.sourcemap_byte_offset = try reader.readInt(u64, .little);
+            self.sourcemap_byte_length = try reader.readInt(u64, .little);
+            self.sourcemap_hash = try reader.readInt(u64, .little);
+            self.esm_record_byte_offset = try reader.readInt(u64, .little);
+            self.esm_record_byte_length = try reader.readInt(u64, .little);
+            self.esm_record_hash = try reader.readInt(u64, .little);
+            switch (self.module_type) {
+.esm, .cjs => {
+
+},
+else => {
+return error.InvalidModuleType;
+},
+}
+            switch (self.output_encoding) {
+.utf8, .utf16, .latin1 => {
+
+},
+else => {
+return error.UnknownEncoding;
+},
+}
+    }
+    pub const size = brk: {
+            var count: usize = 0;
+            _ = &count;
+            const @"meta": CacheMetadata = .{};
+            _ = &@"meta";
+            const field_names = std.meta.fieldNames(CacheMetadata);
+            _ = &field_names;
+            var i: usize = 0;
+            _ = &i;
+            while ((i < field_names.len)) : (i = (i + 1)) {
+                count = (count + @sizeOf(@TypeOf(@field(@"meta", field_names[@as(usize, @intCast(i))]))));
+            }
+            break :brk count;
+    };
+};
+
 pub const RuntimeTranspilerCache = struct {
     input_hash: ?u64 = null,
     input_byte_length: ?u64 = null,
@@ -302,88 +389,7 @@ pub fn put(self: *RuntimeTranspilerCache, output_code_bytes: []const u8, sourcem
             }
     }
     const seed = 42;
-    pub const Metadata = struct {
-        cache_version: u32 = expected_version,
-        output_encoding: Encoding = Encoding.none,
-        module_type: ModuleType = ModuleType.none,
-        features_hash: u64 = 0,
-        input_byte_length: u64 = 0,
-        input_hash: u64 = 0,
-        output_byte_offset: u64 = 0,
-        output_byte_length: u64 = 0,
-        output_hash: u64 = 0,
-        sourcemap_byte_offset: u64 = 0,
-        sourcemap_byte_length: u64 = 0,
-        sourcemap_hash: u64 = 0,
-        esm_record_byte_offset: u64 = 0,
-        esm_record_byte_length: u64 = 0,
-        esm_record_hash: u64 = 0,
-    
-    pub fn encode(self: @This(), writer: anytype) !void {
-                _ = try writer.writeInt(u32, self.cache_version, .little);
-                _ = try writer.writeInt(u8, @intFromEnum(self.module_type), .little);
-                _ = try writer.writeInt(u8, @intFromEnum(self.output_encoding), .little);
-                _ = try writer.writeInt(u64, self.features_hash, .little);
-                _ = try writer.writeInt(u64, self.input_byte_length, .little);
-                _ = try writer.writeInt(u64, self.input_hash, .little);
-                _ = try writer.writeInt(u64, self.output_byte_offset, .little);
-                _ = try writer.writeInt(u64, self.output_byte_length, .little);
-                _ = try writer.writeInt(u64, self.output_hash, .little);
-                _ = try writer.writeInt(u64, self.sourcemap_byte_offset, .little);
-                _ = try writer.writeInt(u64, self.sourcemap_byte_length, .little);
-                _ = try writer.writeInt(u64, self.sourcemap_hash, .little);
-                _ = try writer.writeInt(u64, self.esm_record_byte_offset, .little);
-                _ = try writer.writeInt(u64, self.esm_record_byte_length, .little);
-                _ = try writer.writeInt(u64, self.esm_record_hash, .little);
-        }
-    
-    pub fn decode(self: *@This(), reader: anytype) !void {
-                self.cache_version = try reader.readInt(u32, .little);
-                if ((self.cache_version != expected_version)) {
-                    return error.StaleCache;
-                }
-                self.module_type = @enumFromInt(try reader.readInt(u8, .little));
-                self.output_encoding = @enumFromInt(try reader.readInt(u8, .little));
-                self.features_hash = try reader.readInt(u64, .little);
-                self.input_byte_length = try reader.readInt(u64, .little);
-                self.input_hash = try reader.readInt(u64, .little);
-                self.output_byte_offset = try reader.readInt(u64, .little);
-                self.output_byte_length = try reader.readInt(u64, .little);
-                self.output_hash = try reader.readInt(u64, .little);
-                self.sourcemap_byte_offset = try reader.readInt(u64, .little);
-                self.sourcemap_byte_length = try reader.readInt(u64, .little);
-                self.sourcemap_hash = try reader.readInt(u64, .little);
-                self.esm_record_byte_offset = try reader.readInt(u64, .little);
-                self.esm_record_byte_length = try reader.readInt(u64, .little);
-                self.esm_record_hash = try reader.readInt(u64, .little);
-                switch (self.module_type) {
-    .esm, .cjs => {
-    
-    },
-    else => {
-    return error.InvalidModuleType;
-    },
-    }
-                switch (self.output_encoding) {
-    .utf8, .utf16, .latin1 => {
-    
-    },
-    else => {
-    return error.UnknownEncoding;
-    },
-    }
-        }
-        pub const size = brk: {
-                var count: usize = 0;
-                _ = &count;
-                const @"meta": Metadata = .{};
-                _ = &@"meta";
-                for (std.meta.fieldNames(Metadata)) |name| {
-                    _ = &name;
-                }
-                break :brk count;
-        };
-    };
+    pub const Metadata = CacheMetadata;
     pub const Entry = struct {
         metadata: Metadata,
         output_code: OutputCode = .{ .utf8 = "" },

@@ -2908,7 +2908,19 @@ pub fn isLatin1Identifier(comptime Buffer: type, name: Buffer) bool {
         if ((name.len == 0)) {
             return false;
         }
-        return false;
+        const c0 = name[0];
+        if ((!(((((c0 >= 97) and (c0 <= 122)) or ((c0 >= 65) and (c0 <= 90))) or (c0 == 36)) or (c0 == 95)))) {
+            return false;
+        }
+        var i: usize = 1;
+        _ = &i;
+        while ((i < name.len)) : (i = (i + 1)) {
+            const c = name[@as(usize, @intCast(i))];
+            if ((!((((((c >= 48) and (c <= 57)) or ((c >= 97) and (c <= 122))) or ((c >= 65) and (c <= 90))) or (c == 36)) or (c == 95)))) {
+                return false;
+            }
+        }
+        return true;
 }
 
 pub fn latin1IdentifierContinueLength(name: []const u8) usize {

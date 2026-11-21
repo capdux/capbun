@@ -1489,3 +1489,5 @@
   - `req.ptrAs(([*:0]u8)?)` 中 `)?` 后缀被 `cpc` 误降级为 `try [*:0]u8`，提取顶层类型别名 `OptCStr` 后恢复正常；同步完成剩余 5 项次级 `release()` 重命名，`cli/{init,inspect,watch}` 0 崩溃。
 - **[2026-11-21] `multi_run.cp` 遗漏 `watchOrReap` 修复**：
   - `ProcessHandle.start()` 遗漏 `setExitHandler` 与 `watchOrReap` 导致子进程退出成为 `<defunct>` 且 `remaining_scripts` 永不递减；使用 `const proc_ptr = _.process.?.ptr;` 避免 `cpc` 对 `process` 误判可选 `.?` 后，118 个并发/顺序运行用例通过 117 个。
+- **[2026-11-21] `RuntimeTranspilerCache` / `visit` / `lexer` 循环体与分支静默丢弃修复**：
+  - `RuntimeTranspilerCache.cp` `Metadata.size` 块内 `for (...) |name|` 被 `cpc` 丢弃循环体导致 `size == 0` 缓存全失效；`visit.cp` `for (*dec of st.decls.slice())` 被丢弃导致 `Scope mismatch` panic；`lexer.cp` `switch (name[0])` 在泛型参数下被吞导致 `isLatin1Identifier` 恒 false；改写为显式索引/范围 `if` 后全部实测 100% 通关。

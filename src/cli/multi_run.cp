@@ -621,8 +621,9 @@ pub fn run(ctx: Command.Context): !noreturn {
 
         let packages = std.array_list.Managed(FilteredPackage).init(ctx.allocator);
 
-        while (path := package_json_iter.next()?) {
-            const dirpath = bun.path.dirname(path, .auto);
+        while (package_json_path := package_json_iter.next()?) {
+            const dirpath = ctx.allocator.dupe(u8, std.fs.path.dirname(package_json_path) orelse Global.crash())?;
+            const path = bun.strings.withoutTrailingSlash(dirpath);
 
             // When using --workspaces, skip the root package to prevent recursion
             if (ctx.workspaces && strings.eql(path, resolve_root)) {
@@ -642,7 +643,8 @@ pub fn run(ctx: Command.Context): !noreturn {
             const pkg_name = if (pkgjson.name.len > 0)
                 pkgjson.name
             else
-                bun.path.basename(dirpath);
+                // Fallback: use relative path from workspace root
+                ctx.allocator.dupe(u8, bun.path.relativePlatform(resolve_root, path, .posix, false))?;
 
             packages.append(.{
                 name: pkg_name,

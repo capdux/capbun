@@ -379,10 +379,12 @@ pub fn Visit(
                     st.value = p.visitExprInOut(st.value, ExprIn{ assign_target: assign_target });
                 },
                 .s_local => |st| {
-                    for (*dec of st.decls.slice()) {
-                        p.visitBinding(dec.binding, null);
-                        if (val := dec.value) {
-                            dec.value = p.visitExpr(val);
+                    let decls = st.decls.slice();
+                    let i: usize = 0;
+                    while (i < decls.len) : (i += 1) {
+                        p.visitBinding(decls[i].binding, null);
+                        if (val := decls[i].value) {
+                            decls[i].value = p.visitExpr(val);
                         }
                     }
                     st.kind = p.selectLocalKind(st.kind);

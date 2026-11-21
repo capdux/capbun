@@ -442,8 +442,16 @@ const assign_target = (if (is_in_or_of) js_ast.AssignTarget.replace else js_ast.
             (if (@typeInfo(@TypeOf(st)) == .@"enum") @intFromEnum(st) else st.value) = p.visitExprInOut((if (@typeInfo(@TypeOf(st)) == .@"enum") @intFromEnum(st) else st.value), ExprIn{ .assign_target = assign_target });
 },
 .s_local => |st| {
-for (cp_mut_slice(&st.decls.slice())) |*dec| {
-                _ = &dec;
+var decls = st.decls.slice();
+            _ = &decls;
+            var i: usize = 0;
+            _ = &i;
+            while ((i < decls.len)) : (i = (i + 1)) {
+                _ = p.visitBinding(decls[@as(usize, @intCast(i))].binding, null);
+                if ((if (@typeInfo(@TypeOf(decls[@as(usize, @intCast(i))])) == .@"enum") @intFromEnum(decls[@as(usize, @intCast(i))]) else decls[@as(usize, @intCast(i))].value)) |val| {
+                    _ = &val;
+                    (if (@typeInfo(@TypeOf(decls[@as(usize, @intCast(i))])) == .@"enum") @intFromEnum(decls[@as(usize, @intCast(i))]) else decls[@as(usize, @intCast(i))].value) = p.visitExpr(val);
+                }
             }
             st.kind = p.selectLocalKind(st.kind);
 },
@@ -818,8 +826,8 @@ pub fn visitStmts(p: *P, stmts: *ListManaged(Stmt), kind: StmtsKind) anyerror!vo
                     {
                         var i: i32 = 0;
                         _ = &i;
-                        const __end_13 = stmts.items.len;
-                        while (i < __end_13) : (i += 1) {
+                        const __end_12 = stmts.items.len;
+                        while (i < __end_12) : (i += 1) {
                             const stmt = (&stmts.items[@as(usize, @intCast(i))]);
                             if ((stmt.data == .s_enum)) {
                                 const old_scopes_in_order = p.scope_order_to_visit;
@@ -854,8 +862,8 @@ pub fn visitStmts(p: *P, stmts: *ListManaged(Stmt), kind: StmtsKind) anyerror!vo
                 {
                     var stmt_idx: i32 = 0;
                     _ = &stmt_idx;
-                    const __end_14 = stmts.items.len;
-                    while (stmt_idx < __end_14) : (stmt_idx += 1) {
+                    const __end_13 = stmts.items.len;
+                    while (stmt_idx < __end_13) : (stmt_idx += 1) {
                         const stmt = (&stmts.items[@as(usize, @intCast(stmt_idx))]);
                         const list = list_getter: {
                         switch (stmt.data) {
@@ -1009,8 +1017,8 @@ _ = ((non_fn_stmts.append(stmt)) catch unreachable);
                     {
                         var stmt_i: i32 = 0;
                         _ = &stmt_i;
-                        const __end_20 = items.len;
-                        while (stmt_i < __end_20) : (stmt_i += 1) {
+                        const __end_19 = items.len;
+                        while (stmt_i < __end_19) : (stmt_i += 1) {
                             const stmt = (&items[@as(usize, @intCast(stmt_i))]);
                             switch (stmt.data) {
 .s_empty, .s_comment, .s_directive, .s_debugger, .s_type_script => {
