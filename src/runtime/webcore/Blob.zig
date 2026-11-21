@@ -48,7 +48,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -1175,9 +1175,184 @@ pub fn doWrite(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!
         return JSPromise.resolvedPromiseValue(globalThis, JSValue.jsNumber(0));
 }
 
-pub fn getWriter(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
-        _ = self.size;
-        return globalThis.throwTODO("Blob.writer is not yet implemented");
+pub fn getWriter(self: *Blob, globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSValue {
+        const arguments_ = callframe.arguments_old(1);
+        const arguments = arguments_.slice();
+        if ((((arguments.len > 0) and (!arguments[0].isEmptyOrUndefinedOrNull())) and (!arguments[0].isObject()))) {
+            return globalThis.throwInvalidArguments("options must be an object or undefined", .{});
+        }
+        _ = try validateWritableBlob(globalThis, self);
+        const store = self.store.?;
+        if (self.isS3()) {
+            const s3 = (&self.store.?.data.s3);
+            const path = s3.path();
+            const proxy = globalThis.bunVM().transpiler.env.getHttpProxy(true, null, null);
+            const proxy_url: ?[]const u8 = (if ((proxy != null)) proxy.?.href else null);
+            if ((arguments.len > 0)) {
+                const options = arguments[0];
+                if (options.isObject()) {
+                    if (try options.getTruthy(globalThis, "type")) |content_type| {
+                        _ = &content_type;
+                        if ((!content_type.isString())) {
+                            return globalThis.throwInvalidArgumentType("write", "options.type", "string");
+                        }
+                        var content_type_str = try content_type.toSlice(globalThis, default_allocator);
+                        _ = &content_type_str;
+                        defer {
+                        _ = content_type_str.deinit();
+                        }
+                        const slice = content_type_str.slice();
+                        if (strings.isAllASCII(slice)) {
+                            if (self.content_type_allocated) {
+                                _ = default_allocator.free(self.content_type);
+                                self.content_type_allocated = false;
+                            }
+                            self.content_type_was_set = true;
+                            if (globalThis.bunVM().mimeType(slice)) |mime| {
+                                _ = &mime;
+                                self.content_type = (if (@typeInfo(@TypeOf(mime)) == .@"enum") @intFromEnum(mime) else mime.value);
+                            } else {
+                                const content_type_buf = bun.handleOom(default_allocator.alloc(u8, slice.len));
+                                self.content_type = strings.copyLowercase(slice, content_type_buf);
+                                self.content_type_allocated = true;
+                            }
+                        }
+                    }
+                    var content_disposition_str: ?ZigString.Slice = null;
+                    _ = &content_disposition_str;
+                    defer {
+                    if (content_disposition_str) |cd| {
+                        _ = &cd;
+                        _ = cd.deinit();
+                    }
+                    }
+                    if (try options.getTruthy(globalThis, "contentDisposition")) |content_disposition| {
+                        _ = &content_disposition;
+                        if ((!content_disposition.isString())) {
+                            return globalThis.throwInvalidArgumentType("write", "options.contentDisposition", "string");
+                        }
+                        content_disposition_str = try content_disposition.toSlice(globalThis, default_allocator);
+                    }
+                    var content_encoding_str: ?ZigString.Slice = null;
+                    _ = &content_encoding_str;
+                    defer {
+                    if (content_encoding_str) |ce| {
+                        _ = &ce;
+                        _ = ce.deinit();
+                    }
+                    }
+                    if (try options.getTruthy(globalThis, "contentEncoding")) |content_encoding| {
+                        _ = &content_encoding;
+                        if ((!content_encoding.isString())) {
+                            return globalThis.throwInvalidArgumentType("write", "options.contentEncoding", "string");
+                        }
+                        content_encoding_str = try content_encoding.toSlice(globalThis, default_allocator);
+                    }
+                    var credentialsWithOptions = try s3.getCredentialsWithOptions(options, globalThis);
+                    _ = &credentialsWithOptions;
+                    defer {
+                    _ = credentialsWithOptions.deinit();
+                    }
+                    const cd_slice: ?[]const u8 = (if ((content_disposition_str != null)) content_disposition_str.?.slice() else null);
+                    const ce_slice: ?[]const u8 = (if ((content_encoding_str != null)) content_encoding_str.?.slice() else null);
+                    return S3.writableStream(credentialsWithOptions.credentials.dupe(), path, globalThis, credentialsWithOptions.options, self.contentTypeOrMimeType(), cd_slice, ce_slice, proxy_url, credentialsWithOptions.storage_class, credentialsWithOptions.request_payer);
+                }
+            }
+            return S3.writableStream(s3.getCredentials(), path, globalThis, .{}, self.contentTypeOrMimeType(), null, null, proxy_url, null, s3.request_payer);
+        }
+        if (Environment.isWindows) {
+            const pathlike = store.data.file.pathlike;
+            const vm = globalThis.bunVM();
+            const fd: bun.FD = (if ((pathlike == .fd)) pathlike.fd else brk: {
+            var file_path: bun.PathBuffer = undefined;
+            _ = &file_path;
+            switch (bun.sys.open(pathlike.path.sliceZ((&file_path)), ((bun.O.WRONLY | bun.O.CREAT) | bun.O.NONBLOCK), write_permissions)) {
+.result => |result| {
+break :brk result;
+},
+.err => |e| {
+return globalThis.throwValue(try e.withPath(pathlike.path.slice()).toJS(globalThis));
+},
+}
+            _ = @compileError("unreachable");
+});
+            const is_stdout_or_stderr = brk: {
+            if ((pathlike != .fd)) {
+                break :brk false;
+            }
+            if (vm.rare_data) |rare| {
+                _ = &rare;
+                if ((store == rare.stdout_store)) {
+                    break :brk true;
+                }
+                if ((store == rare.stderr_store)) {
+                    break :brk true;
+                }
+            }
+            if (fd.stdioTag()) |tag| {
+                _ = &tag;
+                break :brk (switch (tag) {
+.std_out, .std_err => true,
+else => false,
+});
+            }
+            break :brk false;
+};
+            var sink = jsc.WebCore.FileSink.init(fd, self.globalThis.bunVM().eventLoop());
+            _ = &sink;
+            sink.writer.owns_fd = (pathlike != .fd);
+            if (is_stdout_or_stderr) {
+                switch (sink.writer.startSync(fd, false)) {
+.err => |e| {
+_ = sink.deref();
+                return globalThis.throwValue(try e.toJS(globalThis));
+},
+else => {
+
+},
+}
+            } else {
+                switch (sink.writer.start(fd, true)) {
+.err => |e| {
+_ = sink.deref();
+                return globalThis.throwValue(try e.toJS(globalThis));
+},
+else => {
+
+},
+}
+            }
+            return sink.toJS(globalThis);
+        }
+        var sink = jsc.WebCore.FileSink.init(bun.invalid_fd, self.globalThis.bunVM().eventLoop());
+        _ = &sink;
+        var input_path: jsc.WebCore.PathOrFileDescriptor = brk: {
+        if ((store.data.file.pathlike == .fd)) {
+            break :brk .{ .fd = store.data.file.pathlike.fd };
+        } else {
+            break :brk .{ .path = bun.handleOom(ZigString.Slice.initDupe(default_allocator, store.data.file.pathlike.path.slice())) };
+        }
+};
+        _ = &input_path;
+        defer {
+        _ = input_path.deinit();
+        }
+        var stream_start: jsc.WebCore.streams.Start = .{ .FileSink = .{ .input_path = input_path } };
+        _ = &stream_start;
+        if (((arguments.len > 0) and arguments[0].isObject())) {
+            stream_start = try jsc.WebCore.streams.Start.fromJSWithTag(globalThis, arguments[0], .FileSink);
+            stream_start.FileSink.input_path = input_path;
+        }
+        switch (sink.start(stream_start)) {
+.err => |e| {
+_ = sink.deref();
+        return globalThis.throwValue(try e.toJS(globalThis));
+},
+else => {
+
+},
+}
+        return sink.toJS(globalThis);
 }
 
 pub fn onStructuredCloneSerialize(self: *Blob, globalThis: *JSGlobalObject, ctx: *anyopaque, writeBytes: BlobStructuredCloneWriteBytes) void {

@@ -53,7 +53,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -74,7 +74,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
@@ -1023,6 +1023,11 @@ pub export fn Bun__Node__Path_joinWTF(lhs: *bun.String, rhs_ptr: [*]const u8, rh
         }
 }
 
+pub fn emptySlice(comptime T: type) []const T {
+        const e: [0]T = undefined;
+        return e[0..0];
+}
+
 pub fn joinWindowsT(comptime T: type, paths: []const []const T, buf: []T, buf2: []T) []const T {
         _ = (comptime validatePathT(T, "joinWindowsT"));
         if ((paths.len == 0)) {
@@ -1033,7 +1038,7 @@ pub fn joinWindowsT(comptime T: type, paths: []const []const T, buf: []T, buf2: 
         _ = &bufSize;
         var bufOffset: usize = 0;
         _ = &bufOffset;
-        var firstPart: []const T = undefined;
+        var firstPart: []const T = emptySlice(T);
         _ = &firstPart;
         for (cp_iter_slice(paths)) |path| {
             _ = &path;
@@ -1080,9 +1085,10 @@ pub fn joinWindowsT(comptime T: type, paths: []const []const T, buf: []T, buf2: 
                 slashCount = (slashCount + 1);
             }
             if ((slashCount >= 2)) {
+                const orig_buf_size = bufSize;
                 bufOffset = 1;
                 bufSize = (bufOffset + (bufSize - slashCount));
-                _ = bun.copy(u8, buf2[bufOffset..bufSize], buf2[slashCount..bufSize]);
+                _ = bun.copy(u8, buf2[bufOffset..bufSize], buf2[slashCount..orig_buf_size]);
                 buf2[cp_cast_int(usize, 0)] = asT(T, CHAR_BACKWARD_SLASH);
             }
         }
@@ -2042,7 +2048,7 @@ pub fn resolvePosixT(comptime T: type, paths: []const []const T, buf: []T, buf2:
         var i_i64: i64 = (if ((paths.len == 0)) -1 else (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf((paths.len - 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((paths.len - 1))) else cp_cast_int(i32, (paths.len - 1))))) == .@"enum") cp_cast_int(i64, @intFromEnum((if (comptime @typeInfo(@TypeOf((paths.len - 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((paths.len - 1))) else cp_cast_int(i32, (paths.len - 1))))) else cp_cast_int(i64, (if (comptime @typeInfo(@TypeOf((paths.len - 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((paths.len - 1))) else cp_cast_int(i32, (paths.len - 1))))));
         _ = &i_i64;
         while (((i_i64 > -2) and (!resolvedAbsolute))) : (i_i64 = (i_i64 - 1)) {
-            var path: []const T = undefined;
+            var path: []const T = emptySlice(T);
             _ = &path;
             if ((i_i64 >= 0)) {
                 path = paths[@as(usize, @intCast((if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(i_i64)) == .@"enum") cp_cast_int(i32, @intFromEnum(i_i64)) else cp_cast_int(i32, i_i64)))) == .@"enum") cp_cast_int(usize, @intFromEnum((if (comptime @typeInfo(@TypeOf(i_i64)) == .@"enum") cp_cast_int(i32, @intFromEnum(i_i64)) else cp_cast_int(i32, i_i64)))) else cp_cast_int(usize, (if (comptime @typeInfo(@TypeOf(i_i64)) == .@"enum") cp_cast_int(i32, @intFromEnum(i_i64)) else cp_cast_int(i32, i_i64))))))];
@@ -2098,11 +2104,11 @@ pub fn resolveWindowsT(comptime T: type, paths: []const []const T, buf: []T, buf
         _ = &max_path_sz;
         var tmpBuf: [max_path_sz]T = undefined;
         _ = &tmpBuf;
-        var resolvedDevice: []const T = undefined;
+        var resolvedDevice: []const T = emptySlice(T);
         _ = &resolvedDevice;
         var resolvedDeviceLen: usize = 0;
         _ = &resolvedDeviceLen;
-        var resolvedTail: []const T = undefined;
+        var resolvedTail: []const T = emptySlice(T);
         _ = &resolvedTail;
         var resolvedTailLen: usize = 0;
         _ = &resolvedTailLen;
@@ -2117,7 +2123,7 @@ pub fn resolveWindowsT(comptime T: type, paths: []const []const T, buf: []T, buf
         var i_i64: i64 = (if ((paths.len == 0)) -1 else (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf((paths.len - 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((paths.len - 1))) else cp_cast_int(i32, (paths.len - 1))))) == .@"enum") cp_cast_int(i64, @intFromEnum((if (comptime @typeInfo(@TypeOf((paths.len - 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((paths.len - 1))) else cp_cast_int(i32, (paths.len - 1))))) else cp_cast_int(i64, (if (comptime @typeInfo(@TypeOf((paths.len - 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((paths.len - 1))) else cp_cast_int(i32, (paths.len - 1))))));
         _ = &i_i64;
         while ((i_i64 > -2)) : (i_i64 = (i_i64 - 1)) {
-            var path: []const T = undefined;
+            var path: []const T = emptySlice(T);
             _ = &path;
             if ((i_i64 >= 0)) {
                 path = paths[@as(usize, @intCast((if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(i_i64)) == .@"enum") cp_cast_int(i32, @intFromEnum(i_i64)) else cp_cast_int(i32, i_i64)))) == .@"enum") cp_cast_int(usize, @intFromEnum((if (comptime @typeInfo(@TypeOf(i_i64)) == .@"enum") cp_cast_int(i32, @intFromEnum(i_i64)) else cp_cast_int(i32, i_i64)))) else cp_cast_int(usize, (if (comptime @typeInfo(@TypeOf(i_i64)) == .@"enum") cp_cast_int(i32, @intFromEnum(i_i64)) else cp_cast_int(i32, i_i64))))))];
@@ -2198,7 +2204,7 @@ pub fn resolveWindowsT(comptime T: type, paths: []const []const T, buf: []T, buf
             const len = path.len;
             var rootEnd: usize = 0;
             _ = &rootEnd;
-            var device: []const T = undefined;
+            var device: []const T = emptySlice(T);
             _ = &device;
             var _isAbsolute: bool = false;
             _ = &_isAbsolute;

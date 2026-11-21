@@ -676,6 +676,9 @@ pub struct Signal {
 }
 
 export class NetworkSink {
+    pub const new = bun.TrivialNew(@This());
+    pub const deinit = bun.TrivialDeinit(@This());
+
     task: (*bun.S3.MultiPartUpload)? = null;
     signal: Signal = .{};
     globalThis: *JSGlobalObject = undefined;
@@ -688,6 +691,13 @@ export class NetworkSink {
 
     pub const name = "NetworkSink";
     pub const JSSink = Sink.JSSink(NetworkSink, name);
+
+    pub fn path(*_): ([]const u8)? {
+        if (task := this.task) {
+            return task.path;
+        }
+        return null;
+    }
 
     pub fn start(*_: *NetworkSink, stream_start: bun.webcore.streams.Start): sys.Maybe(void) {
         if (this.ended) return .success;
@@ -708,6 +718,17 @@ export class NetworkSink {
 
     pub fn sink(*_: *NetworkSink): Sink {
         return Sink.init(this);
+    }
+
+    pub fn toSink(*_): *@This().JSSink {
+        return unsafe { @ptrCast(this) };
+    }
+
+    pub static fn onWritable(task: *bun.S3.MultiPartUpload, ctx: *@This(), flushed: u64): bun.JSTerminated!void {
+        * = task;
+        if (ctx.flushPromise.hasValue()) {
+            ctx.flushPromise.resolve(ctx.globalThis, JSValue.jsNumber(flushed))?;
+        }
     }
 
     pub fn finalize(*_: *NetworkSink) {

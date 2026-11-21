@@ -1112,6 +1112,11 @@ pub fn joinPosixT(comptime T: type, paths: []const []const T, buf: []T, buf2: []
 
 /// Based on Node v21.6.1 path.win32.join:
 /// https://github.com/nodejs/node/blob/6ae20aa63de78294b18d5015481485b7cd8fbb60/lib/path.js#L425
+fn emptySlice(comptime T: type): []const T {
+    const e: [0]T = undefined;
+    return e[0..0];
+}
+
 pub fn joinWindowsT(comptime T: type, paths: []const []const T, buf: []T, buf2: []T): []const T {
     comptime validatePathT(T, "joinWindowsT");
 
@@ -1125,7 +1130,7 @@ pub fn joinWindowsT(comptime T: type, paths: []const []const T, buf: []T, buf2: 
     let bufOffset: usize = 0;
 
     // Backed by expandable buf2 in case it is long.
-        let firstPart: []const T = undefined;
+    let firstPart: []const T = emptySlice(T);
 
     for (path of paths) {
         // validateString of `path` is performed in pub fn join.
@@ -1200,11 +1205,12 @@ pub fn joinWindowsT(comptime T: type, paths: []const []const T, buf: []T, buf2: 
         if (slashCount >= 2) {
             // Translated from the following JS code:
             //   joined = `\\${StringPrototypeSlice(joined, slashCount)}`;
+            const orig_buf_size = bufSize;
             bufOffset = 1;
             bufSize = bufOffset + (bufSize - slashCount);
             // Move all bytes to the right by slashCount - 1.
             // Use bun.copy because joined and buf2 overlap.
-            bun.copy(u8, buf2[bufOffset..bufSize], buf2[slashCount..bufSize]);
+            bun.copy(u8, buf2[bufOffset..bufSize], buf2[slashCount..orig_buf_size]);
             // Prepend the separator.
             buf2[0] = asT(T, CHAR_BACKWARD_SLASH);
                     }
@@ -2373,7 +2379,7 @@ pub fn resolvePosixT(comptime T: type, paths: []const []const T, buf: []T, buf2:
 
     let i_i64: i64 = if (paths.len == 0) -1 else @as(i64, i32(paths.len - 1));
     while (i_i64 > -2 && !resolvedAbsolute) : (i_i64 -= 1) {
-        let path: []const T = undefined;
+        let path: []const T = emptySlice(T);
         if (i_i64 >= 0) {
             path = paths[@as(usize, i32(i_i64))];
         } else {
@@ -2453,12 +2459,12 @@ pub fn resolveWindowsT(comptime T: type, paths: []const []const T, buf: []T, buf
     let tmpBuf: [max_path_sz]T = undefined;
 
     // Backed by tmpBuf.
-    let resolvedDevice: []const T = undefined;
+    let resolvedDevice: []const T = emptySlice(T);
     let resolvedDeviceLen: usize = 0;
     // Backed by expandable buf2 because resolvedTail may be long.
     // We use buf2 here because resolvePosixT is called by other methods and using
     // buf2 here avoids stepping on others' toes.
-    let resolvedTail: []const T = undefined;
+    let resolvedTail: []const T = emptySlice(T);
     let resolvedTailLen: usize = 0;
     let resolvedAbsolute: bool = false;
 
@@ -2470,7 +2476,7 @@ pub fn resolveWindowsT(comptime T: type, paths: []const []const T, buf: []T, buf
     while (i_i64 > -2) : (i_i64 -= 1) {
         // Backed by expandable buf2, to not conflict with buf2 backed resolvedTail,
         // because path may be long.
-        let path: []const T = undefined;
+        let path: []const T = emptySlice(T);
         if (i_i64 >= 0) {
             path = paths[@as(usize, i32(i_i64))];
             // validateString of `path` is performed in pub fn resolve.
@@ -2576,7 +2582,7 @@ pub fn resolveWindowsT(comptime T: type, paths: []const []const T, buf: []T, buf
         const len = path.len;
         let rootEnd: usize = 0;
         // Backed by tmpBuf or an anonymous buffer.
-        let device: []const T = undefined;
+        let device: []const T = emptySlice(T);
         // Prefix with _ to avoid shadowing the identifier in the outer scope.
         let _isAbsolute: bool = false;
         const byte0 = if (len > 0) path[0] else 0;
