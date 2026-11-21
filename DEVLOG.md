@@ -1495,3 +1495,5 @@
   - `bun.lock.cp` 中 `orelse` 赋值吞右值导致所有含 `"name"` 的 `bun.lock` 报 `InvalidWorkspaceObject`；`node_zlib_binding.cp` 中 `@"in"` 局部变量赋值与传参被 `cpc` 静默丢弃导致 `z_stream` 全零报错 `Z_STREAM_ERROR`；`package_manager_command.cp` `getSubcommand` 多切一位参数导致 `bun pm view` 偏移；三项修复后 `tarball-integrity` 13/13 全绿、`audit` 12/13、`info` 12/13。
 - **[2026-11-21] `.npmrc` 静默丢弃、`exports` 索引丢失与 `sourceMappingURL` `@typeName` 修复**：
   - `ini.cp` 遗留 `try parser.parse(...)` 与未转义 `arena` 导致整句被 `cpc` 吞掉，全量替换 102 处 `try` 为 `?` 后 `.npmrc` 全部恢复；`package_json.cp` 4 处 `let i = 0; for (key of keys)` 遗漏 `i += 1;` 改用 `while (i < keys.len) : (i += 1)` 彻底修复条件导出错位；`writeOutputFilesToDisk.cp` 去掉 `string("")` 消除 `sourceMappingURL=*const [0:0]u8`。
+- **[2026-11-21] `build_command.cp` 表达式级 `:=` 吞赋值修复**：
+  - 表达式位置嵌入 `if (user_defines := ctx.args.define)` 导致 `client_transpiler.options.define` 整句被 `cpc` 丢弃，拆分为独立 `let define_data: options.defines.UserDefines? = null;` 语句后 `zig:check` 5/5 通过。

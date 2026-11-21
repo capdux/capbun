@@ -136,3 +136,6 @@
   - 修复 `src/ini/ini.cp` 全量 102 处 `try expr` → `expr?`（包括关键 `loadNpmrc` `parser.parse(parser.@"arena".allocator())?;` 被静默丢弃导致 `.npmrc` 解析失效）、`E.Null`/`E.Array`/`E.Object` 空结构体字面量及 `commitRopePart` `*((*Rope)?)` 参数，`zig:check` **5/5**、`redacted-config-logs.test.ts` **11/11 全绿**、`minimum-release-age.test.ts` `basic filtering` **3/3 全绿**；
   - 修复 `src/resolver/package_json.cp` 4 处（`valueForKey`/`resolveTarget`/`resolveReverse`/`resolveTargetReverse`）`for` 循环遗漏 `i += 1;` 导致条件导出永远只取第 0 项（`"types"` `.d.ts`）的严重缺陷；
   - 修复 `src/bundler/linker_context/writeOutputFilesToDisk.cp:169-172` `string("")` 触发 `cp_string_from` 退化返回 `@typeName(*const [0:0]u8)` 问题，`bun-build-api.test.ts` `sourcemap: true with outdir` 通过。
+- **[2026-11-21 23:14] `build_command.cp` `define` 静默丢弃修复与全仓扫描推进**：
+  - 修复 `src/cli/build_command.cp:277-292` 表达式级 `if (user_defines := ...)` 导致 `client_transpiler.options.define = options.Define.init(...)` 被 `cpc` 静默丢弃的问题（全仓扫描 148 文件 2,173 行 `try ` 与全仓 `= if (x := ...)` 确认仅此一处），`zig:check` **5/5** 全绿；
+  - `test/bundler` 第二批（15 文件）跑出 **23 pass / 14 fail / 0 crash**（14 项 error 均因环境缺少 `filenamify`）。

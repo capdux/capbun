@@ -306,6 +306,13 @@ this_transpiler.options.macro_remap = macros;
                 this_transpiler.options.react_fast_refresh = false;
                 this_transpiler.options.minify_syntax = true;
                 client_transpiler.options.minify_syntax = true;
+                var define_data: ?options.defines.UserDefines = null;
+                _ = &define_data;
+                if (ctx.args.define) |user_defines| {
+                    _ = &user_defines;
+                    define_data = try options.Define.Data.fromInput(try options.stringHashMapFromArrays(options.defines.RawDefines, allocator, (user_defines.keys.len + 4), user_defines.keys, user_defines.values), ctx.args.drop, log, allocator);
+                }
+                client_transpiler.options.define = try options.Define.init(allocator, define_data, null, this_transpiler.options.define.drop_debugger, (this_transpiler.options.dead_code_elimination and this_transpiler.options.minify_syntax));
                 _ = try bun.bake.addImportMetaDefines(allocator, this_transpiler.options.define, .development, .server);
                 _ = try bun.bake.addImportMetaDefines(allocator, client_transpiler.options.define, .development, .client);
                 this_transpiler.resolver.opts = this_transpiler.options;
