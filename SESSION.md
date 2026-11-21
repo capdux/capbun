@@ -198,3 +198,12 @@
   - `src/resolver/fs/stat_hash.cp` & `src/runtime/server/server.cp`：修复 `lastModified()` 悬垂栈切片（改 `_: *const StatHash`）与 `ServerAllConnectionsClosedTask.schedule` 中 `new(this)` 被静默清空函数体问题，彻底跑通 `29181.test.ts` (2/2, 411 expects)；
   - `src/runtime/api/JSBundler.cp`（59→0，15 guards，ratio `1.055`）、`src/runtime/api/cron.cp`（47→0，12 guards，ratio `1.081`）、`src/install/isolated_install.cp`（39→0，34 guards，ratio `1.123`，`Path.cp` `pub ResetScope`）、`src/dotenv/env_loader.cp`（9→0，5 guards，ratio `1.024`）、`src/runtime/node/node_fs.cp`（94→0，28 guards + 11 `unsafe {}`，ratio `1.014`）、`src/bake/DevServer.cp`（85→4，32 guards + 14 `unsafe {}`，ratio `1.076`）；
   - 累计消除 329 处手工 `defer`/`errdefer` 并全部通过 `cpc_brief.py` 与 `zig:check` 5/5，`29181.test.ts` (2/2)、`cron-parse.test.ts` (11/11)、`bun-file.test.ts` (6/6)、`ci-info.test.ts` (4/4) 共 23/23 全绿。
+- **[2026-11-22 03:09] 向 `cp_agy` 提交工单 `task-bun-20261122-return-dot-enum-err`**：复现文件 `/data/dev/cp/temp/repro_return_dot_enum_in_err_union.cp`，上报在 `E!EnumType` 返回函数中 `return .blocked;` 被 `cpc` 误降级为 `return error.blocked;`。
+- **[2026-11-22 03:14] 向 `cp_agy` 提交工单 `task-bun-20261122-generic-raw-ptr-arg`**：复现文件 `/data/dev/cp/temp/repro_generic_raw_ptr_arg.cp`，上报将 `*Foo!` 直接作为泛型实参 `Box<*Foo!>` 传入时，生成 `Box(*Foo!)` 未剥离尾置 `!` 导致 `ast-check` 失败。
+
+- **[2026-11-22 03:22] 4 大核心模块（`Installer`、`h2_frame_parser`、`ConsoleObject`、`BunObject`）泛型 RAII `~init()` 改造里程碑（`zig:check` 5/5、7/7 全绿）**：
+  - `src/install/isolated_install/Installer.cp`（44→0，ratio `1.043`）：以泛型 `DeinitGuard<T>` / `DeinitWithAllocGuard<T>` / `OptDeinitGuard<T>` / `RestoreGuard<T>` 替换全部手工释放，修复 `version_buf` allocator 混用与 `Task.Step/Error/Result/Yield` 可见性；
+  - `src/runtime/api/bun/h2_frame_parser.cp`（43→0，ratio `1.047`）：全面转入顶层泛型与专用 RAII Guard，补充 `@intFromPtr` `unsafe {}`；
+  - `src/jsc/ConsoleObject.cp`（61→0，ratio `1.056`）：拆分 4 处 `JSPropertyIterator` 泛型 Guard 初始化并补全 34 处裸指针 `unsafe {}`；
+  - `src/runtime/api/BunObject.cp`（53→0，ratio `1.044`）：清理全部手工 `defer` 并补全 `unsafe {}`；
+  - 累计再消减 **201 处**手工 `defer`/`errdefer`，`bun run zig:check` **5/5**，`BunObject.test.ts` + `escapeHTML.test.js` **7/7**（276 expects）全绿。

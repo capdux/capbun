@@ -70,6 +70,211 @@ pub const MessageType = enum(u32) {
     _,
 };
 
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
+pub struct OptionalDeinitGuard<T> {
+    val: T? = null,
+    ~init() {
+        if (v := _.val) v.deinit();
+    }
+}
+
+pub struct ConditionalDeinitSliceGuard {
+    val: ZigString.Slice = ZigString.Slice.empty,
+    ~init() {
+        if (_.val.isAllocated()) _.val.deinit();
+    }
+}
+
+pub struct DerefGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deref();
+    }
+}
+
+pub struct FreeGuard<T> {
+    alloc: std.mem.Allocator,
+    ptr: T,
+    ~init() {
+        _.alloc.free(_.ptr);
+    }
+}
+
+pub struct HolderDeinitGuard {
+    holder: ZigException.Holder,
+    vm: *VirtualMachine,
+    ~init() {
+        _.holder.deinit(_.vm);
+    }
+}
+
+pub struct GroupIndentGuard {
+    console: *ConsoleObject,
+    inc: u16,
+    ~init() {
+        _.console.default_indent = _.console.default_indent +| _.inc;
+    }
+}
+
+pub struct ConsoleMutexGuard {
+    is_stderr: bool,
+    ~init() {
+        if (_.is_stderr) {
+            stderr_lock_count -= 1;
+            if (stderr_lock_count == 0) {
+                stderr_mutex.unlock();
+            }
+        } else {
+            stdout_lock_count -= 1;
+            if (stdout_lock_count == 0) {
+                stdout_mutex.unlock();
+            }
+        }
+    }
+}
+
+pub struct IncGuard {
+    ptr: *usize!,
+    ~init() {
+        unsafe {
+            _.ptr.* += 1;
+        }
+    }
+}
+
+pub struct FlushGuard {
+    writer: *std.Io.Writer,
+    enabled: bool,
+    ~init() {
+        if (_.enabled) _.writer.flush() catch {};
+    }
+}
+
+pub struct AnsiResetGuard<W> {
+    writer: W,
+    enabled: bool,
+    ~init() {
+        if (_.enabled) _.writer.writeAll(Output.prettyFmt("<r>", true));
+    }
+}
+
+pub struct IndentDepthGuard {
+    fmt: *ConsoleObject.Formatter,
+    dec_depth: bool = true,
+    ~init() {
+        _.fmt.indent = _.fmt.indent -| 1;
+        if (_.dec_depth) _.fmt.depth = _.fmt.depth -| 1;
+    }
+}
+
+pub struct RestoreQuoteStringsGuard {
+    fmt: *ConsoleObject.Formatter,
+    prev: bool,
+    ~init() {
+        _.fmt.quote_strings = _.prev;
+    }
+}
+
+pub struct RestoreQuoteKeysGuard {
+    fmt: *ConsoleObject.Formatter,
+    prev: bool,
+    ~init() {
+        _.fmt.quote_keys = _.prev;
+    }
+}
+
+pub struct RestoreAlwaysNewlineGuard {
+    fmt: *ConsoleObject.Formatter,
+    prev: bool,
+    ~init() {
+        _.fmt.always_newline_scope = _.prev;
+    }
+}
+
+pub struct RestoreGlobalThisGuard {
+    fmt: *ConsoleObject.Formatter,
+    prev: *JSGlobalObject,
+    ~init() {
+        _.fmt.globalThis = _.prev;
+    }
+}
+
+pub struct RestoreRemainingValuesGuard {
+    fmt: *ConsoleObject.Formatter,
+    ~init() {
+        _.fmt.remaining_values = [];
+    }
+}
+
+pub struct MapNodeClearGuard {
+    src: *ConsoleObject.Formatter,
+    dst: *ConsoleObject.Formatter,
+    ~init() {
+        if (node := _.src.map_node) {
+            _.dst.map_node = null;
+            if (node.data.capacity() > 512) {
+                node.data.clearAndFree();
+            } else {
+                node.data.clearRetainingCapacity();
+            }
+            node.release();
+        }
+    }
+}
+
+pub struct ColumnsGuard<T> {
+    columns: T,
+    ~init() {
+        unsafe {
+            for (*col of _.columns.items) {
+                col.name.deref();
+            }
+            _.columns.deinit();
+        }
+    }
+}
+
+pub struct WriterFailedGuard<W> {
+    formatter: *ConsoleObject.Formatter,
+    writer: W,
+    ~init() {
+        unsafe {
+            if (_.writer.failed) {
+                _.formatter.failed = true;
+            }
+        }
+    }
+}
+
+pub struct MapRemoveGuard {
+    formatter: *ConsoleObject.Formatter,
+    value: JSValue,
+    active: bool = false,
+    ~init() {
+        if (_.active) {
+            * = _.formatter.map.remove(_.value);
+        }
+    }
+}
+
+pub struct MapReinsertGuard {
+    formatter: *ConsoleObject.Formatter,
+    value: JSValue,
+    was_in_map: bool,
+    ~init() {
+        if (_.was_in_map) {
+            const empty_void: void = undefined;
+            * = _.formatter.map.put(_.value, empty_void) catch {};
+        }
+    }
+}
+
 let stderr_mutex: bun.Mutex = {};
 let stdout_mutex: bun.Mutex = {};
 
@@ -100,7 +305,7 @@ fn messageWithTypeAndLevel_(
     len: usize,
 ): bun.JSError!void {
     let console = global.bunVM().console;
-    defer { console.default_indent = console.default_indent +| @as(u16, @intFromBool(message_type == .StartGroup)); }
+    const _indent_g = GroupIndentGuard{ console: console, inc: @as(u16, @intFromBool(message_type == .StartGroup)) };
 
     if (message_type == .StartGroup && len == 0) {
         // undefined is printed if passed explicitly.
@@ -114,7 +319,8 @@ fn messageWithTypeAndLevel_(
 
     // Lock/unlock a mutex incase two JS threads are console.log'ing at the same time
     // We do this the slightly annoying way to avoid assigning a pointer
-    if (level == .Warning || level == .Error || message_type == .Assert) {
+    const is_stderr = level == .Warning || level == .Error || message_type == .Assert;
+    if (is_stderr) {
         if (stderr_lock_count == 0) {
             stderr_mutex.lock();
         }
@@ -128,21 +334,7 @@ fn messageWithTypeAndLevel_(
         stdout_lock_count += 1;
     }
 
-    defer {
-        if (level == .Warning || level == .Error || message_type == .Assert) {
-            stderr_lock_count -= 1;
-
-            if (stderr_lock_count == 0) {
-                stderr_mutex.unlock();
-            }
-        } else {
-            stdout_lock_count -= 1;
-
-            if (stdout_lock_count == 0) {
-                stdout_mutex.unlock();
-            }
-        }
-    }
+    const _mutex_g = ConsoleMutexGuard{ is_stderr: is_stderr };
 
     if (message_type == .Clear) {
         Output.resetTerminal();
@@ -194,9 +386,9 @@ fn messageWithTypeAndLevel_(
 
     if (message_type == .Table && len >= 1) {
         // if value is not an object/array/iterable, don't print a table and just print it
-        let tabular_data = vals[0];
+        let tabular_data = unsafe { vals[0] };
         if (tabular_data.isObject()) {
-            const properties: JSValue = if (len >= 2 && vals[1].jsType().isArray()) vals[1] else .js_undefined;
+            const properties: JSValue = if (len >= 2 && unsafe { vals[1] }.jsType().isArray()) unsafe { vals[1] } else .js_undefined;
             let table_printer = try TablePrinter.init(
                 global,
                 level,
@@ -217,7 +409,7 @@ fn messageWithTypeAndLevel_(
 
     if (message_type == .Dir && len >= 2) {
         print_length = 1;
-        let opts = vals[1];
+        let opts = unsafe { vals[1] };
         if (opts.isObject()) {
             if (depth_prop := opts.get(global, "depth")?) {
                 if (depth_prop.isInt32() || depth_prop.isNumber() || depth_prop.isBigInt())
@@ -423,14 +615,14 @@ pub struct TablePrinter {
                     }
                 }
             } else {
-                let cols_iter = try jsc.JSPropertyIterator({
+                let cols_iter = jsc.JSPropertyIterator({
                     skip_empty_name: false,
                     include_value: true,
-                }).init(_.globalObject, obj);
-                defer cols_iter.deinit();
+                }).init(_.globalObject, obj)?;
+                let cols_iter_g = DeinitGuard<@TypeOf(cols_iter)>{ val: cols_iter };
 
-                while (col_key := cols_iter.next()?) {
-                    const value = cols_iter.value;
+                while (col_key := cols_iter_g.val.next()?) {
+                    const value = cols_iter_g.val.value;
 
                     // find or create the column for the property
                     const column: *Column = brk: {
@@ -532,17 +724,7 @@ pub struct TablePrinter {
 
                 value_formatter.quote_strings = !(tag.tag == .String || tag.tag == .StringPossiblyFormatted);
 
-                defer {
-                    if (node := value_formatter.map_node) {
-                        _.value_formatter.map_node = null;
-                        if (node.data.capacity() > 512) {
-                            node.data.clearAndFree();
-                        } else {
-                            node.data.clearRetainingCapacity();
-                        }
-                        node.release();
-                    }
-                }
+                const _map_node_g = MapNodeClearGuard{ src: &value_formatter, dst: &_.value_formatter };
                 try value_formatter.format(
                     tag,
                     Writer,
@@ -568,12 +750,7 @@ pub struct TablePrinter {
 
         let stack_fallback = std.heap.stackFallback(@sizeOf(Column) * 16, _.globalObject.allocator());
         let columns = std.array_list.Managed(Column).initCapacity(stack_fallback.get(), 16)?;
-        defer {
-            for (*col of columns.items) {
-                col.name.deref();
-            }
-            columns.deinit();
-        }
+        const _cols_g = ColumnsGuard<@TypeOf(&columns)>{ columns: unsafe { &columns } };
 
         // create the first column " " which is always present
         columns.appendAssumeCapacity({
@@ -605,14 +782,14 @@ pub struct TablePrinter {
                 if (ctx_.e) return error.JSError;
             } else {
                 const tabular_obj = this.tabular_data.toObject(globalObject)?;
-                let rows_iter = try jsc.JSPropertyIterator({
+                let rows_iter = jsc.JSPropertyIterator({
                     skip_empty_name: false,
                     include_value: true,
-                }).init(globalObject, tabular_obj);
-                defer rows_iter.deinit();
+                }).init(globalObject, tabular_obj)?;
+                let rows_iter_g = DeinitGuard<@TypeOf(rows_iter)>{ val: rows_iter };
 
-                while (row_key := rows_iter.next()?) {
-                    this.updateColumnsForRow(&columns, { str: String.init(row_key) }, rows_iter.value)?;
+                while (row_key := rows_iter_g.val.next()?) {
+                    this.updateColumnsForRow(&columns, { str: String.init(row_key) }, rows_iter_g.val.value)?;
                 }
             }
         }
@@ -636,7 +813,7 @@ pub struct TablePrinter {
             writer.writeAll("┌")?;
             let i: usize = 0;
             for (*col of columns.items) {
-                defer { i += 1; }
+                const _inc_g = IncGuard{ ptr: unsafe { &i } };
                 if (i > 0) try writer.writeAll("┬");
                 TablePrinter.writeStringNTimes(Writer, writer, "─", col.width + (PADDING * 2))?;
             }
@@ -645,7 +822,7 @@ pub struct TablePrinter {
 
             i = 0;
             for (col of columns.items) {
-                defer { i += 1; }
+                const _inc_g = IncGuard{ ptr: unsafe { &i } };
                 if (i > 0) try writer.writeAll("│");
                 const len = col.name.visibleWidthExcludeANSIColors(false);
                 const needed = col.width -| len;
@@ -663,7 +840,7 @@ pub struct TablePrinter {
             writer.writeAll("│\n├")?;
             i = 0;
             for (col of columns.items) {
-                defer { i += 1; }
+                const _inc_g = IncGuard{ ptr: unsafe { &i } };
                 if (i > 0) try writer.writeAll("┼");
                 TablePrinter.writeStringNTimes(Writer, writer, "─", col.width + (PADDING * 2))?;
             }
@@ -682,14 +859,14 @@ pub struct TablePrinter {
                     return globalObject.throwTypeError("tabular_data must be an object or array", []);
                 }
                 const cell = cell_opt.?;
-                let rows_iter = try jsc.JSPropertyIterator({
+                let rows_iter = jsc.JSPropertyIterator({
                     skip_empty_name: false,
                     include_value: true,
-                }).init(globalObject, cell.toObject(globalObject));
-                defer rows_iter.deinit();
+                }).init(globalObject, cell.toObject(globalObject))?;
+                let rows_iter_g = DeinitGuard<@TypeOf(rows_iter)>{ val: rows_iter };
 
-                while (row_key := rows_iter.next()?) {
-                    _.printRow(Writer, writer, enable_ansi_colors, &columns, { str: String.init(row_key) }, rows_iter.value)?;
+                while (row_key := rows_iter_g.val.next()?) {
+                    _.printRow(Writer, writer, enable_ansi_colors, &columns, { str: String.init(row_key) }, rows_iter_g.val.value)?;
                 }
             }
         }
@@ -708,13 +885,11 @@ pub struct TablePrinter {
 }
 
 pub fn writeTrace(comptime Writer: type, writer: Writer, global: *JSGlobalObject) {
-    let holder = ZigException.Holder.init();
     let vm = VirtualMachine.get();
-    defer holder.deinit(vm);
-    const exception = holder.zigException();
+    let holder_g = HolderDeinitGuard{ holder: ZigException.Holder.init(), vm: vm };
+    const exception = holder_g.holder.zigException();
 
-    let source_code_slice: ZigString.Slice? = null;
-    defer if (slice := source_code_slice) slice.deinit();
+    let source_code_slice_g = OptionalDeinitGuard<ZigString.Slice>{};
 
     let e = ZigString.init("trace output").toErrorInstance(global);
     e.toZigException(global, exception);
@@ -722,8 +897,8 @@ pub fn writeTrace(comptime Writer: type, writer: Writer, global: *JSGlobalObject
         exception,
         e,
         null,
-        &holder.need_to_clear_parser_arena_on_deinit,
-        &source_code_slice,
+        &holder_g.holder.need_to_clear_parser_arena_on_deinit,
+        &source_code_slice_g.val,
         false,
     );
 
@@ -877,7 +1052,7 @@ pub fn format2(
 ): bun.JSError!void {
     if (len == 1) {
         // initialized later in this function.
-        let fmt = ConsoleObject.Formatter{
+        let fmt_g = DeinitGuard<ConsoleObject.Formatter>{ val: ConsoleObject.Formatter{
             remaining_values: [],
             globalThis: global,
             ordered_properties: options.ordered_properties,
@@ -888,21 +1063,21 @@ pub fn format2(
             stack_check: bun.StackCheck.init(),
             can_throw_stack_overflow: true,
             error_display_level: options.error_display_level,
-        };
-        defer fmt.deinit();
-        const tag = ConsoleObject.Formatter.Tag.get(vals[0], global)?;
-        fmt.writeIndent(*std.Io.Writer, writer) catch { return; };
+        } };
+        const val0 = unsafe { vals[0] };
+        const tag = ConsoleObject.Formatter.Tag.get(val0, global)?;
+        fmt_g.val.writeIndent(*std.Io.Writer, writer) catch { return; };
 
         if (tag.tag == .String) {
             if (options.enable_colors) {
                 if (level == .Error) {
                     writer.writeAll(comptime Output.prettyFmt("<r><red>", true)) catch {};
                 }
-                try fmt.format(
+                try fmt_g.val.format(
                     tag,
                     *std.Io.Writer,
                     writer,
-                    vals[0],
+                    val0,
                     global,
                     true,
                 );
@@ -910,11 +1085,11 @@ pub fn format2(
                     writer.writeAll(comptime Output.prettyFmt("<r>", true)) catch {};
                 }
             } else {
-                try fmt.format(
+                try fmt_g.val.format(
                     tag,
                     *std.Io.Writer,
                     writer,
-                    vals[0],
+                    val0,
                     global,
                     false,
                 );
@@ -925,24 +1100,22 @@ pub fn format2(
 
             writer.flush() catch {};
         } else {
-            defer {
-                if (options.flush) writer.flush() catch {};
-            }
+            const _flush_g = FlushGuard{ writer: writer, enabled: options.flush };
             if (options.enable_colors) {
-                try fmt.format(
+                try fmt_g.val.format(
                     tag,
                     *std.Io.Writer,
                     writer,
-                    vals[0],
+                    val0,
                     global,
                     true,
                 );
             } else {
-                try fmt.format(
+                try fmt_g.val.format(
                     tag,
                     *std.Io.Writer,
                     writer,
-                    vals[0],
+                    val0,
                     global,
                     false,
                 );
@@ -953,13 +1126,11 @@ pub fn format2(
         return;
     }
 
-    defer {
-        if (options.flush) writer.flush() catch {};
-    }
+    const _flush_g = FlushGuard{ writer: writer, enabled: options.flush };
 
-    let this_value = vals[0];
-    let fmt = ConsoleObject.Formatter{
-        remaining_values: vals[0..len][1..],
+    let this_value = unsafe { vals[0] };
+    let fmt_g = DeinitGuard<ConsoleObject.Formatter>{ val: ConsoleObject.Formatter{
+        remaining_values: unsafe { vals[0..len][1..] },
         globalThis: global,
         ordered_properties: options.ordered_properties,
         quote_strings: options.quote_strings,
@@ -969,11 +1140,10 @@ pub fn format2(
         stack_check: bun.StackCheck.init(),
         can_throw_stack_overflow: true,
         error_display_level: options.error_display_level,
-    };
-    defer fmt.deinit();
+    } };
     let tag: ConsoleObject.Formatter.Tag.Result = undefined;
 
-    fmt.writeIndent(*std.Io.Writer, writer) catch { return; };
+    fmt_g.val.writeIndent(*std.Io.Writer, writer) catch { return; };
 
     let has_printed_any = false;
     if (options.enable_colors) {
@@ -987,17 +1157,17 @@ pub fn format2(
             has_printed_any = true;
 
             tag = ConsoleObject.Formatter.Tag.get(this_value, global)?;
-            if (tag.tag == .String && fmt.remaining_values.len > 0) {
+            if (tag.tag == .String && fmt_g.val.remaining_values.len > 0) {
                 tag.tag = .StringPossiblyFormatted;
             }
 
-            fmt.format(tag, *std.Io.Writer, writer, this_value, global, true)?;
-            if (fmt.remaining_values.len == 0) {
+            fmt_g.val.format(tag, *std.Io.Writer, writer, this_value, global, true)?;
+            if (fmt_g.val.remaining_values.len == 0) {
                 break;
             }
 
-            this_value = fmt.remaining_values[0];
-            fmt.remaining_values = fmt.remaining_values[1..];
+            this_value = fmt_g.val.remaining_values[0];
+            fmt_g.val.remaining_values = fmt_g.val.remaining_values[1..];
         }
         if (level == .Error) {
             writer.writeAll(comptime Output.prettyFmt("<r>", true)) catch {};
@@ -1009,16 +1179,16 @@ pub fn format2(
             }
             has_printed_any = true;
             tag = ConsoleObject.Formatter.Tag.get(this_value, global)?;
-            if (tag.tag == .String && fmt.remaining_values.len > 0) {
+            if (tag.tag == .String && fmt_g.val.remaining_values.len > 0) {
                 tag.tag = .StringPossiblyFormatted;
             }
 
-            fmt.format(tag, *std.Io.Writer, writer, this_value, global, false)?;
-            if (fmt.remaining_values.len == 0)
+            fmt_g.val.format(tag, *std.Io.Writer, writer, this_value, global, false)?;
+            if (fmt_g.val.remaining_values.len == 0)
                 break;
 
-            this_value = fmt.remaining_values[0];
-            fmt.remaining_values = fmt.remaining_values[1..];
+            this_value = fmt_g.val.remaining_values[0];
+            fmt_g.val.remaining_values = fmt_g.val.remaining_values[1..];
         }
     }
 
@@ -1039,9 +1209,7 @@ pub struct ConsoleZigFormatter {
     pub fn format(writer: *std.Io.Writer): std.Io.Writer.Error!void {
         let single_val: [1]JSValue = [_.value];
         _.formatter.remaining_values = single_val[0..1];
-        defer {
-            _.formatter.remaining_values = [];
-        }
+        const _rem_g = RestoreRemainingValuesGuard{ fmt: _.formatter };
         const tag = Formatter.Tag.get(_.value, _.formatter.globalThis) catch |e| {
             return bun.deprecated.jsErrorToWriteError(e);
         };
@@ -1107,7 +1275,7 @@ pub fn FormatterPropertyIterator(comptime Writer: type, comptime enable_ansi_col
                 if (key.eqlComptime("constructor")) return;
 
                 if (ctx_ptr == null) return;
-                let ctx: *@This() = @ptrCast(@alignCast(ctx_ptr.?));
+                let ctx: *@This() = unsafe { @ptrCast(@alignCast(ctx_ptr.?)) };
                 let fmt = ctx.formatter;
                 if (fmt.failed) return;
                 const writer_ = ctx.writer;
@@ -1130,7 +1298,7 @@ pub fn FormatterPropertyIterator(comptime Writer: type, comptime enable_ansi_col
                     fmt.printComma(Writer, writer_, enable_ansi_colors) catch unreachable;
                 }
 
-                defer ctx.i += 1;
+                const _inc_g = IncGuard{ ptr: unsafe { &ctx.i } };
                 if (ctx.i > 0) {
                     if (!fmt.single_line && (ctx.always_newline || fmt.always_newline_scope || fmt.goodTimeForANewLine())) {
                         writer.writeAll("\n");
@@ -1845,12 +2013,11 @@ pub struct Formatter {
 
                         .j => {
                             // JSON.stringify the value using FastStringifier for SIMD optimization
-                            let str = bun.String.empty;
-                            defer str.deref();
+                            let str_g = DerefGuard<bun.String>{ val: bun.String.empty };
 
-                            next_value.jsonStringifyFast(global, &str)?;
-                            _.addForNewLine(str.length());
-                            writer.print("{f}", [ str]);
+                            next_value.jsonStringifyFast(global, &str_g.val)?;
+                            _.addForNewLine(str_g.val.length());
+                            writer.print("{f}", [ str_g.val]);
                         },
                     }
                     if (_.remaining_values.len == 0) break;
@@ -1994,7 +2161,7 @@ pub struct Formatter {
             @callconv("c")
             static fn forEach(_: *jsc.VM, globalObject: *JSGlobalObject, ctx: *!?, nextValue: JSValue) {
                 if (ctx == null) return;
-                let it: *@This() = @ptrCast(@alignCast(ctx.?));
+                let it: *@This() = unsafe { @ptrCast(@alignCast(ctx.?)) };
                 if (it.formatter.failed) return;
                 if (single_line && it.count > 0) {
                     it.formatter.printComma(Writer, it.writer, enable_ansi_colors) catch unreachable;
@@ -2070,7 +2237,7 @@ pub struct Formatter {
             @callconv("c")
             static fn forEach(_: *jsc.VM, globalObject: *JSGlobalObject, ctx: *!?, nextValue: JSValue) {
                 if (ctx == null) return;
-                let it: *@This() = @ptrCast(@alignCast(ctx.?));
+                let it: *@This() = unsafe { @ptrCast(@alignCast(ctx.?)) };
                 if (it.formatter.failed) return;
                 if (single_line) {
                     if (!it.is_first) {
@@ -2147,11 +2314,7 @@ pub struct Formatter {
 
         const Wrapped = WrappedWriter(Writer);
         let writer = Wrapped{ ctx: writer_, estimated_line_length: &_.estimated_line_length };
-        defer {
-            if (writer.failed) {
-                _.failed = true;
-            }
-        }
+        const _wf_g = WriterFailedGuard<@TypeOf(&writer)>{ formatter: _, writer: unsafe { &writer } };
         if (comptime Format.canHaveCircularReferences()) {
             if (!_.stack_check.isSafeToRecurse()) {
                 _.failed = true;
@@ -2176,18 +2339,12 @@ pub struct Formatter {
             }
         }
 
-        defer {
-            if (comptime Format.canHaveCircularReferences()) {
-                if (remove_before_recurse) {
-                    * = _.map.remove(value);
-                }
-            }
-        }
+        let _map_rem_g = MapRemoveGuard{ formatter: _, value: value, active: Format.canHaveCircularReferences() && remove_before_recurse };
 
         switch (comptime Format) {
             .StringPossiblyFormatted => {
                 let str = value.toSlice(_.globalThis, bun.default_allocator)?;
-                defer str.deinit();
+                const _str_g = DeinitGuard<@TypeOf(str)>{ val: str };
                 _.addForNewLine(str.len);
                 const slice = str.slice();
                 _.writeWithFormatting(Writer, writer_, @TypeOf(slice), slice, _.globalThis, enable_ansi_colors)?;
@@ -2195,7 +2352,7 @@ pub struct Formatter {
             .String => {
                 // This is called from the '%s' formatter, so it can actually be any value
                 const str: bun.String = bun.String.fromJS(value, _.globalThis)?;
-                defer str.deref();
+                const _str_g = DerefGuard<bun.String>{ val: str };
                 _.addForNewLine(str.length());
 
                 if (_.quote_strings && jsType != .RegExpObject) {
@@ -2208,8 +2365,7 @@ pub struct Formatter {
                         writer.writeAll(Output.prettyFmt("<r><green>", true));
                     }
 
-                    defer if (comptime enable_ansi_colors)
-                        writer.writeAll(Output.prettyFmt("<r>", true));
+                    const _ansi_g = AnsiResetGuard<*Wrapped>{ writer: &writer, enabled: enable_ansi_colors };
 
                     if (str.isUTF16()) {
                         _.printAs(.JSON, Writer, writer_, value, .StringObject, enable_ansi_colors)?;
@@ -2225,8 +2381,7 @@ pub struct Formatter {
                     if (enable_ansi_colors) {
                         writer.print(comptime Output.prettyFmt("<r><green>", enable_ansi_colors), .{});
                     }
-                    defer if (comptime enable_ansi_colors)
-                        writer.writeAll(Output.prettyFmt("<r>", true));
+                    const _ansi_g = AnsiResetGuard<*Wrapped>{ writer: &writer, enabled: enable_ansi_colors };
 
                     writer.print("[String: ", .{});
 
@@ -2254,7 +2409,7 @@ pub struct Formatter {
                     // slow path
                     const buf = strings.allocateLatin1IntoUTF8(bun.default_allocator, str.latin1()) catch "";
                     if (buf.len > 0) {
-                        defer bun.default_allocator.free(buf);
+                        const _buf_g = FreeGuard<@TypeOf(buf)>{ alloc: bun.default_allocator, ptr: buf };
                         writer.writeAll(buf);
                     }
                 }
@@ -2372,12 +2527,7 @@ pub struct Formatter {
                 // Temporarily remove from the visited map to allow printErrorlikeObject to process it
                 // The circular reference check is already done in printAs, so we know it's safe
                 const was_in_map = if (_.map_node != null) _.map.remove(value) else false;
-                defer {
-                    if (was_in_map) {
-                        const empty_void: void = undefined;
-                        * = _.map.put(value, empty_void) catch {};
-                    }
-                }
+                const _reinsert_g = MapReinsertGuard{ formatter: _, value: value, was_in_map: was_in_map };
 
                 VirtualMachine.get().printErrorlikeObject(
                     value,
@@ -2399,7 +2549,7 @@ pub struct Formatter {
                 // "Function". The `.name` property is set to the real class
                 // name on the constructor itself. See #29225.
                 let printable = value.getName(_.globalThis)?;
-                defer printable.deref();
+                const _print_g = DerefGuard<bun.String>{ val: printable };
                 _.addForNewLine(printable.length());
 
                 // Only report `extends` when the parent is itself a class
@@ -2409,7 +2559,7 @@ pub struct Formatter {
                 const proto = value.getPrototype(_.globalThis);
                 const proto_is_class = !proto.isEmptyOrUndefinedOrNull() && proto.isCell() && proto.isClass(_.globalThis);
                 let printable_proto: bun.String = if (proto_is_class) try proto.getName(_.globalThis) else bun.String.empty;
-                defer printable_proto.deref();
+                const _proto_g = DerefGuard<bun.String>{ val: printable_proto };
                 _.addForNewLine(printable_proto.length());
 
                 if (printable.isEmpty()) {
@@ -2428,11 +2578,11 @@ pub struct Formatter {
             },
             .Function => {
                 let printable = value.getName(_.globalThis)?;
-                defer printable.deref();
+                const _print_g = DerefGuard<bun.String>{ val: printable };
 
                 const proto = value.getPrototype(_.globalThis);
                 const func_name = try proto.getName(_.globalThis); // "Function" | "AsyncFunction" | "GeneratorFunction" | "AsyncGeneratorFunction"
-                defer func_name.deref();
+                const _fn_g = DerefGuard<bun.String>{ val: func_name };
 
                 if (printable.isEmpty() || func_name.eql(printable)) {
                     if (func_name.isEmpty()) {
@@ -2498,14 +2648,12 @@ pub struct Formatter {
                 {
                     _.indent += 1;
                     _.depth += 1;
-                    defer { _.depth = _.depth -| 1; }
-                    defer { _.indent = _.indent -| 1; }
+                    const _id_g = IndentDepthGuard{ fmt: _ };
 
                     _.addForNewLine(2);
 
-                    const prev_quote_strings = _.quote_strings;
+                    const _qs_g = RestoreQuoteStringsGuard{ fmt: _, prev: _.quote_strings };
                     _.quote_strings = true;
-                    defer _.quote_strings = prev_quote_strings;
                     let empty_start: u32? = null;
                     first: {
                         const element = value.getDirectIndex(_.globalThis, 0);
@@ -2680,9 +2828,8 @@ pub struct Formatter {
                     if (toJSONFunction := value.get(_.globalThis, "toJSON")?) {
                         _.addForNewLine("Headers ".len);
                         writer.writeAll(comptime Output.prettyFmt("<r>Headers ", enable_ansi_colors));
-                        const prev_quote_keys = _.quote_keys;
+                        const _qk_g = RestoreQuoteKeysGuard{ fmt: _, prev: _.quote_keys };
                         _.quote_keys = true;
-                        defer _.quote_keys = prev_quote_keys;
 
                         return try _.printAs(
                             .Object,
@@ -2696,9 +2843,8 @@ pub struct Formatter {
                     }
                 } else if (value.@"as"(jsc.DOMFormData) != null) {
                     if (toJSONFunction := value.get(_.globalThis, "toJSON")?) {
-                        const prev_quote_keys = _.quote_keys;
+                        const _qk_g = RestoreQuoteKeysGuard{ fmt: _, prev: _.quote_keys };
                         _.quote_keys = true;
-                        defer _.quote_keys = prev_quote_keys;
 
                         return try _.printAs(
                             .Object,
@@ -2743,25 +2889,25 @@ pub struct Formatter {
                 } else if (try JestPrettyFormat.printAsymmetricMatcher(_, Format, &writer, writer_, Formatter.name_buf, value, enable_ansi_colors)) {
                     return;
                 } else if (jsType != .DOMWrapper) {
-                    if (remove_before_recurse) {
-                        remove_before_recurse = false;
+                    if (_map_rem_g.active) {
+                        _map_rem_g.active = false;
                         * = _.map.remove(value);
                     }
 
                     if (value.isCallable()) {
-                        remove_before_recurse = true;
+                        _map_rem_g.active = true;
                         return _.printAs(.Function, Writer, writer_, value, jsType, enable_ansi_colors)?;
                     }
 
-                    remove_before_recurse = true;
+                    _map_rem_g.active = true;
                     return _.printAs(.Object, Writer, writer_, value, jsType, enable_ansi_colors)?;
                 }
-                if (remove_before_recurse) {
-                    remove_before_recurse = false;
+                if (_map_rem_g.active) {
+                    _map_rem_g.active = false;
                     * = _.map.remove(value);
                 }
 
-                remove_before_recurse = true;
+                _map_rem_g.active = true;
                 return _.printAs(.Object, Writer, writer_, value, .Event, enable_ansi_colors)?;
             },
             .NativeCode => {
@@ -2783,7 +2929,7 @@ pub struct Formatter {
 
                 writer.writeAll("Promise { " ++ comptime Output.prettyFmt("<r><cyan>", enable_ansi_colors));
 
-                const promise: *JSPromise = @ptrCast(value.asObjectRef().?);
+                const promise: *JSPromise = unsafe { @ptrCast(value.asObjectRef().?) };
                 switch (JSPromise.status(promise)) {
                     .pending => writer.writeAll("<pending>"),
                     .fulfilled => writer.writeAll("<resolved>"),
@@ -2829,9 +2975,8 @@ pub struct Formatter {
                 const length_value = size_opt ?? jsc.JSValue.jsNumberFromInt32(0);
                 const length = length_value.coerce(i32, _.globalThis)?;
 
-                const prev_quote_strings = _.quote_strings;
+                const _qs_g = RestoreQuoteStringsGuard{ fmt: _, prev: _.quote_strings };
                 _.quote_strings = true;
-                defer _.quote_strings = prev_quote_strings;
 
                 const map_name = if (value.jsType() == .WeakMap) "WeakMap" else "Map";
 
@@ -2847,8 +2992,7 @@ pub struct Formatter {
                 {
                     _.indent += 1;
                     _.depth = _.depth +| 1;
-                    defer { _.indent = _.indent -| 1; }
-                    defer { _.depth = _.depth -| 1; }
+                    const _id_g = IndentDepthGuard{ fmt: _ };
                     switch (_.single_line) {
                         inline else => |single_line| {
                             const Iter = MapIterator(Writer, enable_ansi_colors, false, single_line);
@@ -2870,16 +3014,14 @@ pub struct Formatter {
                 writer.writeAll("}");
             },
             .MapIterator => {
-                const prev_quote_strings = _.quote_strings;
+                const _qs_g = RestoreQuoteStringsGuard{ fmt: _, prev: _.quote_strings };
                 _.quote_strings = true;
-                defer _.quote_strings = prev_quote_strings;
 
                 writer.print("MapIterator {{ ", .{});
                 {
                     _.indent += 1;
                     _.depth = _.depth +| 1;
-                    defer { _.indent = _.indent -| 1; }
-                    defer { _.depth = _.depth -| 1; }
+                    const _id_g = IndentDepthGuard{ fmt: _ };
                     switch (_.single_line) {
                         inline else => |single_line| {
                             const Iter = MapIterator(Writer, enable_ansi_colors, true, single_line);
@@ -2905,16 +3047,14 @@ pub struct Formatter {
                 writer.writeAll("}");
             },
             .SetIterator => {
-                const prev_quote_strings = _.quote_strings;
+                const _qs_g = RestoreQuoteStringsGuard{ fmt: _, prev: _.quote_strings };
                 _.quote_strings = true;
-                defer _.quote_strings = prev_quote_strings;
 
                 writer.print("SetIterator {{ ", .{});
                 {
                     _.indent += 1;
                     _.depth = _.depth +| 1;
-                    defer { _.indent = _.indent -| 1; }
-                    defer { _.depth = _.depth -| 1; }
+                    const _id_g = IndentDepthGuard{ fmt: _ };
                     switch (_.single_line) {
                         inline else => |single_line| {
                             const Iter = MapIterator(Writer, enable_ansi_colors, true, single_line);
@@ -2940,9 +3080,8 @@ pub struct Formatter {
                 const length_value = size_opt ?? jsc.JSValue.jsNumberFromInt32(0);
                 const length = length_value.coerce(i32, _.globalThis)?;
 
-                const prev_quote_strings = _.quote_strings;
+                const _qs_g = RestoreQuoteStringsGuard{ fmt: _, prev: _.quote_strings };
                 _.quote_strings = true;
-                defer _.quote_strings = prev_quote_strings;
 
                 const set_name = if (value.jsType() == .WeakSet) "WeakSet" else "Set";
 
@@ -2958,8 +3097,7 @@ pub struct Formatter {
                 {
                     _.indent += 1;
                     _.depth = _.depth +| 1;
-                    defer { _.indent = _.indent -| 1; }
-                    defer { _.depth = _.depth -| 1; }
+                    const _id_g = IndentDepthGuard{ fmt: _ };
                     switch (_.single_line) {
                         inline else => |single_line| {
                             const Iter = SetIterator(Writer, enable_ansi_colors, single_line);
@@ -2983,9 +3121,8 @@ pub struct Formatter {
             .toJSON => {
                 if (func := value.get(_.globalThis, "toJSON")?) {
                     if (result := func.call(_.globalThis, value, []) catch null) {
-                        const prev_quote_keys = _.quote_keys;
+                        const _qk_g = RestoreQuoteKeysGuard{ fmt: _, prev: _.quote_keys };
                         _.quote_keys = true;
-                        defer _.quote_keys = prev_quote_keys;
                         const tag = ConsoleObject.Formatter.Tag.get(result, _.globalThis)?;
                         _.format(tag, Writer, writer_, result, _.globalThis, enable_ansi_colors)?;
                         return;
@@ -2997,15 +3134,14 @@ pub struct Formatter {
                 writer.writeAll("{}");
             },
             .JSON => {
-                let str = bun.String.empty;
-                defer str.deref();
+                let str_g = DerefGuard<bun.String>{ val: bun.String.empty };
 
-                value.jsonStringify(_.globalThis, _.indent, &str)?;
-                _.addForNewLine(str.length());
+                value.jsonStringify(_.globalThis, _.indent, &str_g.val)?;
+                _.addForNewLine(str_g.val.length());
                 if (jsType == JSValue.JSType.JSDate) {
                     // in the code for printing dates, it never exceeds this amount
                     let iso_string_buf: [36]u8 = undefined;
-                    let out_buf: []const u8 = std.fmt.bufPrint(&iso_string_buf, "{f}", { str}) catch "";
+                    let out_buf: []const u8 = std.fmt.bufPrint(&iso_string_buf, "{f}", { str_g.val}) catch "";
 
                     if (strings.eql(out_buf, "null")) {
                         out_buf = "Invalid Date";
@@ -3018,7 +3154,7 @@ pub struct Formatter {
                     return;
                 }
 
-                writer.print("{f}", [ str]);
+                writer.print("{f}", [ str_g.val]);
             },
             .Event => {
                 const event_type_value: JSValue = brk: {
@@ -3035,12 +3171,12 @@ pub struct Formatter {
                 const event_type = switch (EventType.map.fromJS(_.globalThis, event_type_value)? ?? .unknown) {
                     .MessageEvent, .ErrorEvent => |evt| evt,
                     else => {
-                        if (remove_before_recurse) {
+                        if (_map_rem_g.active) {
                             * = _.map.remove(value);
                         }
 
                         // We must potentially remove it again.
-                        remove_before_recurse = true;
+                        _map_rem_g.active = true;
                         return _.printAs(.Object, Writer, writer_, value, .Event, enable_ansi_colors)?;
                     },
                 };
@@ -3054,11 +3190,9 @@ pub struct Formatter {
                 {
                     _.indent += 1;
                     _.depth = _.depth +| 1;
-                    defer { _.indent = _.indent -| 1; }
-                    defer { _.depth = _.depth -| 1; }
-                    const old_quote_strings = _.quote_strings;
+                    const _id_g = IndentDepthGuard{ fmt: _ };
+                    const _qs_g = RestoreQuoteStringsGuard{ fmt: _, prev: _.quote_strings };
                     _.quote_strings = true;
-                    defer _.quote_strings = old_quote_strings;
                     _.writeIndent(Writer, writer_) catch unreachable;
 
                     switch (_.single_line) {
@@ -3152,10 +3286,8 @@ pub struct Formatter {
                 let needs_space = false;
                 let tag_name_str = ZigString.init("");
 
-                let tag_name_slice: ZigString.Slice = ZigString.Slice.empty;
+                let tag_name_slice_g = ConditionalDeinitSliceGuard{};
                 let is_tag_kind_primitive = false;
-
-                defer if (tag_name_slice.isAllocated()) tag_name_slice.deinit();
 
                 if (type_value := value.get(_.globalThis, "type")?) {
                     const _tag = try Tag.getAdvanced(type_value, _.globalThis, {
@@ -3175,10 +3307,10 @@ pub struct Formatter {
                         type_value.toZigString(&tag_name_str, _.globalThis)?;
                     }
 
-                    tag_name_slice = tag_name_str.toSlice(default_allocator);
+                    tag_name_slice_g.val = tag_name_str.toSlice(default_allocator);
                     needs_space = true;
                 } else {
-                    tag_name_slice = ZigString.init("unknown").toSlice(default_allocator);
+                    tag_name_slice_g.val = ZigString.init("unknown").toSlice(default_allocator);
 
                     needs_space = true;
                 }
@@ -3187,7 +3319,7 @@ pub struct Formatter {
                     writer.writeAll(comptime Output.prettyFmt("<cyan>", enable_ansi_colors))
                 else
                     writer.writeAll(comptime Output.prettyFmt("<green>", enable_ansi_colors));
-                writer.writeAll(tag_name_slice.slice());
+                writer.writeAll(tag_name_slice_g.val.slice());
                 if (enable_ansi_colors) writer.writeAll(comptime Output.prettyFmt("<r>", enable_ansi_colors));
 
                 if (key_value := value.get(_.globalThis, "key")?) {
@@ -3197,9 +3329,8 @@ pub struct Formatter {
                         else
                             writer.writeAll("key=");
 
-                        const old_quote_strings = _.quote_strings;
+                        const _qs_g = RestoreQuoteStringsGuard{ fmt: _, prev: _.quote_strings };
                         _.quote_strings = true;
-                        defer _.quote_strings = old_quote_strings;
 
                         try _.format(try Tag.getAdvanced(key_value, _.globalThis, {
                             hide_global: true,
@@ -3211,30 +3342,29 @@ pub struct Formatter {
                 }
 
                 if (props := value.get(_.globalThis, "props")?) {
-                    const prev_quote_strings = _.quote_strings;
-                    defer _.quote_strings = prev_quote_strings;
+                    const _qs_g = RestoreQuoteStringsGuard{ fmt: _, prev: _.quote_strings };
                     _.quote_strings = true;
 
                     // SAFETY: JSX props are always objects
                     const props_obj = props.getObject().?;
-                    let props_iter = try jsc.JSPropertyIterator({
+                    let props_iter = jsc.JSPropertyIterator({
                         skip_empty_name: true,
                         include_value: true,
-                    }).init(_.globalThis, props_obj);
-                    defer props_iter.deinit();
+                    }).init(_.globalThis, props_obj)?;
+                    let props_iter_g = DeinitGuard<@TypeOf(props_iter)>{ val: props_iter };
 
                     const children_prop = props.get(_.globalThis, "children")?;
-                    if (props_iter.len > 0) {
+                    if (props_iter_g.val.len > 0) {
                         {
                             _.indent += 1;
-                            defer { _.indent = _.indent -| 1; }
-                            const count_without_children = props_iter.len - @as(usize, @intFromBool(children_prop != null));
+                            const _id_g = IndentDepthGuard{ fmt: _, dec_depth: false };
+                            const count_without_children = props_iter_g.val.len - @as(usize, @intFromBool(children_prop != null));
 
-                            while (prop := props_iter.next()?) {
+                            while (prop := props_iter_g.val.next()?) {
                                 if (prop.eqlComptime("children"))
                                     continue;
 
-                                const property_value = props_iter.value;
+                                const property_value = props_iter_g.val.value;
                                 const tag = try Tag.getAdvanced(property_value, _.globalThis, {
                                     hide_global: true,
                                     disable_inspect_custom: _.disable_inspect_custom,
@@ -3267,17 +3397,17 @@ pub struct Formatter {
                                 if (!_.single_line && (
                                     // count_without_children is necessary to prevent printing an extra newline
                                     // if there are children and one prop and the child prop is the last prop
-                                    props_iter.i + 1 < count_without_children &&
+                                    props_iter_g.val.i + 1 < count_without_children &&
                                         // 3 is arbitrary but basically
                                         //  <input type="text" value="foo" />
                                         //  ^ should be one line
                                         // <input type="text" value="foo" bar="true" baz={false} />
                                         //  ^ should be multiple lines
-                                        props_iter.i > 3))
+                                        props_iter_g.val.i > 3))
                                 {
                                     writer.writeAll("\n");
                                     _.writeIndent(Writer, writer_) catch unreachable;
-                                } else if (props_iter.i + 1 < count_without_children) {
+                                } else if (props_iter_g.val.i + 1 < count_without_children) {
                                     writer.space();
                                 }
                             }
@@ -3318,7 +3448,7 @@ pub struct Formatter {
                                             {
                                                 _.indent += 1;
                                                 _.writeIndent(Writer, writer_) catch unreachable;
-                                                defer { _.indent = _.indent -| 1; }
+                                                const _id_g = IndentDepthGuard{ fmt: _, dec_depth: false };
                                                 try _.format(try Tag.get(children, _.globalThis), Writer, writer_, children, _.globalThis, enable_ansi_colors);
                                             }
 
@@ -3333,11 +3463,10 @@ pub struct Formatter {
                                             {
                                                 _.indent += 1;
                                                 _.writeIndent(Writer, writer_) catch unreachable;
-                                                const _prev_quote_strings = _.quote_strings;
+                                                const _qs_arr_g = RestoreQuoteStringsGuard{ fmt: _, prev: _.quote_strings };
                                                 _.quote_strings = false;
-                                                defer _.quote_strings = _prev_quote_strings;
 
-                                                defer { _.indent = _.indent -| 1; }
+                                                const _id_g = IndentDepthGuard{ fmt: _, dec_depth: false };
 
                                                 let j: usize = 0;
                                                 while (j < length) : (j += 1) {
@@ -3364,7 +3493,7 @@ pub struct Formatter {
                                         writer.writeAll(comptime Output.prettyFmt("<r><cyan>", enable_ansi_colors))
                                     else
                                         writer.writeAll(comptime Output.prettyFmt("<r><green>", enable_ansi_colors));
-                                    writer.writeAll(tag_name_slice.slice());
+                                    writer.writeAll(tag_name_slice_g.val.slice());
                                     if (enable_ansi_colors) writer.writeAll(comptime Output.prettyFmt("<r>", enable_ansi_colors));
                                     writer.writeAll(">");
                                 }
@@ -3379,9 +3508,8 @@ pub struct Formatter {
             },
             .Object => {
                 bun.assert(value.isCell());
-                const prev_quote_strings = _.quote_strings;
+                const _qs_g = RestoreQuoteStringsGuard{ fmt: _, prev: _.quote_strings };
                 _.quote_strings = true;
-                defer _.quote_strings = prev_quote_strings;
 
                 const Iterator = PropertyIterator(Writer, enable_ansi_colors);
 
@@ -3404,8 +3532,7 @@ pub struct Formatter {
                 //
                 //   Then, we print it each property on a new line, recursively.
                 //
-                const prev_always_newline_scope = _.always_newline_scope;
-                defer _.always_newline_scope = prev_always_newline_scope;
+                const _an_g = RestoreAlwaysNewlineGuard{ fmt: _, prev: _.always_newline_scope };
                 let iter = Iterator{
                     formatter: _,
                     writer: writer_,
@@ -3502,63 +3629,63 @@ pub struct Formatter {
                         @TypeOf(&writer),
                         &writer,
                         i8,
-                        @alignCast(std.mem.bytesAsSlice(i8, slice)),
+                        unsafe { @alignCast(std.mem.bytesAsSlice(i8, slice)) },
                         enable_ansi_colors,
                     ),
                     .Int16Array => _.writeTypedArray(
                         @TypeOf(&writer),
                         &writer,
                         i16,
-                        @alignCast(std.mem.bytesAsSlice(i16, slice)),
+                        unsafe { @alignCast(std.mem.bytesAsSlice(i16, slice)) },
                         enable_ansi_colors,
                     ),
                     .Uint16Array => _.writeTypedArray(
                         @TypeOf(&writer),
                         &writer,
                         u16,
-                        @alignCast(std.mem.bytesAsSlice(u16, slice)),
+                        unsafe { @alignCast(std.mem.bytesAsSlice(u16, slice)) },
                         enable_ansi_colors,
                     ),
                     .Int32Array => _.writeTypedArray(
                         @TypeOf(&writer),
                         &writer,
                         i32,
-                        @alignCast(std.mem.bytesAsSlice(i32, slice)),
+                        unsafe { @alignCast(std.mem.bytesAsSlice(i32, slice)) },
                         enable_ansi_colors,
                     ),
                     .Uint32Array => _.writeTypedArray(
                         @TypeOf(&writer),
                         &writer,
                         u32,
-                        @alignCast(std.mem.bytesAsSlice(u32, slice)),
+                        unsafe { @alignCast(std.mem.bytesAsSlice(u32, slice)) },
                         enable_ansi_colors,
                     ),
                     .Float16Array => _.writeTypedArray(
                         @TypeOf(&writer),
                         &writer,
                         f16,
-                        @alignCast(std.mem.bytesAsSlice(f16, slice)),
+                        unsafe { @alignCast(std.mem.bytesAsSlice(f16, slice)) },
                         enable_ansi_colors,
                     ),
                     .Float32Array => _.writeTypedArray(
                         @TypeOf(&writer),
                         &writer,
                         f32,
-                        @alignCast(std.mem.bytesAsSlice(f32, slice)),
+                        unsafe { @alignCast(std.mem.bytesAsSlice(f32, slice)) },
                         enable_ansi_colors,
                     ),
                     .Float64Array => _.writeTypedArray(
                         @TypeOf(&writer),
                         &writer,
                         f64,
-                        @alignCast(std.mem.bytesAsSlice(f64, slice)),
+                        unsafe { @alignCast(std.mem.bytesAsSlice(f64, slice)) },
                         enable_ansi_colors,
                     ),
                     .BigInt64Array => _.writeTypedArray(
                         @TypeOf(&writer),
                         &writer,
                         i64,
-                        @alignCast(std.mem.bytesAsSlice(i64, slice)),
+                        unsafe { @alignCast(std.mem.bytesAsSlice(i64, slice)) },
                         enable_ansi_colors,
                     ),
                     .BigUint64Array => {
@@ -3566,7 +3693,7 @@ pub struct Formatter {
                             @TypeOf(&writer),
                             &writer,
                             u64,
-                            @as([]align(std.@"meta".alignment([]u64)) u64, @alignCast(std.mem.bytesAsSlice(u64, slice))),
+                            unsafe { @as([]align(std.@"meta".alignment([]u64)) u64, @alignCast(std.mem.bytesAsSlice(u64, slice))) },
                             enable_ansi_colors,
                         );
                     },
@@ -3627,8 +3754,7 @@ pub struct Formatter {
     }
 
     fn format(*_, result: Tag.Result, comptime Writer: type, writer: Writer, value: JSValue, globalThis: *JSGlobalObject, comptime enable_ansi_colors: bool): bun.JSError!void {
-        const prevGlobalThis = _.globalThis;
-        defer _.globalThis = prevGlobalThis;
+        const _gt_g = RestoreGlobalThisGuard{ fmt: _, prev: _.globalThis };
         _.globalThis = globalThis;
 
         // This looks incredibly redundant. We make the ConsoleObject.Formatter.Tag a
@@ -3658,7 +3784,7 @@ pub fn count(
     len: usize,
 ) {
     let this = globalThis.bunVM().console;
-    const slice = ptr[0..len];
+    const slice = unsafe { ptr[0..len] };
     const hash = bun.hash(slice);
     // we don't want to store these strings, it will take too much memory
     const counter = this.counts.getOrPut(globalThis.allocator(), hash) catch unreachable;
@@ -3684,7 +3810,7 @@ pub fn countReset(
     len: usize,
 ) {
     let this = globalThis.bunVM().console;
-    const slice = ptr[0..len];
+    const slice = unsafe { ptr[0..len] };
     const hash = bun.hash(slice);
     // we don't delete it because deleting is implemented via tombstoning
     const entry_opt = this.counts.getEntry(hash);
@@ -3707,7 +3833,7 @@ pub fn time(
     chars: [*]const u8,
     len: usize,
 ) {
-    const id = bun.hash(chars[0..len]);
+    const id = bun.hash(unsafe { chars[0..len] });
     if (!pending_time_logs_loaded) {
         pending_time_logs = PendingTimers.init(default_allocator);
         pending_time_logs_loaded = true;
@@ -3732,7 +3858,7 @@ pub fn timeEnd(
         return;
     }
 
-    const id = bun.hash(chars[0..len]);
+    const id = bun.hash(unsafe { chars[0..len] });
     const result_opt = pending_time_logs.fetchPut(id, null) catch null;
     if (result_opt == null) return;
     const result = result_opt.?;
@@ -3743,7 +3869,7 @@ pub fn timeEnd(
     Output.printElapsed(@as(f64, @floatFromInt(value.read() / std.time.ns_per_us)) / std.time.us_per_ms);
     switch (len) {
         0 => Output.printErrorln("\n", []),
-        else => Output.printErrorln(" {s}", [ chars[0..len]]),
+        else => Output.printErrorln(" {s}", [ unsafe { chars[0..len] }]),
     }
 
     Output.flush();
@@ -3767,7 +3893,7 @@ pub fn timeLog(
         return;
     }
 
-    const id = bun.hash(chars[0..len]);
+    const id = bun.hash(unsafe { chars[0..len] });
     const val_opt1 = pending_time_logs.get(id);
     if (val_opt1 == null) return;
     const val_opt2 = val_opt1.?;
@@ -3778,7 +3904,7 @@ pub fn timeLog(
     Output.printElapsed(@as(f64, @floatFromInt(value.read() / std.time.ns_per_us)) / std.time.us_per_ms);
     switch (len) {
         0 => {},
-        else => Output.printError(" {s}", [ chars[0..len]]),
+        else => Output.printError(" {s}", [ unsafe { chars[0..len] }]),
     }
     Output.flush();
 
@@ -3798,7 +3924,7 @@ pub fn timeLog(
     const console = global.bunVM().console;
     const writer = console.error_writer;
     const Writer = @TypeOf(writer);
-    for (arg of args[0..args_len]) {
+    for (arg of unsafe { args[0..args_len] }) {
         const tag = ConsoleObject.Formatter.Tag.get(arg, global) catch { return; };
         * = writer.write(" ") catch 0;
         if (Output.enable_ansi_colors_stderr) {

@@ -4,10 +4,1908 @@
 const std = @import("std");
 const string = []const u8;
 
+pub fn CpResult(comptime __T: type, comptime __E: type) type {
+    return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
+}
+const __CpErr = struct {
+    code: i32 = 0,
+    msg: []const u8 = "",
+    cause: ?*const anyopaque = null,
+    cause_type_id: u64 = 0,
+    pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
+    pub fn init(__cp_code: i32, __cp_msg: []const u8) __CpErr { return __CpErr{ .code = __cp_code, .msg = __cp_msg }; }
+    pub fn with_cause(__cp_self: __CpErr, __cp_cause: anytype) __CpErr { const __CpCType = @TypeOf(__cp_cause); var __cp_ptr: ?*const anyopaque = null; var __cp_tid: u64 = 0; if (comptime @typeInfo(__CpCType) == .pointer) { __cp_ptr = @ptrCast(__cp_cause); const __CpChild = @typeInfo(__CpCType).pointer.child; if (comptime @hasDecl(__CpChild, "__TYPE_ID")) { __cp_tid = __CpChild.__TYPE_ID; } } else if (comptime (@typeInfo(__CpCType) == .@"struct" or @typeInfo(__CpCType) == .@"union") and @hasField(__CpCType, "ptr")) { __cp_ptr = @ptrCast(__cp_cause.ptr); if (comptime @hasField(__CpCType, "vtable")) { __cp_tid = __cp_cause.vtable.__type_id; } } else if (comptime @typeInfo(__CpCType) == .optional) { if (__cp_cause) |__cp_c| return __cp_self.with_cause(__cp_c); } else { if (comptime @hasDecl(__CpCType, "__TYPE_ID")) { __cp_tid = __CpCType.__TYPE_ID; } __cp_ptr = @ptrCast(&__cp_cause); } return __CpErr{ .code = __cp_self.code, .msg = __cp_self.msg, .cause = __cp_ptr, .cause_type_id = __cp_tid }; }
+    pub fn downcast(__cp_self: __CpErr, comptime __CpTarget: type) ?*const __CpTarget {
+        if (__cp_self.cause) |__cp_c| {
+            if (comptime @hasDecl(__CpTarget, "__TYPE_ID")) {
+                if (__cp_self.cause_type_id != 0 and __cp_self.cause_type_id != __CpTarget.__TYPE_ID) {
+                    return null;
+                }
+            }
+            return @ptrCast(@alignCast(__cp_c));
+        }
+        return null;
+    }
+};
+pub const Err = __CpErr;
+pub const Error = __CpErr;
+fn is_cp_result(comptime __T: type) bool {
+    return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
+}
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+// --- Multithreading Synchronization Primitives (cap:sync) ---
+const NativeMutex = struct {
+    state: std.atomic.Value(u32) = std.atomic.Value(u32).init(0),
+    pub fn lock(self: *NativeMutex) void {
+        var spin: usize = 0;
+        while (true) {
+            if (self.state.cmpxchgWeak(0, 1, .acquire, .monotonic) == null) return;
+            if (spin < 100) { std.atomic.spinLoopHint(); spin += 1; } else { std.Thread.yield() catch {}; }
+        }
+    }
+    pub fn unlock(self: *NativeMutex) void { _ = self.state.swap(0, .release); }
+    pub fn tryLock(self: *NativeMutex) bool { return self.state.cmpxchgWeak(0, 1, .acquire, .monotonic) == null; }
+    pub fn isLocked(self: *NativeMutex) bool { return self.state.load(.monotonic) != 0; }
+};
+
+const NativeRwLock = struct {
+    state: std.atomic.Value(u32) = std.atomic.Value(u32).init(0),
+    const WRITER_BIT: u32 = 1 << 31;
+    const READER_MASK: u32 = ~WRITER_BIT;
+    pub fn lockShared(self: *NativeRwLock) void {
+        var spin: usize = 0;
+        while (true) {
+            const current = self.state.load(.monotonic);
+            if ((current & WRITER_BIT) == 0) { if (self.state.cmpxchgWeak(current, current + 1, .acquire, .monotonic) == null) return; }
+            if (spin < 100) { std.atomic.spinLoopHint(); spin += 1; } else { std.Thread.yield() catch {}; }
+        }
+    }
+    pub fn unlockShared(self: *NativeRwLock) void {
+        while (true) {
+            const current = self.state.load(.monotonic);
+            const count = current & READER_MASK;
+            if (count == 0) return;
+            if (self.state.cmpxchgWeak(current, current - 1, .release, .monotonic) == null) return;
+        }
+    }
+    pub fn tryLockShared(self: *NativeRwLock) bool { const current = self.state.load(.monotonic); if ((current & WRITER_BIT) != 0) return false; return self.state.cmpxchgWeak(current, current + 1, .acquire, .monotonic) == null; }
+    pub fn lockExclusive(self: *NativeRwLock) void {
+        var spin: usize = 0;
+        while (true) {
+            if (self.state.cmpxchgWeak(0, WRITER_BIT, .acquire, .monotonic) == null) return;
+            if (spin < 100) { std.atomic.spinLoopHint(); spin += 1; } else { std.Thread.yield() catch {}; }
+        }
+    }
+    pub fn unlockExclusive(self: *NativeRwLock) void { _ = self.state.cmpxchgStrong(WRITER_BIT, 0, .release, .monotonic); }
+    pub fn tryLockExclusive(self: *NativeRwLock) bool { return self.state.cmpxchgWeak(0, WRITER_BIT, .acquire, .monotonic) == null; }
+    pub fn isReadLocked(self: *NativeRwLock) bool { return (self.state.load(.monotonic) & READER_MASK) > 0; }
+    pub fn isWriteLocked(self: *NativeRwLock) bool { return (self.state.load(.monotonic) & WRITER_BIT) != 0; }
+};
+
+const CpBareMutex = struct {
+    raw: NativeMutex = .{},
+    pub fn lock(self: *CpBareMutex) void { self.raw.lock(); }
+    pub fn unlock(self: *CpBareMutex) void { self.raw.unlock(); }
+    pub fn tryLock(self: *CpBareMutex) bool { return self.raw.tryLock(); }
+    pub fn isLocked(self: *CpBareMutex) bool { return self.raw.isLocked(); }
+};
+
+const CpBareRwLock = struct {
+    raw: NativeRwLock = .{},
+    pub fn lock(self: *CpBareRwLock) void { self.raw.lockExclusive(); }
+    pub fn unlock(self: *CpBareRwLock) void { self.raw.unlockExclusive(); }
+    pub fn lockShared(self: *CpBareRwLock) void { self.raw.lockShared(); }
+    pub fn unlockShared(self: *CpBareRwLock) void { self.raw.unlockShared(); }
+    pub fn read(self: *CpBareRwLock) void { self.raw.lockShared(); }
+    pub fn write(self: *CpBareRwLock) void { self.raw.lockExclusive(); }
+    pub fn tryLock(self: *CpBareRwLock) bool { return self.raw.tryLockExclusive(); }
+    pub fn tryLockShared(self: *CpBareRwLock) bool { return self.raw.tryLockShared(); }
+    pub fn tryRead(self: *CpBareRwLock) bool { return self.raw.tryLockShared(); }
+    pub fn tryWrite(self: *CpBareRwLock) bool { return self.raw.tryLockExclusive(); }
+    pub fn isReadLocked(self: *CpBareRwLock) bool { return self.raw.isReadLocked(); }
+    pub fn isWriteLocked(self: *CpBareRwLock) bool { return self.raw.isWriteLocked(); }
+};
+
+fn LockGuard(comptime __T: type) type {
+    return struct {
+        const Self = @This();
+        mutex: *CpMutex(__T),
+        data: *__T,
+        pub fn __cp_deinit(self: Self) void { self.release(); }
+        pub fn release(self: Self) void { self.mutex.raw.unlock(); }
+        pub fn unlock(self: Self) void { self.release(); }
+    };
+}
+
+fn ReadGuard(comptime __T: type) type {
+    return struct {
+        const Self = @This();
+        rwlock: *CpRwLock(__T),
+        data: *const __T,
+        pub fn __cp_deinit(self: Self) void { self.release(); }
+        pub fn release(self: Self) void { self.rwlock.raw.unlockShared(); }
+        pub fn unlock(self: Self) void { self.release(); }
+    };
+}
+
+fn WriteGuard(comptime __T: type) type {
+    return struct {
+        const Self = @This();
+        rwlock: *CpRwLock(__T),
+        data: *__T,
+        pub fn __cp_deinit(self: Self) void { self.release(); }
+        pub fn release(self: Self) void { self.rwlock.raw.unlockExclusive(); }
+        pub fn unlock(self: Self) void { self.release(); }
+    };
+}
+
+fn CpMutex(comptime __T: type) type {
+    return struct {
+        const Self = @This();
+        raw: NativeMutex = .{},
+        data: __T,
+        pub fn init(val: __T) Self { return .{ .data = val }; }
+        pub fn lock(self: *Self) LockGuard(__T) { self.raw.lock(); return .{ .mutex = self, .data = &self.data }; }
+        pub fn tryLock(self: *Self) ?LockGuard(__T) { if (self.raw.tryLock()) { return LockGuard(__T){ .mutex = self, .data = &self.data }; } return null; }
+        pub fn isLocked(self: *Self) bool { return self.raw.isLocked(); }
+    };
+}
+
+fn CpRwLock(comptime __T: type) type {
+    return struct {
+        const Self = @This();
+        raw: NativeRwLock = .{},
+        data: __T,
+        pub fn init(val: __T) Self { return .{ .data = val }; }
+        pub fn read(self: *Self) ReadGuard(__T) { self.raw.lockShared(); return .{ .rwlock = self, .data = &self.data }; }
+        pub fn tryRead(self: *Self) ?ReadGuard(__T) { if (self.raw.tryLockShared()) { return ReadGuard(__T){ .rwlock = self, .data = &self.data }; } return null; }
+        pub fn write(self: *Self) WriteGuard(__T) { self.raw.lockExclusive(); return .{ .rwlock = self, .data = &self.data }; }
+        pub fn tryWrite(self: *Self) ?WriteGuard(__T) { if (self.raw.tryLockExclusive()) { return WriteGuard(__T){ .rwlock = self, .data = &self.data }; } return null; }
+        pub fn isReadLocked(self: *Self) bool { return self.raw.isReadLocked(); }
+        pub fn isWriteLocked(self: *Self) bool { return self.raw.isWriteLocked(); }
+    };
+}
+
+fn CpAtomic(comptime __T: type) type {
+    return struct {
+        const Self = @This();
+        raw: std.atomic.Value(__T),
+        pub fn init(val: __T) Self { return .{ .raw = std.atomic.Value(__T).init(val) }; }
+        pub fn load(self: *const Self) __T { return self.raw.load(.seq_cst); }
+        pub fn store(self: *Self, val: __T) void { self.raw.store(val, .seq_cst); }
+        pub fn swap(self: *Self, val: __T) __T { return self.raw.swap(val, .seq_cst); }
+        pub fn cas(self: *Self, expected: __T, desired: __T) bool { return self.raw.cmpxchgStrong(expected, desired, .seq_cst, .seq_cst) == null; }
+        pub fn compareAndSwap(self: *Self, expected: __T, desired: __T) bool { return self.cas(expected, desired); }
+        pub fn add(self: *Self, delta: __T) __T { return self.raw.fetchAdd(delta, .seq_cst); }
+        pub fn sub(self: *Self, delta: __T) __T { return self.raw.fetchSub(delta, .seq_cst); }
+        pub fn inc(self: *Self) __T { return self.add(1); }
+        pub fn dec(self: *Self) __T { return self.sub(1); }
+        pub fn @"and"(self: *Self, mask: __T) __T { return self.raw.fetchAnd(mask, .seq_cst); }
+        pub fn @"or"(self: *Self, mask: __T) __T { return self.raw.fetchOr(mask, .seq_cst); }
+        pub fn @"xor"(self: *Self, mask: __T) __T { return self.raw.fetchXor(mask, .seq_cst); }
+        pub fn testAndSet(self: *Self) bool { if (comptime __T == bool) { return self.raw.swap(true, .seq_cst); } else { return self.raw.swap(1, .seq_cst) != 0; } }
+        pub fn clear(self: *Self) void { if (comptime __T == bool) { self.raw.store(false, .seq_cst); } else { self.raw.store(0, .seq_cst); } }
+    };
+}
+
+fn cp_make_mutex(val: anytype) CpMutex(@TypeOf(val)) { return CpMutex(@TypeOf(val)).init(val); }
+fn cp_make_rwlock(val: anytype) CpRwLock(@TypeOf(val)) { return CpRwLock(@TypeOf(val)).init(val); }
+fn CpAtomicConcreteType(comptime __T: type) type { if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_make_atomic(val: anytype) CpAtomic(CpAtomicConcreteType(@TypeOf(val))) { const __T = CpAtomicConcreteType(@TypeOf(val)); return CpAtomic(__T).init(@as(__T, val)); }
+
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
+fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
+fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
+fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
+fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
+fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == __CpErr) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return __CpErr{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return __CpErr{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return __CpErr{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return __CpErr.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return __CpErr.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return __CpErr{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
+fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_array_lit(comptime __Elem: type, __init_slice: []const __Elem) []const __Elem { const __buf = std.heap.page_allocator.alloc(__Elem, __init_slice.len) catch unreachable; if (__init_slice.len > 0) @memcpy(__buf, __init_slice); return __buf; }
+fn CpArrayElemType(comptime __PtrT: type) type { const __S0 = @typeInfo(__PtrT).pointer.child; const __S1 = if (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one) @typeInfo(__S0).pointer.child else __S0; return @typeInfo(__S1).pointer.child; }
+fn cp_array_push(__arr_ptr: anytype, __item: anytype) void { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __SliceT = @TypeOf(__target_ptr.*); const __Elem = @typeInfo(__SliceT).pointer.child; const __old_slice = __target_ptr.*; const __new_slice = std.heap.page_allocator.alloc(__Elem, __old_slice.len + 1) catch unreachable; if (__old_slice.len > 0) @memcpy(__new_slice[0..__old_slice.len], __old_slice); __new_slice[__old_slice.len] = @as(__Elem, cp_val(__item)); __target_ptr.* = __new_slice; }
+fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __s = __target_ptr.*; if (__s.len == 0) return null; const __last = __s[__s.len - 1]; __target_ptr.* = __s[0 .. __s.len - 1]; return __last; }
+fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+const Message = anyopaque;
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __T: type, comptime idx: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") return ti.@"struct".field_types[idx]; return @FieldType(__T, std.fmt.comptimePrint("{d}", .{idx})); }
+pub fn cp_unpack_elem(v: anytype, comptime idx: usize) CpUnpackElemType(@TypeOf(v), idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and idx < m.array.len) { return cp_msg_to_val(m.array[idx]); } } return ""; } else if (comptime __T == Message) { if (v == .array and idx < v.array.len) { return cp_msg_to_val(v.array[idx]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .array)) { return v[idx]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") return @field(v, ti.@"struct".field_names[idx]); return @field(v, std.fmt.comptimePrint("{d}", .{idx})); } }
+pub fn CpUnpackTailType(comptime __T: type, comptime offset_from_end: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return ti.@"struct".field_types[n - offset_from_end]; } return @FieldType(__T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(v: anytype, comptime offset_from_end: usize) CpUnpackTailType(@TypeOf(v), offset_from_end) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= offset_from_end) { return cp_msg_to_val(m.array[m.array.len - offset_from_end]); } } return ""; } else if (comptime __T == Message) { if (v == .array and v.array.len >= offset_from_end) { return cp_msg_to_val(v.array[v.array.len - offset_from_end]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[v.*.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .array)) { return v[v.len - offset_from_end]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return @field(v, ti.@"struct".field_names[n - offset_from_end]); } return @field(v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __T: type, comptime start_idx: usize) type { if (__T == ?Message or __T == Message) return []const Message; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return __T; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return []const @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const types = ti.@"struct".field_types; if (types.len == 0) return []const i32; const Elem = if (start_idx < types.len) types[start_idx] else types[0]; return []const CpValType(Elem); } return []const i32; }
+pub fn cp_unpack_slice(v: anytype, comptime start_idx: usize, comptime suffix_len: usize) CpUnpackSliceType(@TypeOf(v), start_idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= start_idx + suffix_len) { return m.array[start_idx .. m.array.len - suffix_len]; } } return &[_]Message{}; } else if (comptime __T == Message) { if (v == .array and v.array.len >= start_idx + suffix_len) { return v.array[start_idx .. v.array.len - suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[start_idx .. v.*.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .array)) { return v[start_idx .. v.len - suffix_len]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const names = ti.@"struct".field_names; const types = ti.@"struct".field_types; const end = names.len - suffix_len; const count = if (end > start_idx) end - start_idx else 0; const Elem = if (start_idx < types.len) CpValType(types[start_idx]) else i32; const buf = std.heap.page_allocator.alloc(Elem, count) catch unreachable; inline for (start_idx..end, 0..) |f_idx, out_idx| { buf[out_idx] = cp_val(@field(v, names[f_idx])); } return buf; } return &[_]i32{}; } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .array and @typeInfo(@typeInfo(__T).pointer.child).array.child == u8)) { return val[0..]; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
 pub const bun = @import("bun");
 pub const FileCloner = @import("./FileCloner.zig");
 pub const Hardlinker = @import("./Hardlinker.zig");
 pub const SymlinkerModule = @import("./Symlinker.zig");
+pub const OnTaskCompleteState = enum {
+    success,
+    skipped,
+    fail,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const TopWhich = enum {
+    final,
+    staging,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const TaskStep = enum(u8) {
+    link_package,
+    symlink_dependencies,
+    check_if_blocked,
+    symlink_dependency_binaries,
+    run_preinstall,
+    binaries,
+    @"run (post)install && (pre/post)prepare",
+    done,
+    blocked,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        val: T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.val.deinit();
+        }
+    };
+}
+
+pub fn DeinitWithAllocGuard(comptime T: type) type {
+    return struct {
+        val: T,
+        alloc: std.mem.Allocator,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.val.deinit(self.alloc);
+        }
+    };
+}
+
+pub fn OptDeinitGuard(comptime T: type) type {
+    return struct {
+        val: ?T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.val) |*v| {
+                    _ = &v;
+                    _ = (v.*).deinit();
+                }
+        }
+    };
+}
+
+pub const CloseGuard = struct {
+    fd: FD,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *CloseGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = self.fd.close();
+    }
+};
+
+pub const OptCloseGuard = struct {
+    fd: ?FD,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *OptCloseGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (self.fd) |d| {
+                _ = &d;
+                _ = d.close();
+            }
+    }
+};
+
+pub fn RestoreGuard(comptime T: type) type {
+    return struct {
+        val: T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.val.restore();
+        }
+    };
+}
+
+pub const MutexUnlockGuard = struct {
+    mutex: *CpBareMutex,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *MutexUnlockGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = (if (comptime @typeInfo(@TypeOf(self.mutex)) == .pointer) (self.mutex) else &(self.mutex)).unlock();
+    }
+};
+
+pub const PathBufPoolGuard = struct {
+    buf: *bun.PathBuffer,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *PathBufPoolGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = bun.path_buffer_pool.put(self.buf);
+    }
+};
+
+pub const PatchInfoRemove = struct {
+    name_and_version_hash: u64,
+};
+
+pub const PatchInfoPatch = struct {
+    name_and_version_hash: u64,
+    patch_path: []const u8,
+    contents_hash: u64,
+};
+
+pub const TopPatchInfo = union(enum) {
+    none: void,
+    remove: PatchInfoRemove,
+    patch: PatchInfoPatch,
+
+pub fn contentsHash(self: TopPatchInfo) ?u64 {
+            return (switch (self) {
+.none, .remove => null,
+.patch => |patch| patch.contents_hash,
+});
+    }
+
+pub fn nameAndVersionHash(self: TopPatchInfo) ?u64 {
+            return (switch (self) {
+.none, .remove => null,
+.patch => |patch| patch.name_and_version_hash,
+});
+    }
+    const Remove = PatchInfoRemove;
+    const Patch = PatchInfoPatch;
+};
+
+pub const TaskDownloadError = struct {
+    download_err: anyerror,
+    url: []const u8,
+};
+
+pub const TaskError = union(enum) {
+    link_package: sys.Error,
+    symlink_dependencies: sys.Error,
+    run_scripts: anyerror,
+    binaries: anyerror,
+    patching: bun.logger.Log,
+    download: TaskDownloadError,
+
+pub fn clone(self: TaskError, allocator: std.mem.Allocator) TaskError {
+            return (switch (self) {
+.link_package => |e| .{ .link_package = e.clone(allocator) },
+.symlink_dependencies => |e| .{ .symlink_dependencies = e.clone(allocator) },
+.binaries => |e| .{ .binaries = e },
+.run_scripts => |e| .{ .run_scripts = e },
+.patching => |l| .{ .patching = l },
+.download => |dl| .{ .download = dl },
+});
+    }
+};
+
+pub const TaskResult = union(enum) {
+    none: void,
+    err: TaskError,
+    blocked: void,
+    run_scripts: *Package.Scripts.List,
+    done: void,
+};
+
+pub const TaskYield = union(enum) {
+    yield: void,
+    run_scripts: *Package.Scripts.List,
+    done: void,
+    blocked: void,
+    fail: TaskError,
+
+pub fn failure(e: TaskError) TaskYield {
+            return .{ .fail = e.clone(bun.default_allocator) };
+    }
+};
+
+pub const TopTask = struct {
+    entry_id: Store.Entry.Id,
+    installer: *Installer,
+    task: ThreadPool.Task,
+    next: ?*TopTask,
+    result: TaskResult,
+
+pub fn nextStep(self: *TopTask, comptime current_step: Step) Step {
+            const next_step: Step = (switch ((comptime current_step)) {
+.link_package => .symlink_dependencies,
+.symlink_dependencies => .check_if_blocked,
+.check_if_blocked => .symlink_dependency_binaries,
+.symlink_dependency_binaries => .run_preinstall,
+.run_preinstall => .binaries,
+.binaries => .@"run (post)install && (pre/post)prepare",
+.@"run (post)install && (pre/post)prepare" => .done,
+.done, .blocked => @compileError("unexpected step"),
+});
+            _ = self.installer.store.entries.items(.step)[@as(usize, @intCast(self.entry_id.get()))].store(next_step, .release);
+            return next_step;
+    }
+
+pub fn run(self: *TopTask) OOM!Yield {
+            const installer = self.installer;
+            const manager = installer.manager;
+            const lockfile = installer.lockfile;
+            const pkgs = installer.lockfile.packages.slice();
+            const pkg_names = pkgs.items(.name);
+            const pkg_name_hashes = pkgs.items(.name_hash);
+            const pkg_resolutions = pkgs.items(.resolution);
+            const pkg_resolutions_lists = pkgs.items(.resolutions);
+            const pkg_metas: []const Lockfile.Package.Meta = pkgs.items(.@"meta");
+            const pkg_bins = pkgs.items(.bin);
+            const pkg_script_lists = pkgs.items(.scripts);
+            const entries = installer.store.entries.slice();
+            const entry_node_ids = entries.items(.node_id);
+            const entry_dependencies = entries.items(.dependencies);
+            const entry_steps = entries.items(.step);
+            var entry_scripts = entries.items(.scripts);
+            _ = &entry_scripts;
+            const entry_hoisted = entries.items(.hoisted);
+            const nodes = installer.store.nodes.slice();
+            const node_pkg_ids = nodes.items(.pkg_id);
+            const node_dep_ids = nodes.items(.dep_id);
+            const node_id = entry_node_ids[@as(usize, @intCast(self.entry_id.get()))];
+            const pkg_id = node_pkg_ids[@as(usize, @intCast(node_id.get()))];
+            const dep_id = node_dep_ids[@as(usize, @intCast(node_id.get()))];
+            const pkg_name = pkg_names[@as(usize, @intCast(pkg_id))];
+            const pkg_name_hash = pkg_name_hashes[@as(usize, @intCast(pkg_id))];
+            const pkg_res = pkg_resolutions[@as(usize, @intCast(pkg_id))];
+            var current_step_val = entry_steps[@as(usize, @intCast(self.entry_id.get()))].load(.acquire);
+            _ = &current_step_val;
+            while (true) {
+                switch (current_step_val) {
+.link_package => {
+const string_buf = lockfile.buffers.string_bytes.items;
+                var pkg_cache_dir_subpath_guard = DeinitGuard(bun.AutoRelPath){ .val = bun.AutoRelPath.from((switch (pkg_res.tag) {
+else => pkg_cache_dir_subpath: {
+                const patch_info = try installer.packagePatchInfo(pkg_name, pkg_name_hash, (&pkg_res));
+                break :pkg_cache_dir_subpath (switch (pkg_res.tag) {
+.npm => manager.cachedNPMPackageFolderName(pkg_name.slice(string_buf), (if (@typeInfo(@TypeOf(pkg_res)) == .@"enum") @intFromEnum(pkg_res) else pkg_res.value).npm.version, patch_info.contentsHash()),
+.git => manager.cachedGitFolderName((&(if (@typeInfo(@TypeOf(pkg_res)) == .@"enum") @intFromEnum(pkg_res) else pkg_res.value).git), patch_info.contentsHash()),
+.github => manager.cachedGitHubFolderName((&(if (@typeInfo(@TypeOf(pkg_res)) == .@"enum") @intFromEnum(pkg_res) else pkg_res.value).github), patch_info.contentsHash()),
+.local_tarball => manager.cachedTarballFolderName((if (@typeInfo(@TypeOf(pkg_res)) == .@"enum") @intFromEnum(pkg_res) else pkg_res.value).local_tarball, patch_info.contentsHash()),
+.remote_tarball => manager.cachedTarballFolderName((if (@typeInfo(@TypeOf(pkg_res)) == .@"enum") @intFromEnum(pkg_res) else pkg_res.value).remote_tarball, patch_info.contentsHash()),
+else => {
+{
+                    if (comptime Environment.ci_assert) {
+                        _ = bun.assertWithLocation(false, @src());
+                    }
+                    current_step_val = self.nextStep(.link_package);
+                    continue;
+                }
+},
+});
+},
+.folder, .root => {
+{
+                    const path = (switch (pkg_res.tag) {
+.folder => (if (@typeInfo(@TypeOf(pkg_res)) == .@"enum") @intFromEnum(pkg_res) else pkg_res.value).folder.slice(string_buf),
+.root => ".",
+else => unreachable,
+});
+                    var folder_dir = CloseGuard{ .fd = (switch (bun.openDirForIteration(FD.cwd(), path)) {
+.result => |fd| fd,
+.err => |err| {
+return Yield.failure(.{ .link_package = err });
+},
+}) };
+                    _ = &folder_dir;
+                    var __folder_dir_moved = false; _ = &__folder_dir_moved;
+                    defer if (!__folder_dir_moved) { __folder_dir_moved = true; const __T = @TypeOf(folder_dir); if (@typeInfo(__T) == .optional) { if (folder_dir) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { folder_dir.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = folder_dir; _drop_val.__cp_deinit(); } };
+                    var folder_backend: PackageInstall.Method = .hardlink;
+                    _ = &folder_backend;
+                    while (true) {
+                        switch (folder_backend) {
+.hardlink => {
+var src = DeinitGuard(AbsPathOsAuto){ .val = .initTopLevelDirLongPath() };
+                        _ = &src;
+                        var __src_moved = false; _ = &__src_moved;
+                        defer if (!__src_moved) { __src_moved = true; const __T = @TypeOf(src); if (@typeInfo(__T) == .optional) { if (src) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { src.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = src; _drop_val.__cp_deinit(); } };
+                        _ = src.val.appendJoin((if (@typeInfo(@TypeOf(pkg_res)) == .@"enum") @intFromEnum(pkg_res) else pkg_res.value).folder.slice(string_buf));
+                        var dest = DeinitGuard(PathOsAuto){ .val = .init() };
+                        _ = &dest;
+                        var __dest_moved = false; _ = &__dest_moved;
+                        defer if (!__dest_moved) { __dest_moved = true; const __T = @TypeOf(dest); if (@typeInfo(__T) == .optional) { if (dest) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { dest.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = dest; _drop_val.__cp_deinit(); } };
+                        _ = installer.appendStorePath((&dest.val), self.entry_id);
+                        var hardlinker = DeinitGuard(Hardlinker){ .val = try .init(folder_dir.fd, src.val, dest.val, (&.{ (comptime bun.OSPathLiteral("node_modules")) })) };
+                        _ = &hardlinker;
+                        var __hardlinker_moved = false; _ = &__hardlinker_moved;
+                        defer if (!__hardlinker_moved) { __hardlinker_moved = true; const __T = @TypeOf(hardlinker); if (@typeInfo(__T) == .optional) { if (hardlinker) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { hardlinker.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = hardlinker; _drop_val.__cp_deinit(); } };
+                        switch (try hardlinker.val.link()) {
+.result => {
+
+},
+.err => |err| {
+if ((err.getErrno() == .XDEV)) {
+                            folder_backend = .copyfile;
+                            continue;
+                        }
+                        if (PackageManager.verbose_install) {
+                            _ = Output.prettyErrorln("<red><b>error<r><d>:<r>Failed to hardlink package folder\n{f}\n<d>From: {f}<r>\n<d>  To: {f}<r>\n<r>", .{ err, bun.fmt.fmtOSPath(src.val.slice(), .{ .path_sep = .auto }), bun.fmt.fmtOSPath(dest.val.slice(), .{ .path_sep = .auto }) });
+                            _ = Output.flush();
+                        }
+                        return Yield.failure(.{ .link_package = err });
+},
+}
+                        break;
+},
+.copyfile => {
+var src_path = DeinitGuard(AbsPathOsAuto){ .val = .init() };
+                        _ = &src_path;
+                        var __src_path_moved = false; _ = &__src_path_moved;
+                        defer if (!__src_path_moved) { __src_path_moved = true; const __T = @TypeOf(src_path); if (@typeInfo(__T) == .optional) { if (src_path) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { src_path.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = src_path; _drop_val.__cp_deinit(); } };
+                        if (comptime Environment.isWindows) {
+                            const src_path_len = bun.windows.GetFinalPathNameByHandleW(folder_dir.fd.cast(), src_path.val.buf().ptr, @intCast(src_path.val.buf().len), 0);
+                            if (((src_path_len == 0) or (src_path_len >= src_path.val.buf().len))) {
+                                const err: bun.sys.SystemErrno = (if ((src_path_len == 0)) ((bun.windows.Win32Error.get().toSystemErrno()) orelse (.EUNKNOWN)) else .ENAMETOOLONG);
+                                return Yield.failure(.{ .link_package = .{ .errno = @intFromEnum(err), .syscall = .copyfile } });
+                            }
+                            _ = src_path.val.setLength(src_path_len);
+                        }
+                        var dest = DeinitGuard(PathOsAuto){ .val = .init() };
+                        _ = &dest;
+                        var __dest_moved = false; _ = &__dest_moved;
+                        defer if (!__dest_moved) { __dest_moved = true; const __T = @TypeOf(dest); if (@typeInfo(__T) == .optional) { if (dest) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { dest.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = dest; _drop_val.__cp_deinit(); } };
+                        _ = installer.appendStorePath((&dest.val), self.entry_id);
+                        var file_copier = DeinitGuard(FileCopier){ .val = try .init(folder_dir.fd, src_path.val, dest.val, (&.{ (comptime bun.OSPathLiteral("node_modules")) })) };
+                        _ = &file_copier;
+                        var __file_copier_moved = false; _ = &__file_copier_moved;
+                        defer if (!__file_copier_moved) { __file_copier_moved = true; const __T = @TypeOf(file_copier); if (@typeInfo(__T) == .optional) { if (file_copier) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { file_copier.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = file_copier; _drop_val.__cp_deinit(); } };
+                        switch (file_copier.val.copy()) {
+.result => {
+
+},
+.err => |err| {
+if (PackageManager.verbose_install) {
+                            _ = Output.prettyErrorln("<red><b>error<r><d>:<r>Failed to copy package\n{f}\n<d>From: {f}<r>\n<d>  To: {f}<r>\n<r>", .{ err, bun.fmt.fmtOSPath(src_path.val.slice(), .{ .path_sep = .auto }), bun.fmt.fmtOSPath(dest.val.slice(), .{ .path_sep = .auto }) });
+                            _ = Output.flush();
+                        }
+                        return Yield.failure(.{ .link_package = err });
+},
+}
+                        break;
+},
+else => {
+_ = unreachable;
+},
+}
+                    }
+                    current_step_val = self.nextStep(.link_package);
+                    continue;
+                }
+},
+})) };
+                _ = &pkg_cache_dir_subpath_guard;
+                var __pkg_cache_dir_subpath_guard_moved = false; _ = &__pkg_cache_dir_subpath_guard_moved;
+                defer if (!__pkg_cache_dir_subpath_guard_moved) { __pkg_cache_dir_subpath_guard_moved = true; const __T = @TypeOf(pkg_cache_dir_subpath_guard); if (@typeInfo(__T) == .optional) { if (pkg_cache_dir_subpath_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { pkg_cache_dir_subpath_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = pkg_cache_dir_subpath_guard; _drop_val.__cp_deinit(); } };
+                const _cache_pair = manager.getCacheDirectoryAndAbsPath();
+                const cache_dir = _cache_pair[0];
+                const cache_dir_path_raw = _cache_pair[1];
+                var cache_dir_path = DeinitGuard(@TypeOf(cache_dir_path_raw)){ .val = cache_dir_path_raw };
+                _ = &cache_dir_path;
+                var __cache_dir_path_moved = false; _ = &__cache_dir_path_moved;
+                defer if (!__cache_dir_path_moved) { __cache_dir_path_moved = true; const __T = @TypeOf(cache_dir_path); if (@typeInfo(__T) == .optional) { if (cache_dir_path) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { cache_dir_path.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = cache_dir_path; _drop_val.__cp_deinit(); } };
+                var dest_subpath = DeinitGuard(PathOsAuto){ .val = .init() };
+                _ = &dest_subpath;
+                var __dest_subpath_moved = false; _ = &__dest_subpath_moved;
+                defer if (!__dest_subpath_moved) { __dest_subpath_moved = true; const __T = @TypeOf(dest_subpath); if (@typeInfo(__T) == .optional) { if (dest_subpath) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { dest_subpath.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = dest_subpath; _drop_val.__cp_deinit(); } };
+                _ = installer.appendRealStorePath((&dest_subpath.val), self.entry_id, .staging);
+                const uses_global_store = installer.entryUsesGlobalStore(self.entry_id);
+                if ((!uses_global_store)) {
+                    var local = DeinitGuard(PathAuto){ .val = .initTopLevelDir() };
+                    _ = &local;
+                    var __local_moved = false; _ = &__local_moved;
+                    defer if (!__local_moved) { __local_moved = true; const __T = @TypeOf(local); if (@typeInfo(__T) == .optional) { if (local) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { local.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = local; _drop_val.__cp_deinit(); } };
+                    _ = installer.appendLocalStoreEntryPath((&local.val), self.entry_id);
+                    const is_stale_link = (if (comptime Environment.isWindows) (if (sys.getFileAttributes(local.val.sliceZ())) |a| a.is_reparse_point else false) else (if (sys.lstat(local.val.sliceZ()).asValue()) |st| std.posix.S.ISLNK(@intCast(st.mode)) else false));
+                    if (is_stale_link) {
+                        const remove_err: ?sys.Error = (if (comptime Environment.isWindows) win: {
+                        if (sys.rmdir(local.val.sliceZ()).asErr()) |_| {
+                            if (sys.unlink(local.val.sliceZ()).asErr()) |e| {
+                                _ = &e;
+                                break :win e;
+                            }
+                        }
+                        break :win null;
+} else sys.unlink(local.val.sliceZ()).asErr());
+                        if (remove_err) |e| {
+                            _ = &e;
+                            if ((e.getErrno() != .NOENT)) {
+                                return Yield.failure(.{ .link_package = e });
+                            }
+                        }
+                    }
+                }
+                if (uses_global_store) {
+                    var staging = DeinitGuard(AbsPathAuto){ .val = .init() };
+                    _ = &staging;
+                    var __staging_moved = false; _ = &__staging_moved;
+                    defer if (!__staging_moved) { __staging_moved = true; const __T = @TypeOf(staging); if (@typeInfo(__T) == .optional) { if (staging) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { staging.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = staging; _drop_val.__cp_deinit(); } };
+                    _ = installer.appendGlobalStoreEntryPath((&staging.val), self.entry_id, .staging);
+                    _ = (blk_catch_0: { break :blk_catch_0 ((FD.cwd().deleteTree(staging.val.slice())) catch |__ce_0| { _ = &__ce_0;  }); });
+                }
+                var cached_package_dir = OptCloseGuard{ .fd = null };
+                _ = &cached_package_dir;
+                var __cached_package_dir_moved = false; _ = &__cached_package_dir_moved;
+                defer if (!__cached_package_dir_moved) { __cached_package_dir_moved = true; const __T = @TypeOf(cached_package_dir); if (@typeInfo(__T) == .optional) { if (cached_package_dir) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { cached_package_dir.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = cached_package_dir; _drop_val.__cp_deinit(); } };
+                var backend = installer.supported_backend.load(.monotonic);
+                _ = &backend;
+                while (true) {
+                    switch (backend) {
+.clonefile => {
+if (comptime (!Environment.isMac)) {
+                        _ = installer.supported_backend.store(.hardlink, .monotonic);
+                        backend = .hardlink;
+                        continue;
+                    }
+                    if (installer.manager.options.log_level.isVerbose()) {
+                        _ = bun.Output.prettyErrorln("Cloning {f} to {f}", .{ bun.fmt.fmtOSPath(pkg_cache_dir_subpath_guard.val.sliceZ(), .{ .path_sep = .auto }), bun.fmt.fmtOSPath(dest_subpath.val.sliceZ(), .{ .path_sep = .auto }) });
+                        _ = bun.Output.flush();
+                    }
+                    var cloner: FileCloner = .{ .cache_dir = cache_dir, .cache_dir_subpath = pkg_cache_dir_subpath_guard.val, .dest_subpath = dest_subpath.val };
+                    _ = &cloner;
+                    switch (cloner.clone()) {
+.result => {
+
+},
+.err => |err| {
+switch (err.getErrno()) {
+.XDEV => {
+_ = installer.supported_backend.store(.copyfile, .monotonic);
+                    backend = .copyfile;
+                    continue;
+},
+.OPNOTSUPP => {
+_ = installer.supported_backend.store(.hardlink, .monotonic);
+                    backend = .hardlink;
+                    continue;
+},
+else => {
+return Yield.failure(.{ .link_package = err });
+},
+}
+},
+}
+                    current_step_val = self.nextStep(.link_package);
+                    continue;
+},
+.hardlink => {
+cached_package_dir.fd = (switch (bun.openDirForIteration(cache_dir, pkg_cache_dir_subpath_guard.val.slice())) {
+.result => |fd| fd,
+.err => |err| {
+{
+                        if (PackageManager.verbose_install) {
+                            _ = Output.prettyErrorln("Failed to open cache directory for hardlink: {s}", .{ pkg_cache_dir_subpath_guard.val.slice() });
+                            _ = Output.flush();
+                        }
+                        return Yield.failure(.{ .link_package = err });
+                    }
+},
+});
+                    var src = DeinitGuard(AbsPathOsAuto){ .val = .fromLongPath(cache_dir_path.val.slice()) };
+                    _ = &src;
+                    var __src_moved = false; _ = &__src_moved;
+                    defer if (!__src_moved) { __src_moved = true; const __T = @TypeOf(src); if (@typeInfo(__T) == .optional) { if (src) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { src.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = src; _drop_val.__cp_deinit(); } };
+                    _ = src.val.appendJoin(pkg_cache_dir_subpath_guard.val.slice());
+                    const empty_skip: [0]bun.OSPathSlice = undefined;
+                    var hardlinker = DeinitGuard(Hardlinker){ .val = try .init(cached_package_dir.fd.?, src.val, dest_subpath.val, empty_skip[0..0]) };
+                    _ = &hardlinker;
+                    var __hardlinker_moved = false; _ = &__hardlinker_moved;
+                    defer if (!__hardlinker_moved) { __hardlinker_moved = true; const __T = @TypeOf(hardlinker); if (@typeInfo(__T) == .optional) { if (hardlinker) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { hardlinker.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = hardlinker; _drop_val.__cp_deinit(); } };
+                    switch (try hardlinker.val.link()) {
+.result => {
+
+},
+.err => |err| {
+if ((err.getErrno() == .XDEV)) {
+                        _ = installer.supported_backend.store(.copyfile, .monotonic);
+                        backend = .copyfile;
+                        continue;
+                    }
+                    if (PackageManager.verbose_install) {
+                        _ = Output.prettyErrorln("<red><b>error<r><d>:<r>Failed to hardlink package\n{f}\n<d>From: {s}<r>\n<d>  To: {f}<r>\n<r>", .{ err, pkg_cache_dir_subpath_guard.val.slice(), bun.fmt.fmtOSPath(dest_subpath.val.slice(), .{ .path_sep = .auto }) });
+                        _ = Output.flush();
+                    }
+                    return Yield.failure(.{ .link_package = err });
+},
+}
+                    current_step_val = self.nextStep(.link_package);
+                    continue;
+},
+else => {
+cached_package_dir.fd = (switch (bun.openDirForIteration(cache_dir, pkg_cache_dir_subpath_guard.val.slice())) {
+.result => |fd| fd,
+.err => |err| {
+{
+                        if (PackageManager.verbose_install) {
+                            _ = Output.prettyErrorln("<red><b>error<r><d>:<r>Failed to open cache directory for copyfile\n{f}\n<d>From: {s}<r>\n<d>  To: {f}<r>\n<r>", .{ err, pkg_cache_dir_subpath_guard.val.slice(), bun.fmt.fmtOSPath(dest_subpath.val.slice(), .{ .path_sep = .auto }) });
+                            _ = Output.flush();
+                        }
+                        return Yield.failure(.{ .link_package = err });
+                    }
+},
+});
+                    var src_path = DeinitGuard(AbsPathOsAuto){ .val = AbsPathOsAuto.from(cache_dir_path.val.slice()) };
+                    _ = &src_path;
+                    var __src_path_moved = false; _ = &__src_path_moved;
+                    defer if (!__src_path_moved) { __src_path_moved = true; const __T = @TypeOf(src_path); if (@typeInfo(__T) == .optional) { if (src_path) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { src_path.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = src_path; _drop_val.__cp_deinit(); } };
+                    _ = src_path.val.append(pkg_cache_dir_subpath_guard.val.slice());
+                    const empty_skip: [0]bun.OSPathSlice = undefined;
+                    var file_copier = DeinitGuard(FileCopier){ .val = try .init(cached_package_dir.fd.?, src_path.val, dest_subpath.val, empty_skip[0..0]) };
+                    _ = &file_copier;
+                    var __file_copier_moved = false; _ = &__file_copier_moved;
+                    defer if (!__file_copier_moved) { __file_copier_moved = true; const __T = @TypeOf(file_copier); if (@typeInfo(__T) == .optional) { if (file_copier) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { file_copier.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = file_copier; _drop_val.__cp_deinit(); } };
+                    switch (file_copier.val.copy()) {
+.result => {
+
+},
+.err => |err| {
+if (PackageManager.verbose_install) {
+                        _ = Output.prettyErrorln("<red><b>error<r><d>:<r>Failed to copy package\n{f}\n<d>From: {s}<r>\n<d>  To: {f}<r>\n<r>", .{ err, pkg_cache_dir_subpath_guard.val.slice(), bun.fmt.fmtOSPath(dest_subpath.val.slice(), .{ .path_sep = .auto }) });
+                        _ = Output.flush();
+                    }
+                    return Yield.failure(.{ .link_package = err });
+},
+}
+                    current_step_val = self.nextStep(.link_package);
+                    continue;
+},
+}
+                }
+},
+.symlink_dependencies => {
+const string_buf = lockfile.buffers.string_bytes.items;
+                const dependencies = lockfile.buffers.dependencies.items;
+                for (cp_iter_slice(entry_dependencies[@as(usize, @intCast(self.entry_id.get()))].slice())) |dep| {
+                    _ = &dep;
+                    const dep_name = (if (@typeInfo(@TypeOf(dependencies[@as(usize, @intCast(dep.dep_id))])) == .@"enum" or @typeInfo(@TypeOf(dependencies[@as(usize, @intCast(dep.dep_id))])) == .@"union") @tagName(dependencies[@as(usize, @intCast(dep.dep_id))]) else dependencies[@as(usize, @intCast(dep.dep_id))].name).slice(string_buf);
+                    var dest = DeinitGuard(PathAuto){ .val = .initTopLevelDir() };
+                    _ = &dest;
+                    var __dest_moved = false; _ = &__dest_moved;
+                    defer if (!__dest_moved) { __dest_moved = true; const __T = @TypeOf(dest); if (@typeInfo(__T) == .optional) { if (dest) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { dest.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = dest; _drop_val.__cp_deinit(); } };
+                    _ = installer.appendRealStoreNodeModulesPath((&dest.val), self.entry_id, .staging);
+                    _ = dest.val.append(dep_name);
+                    if (installer.entryStoreNodeModulesPackageName(dep_id, pkg_id, (&pkg_res), pkg_names)) |entry_node_modules_name| {
+                        _ = &entry_node_modules_name;
+                        if (strings.eqlLong(dep_name, entry_node_modules_name, true)) {
+                            _ = dest.val.append("node_modules");
+                            _ = dest.val.append(dep_name);
+                        }
+                    }
+                    var dep_store_path = DeinitGuard(AbsPathAuto){ .val = .initTopLevelDir() };
+                    _ = &dep_store_path;
+                    var __dep_store_path_moved = false; _ = &__dep_store_path_moved;
+                    defer if (!__dep_store_path_moved) { __dep_store_path_moved = true; const __T = @TypeOf(dep_store_path); if (@typeInfo(__T) == .optional) { if (dep_store_path) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { dep_store_path.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = dep_store_path; _drop_val.__cp_deinit(); } };
+                    if (installer.entryUsesGlobalStore(self.entry_id)) {
+                        _ = bun.debugAssert(installer.entryUsesGlobalStore(dep.entry_id));
+                        _ = installer.appendRealStorePath((&dep_store_path.val), dep.entry_id, .final);
+                    } else {
+                        _ = installer.appendStorePath((&dep_store_path.val), dep.entry_id);
+                    }
+                    var target = DeinitGuard(RelPathAuto){ .val = target: {
+                    var dest_save_raw = dest.val.save();
+                    _ = &dest_save_raw;
+                    var dest_save = RestoreGuard(@TypeOf(dest_save_raw)){ .val = dest_save_raw };
+                    _ = &dest_save;
+                    var __dest_save_moved = false; _ = &__dest_save_moved;
+                    defer if (!__dest_save_moved) { __dest_save_moved = true; const __T = @TypeOf(dest_save); if (@typeInfo(__T) == .optional) { if (dest_save) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { dest_save.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = dest_save; _drop_val.__cp_deinit(); } };
+                    _ = dest.val.undo(1);
+                    break :target dest.val.relative((&dep_store_path.val));
+} };
+                    _ = &target;
+                    var __target_moved = false; _ = &__target_moved;
+                    defer if (!__target_moved) { __target_moved = true; const __T = @TypeOf(target); if (@typeInfo(__T) == .optional) { if (target) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { target.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = target; _drop_val.__cp_deinit(); } };
+                    const symlinker: Symlinker = .{ .dest = dest.val, .target = target.val, .fallback_junction_target = dep_store_path.val };
+                    const link_strategy: Symlinker.Strategy = (if (((pkg_res.tag == .root) or (pkg_res.tag == .workspace))) .expect_existing else .expect_missing);
+                    switch (symlinker.ensureSymlink(link_strategy)) {
+.result => {
+
+},
+.err => |err| {
+return Yield.failure(.{ .symlink_dependencies = err });
+},
+}
+                }
+                if (installer.entryUsesGlobalStore(self.entry_id)) {
+                    switch (installer.linkProjectToGlobalStore(self.entry_id)) {
+.result => {
+
+},
+.err => |err| {
+return Yield.failure(.{ .symlink_dependencies = err });
+},
+}
+                }
+                current_step_val = self.nextStep(.symlink_dependencies);
+                continue;
+},
+.check_if_blocked => {
+var parent_dedupe = DeinitGuard(EntryDedupeMap){ .val = .init(bun.default_allocator) };
+                _ = &parent_dedupe;
+                var __parent_dedupe_moved = false; _ = &__parent_dedupe_moved;
+                defer if (!__parent_dedupe_moved) { __parent_dedupe_moved = true; const __T = @TypeOf(parent_dedupe); if (@typeInfo(__T) == .optional) { if (parent_dedupe) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { parent_dedupe.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = parent_dedupe; _drop_val.__cp_deinit(); } };
+                if (installer.isTaskBlocked(self.entry_id, (&parent_dedupe.val))) {
+                    return TaskYield.blocked;
+                }
+                current_step_val = self.nextStep(.check_if_blocked);
+                continue;
+},
+.symlink_dependency_binaries => {
+_ = (blk_catch_1: { break :blk_catch_1 ((installer.linkDependencyBins(self.entry_id)) catch |e| { _ = &e; return Yield.failure(.{ .binaries = e }); }); });
+                switch (pkg_res.tag) {
+.uninitialized, .root, .workspace, .folder, .symlink, .single_file_module => {
+
+},
+else => {
+
+},
+.npm, .git, .github, .local_tarball, .remote_tarball => {
+if ((!entry_hoisted[@as(usize, @intCast(self.entry_id.get()))])) {
+                    current_step_val = self.nextStep(.symlink_dependency_binaries);
+                    continue;
+                }
+                _ = installer.linkToHiddenNodeModules(self.entry_id);
+},
+}
+                current_step_val = self.nextStep(.symlink_dependency_binaries);
+                continue;
+},
+.run_preinstall => {
+if (((!installer.manager.options.do.run_scripts) or (self.entry_id == .root))) {
+                    current_step_val = self.nextStep(.run_preinstall);
+                    continue;
+                }
+                if (installer.entryUsesGlobalStore(self.entry_id)) {
+                    current_step_val = self.nextStep(.run_preinstall);
+                    continue;
+                }
+                const string_buf = installer.lockfile.buffers.string_bytes.items;
+                const dep = installer.lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))];
+                const truncated_dep_name_hash: TruncatedPackageNameHash = @truncate(dep.name_hash);
+                const trusted_pair = brk: {
+                if (installer.trusted_dependencies_from_update_requests.contains(truncated_dep_name_hash)) {
+                    break :brk .{ true, true };
+                }
+                if (installer.lockfile.hasTrustedDependency((if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(string_buf), (&pkg_res))) {
+                    break :brk .{ true, false };
+                }
+                break :brk .{ false, false };
+};
+                const is_trusted = trusted_pair[0];
+                const is_trusted_through_update_request = trusted_pair[1];
+                var pkg_cwd = DeinitGuard(AbsPathAuto){ .val = .initTopLevelDir() };
+                _ = &pkg_cwd;
+                var __pkg_cwd_moved = false; _ = &__pkg_cwd_moved;
+                defer if (!__pkg_cwd_moved) { __pkg_cwd_moved = true; const __T = @TypeOf(pkg_cwd); if (@typeInfo(__T) == .optional) { if (pkg_cwd) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { pkg_cwd.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = pkg_cwd; _drop_val.__cp_deinit(); } };
+                _ = installer.appendStorePath((&pkg_cwd.val), self.entry_id);
+                if (((pkg_res.tag != .root) and ((pkg_res.tag == .workspace) or is_trusted))) {
+                    _ = enqueue_lifecycle_scripts: {
+                    var pkg_scripts: Package.Scripts = pkg_script_lists[@as(usize, @intCast(pkg_id))];
+                    _ = &pkg_scripts;
+                    if ((is_trusted and manager.postinstall_optimizer.shouldIgnoreLifecycleScripts(.{ .name_hash = pkg_name_hash, .version = (if ((pkg_res.tag == .npm)) (if (@typeInfo(@TypeOf(pkg_res)) == .@"enum") @intFromEnum(pkg_res) else pkg_res.value).npm.version else null), .version_buf = lockfile.buffers.string_bytes.items }, installer.lockfile.buffers.resolutions.items, pkg_metas, manager.options.cpu, manager.options.os, null))) {
+                        break :enqueue_lifecycle_scripts;
+                    }
+                    var log = DeinitGuard(bun.logger.Log){ .val = bun.logger.Log.init(bun.default_allocator) };
+                    _ = &log;
+                    var __log_moved = false; _ = &__log_moved;
+                    defer if (!__log_moved) { __log_moved = true; const __T = @TypeOf(log); if (@typeInfo(__T) == .optional) { if (log) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { log.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = log; _drop_val.__cp_deinit(); } };
+                    const scripts_list = (blk_catch_2: { break :blk_catch_2 ((pkg_scripts.getList((&log.val), installer.lockfile, (&pkg_cwd.val), (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(string_buf), (&pkg_res))) catch |e| { _ = &e; return Yield.failure(.{ .run_scripts = e }); }); });
+                    if (scripts_list) |list| {
+                        _ = &list;
+                        const clone = bun.create(bun.default_allocator, Package.Scripts.List, list);
+                        entry_scripts[cp_cast_int(usize, self.entry_id.get())] = clone;
+                        if (is_trusted_through_update_request) {
+                            const trusted_dep_to_add = try installer.manager.allocator.dupe(u8, (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(string_buf));
+                            _ = (if (comptime @typeInfo(@TypeOf(installer.trusted_dependencies_mutex)) == .pointer) (installer.trusted_dependencies_mutex) else &(installer.trusted_dependencies_mutex)).lock();
+                            var _mutex_guard = MutexUnlockGuard{ .mutex = (&installer.trusted_dependencies_mutex) };
+                            _ = &_mutex_guard;
+                            var ___mutex_guard_moved = false; _ = &___mutex_guard_moved;
+                            defer if (!___mutex_guard_moved) { ___mutex_guard_moved = true; const __T = @TypeOf(_mutex_guard); if (@typeInfo(__T) == .optional) { if (_mutex_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _mutex_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _mutex_guard; _drop_val.__cp_deinit(); } };
+                            _ = try installer.manager.trusted_deps_to_add_to_package_json.append(installer.manager.allocator, trusted_dep_to_add);
+                            if ((installer.lockfile.trusted_dependencies == null)) {
+                                installer.lockfile.trusted_dependencies = .{};
+                            }
+                            const void_val: void = undefined;
+                            const td = (&installer.lockfile.trusted_dependencies.?);
+                            _ = try td.put(installer.manager.allocator, truncated_dep_name_hash, void_val);
+                        }
+                        if ((list.first_index != 0)) {
+                            current_step_val = self.nextStep(.run_preinstall);
+                            continue;
+                        }
+                        return .{ .run_scripts = clone };
+                    }
+};
+                }
+                current_step_val = self.nextStep(.run_preinstall);
+                continue;
+},
+.binaries => {
+if ((self.entry_id == .root)) {
+                    current_step_val = self.nextStep(.binaries);
+                    continue;
+                }
+                const bin = pkg_bins[@as(usize, @intCast(pkg_id))];
+                if ((bin.tag == .none)) {
+                    switch (installer.commitGlobalStoreEntry(self.entry_id)) {
+.result => {
+
+},
+.err => |e| {
+return Yield.failure(.{ .link_package = e });
+},
+}
+                    current_step_val = self.nextStep(.binaries);
+                    continue;
+                }
+                const string_buf = installer.lockfile.buffers.string_bytes.items;
+                const dependencies = installer.lockfile.buffers.dependencies.items;
+                const dep_name = (if (@typeInfo(@TypeOf(dependencies[@as(usize, @intCast(dep_id))])) == .@"enum" or @typeInfo(@TypeOf(dependencies[@as(usize, @intCast(dep_id))])) == .@"union") @tagName(dependencies[@as(usize, @intCast(dep_id))]) else dependencies[@as(usize, @intCast(dep_id))].name).slice(string_buf);
+                var abs_target_buf = PathBufPoolGuard{ .buf = bun.path_buffer_pool.get() };
+                _ = &abs_target_buf;
+                var __abs_target_buf_moved = false; _ = &__abs_target_buf_moved;
+                defer if (!__abs_target_buf_moved) { __abs_target_buf_moved = true; const __T = @TypeOf(abs_target_buf); if (@typeInfo(__T) == .optional) { if (abs_target_buf) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { abs_target_buf.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = abs_target_buf; _drop_val.__cp_deinit(); } };
+                var abs_dest_buf = PathBufPoolGuard{ .buf = bun.path_buffer_pool.get() };
+                _ = &abs_dest_buf;
+                var __abs_dest_buf_moved = false; _ = &__abs_dest_buf_moved;
+                defer if (!__abs_dest_buf_moved) { __abs_dest_buf_moved = true; const __T = @TypeOf(abs_dest_buf); if (@typeInfo(__T) == .optional) { if (abs_dest_buf) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { abs_dest_buf.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = abs_dest_buf; _drop_val.__cp_deinit(); } };
+                var rel_buf = PathBufPoolGuard{ .buf = bun.path_buffer_pool.get() };
+                _ = &rel_buf;
+                var __rel_buf_moved = false; _ = &__rel_buf_moved;
+                defer if (!__rel_buf_moved) { __rel_buf_moved = true; const __T = @TypeOf(rel_buf); if (@typeInfo(__T) == .optional) { if (rel_buf) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { rel_buf.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = rel_buf; _drop_val.__cp_deinit(); } };
+                var seen = DeinitGuard(SeenMap){ .val = .init(bun.default_allocator) };
+                _ = &seen;
+                var __seen_moved = false; _ = &__seen_moved;
+                defer if (!__seen_moved) { __seen_moved = true; const __T = @TypeOf(seen); if (@typeInfo(__T) == .optional) { if (seen) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { seen.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = seen; _drop_val.__cp_deinit(); } };
+                var node_modules_path = DeinitGuard(AbsPathEmpty){ .val = .initTopLevelDir() };
+                _ = &node_modules_path;
+                var __node_modules_path_moved = false; _ = &__node_modules_path_moved;
+                defer if (!__node_modules_path_moved) { __node_modules_path_moved = true; const __T = @TypeOf(node_modules_path); if (@typeInfo(__T) == .optional) { if (node_modules_path) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { node_modules_path.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = node_modules_path; _drop_val.__cp_deinit(); } };
+                _ = installer.appendRealStoreNodeModulesPath((&node_modules_path.val), self.entry_id, .staging);
+                var target_node_modules_path = OptDeinitGuard(AbsPathEmpty){ .val = null };
+                _ = &target_node_modules_path;
+                var __target_node_modules_path_moved = false; _ = &__target_node_modules_path_moved;
+                defer if (!__target_node_modules_path_moved) { __target_node_modules_path_moved = true; const __T = @TypeOf(target_node_modules_path); if (@typeInfo(__T) == .optional) { if (target_node_modules_path) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { target_node_modules_path.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = target_node_modules_path; _drop_val.__cp_deinit(); } };
+                var target_package_name: strings.StringOrTinyString = strings.StringOrTinyString.init(dep_name);
+                _ = &target_package_name;
+                if (installer.maybeReplaceNodeModulesPath(entry_node_ids, node_pkg_ids, pkg_name_hashes, pkg_resolutions_lists, installer.lockfile.buffers.resolutions.items, installer.lockfile.packages.items(.@"meta"), pkg_id)) |replacement_entry_id| {
+                    _ = &replacement_entry_id;
+                    target_node_modules_path.val = AbsPathEmpty.initTopLevelDir();
+                    _ = installer.appendRealStoreNodeModulesPath((&target_node_modules_path.val.?), replacement_entry_id, .final);
+                    const replacement_node_id = entry_node_ids[@as(usize, @intCast(replacement_entry_id.get()))];
+                    const replacement_pkg_id = node_pkg_ids[@as(usize, @intCast(replacement_node_id.get()))];
+                    target_package_name = strings.StringOrTinyString.init(installer.lockfile.str((&pkg_names[@as(usize, @intCast(replacement_pkg_id))])));
+                }
+                var target_nm_path = (&node_modules_path.val);
+                _ = &target_nm_path;
+                if ((target_node_modules_path.val != null)) {
+                    target_nm_path = (&target_node_modules_path.val.?);
+                }
+                var bin_linker: Bin.Linker = .{ .bin = bin, .global_bin_path = installer.manager.options.bin_path, .package_name = strings.StringOrTinyString.init(dep_name), .target_package_name = target_package_name, .string_buf = string_buf, .extern_string_buf = installer.lockfile.buffers.extern_strings.items, .seen = (&seen.val), .target_node_modules_path = target_nm_path, .node_modules_path = (&node_modules_path.val), .abs_target_buf = abs_target_buf.buf, .abs_dest_buf = abs_dest_buf.buf, .rel_buf = rel_buf.buf };
+                _ = &bin_linker;
+                _ = bin_linker.link(false);
+                if (((target_node_modules_path.val != null) and (bin_linker.skipped_due_to_missing_bin or (bin_linker.err != null)))) {
+                    _ = target_node_modules_path.val.?.deinit();
+                    target_node_modules_path.val = null;
+                    bin_linker.target_node_modules_path = (&node_modules_path.val);
+                    bin_linker.target_package_name = strings.StringOrTinyString.init(dep_name);
+                    if (self.installer.manager.options.log_level.isVerbose()) {
+                        _ = Output.prettyErrorln("<d>[Bin Linker]<r> {s} -> {s} retrying without native bin link", .{ dep_name, bin_linker.target_package_name.slice() });
+                    }
+                    _ = bin_linker.link(false);
+                }
+                if (bin_linker.err) |err| {
+                    _ = &err;
+                    return Yield.failure(.{ .binaries = err });
+                }
+                switch (installer.commitGlobalStoreEntry(self.entry_id)) {
+.result => {
+
+},
+.err => |e| {
+return Yield.failure(.{ .link_package = e });
+},
+}
+                current_step_val = self.nextStep(.binaries);
+                continue;
+},
+.@"run (post)install && (pre/post)prepare" => {
+if (((!installer.manager.options.do.run_scripts) or (self.entry_id == .root))) {
+                    current_step_val = self.nextStep(.@"run (post)install && (pre/post)prepare");
+                    continue;
+                }
+                var list = ((entry_scripts[@as(usize, @intCast(self.entry_id.get()))]) orelse {
+                current_step_val = self.nextStep(.@"run (post)install && (pre/post)prepare");
+                continue;
+});
+                _ = &list;
+                if ((list.first_index == 0)) {
+                    var i: usize = 1;
+                    _ = &i;
+                    for (cp_iter_slice(list.items[1..])) |item| {
+                        _ = &item;
+                        if ((item != null)) {
+                            list.first_index = @intCast(i);
+                            break;
+                        }
+                        i = (i + 1);
+                    }
+                }
+                if ((list.first_index == 0)) {
+                    current_step_val = self.nextStep(.@"run (post)install && (pre/post)prepare");
+                    continue;
+                }
+                return .{ .run_scripts = list };
+},
+.done => {
+return TaskYield.done;
+},
+.blocked => {
+_ = bun.debugAssert(false);
+                return TaskYield.yield;
+},
+}
+            }
+    }
+
+pub fn callback(task: *ThreadPool.Task) void {
+            const self_task: *TopTask = @fieldParentPtr("task", task);
+            const res = (blk_catch_3: { break :blk_catch_3 ((self_task.run()) catch |e| { _ = &e; break :blk_catch_3 @as(Yield, (__sw_blk_2: { const __disc_2 = e; _ = &__disc_2; if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .OutOfMemory)) {  break :__sw_blk_2 cp_val(bun.outOfMemory()); } }  unreachable; })); }); });
+            switch (res) {
+.yield => {
+
+},
+.run_scripts => |list| {
+if (comptime Environment.ci_assert) {
+                _ = bun.assertWithLocation((self_task.installer.store.entries.items(.scripts)[@as(usize, @intCast(self_task.entry_id.get()))] != null), @src());
+            }
+            self_task.result = .{ .run_scripts = list };
+            _ = self_task.installer.task_queue.push(self_task);
+            _ = self_task.installer.manager.wake();
+},
+.done => {
+if (comptime Environment.ci_assert) {
+                _ = bun.assertWithLocation((self_task.installer.store.entries.items(.step)[@as(usize, @intCast(self_task.entry_id.get()))].load(.monotonic) == .done), @src());
+            }
+            self_task.result = .done;
+            _ = self_task.installer.task_queue.push(self_task);
+            _ = self_task.installer.manager.wake();
+},
+.blocked => {
+if (comptime Environment.ci_assert) {
+                _ = bun.assertWithLocation((self_task.installer.store.entries.items(.step)[@as(usize, @intCast(self_task.entry_id.get()))].load(.monotonic) == .check_if_blocked), @src());
+            }
+            self_task.result = .blocked;
+            _ = self_task.installer.task_queue.push(self_task);
+            _ = self_task.installer.manager.wake();
+},
+.fail => |err| {
+if (comptime Environment.ci_assert) {
+                _ = bun.assertWithLocation((self_task.installer.store.entries.items(.step)[@as(usize, @intCast(self_task.entry_id.get()))].load(.monotonic) != .done), @src());
+            }
+            _ = self_task.installer.store.entries.items(.step)[@as(usize, @intCast(self_task.entry_id.get()))].store(.done, .release);
+            self_task.result = .{ .err = err };
+            _ = self_task.installer.task_queue.push(self_task);
+            _ = self_task.installer.manager.wake();
+},
+}
+    }
+    pub const Result = TaskResult;
+    pub const Error = TaskError;
+    pub const Step = TaskStep;
+    pub const Yield = TaskYield;
+};
+
+pub const Installer = struct {
+    trusted_dependencies_mutex: CpBareMutex,
+    lockfile: *Lockfile,
+    summary: PackageInstall.Summary = .{ .successfully_installed = .empty },
+    installed: Bitset,
+    install_node: ?*Progress.Node,
+    scripts_node: ?*Progress.Node,
+    is_new_bun_modules: bool,
+    manager: *PackageManager,
+    command_ctx: Command.Context,
+    store: *const Store,
+    task_queue: bun.UnboundedQueue(Task, .next) = .{},
+    tasks: []Task,
+    supported_backend: std.atomic.Value(PackageInstall.Method),
+    trusted_dependencies_from_update_requests: std.AutoArrayHashMapUnmanaged(TruncatedPackageNameHash, void),
+    global_store_path: ?[:0]const u8,
+    global_store_tmp_suffix: u64,
+
+pub fn deinit(self: *Installer) void {
+            _ = self.trusted_dependencies_from_update_requests.deinit(self.lockfile.allocator);
+    }
+
+pub fn startTask(self: *Installer, entry_id: Store.Entry.Id) void {
+            var task = self.tasks[@as(usize, @intCast(entry_id.get()))];
+            _ = &task;
+            _ = bun.debugAssert((switch (task.result) {
+.none => true,
+.blocked => true,
+.run_scripts => true,
+else => false,
+}));
+            task.result = .none;
+            _ = self.manager.thread_pool.schedule(ThreadPool.Batch.from((&task.task)));
+    }
+
+pub fn onPackageExtracted(self: *Installer, task_id: install.Task.Id) void {
+            if (self.manager.task_queue.fetchRemove(task_id)) |removed| {
+                _ = &removed;
+                const store = self.store;
+                const node_pkg_ids = store.nodes.items(.pkg_id);
+                const entries = store.entries.slice();
+                const entry_steps = entries.items(.step);
+                const entry_node_ids = entries.items(.node_id);
+                const pkgs = self.lockfile.packages.slice();
+                const pkg_names = pkgs.items(.name);
+                const pkg_name_hashes = pkgs.items(.name_hash);
+                const pkg_resolutions = pkgs.items(.resolution);
+                for ((if (@typeInfo(@TypeOf(removed)) == .@"enum") @intFromEnum(removed) else removed.value).items) |install_ctx| {
+                    _ = &install_ctx;
+                    const entry_id = install_ctx.isolated_package_install_context;
+                    const node_id = entry_node_ids[@as(usize, @intCast(entry_id.get()))];
+                    const pkg_id = node_pkg_ids[@as(usize, @intCast(node_id.get()))];
+                    const pkg_name = pkg_names[@as(usize, @intCast(pkg_id))];
+                    const pkg_name_hash = pkg_name_hashes[@as(usize, @intCast(pkg_id))];
+                    const pkg_res = (&pkg_resolutions[@as(usize, @intCast(pkg_id))]);
+                    const patch_info = bun.handleOom(self.packagePatchInfo(pkg_name, pkg_name_hash, pkg_res));
+                    if ((patch_info == .patch)) {
+                        var log: bun.logger.Log = .init(self.manager.allocator);
+                        _ = &log;
+                        _ = self.applyPackagePatch(entry_id, patch_info.patch, (&log));
+                        if (log.hasErrors()) {
+                            _ = entry_steps[@as(usize, @intCast(entry_id.get()))].store(.done, .monotonic);
+                            _ = self.onTaskFail(entry_id, .{ .patching = log });
+                            continue;
+                        }
+                    }
+                    _ = self.startTask(entry_id);
+                }
+            }
+    }
+
+pub fn onPackageDownloadError(self: *Installer, task_id: install.Task.Id, name: []const u8, resolution: *const Resolution, download_err: anyerror, url: []const u8) void {
+            if (self.manager.task_queue.fetchRemove(task_id)) |removed| {
+                _ = &removed;
+                var callbacks = DeinitWithAllocGuard(@TypeOf(removed.value)){ .val = (if (@typeInfo(@TypeOf(removed)) == .@"enum") @intFromEnum(removed) else removed.value), .alloc = self.manager.allocator };
+                _ = &callbacks;
+                var __callbacks_moved = false; _ = &__callbacks_moved;
+                defer if (!__callbacks_moved) { __callbacks_moved = true; const __T = @TypeOf(callbacks); if (@typeInfo(__T) == .optional) { if (callbacks) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { callbacks.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = callbacks; _drop_val.__cp_deinit(); } };
+                const entry_steps = self.store.entries.items(.step);
+                for (callbacks.val.items) |install_ctx| {
+                    _ = &install_ctx;
+                    const entry_id = install_ctx.isolated_package_install_context;
+                    _ = entry_steps[@as(usize, @intCast(entry_id.get()))].store(.done, .monotonic);
+                    _ = self.onTaskFail(entry_id, Task.Error{ .download = .{ .download_err = download_err, .url = url } });
+                }
+            } else {
+                const string_buf = self.lockfile.buffers.string_bytes.items;
+                _ = Output.errGeneric("failed to download <b>{s}@{f}<r>: {s}\n  <d>{s}<r>", .{ name, resolution.fmt(string_buf, .auto), Installer.downloadErrorReason(download_err), url });
+                _ = Output.flush();
+            }
+    }
+
+pub fn downloadErrorReason(e: anyerror) []const u8 {
+            return (switch (e) {
+error.TarballHTTP400 => "400 Bad Request",
+error.TarballHTTP401 => "401 Unauthorized",
+error.TarballHTTP402 => "402 Payment Required",
+error.TarballHTTP403 => "403 Forbidden",
+error.TarballHTTP404 => "404 Not Found",
+error.TarballHTTP4xx => "HTTP 4xx",
+error.TarballHTTP5xx => "HTTP 5xx",
+error.TarballFailedToExtract => "failed to extract",
+error.TarballFailedToDownload => "download failed",
+else => @errorName(e),
+});
+    }
+
+pub fn applyPackagePatch(self: *Installer, entry_id: Store.Entry.Id, patch: PatchInfo.Patch, log: *bun.logger.Log) void {
+            const store = self.store;
+            const entry_node_ids = store.entries.items(.node_id);
+            const node_id = entry_node_ids[@as(usize, @intCast(entry_id.get()))];
+            const node_pkg_ids = store.nodes.items(.pkg_id);
+            const pkg_id = node_pkg_ids[@as(usize, @intCast(node_id.get()))];
+            var patch_task = DeinitGuard(*install.PatchTask){ .val = install.PatchTask.newApplyPatchHash(self.manager, pkg_id, patch.contents_hash, patch.name_and_version_hash) };
+            _ = &patch_task;
+            var __patch_task_moved = false; _ = &__patch_task_moved;
+            defer if (!__patch_task_moved) { __patch_task_moved = true; const __T = @TypeOf(patch_task); if (@typeInfo(__T) == .optional) { if (patch_task) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { patch_task.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = patch_task; _drop_val.__cp_deinit(); } };
+            _ = bun.handleOom(patch_task.val.apply());
+            if (patch_task.val.callback.apply.logger.hasErrors()) {
+                _ = bun.handleOom(patch_task.val.callback.apply.logger.cloneToWithRecycled(log, true));
+            }
+    }
+
+pub fn onTaskFail(self: *Installer, entry_id: Store.Entry.Id, err: Task.Error) void {
+            const string_buf = self.lockfile.buffers.string_bytes.items;
+            const entries = self.store.entries.slice();
+            const entry_node_ids = entries.items(.node_id);
+            const nodes = self.store.nodes.slice();
+            const node_pkg_ids = nodes.items(.pkg_id);
+            const pkgs = self.lockfile.packages.slice();
+            const pkg_names = pkgs.items(.name);
+            const pkg_resolutions = pkgs.items(.resolution);
+            const node_id = entry_node_ids[@as(usize, @intCast(entry_id.get()))];
+            const pkg_id = node_pkg_ids[@as(usize, @intCast(node_id.get()))];
+            const pkg_name = pkg_names[@as(usize, @intCast(pkg_id))];
+            const pkg_res = pkg_resolutions[@as(usize, @intCast(pkg_id))];
+            switch (err) {
+.link_package => |link_err| {
+_ = Output.err(link_err, "failed to link package: {s}@{f}", .{ pkg_name.slice(string_buf), pkg_res.fmt(string_buf, .auto) });
+},
+.symlink_dependencies => |symlink_err| {
+_ = Output.err(symlink_err, "failed to symlink dependencies for package: {s}@{f}", .{ pkg_name.slice(string_buf), pkg_res.fmt(string_buf, .auto) });
+},
+.patching => |patch_log| {
+_ = Output.errGeneric("failed to patch package: {s}@{f}", .{ pkg_name.slice(string_buf), pkg_res.fmt(string_buf, .auto) });
+            _ = (blk_catch_4: { break :blk_catch_4 ((patch_log.print(Output.errorWriter())) catch |__ce_4| { _ = &__ce_4;  }); });
+},
+.binaries => |bin_err| {
+_ = Output.err(bin_err, "failed to link binaries for package: {s}@{f}", .{ pkg_name.slice(string_buf), pkg_res.fmt(string_buf, .auto) });
+},
+.download => |dl| {
+_ = Output.errGeneric("failed to download <b>{s}@{f}<r>: {s}\n  <d>{s}<r>", .{ pkg_name.slice(string_buf), pkg_res.fmt(string_buf, .auto), Installer.downloadErrorReason(dl.download_err), dl.url });
+},
+else => {
+
+},
+}
+            _ = Output.flush();
+            if (self.entryUsesGlobalStore(entry_id)) {
+                var staging = DeinitGuard(AbsPathAuto){ .val = .init() };
+                _ = &staging;
+                var __staging_moved = false; _ = &__staging_moved;
+                defer if (!__staging_moved) { __staging_moved = true; const __T = @TypeOf(staging); if (@typeInfo(__T) == .optional) { if (staging) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { staging.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = staging; _drop_val.__cp_deinit(); } };
+                _ = self.appendGlobalStoreEntryPath((&staging.val), entry_id, .staging);
+                _ = (blk_catch_5: { break :blk_catch_5 ((FD.cwd().deleteTree(staging.val.slice())) catch |__ce_5| { _ = &__ce_5;  }); });
+            }
+            switch (pkg_res.tag) {
+.uninitialized, .single_file_module, .root, .workspace, .symlink => {
+
+},
+else => {
+
+},
+.npm, .git, .github, .local_tarball, .remote_tarball, .folder => {
+var store_path = DeinitGuard(RelPathAuto){ .val = .init() };
+            _ = &store_path;
+            var __store_path_moved = false; _ = &__store_path_moved;
+            defer if (!__store_path_moved) { __store_path_moved = true; const __T = @TypeOf(store_path); if (@typeInfo(__T) == .optional) { if (store_path) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { store_path.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = store_path; _drop_val.__cp_deinit(); } };
+            _ = store_path.val.appendFmt("node_modules/{f}", .{ Store.Entry.fmtStorePath(entry_id, self.store, self.lockfile) });
+            _ = sys.unlink(store_path.val.sliceZ());
+},
+}
+            if (self.manager.options.enable.fail_early) {
+                _ = Global.exit(1);
+            }
+            self.summary.fail = (self.summary.fail + 1);
+            _ = self.decrementPendingTasks();
+            _ = self.resumeUnblockedTasks();
+    }
+
+pub fn decrementPendingTasks(self: *Installer) void {
+            _ = self.manager.decrementPendingTasks();
+    }
+
+pub fn onTaskBlocked(self: *Installer, entry_id: Store.Entry.Id) void {
+            var parent_dedupe = DeinitGuard(EntryDedupeMap){ .val = .init(bun.default_allocator) };
+            _ = &parent_dedupe;
+            var __parent_dedupe_moved = false; _ = &__parent_dedupe_moved;
+            defer if (!__parent_dedupe_moved) { __parent_dedupe_moved = true; const __T = @TypeOf(parent_dedupe); if (@typeInfo(__T) == .optional) { if (parent_dedupe) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { parent_dedupe.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = parent_dedupe; _drop_val.__cp_deinit(); } };
+            if ((!self.isTaskBlocked(entry_id, (&parent_dedupe.val)))) {
+                _ = self.store.entries.items(.step)[@as(usize, @intCast(entry_id.get()))].store(.symlink_dependency_binaries, .monotonic);
+                _ = self.startTask(entry_id);
+                return;
+            }
+            _ = self.store.entries.items(.step)[@as(usize, @intCast(entry_id.get()))].store(.blocked, .monotonic);
+    }
+
+pub fn isTaskBlocked(self: *Installer, entry_id: Store.Entry.Id, parent_dedupe: *std.AutoArrayHashMap(Store.Entry.Id, void)) bool {
+            const entries = self.store.entries.slice();
+            const entry_deps = entries.items(.dependencies);
+            const entry_steps = entries.items(.step);
+            const deps = entry_deps[@as(usize, @intCast(entry_id.get()))];
+            for (cp_iter_slice(deps.slice())) |dep| {
+                _ = &dep;
+                if ((entry_steps[@as(usize, @intCast(dep.entry_id.get()))].load(.acquire) != .done)) {
+                    _ = parent_dedupe.clearRetainingCapacity();
+                    if (self.store.isCycle(entry_id, dep.entry_id, parent_dedupe)) {
+                        continue;
+                    }
+                    return true;
+                }
+            }
+            return false;
+    }
+
+pub fn onTaskComplete(self: *Installer, entry_id: Store.Entry.Id, state: OnTaskCompleteState) void {
+            if (comptime Environment.ci_assert) {
+                _ = bun.assertWithLocation((self.store.entries.items(.step)[@as(usize, @intCast(entry_id.get()))].load(.monotonic) == .done), @src());
+            }
+            _ = self.decrementPendingTasks();
+            _ = self.resumeUnblockedTasks();
+            if (self.install_node) |p_node| {
+                _ = &p_node;
+                _ = bun.Progress.Node.completeOne(p_node);
+            }
+            const nodes = self.store.nodes.slice();
+            const state_pair = state: {
+            if ((entry_id == .root)) {
+                break :state .{ .root, .skipped };
+            }
+            const node_id = self.store.entries.items(.node_id)[@as(usize, @intCast(entry_id.get()))];
+            const dep_id = nodes.items(.dep_id)[@as(usize, @intCast(node_id.get()))];
+            if ((dep_id == invalid_dependency_id)) {
+                break :state .{ .root, .skipped };
+            }
+            const dep = self.lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))];
+            if (dep.behavior.isWorkspace()) {
+                break :state .{ node_id, .skipped };
+            }
+            break :state .{ node_id, state };
+};
+            const node_id = state_pair[0];
+            const real_state = state_pair[1];
+            switch (real_state) {
+.success => {
+self.summary.success = (self.summary.success + 1);
+},
+.skipped => {
+self.summary.skipped = (self.summary.skipped + 1);
+            return;
+},
+.fail => {
+self.summary.fail = (self.summary.fail + 1);
+            return;
+},
+}
+            const pkg_id = nodes.items(.pkg_id)[@as(usize, @intCast(node_id.get()))];
+            const is_duplicate = self.installed.isSet(pkg_id);
+            self.summary.success = (self.summary.success + @intFromBool((!is_duplicate)));
+            _ = self.installed.set(pkg_id);
+    }
+
+pub fn resumeUnblockedTasks(self: *Installer) void {
+            const entries = self.store.entries.slice();
+            const entry_steps = entries.items(.step);
+            var parent_dedupe = DeinitGuard(EntryDedupeMap){ .val = .init(bun.default_allocator) };
+            _ = &parent_dedupe;
+            var __parent_dedupe_moved = false; _ = &__parent_dedupe_moved;
+            defer if (!__parent_dedupe_moved) { __parent_dedupe_moved = true; const __T = @TypeOf(parent_dedupe); if (@typeInfo(__T) == .optional) { if (parent_dedupe) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { parent_dedupe.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = parent_dedupe; _drop_val.__cp_deinit(); } };
+            {
+                var id_int: i32 = 0;
+                _ = &id_int;
+                const __end_6 = self.store.entries.len;
+                while (id_int < __end_6) : (id_int += 1) {
+                    const entry_id: Store.Entry.Id = Store.Entry.Id.from(@intCast(id_int));
+                    const entry_step = entry_steps[@as(usize, @intCast(entry_id.get()))].load(.monotonic);
+                    if ((entry_step != .blocked)) {
+                        continue;
+                    }
+                    if (self.isTaskBlocked(entry_id, (&parent_dedupe.val))) {
+                        continue;
+                    }
+                    _ = entry_steps[@as(usize, @intCast(entry_id.get()))].store(.symlink_dependency_binaries, .monotonic);
+                    _ = self.startTask(entry_id);
+                }
+            }
+    }
+
+pub fn packagePatchInfo(self: *Installer, pkg_name: String, pkg_name_hash: PackageNameHash, pkg_res: *const Resolution) OOM!PatchInfo {
+            if (((self.lockfile.patched_dependencies.entries.len == 0) and (self.manager.patched_dependencies_to_remove.entries.len == 0))) {
+                return PatchInfo.none;
+            }
+            const string_buf = self.lockfile.buffers.string_bytes.items;
+            var version_buf = DeinitWithAllocGuard(std.ArrayListUnmanaged(u8)){ .val = .empty, .alloc = self.lockfile.allocator };
+            _ = &version_buf;
+            var __version_buf_moved = false; _ = &__version_buf_moved;
+            defer if (!__version_buf_moved) { __version_buf_moved = true; const __T = @TypeOf(version_buf); if (@typeInfo(__T) == .optional) { if (version_buf) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { version_buf.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = version_buf; _drop_val.__cp_deinit(); } };
+            var writer = version_buf.val.writer(self.lockfile.allocator);
+            _ = &writer;
+            const pkg_slice_fn = @TypeOf(pkg_name).slice;
+            _ = try writer.print("{s}@", .{ pkg_slice_fn((&pkg_name), string_buf) });
+            switch (pkg_res.tag) {
+.workspace => {
+if (self.lockfile.workspace_versions.get(pkg_name_hash)) |workspace_version| {
+                _ = &workspace_version;
+                _ = try writer.print("{f}", .{ workspace_version.fmt(string_buf) });
+            }
+},
+else => {
+_ = try writer.print("{f}", .{ pkg_res.fmt(string_buf, .posix) });
+},
+}
+            const name_and_version_hash = String.Builder.stringHash(version_buf.val.items);
+            if (self.lockfile.patched_dependencies.get(name_and_version_hash)) |patch| {
+                _ = &patch;
+                return .{ .patch = .{ .name_and_version_hash = name_and_version_hash, .patch_path = patch.path.slice(string_buf), .contents_hash = (patch.patchfileHash()).? } };
+            }
+            if (self.manager.patched_dependencies_to_remove.contains(name_and_version_hash)) {
+                return .{ .remove = .{ .name_and_version_hash = name_and_version_hash } };
+            }
+            return PatchInfo.none;
+    }
+
+pub fn linkToHiddenNodeModules(self: Installer, entry_id: Store.Entry.Id) void {
+            const string_buf = self.lockfile.buffers.string_bytes.items;
+            const node_id = self.store.entries.items(.node_id)[@as(usize, @intCast(entry_id.get()))];
+            const pkg_id = self.store.nodes.items(.pkg_id)[@as(usize, @intCast(node_id.get()))];
+            const pkg_name = self.lockfile.packages.items(.name)[@as(usize, @intCast(pkg_id))];
+            var hidden_hoisted_node_modules = DeinitGuard(PathAuto){ .val = .init() };
+            _ = &hidden_hoisted_node_modules;
+            var __hidden_hoisted_node_modules_moved = false; _ = &__hidden_hoisted_node_modules_moved;
+            defer if (!__hidden_hoisted_node_modules_moved) { __hidden_hoisted_node_modules_moved = true; const __T = @TypeOf(hidden_hoisted_node_modules); if (@typeInfo(__T) == .optional) { if (hidden_hoisted_node_modules) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { hidden_hoisted_node_modules.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = hidden_hoisted_node_modules; _drop_val.__cp_deinit(); } };
+            _ = hidden_hoisted_node_modules.val.append((((("node_modules" ++ std.fs.path.sep_str) ++ ".bun") ++ std.fs.path.sep_str) ++ "node_modules"));
+            _ = hidden_hoisted_node_modules.val.append(pkg_name.slice(string_buf));
+            var target = DeinitGuard(RelPathAuto){ .val = .init() };
+            _ = &target;
+            var __target_moved = false; _ = &__target_moved;
+            defer if (!__target_moved) { __target_moved = true; const __T = @TypeOf(target); if (@typeInfo(__T) == .optional) { if (target) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { target.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = target; _drop_val.__cp_deinit(); } };
+            _ = target.val.append("..");
+            if (strings.containsChar(pkg_name.slice(string_buf), 47)) {
+                _ = target.val.append("..");
+            }
+            _ = target.val.appendFmt("{f}/node_modules/{s}", .{ Store.Entry.fmtStorePath(entry_id, self.store, self.lockfile), pkg_name.slice(string_buf) });
+            var full_target = DeinitGuard(AbsPathAuto){ .val = .initTopLevelDir() };
+            _ = &full_target;
+            var __full_target_moved = false; _ = &__full_target_moved;
+            defer if (!__full_target_moved) { __full_target_moved = true; const __T = @TypeOf(full_target); if (@typeInfo(__T) == .optional) { if (full_target) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { full_target.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = full_target; _drop_val.__cp_deinit(); } };
+            _ = self.appendStorePath((&full_target.val), entry_id);
+            const symlinker: Symlinker = .{ .dest = hidden_hoisted_node_modules.val, .target = target.val, .fallback_junction_target = full_target.val };
+            const link_strategy: Symlinker.Strategy = (if (self.is_new_bun_modules) .expect_missing else .expect_existing);
+            _ = symlinker.ensureSymlink(link_strategy);
+    }
+
+pub fn maybeReplaceNodeModulesPath(self: *const Installer, entry_node_ids: []const Store.Node.Id, node_pkg_ids: []const PackageID, name_hashes: []const PackageNameHash, pkg_resolutions_lists: []const Lockfile.PackageIDSlice, pkg_resolutions_buffer: []const PackageID, pkg_metas: []const Package.Meta, pkg_id: PackageID) ?Store.Entry.Id {
+            const postinstall_optimizer = (&self.manager.postinstall_optimizer);
+            if ((!postinstall_optimizer.isNativeBinlinkEnabled())) {
+                return null;
+            }
+            const name_hash = name_hashes[@as(usize, @intCast(pkg_id))];
+            if (postinstall_optimizer.get(.{ .name_hash = name_hash })) |optimizer| {
+                _ = &optimizer;
+                switch (optimizer) {
+.native_binlink => {
+const manager = self.manager;
+                const target_cpu = manager.options.cpu;
+                const target_os = manager.options.os;
+                if (PostinstallOptimizer.getNativeBinlinkReplacementPackageID(pkg_resolutions_lists[@as(usize, @intCast(pkg_id))].get(pkg_resolutions_buffer), pkg_metas, target_cpu, target_os)) |replacement_pkg_id| {
+                    _ = &replacement_pkg_id;
+                    var new_entry_id: usize = 0;
+                    _ = &new_entry_id;
+                    for (cp_iter_slice(entry_node_ids)) |new_node_id| {
+                        _ = &new_node_id;
+                        if ((node_pkg_ids[@as(usize, @intCast(new_node_id.get()))] == replacement_pkg_id)) {
+                            _ = debug("native bin link {d} -> {d}", .{ pkg_id, replacement_pkg_id });
+                            return Store.Entry.Id.from(@intCast(new_entry_id));
+                        }
+                        new_entry_id = (new_entry_id + 1);
+                    }
+                }
+},
+.ignore => {
+
+},
+}
+            }
+            return null;
+    }
+
+pub fn linkDependencyBins(self: *const Installer, parent_entry_id: Store.Entry.Id) !void {
+            const lockfile = self.lockfile;
+            const store = self.store;
+            const string_buf = lockfile.buffers.string_bytes.items;
+            const extern_string_buf = lockfile.buffers.extern_strings.items;
+            const entries = store.entries.slice();
+            const entry_node_ids: []const Store.Node.Id = entries.items(.node_id);
+            const entry_deps = entries.items(.dependencies);
+            const nodes = store.nodes.slice();
+            const node_pkg_ids = nodes.items(.pkg_id);
+            const node_dep_ids = nodes.items(.dep_id);
+            const pkgs = lockfile.packages.slice();
+            const pkg_name_hashes = pkgs.items(.name_hash);
+            const pkg_metas = pkgs.items(.@"meta");
+            const pkg_resolutions_lists = pkgs.items(.resolutions);
+            const pkg_resolutions_buffer = lockfile.buffers.resolutions.items;
+            const pkg_bins = pkgs.items(.bin);
+            var link_target_buf = PathBufPoolGuard{ .buf = bun.path_buffer_pool.get() };
+            _ = &link_target_buf;
+            var __link_target_buf_moved = false; _ = &__link_target_buf_moved;
+            defer if (!__link_target_buf_moved) { __link_target_buf_moved = true; const __T = @TypeOf(link_target_buf); if (@typeInfo(__T) == .optional) { if (link_target_buf) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { link_target_buf.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = link_target_buf; _drop_val.__cp_deinit(); } };
+            var link_dest_buf = PathBufPoolGuard{ .buf = bun.path_buffer_pool.get() };
+            _ = &link_dest_buf;
+            var __link_dest_buf_moved = false; _ = &__link_dest_buf_moved;
+            defer if (!__link_dest_buf_moved) { __link_dest_buf_moved = true; const __T = @TypeOf(link_dest_buf); if (@typeInfo(__T) == .optional) { if (link_dest_buf) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { link_dest_buf.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = link_dest_buf; _drop_val.__cp_deinit(); } };
+            var link_rel_buf = PathBufPoolGuard{ .buf = bun.path_buffer_pool.get() };
+            _ = &link_rel_buf;
+            var __link_rel_buf_moved = false; _ = &__link_rel_buf_moved;
+            defer if (!__link_rel_buf_moved) { __link_rel_buf_moved = true; const __T = @TypeOf(link_rel_buf); if (@typeInfo(__T) == .optional) { if (link_rel_buf) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { link_rel_buf.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = link_rel_buf; _drop_val.__cp_deinit(); } };
+            var seen = DeinitGuard(SeenMap){ .val = .init(bun.default_allocator) };
+            _ = &seen;
+            var __seen_moved = false; _ = &__seen_moved;
+            defer if (!__seen_moved) { __seen_moved = true; const __T = @TypeOf(seen); if (@typeInfo(__T) == .optional) { if (seen) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { seen.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = seen; _drop_val.__cp_deinit(); } };
+            var node_modules_path = DeinitGuard(AbsPathEmpty){ .val = .initTopLevelDir() };
+            _ = &node_modules_path;
+            var __node_modules_path_moved = false; _ = &__node_modules_path_moved;
+            defer if (!__node_modules_path_moved) { __node_modules_path_moved = true; const __T = @TypeOf(node_modules_path); if (@typeInfo(__T) == .optional) { if (node_modules_path) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { node_modules_path.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = node_modules_path; _drop_val.__cp_deinit(); } };
+            _ = self.appendRealStoreNodeModulesPath((&node_modules_path.val), parent_entry_id, .staging);
+            for (cp_iter_slice(entry_deps[@as(usize, @intCast(parent_entry_id.get()))].slice())) |dep| {
+                _ = &dep;
+                const node_id = entry_node_ids[@as(usize, @intCast(dep.entry_id.get()))];
+                const dep_id = node_dep_ids[@as(usize, @intCast(node_id.get()))];
+                const pkg_id = node_pkg_ids[@as(usize, @intCast(node_id.get()))];
+                const bin = pkg_bins[@as(usize, @intCast(pkg_id))];
+                if ((bin.tag == .none)) {
+                    continue;
+                }
+                const alias = (if (@typeInfo(@TypeOf(lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))])) == .@"enum" or @typeInfo(@TypeOf(lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))])) == .@"union") @tagName(lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))]) else lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))].name);
+                var target_node_modules_path = OptDeinitGuard(AbsPathEmpty){ .val = null };
+                _ = &target_node_modules_path;
+                var __target_node_modules_path_moved = false; _ = &__target_node_modules_path_moved;
+                defer if (!__target_node_modules_path_moved) { __target_node_modules_path_moved = true; const __T = @TypeOf(target_node_modules_path); if (@typeInfo(__T) == .optional) { if (target_node_modules_path) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { target_node_modules_path.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = target_node_modules_path; _drop_val.__cp_deinit(); } };
+                const package_name = strings.StringOrTinyString.init(alias.slice(string_buf));
+                var target_package_name = package_name;
+                _ = &target_package_name;
+                if (self.maybeReplaceNodeModulesPath(entry_node_ids, node_pkg_ids, pkg_name_hashes, pkg_resolutions_lists, pkg_resolutions_buffer, pkg_metas, pkg_id)) |replacement_entry_id| {
+                    _ = &replacement_entry_id;
+                    target_node_modules_path.val = AbsPathEmpty.initTopLevelDir();
+                    _ = self.appendRealStoreNodeModulesPath((&target_node_modules_path.val.?), replacement_entry_id, .final);
+                    const replacement_node_id = entry_node_ids[@as(usize, @intCast(replacement_entry_id.get()))];
+                    const replacement_pkg_id = node_pkg_ids[@as(usize, @intCast(replacement_node_id.get()))];
+                    const pkg_names = pkgs.items(.name);
+                    target_package_name = strings.StringOrTinyString.init(self.lockfile.str((&pkg_names[@as(usize, @intCast(replacement_pkg_id))])));
+                }
+                var target_nm_path = (&node_modules_path.val);
+                _ = &target_nm_path;
+                if ((target_node_modules_path.val != null)) {
+                    target_nm_path = (&target_node_modules_path.val.?);
+                }
+                var bin_linker: Bin.Linker = .{ .bin = bin, .global_bin_path = self.manager.options.bin_path, .package_name = package_name, .string_buf = string_buf, .extern_string_buf = extern_string_buf, .seen = (&seen.val), .node_modules_path = (&node_modules_path.val), .target_node_modules_path = target_nm_path, .target_package_name = (if ((target_node_modules_path.val != null)) target_package_name else package_name), .abs_target_buf = link_target_buf.buf, .abs_dest_buf = link_dest_buf.buf, .rel_buf = link_rel_buf.buf };
+                _ = &bin_linker;
+                _ = bin_linker.link(false);
+                if (((target_node_modules_path.val != null) and (bin_linker.skipped_due_to_missing_bin or (bin_linker.err != null)))) {
+                    _ = target_node_modules_path.val.?.deinit();
+                    target_node_modules_path.val = null;
+                    bin_linker.target_node_modules_path = (&node_modules_path.val);
+                    bin_linker.target_package_name = package_name;
+                    if (self.manager.options.log_level.isVerbose()) {
+                        _ = Output.prettyErrorln("<d>[Bin Linker]<r> {s} -> {s} retrying without native bin link", .{ package_name.slice(), target_package_name.slice() });
+                    }
+                    _ = bin_linker.link(false);
+                }
+                if (bin_linker.err) |err| {
+                    _ = &err;
+                    return err;
+                }
+            }
+    }
+
+pub fn entryUsesGlobalStore(self: *const Installer, entry_id: Store.Entry.Id) bool {
+            if ((self.global_store_path == null)) {
+                return false;
+            }
+            return (self.store.entries.items(.entry_hash)[@as(usize, @intCast(entry_id.get()))] != 0);
+    }
+
+pub fn appendGlobalStoreEntryPath(self: *const Installer, buf: anytype, entry_id: Store.Entry.Id, which: Which) void {
+            _ = bun.debugAssert(self.entryUsesGlobalStore(entry_id));
+            _ = buf.clear();
+            _ = buf.append(self.global_store_path.?);
+            switch (which) {
+.final => {
+_ = buf.appendFmt("{f}", .{ Store.Entry.fmtGlobalStorePath(entry_id, self.store, self.lockfile) });
+},
+.staging => {
+_ = buf.appendFmt("{f}.tmp-{x}", .{ Store.Entry.fmtGlobalStorePath(entry_id, self.store, self.lockfile), self.global_store_tmp_suffix });
+},
+}
+    }
+
+pub fn commitGlobalStoreEntry(self: *const Installer, entry_id: Store.Entry.Id) sys.Maybe(void) {
+            if ((!self.entryUsesGlobalStore(entry_id))) {
+                return .success;
+            }
+            var staging = DeinitGuard(AbsPathAuto){ .val = .init() };
+            _ = &staging;
+            var __staging_moved = false; _ = &__staging_moved;
+            defer if (!__staging_moved) { __staging_moved = true; const __T = @TypeOf(staging); if (@typeInfo(__T) == .optional) { if (staging) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { staging.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = staging; _drop_val.__cp_deinit(); } };
+            _ = self.appendGlobalStoreEntryPath((&staging.val), entry_id, .staging);
+            var final = DeinitGuard(AbsPathAuto){ .val = .init() };
+            _ = &final;
+            var __final_moved = false; _ = &__final_moved;
+            defer if (!__final_moved) { __final_moved = true; const __T = @TypeOf(final); if (@typeInfo(__T) == .optional) { if (final) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { final.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = final; _drop_val.__cp_deinit(); } };
+            _ = self.appendGlobalStoreEntryPath((&final.val), entry_id, .final);
+            switch (sys.renameat(FD.cwd(), staging.val.sliceZ(), FD.cwd(), final.val.sliceZ())) {
+.result => {
+return .success;
+},
+.err => |err| {
+if ((!Installer.isRenameCollision(err))) {
+                _ = (blk_catch_6: { break :blk_catch_6 ((FD.cwd().deleteTree(staging.val.slice())) catch |__ce_6| { _ = &__ce_6;  }); });
+                return .initErr(err);
+            }
+            if (self.manager.options.enable.force_install) {
+                var old = DeinitGuard(AbsPathAuto){ .val = .init() };
+                _ = &old;
+                var __old_moved = false; _ = &__old_moved;
+                defer if (!__old_moved) { __old_moved = true; const __T = @TypeOf(old); if (@typeInfo(__T) == .optional) { if (old) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { old.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = old; _drop_val.__cp_deinit(); } };
+                _ = old.val.append(self.global_store_path.?);
+                _ = old.val.appendFmt("{f}.old-{x}", .{ Store.Entry.fmtGlobalStorePath(entry_id, self.store, self.lockfile), bun.fastRandom() });
+                if (sys.renameat(FD.cwd(), final.val.sliceZ(), FD.cwd(), old.val.sliceZ()).asErr()) |swap_err| {
+                    _ = &swap_err;
+                    _ = (blk_catch_7: { break :blk_catch_7 ((FD.cwd().deleteTree(staging.val.slice())) catch |__ce_7| { _ = &__ce_7;  }); });
+                    return .initErr(swap_err);
+                }
+                switch (sys.renameat(FD.cwd(), staging.val.sliceZ(), FD.cwd(), final.val.sliceZ())) {
+.result => {
+_ = (blk_catch_8: { break :blk_catch_8 ((FD.cwd().deleteTree(old.val.slice())) catch |__ce_8| { _ = &__ce_8;  }); });
+                return .success;
+},
+.err => |publish_err| {
+_ = (blk_catch_9: { break :blk_catch_9 ((FD.cwd().deleteTree(staging.val.slice())) catch |__ce_9| { _ = &__ce_9;  }); });
+                _ = (blk_catch_10: { break :blk_catch_10 ((FD.cwd().deleteTree(old.val.slice())) catch |__ce_10| { _ = &__ce_10;  }); });
+                return (if (Installer.isRenameCollision(publish_err)) .success else .initErr(publish_err));
+},
+}
+            }
+            _ = (blk_catch_11: { break :blk_catch_11 ((FD.cwd().deleteTree(staging.val.slice())) catch |__ce_11| { _ = &__ce_11;  }); });
+            return .success;
+},
+}
+    }
+
+pub fn isRenameCollision(err: sys.Error) bool {
+            return (switch (err.getErrno()) {
+.EXIST, .NOTEMPTY => true,
+.PERM, .ACCES => Environment.isWindows,
+else => false,
+});
+    }
+
+pub fn appendLocalStoreEntryPath(self: *const Installer, buf: anytype, entry_id: Store.Entry.Id) void {
+            _ = buf.appendFmt((("node_modules/" ++ Store.modules_dir_name) ++ "/{f}"), .{ Store.Entry.fmtStorePath(entry_id, self.store, self.lockfile) });
+    }
+
+pub fn linkProjectToGlobalStore(self: *const Installer, entry_id: Store.Entry.Id) sys.Maybe(void) {
+            var dest = DeinitGuard(PathAuto){ .val = .initTopLevelDir() };
+            _ = &dest;
+            var __dest_moved = false; _ = &__dest_moved;
+            defer if (!__dest_moved) { __dest_moved = true; const __T = @TypeOf(dest); if (@typeInfo(__T) == .optional) { if (dest) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { dest.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = dest; _drop_val.__cp_deinit(); } };
+            _ = self.appendLocalStoreEntryPath((&dest.val), entry_id);
+            var target_abs = DeinitGuard(AbsPathAuto){ .val = .init() };
+            _ = &target_abs;
+            var __target_abs_moved = false; _ = &__target_abs_moved;
+            defer if (!__target_abs_moved) { __target_abs_moved = true; const __T = @TypeOf(target_abs); if (@typeInfo(__T) == .optional) { if (target_abs) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { target_abs.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = target_abs; _drop_val.__cp_deinit(); } };
+            _ = self.appendGlobalStoreEntryPath((&target_abs.val), entry_id, .final);
+            const do_symlink = struct {
+
+pub fn call(d: [:0]const u8, t: [:0]const u8) sys.Maybe(void) {
+            if (comptime Environment.isWindows) {
+                return sys.symlinkOrJunction(d, t, t);
+            }
+            return sys.symlink(t, d);
+    }
+}.call;
+            switch (do_symlink(dest.val.sliceZ(), target_abs.val.sliceZ())) {
+.result => {
+return .success;
+},
+.err => |err| {
+switch (err.getErrno()) {
+.NOENT => {
+if (dest.val.dirname()) |parent| {
+                _ = &parent;
+                _ = (blk_catch_12: { break :blk_catch_12 ((FD.cwd().makePath(u8, parent)) catch |__ce_12| { _ = &__ce_12;  }); });
+            }
+},
+.EXIST => {
+const is_symlink = (if (comptime Environment.isWindows) (if (sys.getFileAttributes(dest.val.sliceZ())) |a| a.is_reparse_point else true) else (if (sys.lstat(dest.val.sliceZ()).asValue()) |st| std.posix.S.ISLNK(@intCast(st.mode)) else true));
+            if (is_symlink) {
+                if (comptime Environment.isWindows) {
+                    if (sys.rmdir(dest.val.sliceZ()).asErr()) |_| {
+                        _ = sys.unlink(dest.val.sliceZ());
+                    }
+                } else {
+                    _ = sys.unlink(dest.val.sliceZ());
+                }
+            } else {
+                _ = (blk_catch_13: { break :blk_catch_13 ((FD.cwd().deleteTree(dest.val.slice())) catch |__ce_13| { _ = &__ce_13;  }); });
+            }
+},
+else => {
+return .initErr(err);
+},
+}
+},
+}
+            return do_symlink(dest.val.sliceZ(), target_abs.val.sliceZ());
+    }
+
+pub fn appendStoreNodeModulesPath(self: *const Installer, buf: anytype, entry_id: Store.Entry.Id) void {
+            const string_buf = self.lockfile.buffers.string_bytes.items;
+            const entries = self.store.entries.slice();
+            const entry_node_ids = entries.items(.node_id);
+            const nodes = self.store.nodes.slice();
+            const node_pkg_ids = nodes.items(.pkg_id);
+            const pkgs = self.lockfile.packages.slice();
+            const pkg_resolutions = pkgs.items(.resolution);
+            const node_id = entry_node_ids[@as(usize, @intCast(entry_id.get()))];
+            const pkg_id = node_pkg_ids[@as(usize, @intCast(node_id.get()))];
+            const pkg_res = pkg_resolutions[@as(usize, @intCast(pkg_id))];
+            switch (pkg_res.tag) {
+.root => {
+_ = buf.append("node_modules");
+},
+.workspace => {
+_ = buf.append((if (@typeInfo(@TypeOf(pkg_res)) == .@"enum") @intFromEnum(pkg_res) else pkg_res.value).workspace.slice(string_buf));
+            _ = buf.append("node_modules");
+},
+else => {
+_ = buf.appendFmt((("node_modules/" ++ Store.modules_dir_name) ++ "/{f}/node_modules"), .{ Store.Entry.fmtStorePath(entry_id, self.store, self.lockfile) });
+},
+}
+    }
+
+pub fn appendRealStoreNodeModulesPath(self: *const Installer, buf: anytype, entry_id: Store.Entry.Id, which: Which) void {
+            if (self.entryUsesGlobalStore(entry_id)) {
+                _ = self.appendGlobalStoreEntryPath(buf, entry_id, which);
+                _ = buf.append("node_modules");
+                return;
+            }
+            _ = self.appendStoreNodeModulesPath(buf, entry_id);
+    }
+
+pub fn appendRealStorePath(self: *const Installer, buf: anytype, entry_id: Store.Entry.Id, which: Which) void {
+            if (self.entryUsesGlobalStore(entry_id)) {
+                const string_buf = self.lockfile.buffers.string_bytes.items;
+                const node_id = self.store.entries.items(.node_id)[@as(usize, @intCast(entry_id.get()))];
+                const pkg_id = self.store.nodes.items(.pkg_id)[@as(usize, @intCast(node_id.get()))];
+                const pkg_name = self.lockfile.packages.items(.name)[@as(usize, @intCast(pkg_id))];
+                _ = self.appendGlobalStoreEntryPath(buf, entry_id, which);
+                _ = buf.append("node_modules");
+                _ = buf.append(pkg_name.slice(string_buf));
+                return;
+            }
+            _ = self.appendStorePath(buf, entry_id);
+    }
+
+pub fn appendStorePath(self: *const Installer, buf: anytype, entry_id: Store.Entry.Id) void {
+            const string_buf = self.lockfile.buffers.string_bytes.items;
+            const entries = self.store.entries.slice();
+            const entry_node_ids = entries.items(.node_id);
+            const nodes = self.store.nodes.slice();
+            const node_pkg_ids = nodes.items(.pkg_id);
+            const node_dep_ids = nodes.items(.dep_id);
+            const pkgs = self.lockfile.packages.slice();
+            const pkg_names = pkgs.items(.name);
+            const pkg_resolutions = pkgs.items(.resolution);
+            const node_id = entry_node_ids[@as(usize, @intCast(entry_id.get()))];
+            const pkg_id = node_pkg_ids[@as(usize, @intCast(node_id.get()))];
+            const dep_id = node_dep_ids[@as(usize, @intCast(node_id.get()))];
+            const pkg_res = pkg_resolutions[@as(usize, @intCast(pkg_id))];
+            switch (pkg_res.tag) {
+.root => {
+if ((dep_id != invalid_dependency_id)) {
+                const pkg_name = pkg_names[@as(usize, @intCast(pkg_id))];
+                _ = buf.append(("node_modules/" ++ Store.modules_dir_name));
+                _ = buf.appendFmt("{f}", .{ Store.Entry.fmtStorePath(entry_id, self.store, self.lockfile) });
+                _ = buf.append("node_modules");
+                if (pkg_name.isEmpty()) {
+                    _ = buf.append(std.fs.path.basename(bun.fs.FileSystem.instance.top_level_dir));
+                } else {
+                    _ = buf.append(pkg_name.slice(string_buf));
+                }
+            } else {
+            }
+},
+.workspace => {
+_ = buf.append((if (@typeInfo(@TypeOf(pkg_res)) == .@"enum") @intFromEnum(pkg_res) else pkg_res.value).workspace.slice(string_buf));
+},
+.symlink => {
+const symlink_dir_path = self.manager.globalLinkDirPath();
+            _ = buf.clear();
+            _ = buf.append(symlink_dir_path);
+            _ = buf.append((if (@typeInfo(@TypeOf(pkg_res)) == .@"enum") @intFromEnum(pkg_res) else pkg_res.value).symlink.slice(string_buf));
+},
+else => {
+const pkg_name = pkg_names[@as(usize, @intCast(pkg_id))];
+            _ = buf.append(("node_modules/" ++ Store.modules_dir_name));
+            _ = buf.appendFmt("{f}", .{ Store.Entry.fmtStorePath(entry_id, self.store, self.lockfile) });
+            _ = buf.append("node_modules");
+            _ = buf.append(pkg_name.slice(string_buf));
+},
+}
+    }
+
+pub fn entryStoreNodeModulesPackageName(self: *const Installer, dep_id: DependencyID, pkg_id: PackageID, pkg_res: *const Resolution, pkg_names: []const String) ?[]const u8 {
+            const string_buf = self.lockfile.buffers.string_bytes.items;
+            return (switch (pkg_res.tag) {
+.root => {
+{
+                if ((dep_id != invalid_dependency_id)) {
+                    const pkg_name = pkg_names[@as(usize, @intCast(pkg_id))];
+                    if (pkg_name.isEmpty()) {
+                        return std.fs.path.basename(bun.fs.FileSystem.instance.top_level_dir);
+                    }
+                    const slice_fn = @TypeOf(pkg_name).slice;
+                    return slice_fn((&pkg_name), string_buf);
+                }
+                return null;
+            }
+},
+.workspace => null,
+.symlink => null,
+else => brk: {
+            const p_name = (&pkg_names[@as(usize, @intCast(pkg_id))]);
+            const slice_fn = @TypeOf(p_name.*).slice;
+            break :brk slice_fn(p_name, string_buf);
+},
+});
+    }
+    const Which = TopWhich;
+    pub const Task = TopTask;
+    const PatchInfo = TopPatchInfo;
+};
+
 const Symlinker = SymlinkerModule.Symlinker;
 const Environment = bun.Environment;
 const FD = bun.FD;
@@ -38,1995 +1936,11 @@ const invalid_dependency_id = install.invalid_dependency_id;
 const Lockfile = install.Lockfile;
 const Package = Lockfile.Package;
 const debug = Output.scoped(.IsolatedInstaller, .hidden);
-pub const Installer = struct {
-    trusted_dependencies_mutex: Mutex,
-    // this is not const for `lockfile.trusted_dependencies`
-    lockfile: *Lockfile,
-
-    summary: PackageInstall.Summary = .{ .successfully_installed = .empty },
-    installed: Bitset,
-    install_node: ?*Progress.Node,
-    scripts_node: ?*Progress.Node,
-    is_new_bun_modules: bool,
-
-    manager: *PackageManager,
-    command_ctx: Command.Context,
-
-    store: *const Store,
-
-    task_queue: bun.UnboundedQueue(Task, .next) = .{},
-    tasks: []Task,
-
-    supported_backend: std.atomic.Value(PackageInstall.Method),
-
-    trusted_dependencies_from_update_requests: std.AutoArrayHashMapUnmanaged(TruncatedPackageNameHash, void),
-
-    /// Absolute path to the global virtual store (`<cache_dir>/links`). When
-    /// non-null, npm/git/tarball entries are materialized once into this
-    /// directory && `node_modules/.bun/<storepath>` becomes a symlink into
-    /// it, so warm installs are O(packages) symlinks instead of O(files)
-    /// clonefile work.
-    global_store_path: ?[:0]const u8,
-
-    /// Per-process suffix for staging global-store entries. Each entry is
-    /// built under `<cache>/links/<storepath>-<hash>.tmp-<this>/` (package
-    /// files, dep symlinks, bin links — all relative within the entry, so
-    /// they resolve identically after the rename) && renamed into place as
-    /// the final step. The directory existing at its final path is the only
-    /// completeness signal the warm-hit check needs.
-    global_store_tmp_suffix: u64,
-
-    pub fn deinit(this: *Installer) void {
-        this.trusted_dependencies_from_update_requests.deinit(this.lockfile.allocator);
-    }
-
-    /// Called from main thread
-    pub fn startTask(this: *Installer, entry_id: Store.Entry.Id) void {
-        var task = &this.tasks[entry_id.get()];
-        bun.debugAssert(switch (task.result) {
-            // first time starting the task
-            .none => true,
-            // the task returned to the main thread because it was blocked
-            .blocked => true,
-            // the task returned to the main thread to spawn some scripts
-            .run_scripts => true,
-            else => false,
-        });
-
-        task.result = .none;
-        this.manager.thread_pool.schedule(.from(&task.task));
-    }
-
-    pub fn onPackageExtracted(this: *Installer, task_id: install.Task.Id) void {
-        if (this.manager.task_queue.fetchRemove(task_id)) |removed| {
-            const store = this.store;
-
-            const node_pkg_ids = store.nodes.items(.pkg_id);
-
-            const entries = store.entries.slice();
-            const entry_steps = entries.items(.step);
-            const entry_node_ids = entries.items(.node_id);
-
-            const pkgs = this.lockfile.packages.slice();
-            const pkg_names = pkgs.items(.name);
-            const pkg_name_hashes = pkgs.items(.name_hash);
-            const pkg_resolutions = pkgs.items(.resolution);
-
-            for (removed.value.items) |install_ctx| {
-                const entry_id = install_ctx.isolated_package_install_context;
-
-                const node_id = entry_node_ids[entry_id.get()];
-                const pkg_id = node_pkg_ids[node_id.get()];
-                const pkg_name = pkg_names[pkg_id];
-                const pkg_name_hash = pkg_name_hashes[pkg_id];
-                const pkg_res = &pkg_resolutions[pkg_id];
-
-                const patch_info = bun.handleOom(this.packagePatchInfo(pkg_name, pkg_name_hash, pkg_res));
-
-                if (patch_info == .patch) {
-                    var log: bun.logger.Log = .init(this.manager.allocator);
-                    this.applyPackagePatch(entry_id, patch_info.patch, &log);
-                    if (log.hasErrors()) {
-                        // monotonic is okay because we haven't started the task yet (it isn't running
-                        // on another thread)
-                        entry_steps[entry_id.get()].store(.done, .monotonic);
-                        this.onTaskFail(entry_id, .{ .patching = log });
-                        continue;
-                    }
-                }
-
-                this.startTask(entry_id);
-            }
-        }
-    }
-
-    /// Called from main thread when a tarball download || extraction fails.
-    /// Without this, the upfront pending-task slot for each waiting entry is
-    /// never released && the install loop blocks forever on
-    /// `pendingTaskCount() == 0`.
-    pub fn onPackageDownloadError(
-        this: *Installer,
-        task_id: install.Task.Id,
-        name: []const u8,
-        resolution: *const Resolution,
-        download_err: anyerror,
-        url: []const u8,
-    ) void {
-        if (this.manager.task_queue.fetchRemove(task_id)) |removed| {
-            var callbacks = removed.value;
-            defer callbacks.deinit(this.manager.allocator);
-
-            const entry_steps = this.store.entries.items(.step);
-            for (callbacks.items) |install_ctx| {
-                const entry_id = install_ctx.isolated_package_install_context;
-                entry_steps[entry_id.get()].store(.done, .monotonic);
-                this.onTaskFail(entry_id, Task.Error{ .download = .{
-                    .download_err = download_err,
-                    .url = url,
-                } });
-            }
-        } else {
-            // No waiting entry — still surface the error so it isn't lost.
-            const string_buf = this.lockfile.buffers.string_bytes.items;
-            Output.errGeneric("failed to download <b>{s}@{f}<r>: {s}\n  <d>{s}<r>", .{
-                name,
-                resolution.fmt(string_buf, .auto),
-                downloadErrorReason(download_err),
-                url,
-            });
-            Output.flush();
-        }
-    }
-
-    fn downloadErrorReason(e: anyerror) []const u8 {
-        return switch (e) {
-            error.TarballHTTP400 => "400 Bad Request",
-            error.TarballHTTP401 => "401 Unauthorized",
-            error.TarballHTTP402 => "402 Payment Required",
-            error.TarballHTTP403 => "403 Forbidden",
-            error.TarballHTTP404 => "404 Not Found",
-            error.TarballHTTP4xx => "HTTP 4xx",
-            error.TarballHTTP5xx => "HTTP 5xx",
-            error.TarballFailedToExtract => "failed to extract",
-            error.TarballFailedToDownload => "download failed",
-            else => @errorName(e),
-        };
-    }
-
-    pub fn applyPackagePatch(this: *Installer, entry_id: Store.Entry.Id, patch: PatchInfo.Patch, log: *bun.logger.Log) void {
-        const store = this.store;
-        const entry_node_ids = store.entries.items(.node_id);
-        const node_id = entry_node_ids[entry_id.get()];
-        const node_pkg_ids = store.nodes.items(.pkg_id);
-        const pkg_id = node_pkg_ids[node_id.get()];
-        const patch_task = install.PatchTask.newApplyPatchHash(
-            this.manager,
-            pkg_id,
-            patch.contents_hash,
-            patch.name_and_version_hash,
-        );
-        defer patch_task.deinit();
-        bun.handleOom(patch_task.apply());
-
-        if (patch_task.callback.apply.logger.hasErrors()) {
-            bun.handleOom(patch_task.callback.apply.logger.cloneToWithRecycled(log, true));
-        }
-    }
-
-    /// Called from main thread
-    pub fn onTaskFail(this: *Installer, entry_id: Store.Entry.Id, err: Task.Error) void {
-        const string_buf = this.lockfile.buffers.string_bytes.items;
-
-        const entries = this.store.entries.slice();
-        const entry_node_ids = entries.items(.node_id);
-
-        const nodes = this.store.nodes.slice();
-        const node_pkg_ids = nodes.items(.pkg_id);
-
-        const pkgs = this.lockfile.packages.slice();
-        const pkg_names = pkgs.items(.name);
-        const pkg_resolutions = pkgs.items(.resolution);
-
-        const node_id = entry_node_ids[entry_id.get()];
-        const pkg_id = node_pkg_ids[node_id.get()];
-
-        const pkg_name = pkg_names[pkg_id];
-        const pkg_res = pkg_resolutions[pkg_id];
-
-        switch (err) {
-            .link_package => |link_err| {
-                Output.err(link_err, "failed to link package: {s}@{f}", .{
-                    pkg_name.slice(string_buf),
-                    pkg_res.fmt(string_buf, .auto),
-                });
-            },
-            .symlink_dependencies => |symlink_err| {
-                Output.err(symlink_err, "failed to symlink dependencies for package: {s}@{f}", .{
-                    pkg_name.slice(string_buf),
-                    pkg_res.fmt(string_buf, .auto),
-                });
-            },
-            .patching => |patch_log| {
-                Output.errGeneric("failed to patch package: {s}@{f}", .{
-                    pkg_name.slice(string_buf),
-                    pkg_res.fmt(string_buf, .auto),
-                });
-                patch_log.print(Output.errorWriter()) catch {};
-            },
-            .binaries => |bin_err| {
-                Output.err(bin_err, "failed to link binaries for package: {s}@{f}", .{
-                    pkg_name.slice(string_buf),
-                    pkg_res.fmt(string_buf, .auto),
-                });
-            },
-            .download => |dl| {
-                Output.errGeneric("failed to download <b>{s}@{f}<r>: {s}\n  <d>{s}<r>", .{
-                    pkg_name.slice(string_buf),
-                    pkg_res.fmt(string_buf, .auto),
-                    downloadErrorReason(dl.download_err),
-                    dl.url,
-                });
-            },
-            else => {},
-        }
-        Output.flush();
-
-        // Clean up the staging directory so a half-built global-store entry
-        // doesn't leak in the cache (it would never be reused — the suffix is
-        // random — but it's wasted disk).
-        if (this.entryUsesGlobalStore(entry_id)) {
-            var staging: bun.AbsPath(.{ .sep = .auto }) = .init();
-            defer staging.deinit();
-            this.appendGlobalStoreEntryPath(&staging, entry_id, .staging);
-            FD.cwd().deleteTree(staging.slice()) catch {};
-        }
-
-        // attempt deleting the package so the next install will install it again
-        switch (pkg_res.tag) {
-            .uninitialized,
-            .single_file_module,
-            .root,
-            .workspace,
-            .symlink,
-            => {},
-
-            _ => {},
-
-            // to be safe make sure we only delete packages in the store
-            .npm,
-            .git,
-            .github,
-            .local_tarball,
-            .remote_tarball,
-            .folder,
-            => {
-                var store_path: bun.RelPath(.{ .sep = .auto }) = .init();
-                defer store_path.deinit();
-
-                store_path.appendFmt("node_modules/{f}", .{
-                    Store.Entry.fmtStorePath(entry_id, this.store, this.lockfile),
-                });
-
-                _ = sys.unlink(store_path.sliceZ());
-            },
-        }
-
-        if (this.manager.options.enable.fail_early) {
-            Global.exit(1);
-        }
-
-        this.summary.fail += 1;
-
-        this.decrementPendingTasks();
-        this.resumeUnblockedTasks();
-    }
-
-    pub fn decrementPendingTasks(this: *Installer) void {
-        this.manager.decrementPendingTasks();
-    }
-
-    /// Called from main thread
-    pub fn onTaskBlocked(this: *Installer, entry_id: Store.Entry.Id) void {
-        // race condition (fixed now): task decides it is blocked because one of its dependencies
-        // has not finished. before the task can mark itself as blocked, the dependency finishes its
-        // install, causing the task to never finish because resumeUnblockedTasks is called before
-        // its state is set to blocked.
-        //
-        // fix: check if the task is unblocked after the task returns blocked, && only set/unset
-        // blocked from the main thread.
-
-        var parent_dedupe: std.AutoArrayHashMap(Store.Entry.Id, void) = .init(bun.default_allocator);
-        defer parent_dedupe.deinit();
-
-        if (!this.isTaskBlocked(entry_id, &parent_dedupe)) {
-            // .monotonic is okay because the task isn't running right now.
-            this.store.entries.items(.step)[entry_id.get()].store(.symlink_dependency_binaries, .monotonic);
-            this.startTask(entry_id);
-            return;
-        }
-
-        // .monotonic is okay because the task isn't running right now.
-        this.store.entries.items(.step)[entry_id.get()].store(.blocked, .monotonic);
-    }
-
-    /// Called from both the main thread (via `onTaskBlocked` && `resumeUnblockedTasks`) && the
-    /// task thread (via `run`). `parent_dedupe` should not be shared between threads.
-    fn isTaskBlocked(this: *Installer, entry_id: Store.Entry.Id, parent_dedupe: *std.AutoArrayHashMap(Store.Entry.Id, void)) bool {
-        const entries = this.store.entries.slice();
-        const entry_deps = entries.items(.dependencies);
-        const entry_steps = entries.items(.step);
-
-        const deps = entry_deps[entry_id.get()];
-        for (deps.slice()) |dep| {
-            if (entry_steps[dep.entry_id.get()].load(.acquire) != .done) {
-                parent_dedupe.clearRetainingCapacity();
-                if (this.store.isCycle(entry_id, dep.entry_id, parent_dedupe)) {
-                    continue;
-                }
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /// Called from main thread
-    pub fn onTaskComplete(this: *Installer, entry_id: Store.Entry.Id, state: enum { success, skipped, fail }) void {
-        if (comptime Environment.ci_assert) {
-            // .monotonic is okay because we should have already synchronized with the completed
-            // task thread by virtue of popping from the `UnboundedQueue`.
-            bun.assertWithLocation(this.store.entries.items(.step)[entry_id.get()].load(.monotonic) == .done, @src());
-        }
-
-        this.decrementPendingTasks();
-        this.resumeUnblockedTasks();
-
-        if (this.install_node) |node| {
-            node.completeOne();
-        }
-
-        const nodes = this.store.nodes.slice();
-
-        const node_id, const real_state = state: {
-            if (entry_id == .root) {
-                break :state .{ .root, .skipped };
-            }
-
-            const node_id = this.store.entries.items(.node_id)[entry_id.get()];
-            const dep_id = nodes.items(.dep_id)[node_id.get()];
-
-            if (dep_id == invalid_dependency_id) {
-                // should be coverd by `entry_id == .root` above, but
-                // just in case
-                break :state .{ .root, .skipped };
-            }
-
-            const dep = this.lockfile.buffers.dependencies.items[dep_id];
-
-            if (dep.behavior.isWorkspace()) {
-                break :state .{ node_id, .skipped };
-            }
-
-            break :state .{ node_id, state };
-        };
-
-        switch (real_state) {
-            .success => {
-                this.summary.success += 1;
-            },
-            .skipped => {
-                this.summary.skipped += 1;
-                return;
-            },
-            .fail => {
-                this.summary.fail += 1;
-                return;
-            },
-        }
-
-        const pkg_id = nodes.items(.pkg_id)[node_id.get()];
-
-        const is_duplicate = this.installed.isSet(pkg_id);
-        this.summary.success += @intFromBool(!is_duplicate);
-        this.installed.set(pkg_id);
-    }
-
-    // This function runs only on the main thread. The installer tasks threads
-    // will be changing values in `entry_step`, but the blocked state is only
-    // set on the main thread, allowing the code between
-    // `entry_steps[entry_id.get()].load(.monotonic)`
-    // &&
-    // `entry_steps[entry_id.get()].store(.symlink_dependency_binaries, .monotonic)`
-    pub fn resumeUnblockedTasks(this: *Installer) void {
-        const entries = this.store.entries.slice();
-        const entry_steps = entries.items(.step);
-
-        var parent_dedupe: std.AutoArrayHashMap(Store.Entry.Id, void) = .init(bun.default_allocator);
-        defer parent_dedupe.deinit();
-
-        for (0..this.store.entries.len) |id_int| {
-            const entry_id: Store.Entry.Id = .from(@intCast(id_int));
-
-            // .monotonic is okay because only the main thread sets this to `.blocked`.
-            const entry_step = entry_steps[entry_id.get()].load(.monotonic);
-            if (entry_step != .blocked) {
-                continue;
-            }
-
-            if (this.isTaskBlocked(entry_id, &parent_dedupe)) {
-                continue;
-            }
-
-            // .monotonic is okay because the task isn't running right now.
-            entry_steps[entry_id.get()].store(.symlink_dependency_binaries, .monotonic);
-            this.startTask(entry_id);
-        }
-    }
-
-    pub const Task = struct {
-        entry_id: Store.Entry.Id,
-        installer: *Installer,
-
-        task: ThreadPool.Task,
-        next: ?*Task,
-
-        result: Result,
-
-        const Result = union(enum) {
-            none,
-            err: Error,
-            blocked,
-            run_scripts: *Package.Scripts.List,
-            done,
-        };
-
-        const Error = union(enum) {
-            link_package: sys.Error,
-            symlink_dependencies: sys.Error,
-            run_scripts: anyerror,
-            binaries: anyerror,
-            patching: bun.logger.Log,
-            download: struct { download_err: anyerror, url: []const u8 },
-
-            pub fn clone(this: *const Error, allocator: std.mem.Allocator) Error {
-                return switch (this.*) {
-                    .link_package => |err| .{ .link_package = err.clone(allocator) },
-                    .symlink_dependencies => |err| .{ .symlink_dependencies = err.clone(allocator) },
-                    .binaries => |err| .{ .binaries = err },
-                    .run_scripts => |err| .{ .run_scripts = err },
-                    .patching => |log| .{ .patching = log },
-                    .download => |dl| .{ .download = dl },
-                };
-            }
-        };
-
-        pub const Step = enum(u8) {
-            link_package,
-            symlink_dependencies,
-
-            check_if_blocked,
-
-            // blocked can only happen here
-
-            symlink_dependency_binaries,
-            run_preinstall,
-
-            // pause here while preinstall runs
-
-            binaries,
-            @"run (post)install && (pre/post)prepare",
-
-            // pause again while remaining scripts run.
-
-            done,
-
-            // only the main thread sets blocked, && only the main thread
-            // sets a blocked task to symlink_dependency_binaries
-            blocked,
-        };
-
-        /// Called from task thread
-        fn nextStep(this: *Task, comptime current_step: Step) Step {
-            const next_step: Step = switch (comptime current_step) {
-                .link_package => .symlink_dependencies,
-                .symlink_dependencies => .check_if_blocked,
-                .check_if_blocked => .symlink_dependency_binaries,
-                .symlink_dependency_binaries => .run_preinstall,
-                .run_preinstall => .binaries,
-                .binaries => .@"run (post)install && (pre/post)prepare",
-                .@"run (post)install && (pre/post)prepare" => .done,
-
-                .done,
-                .blocked,
-                => @compileError("unexpected step"),
-            };
-
-            this.installer.store.entries.items(.step)[this.entry_id.get()].store(next_step, .release);
-
-            return next_step;
-        }
-
-        const Yield = union(enum) {
-            yield,
-            run_scripts: *Package.Scripts.List,
-            done,
-            blocked,
-            fail: Error,
-
-            pub fn failure(e: Error) Yield {
-                // clone here in case a path is kept in a buffer that
-                // will be freed at the end of the current scope.
-                return .{ .fail = e.clone(bun.default_allocator) };
-            }
-        };
-
-        /// Called from task thread
-        fn run(this: *Task) OOM!Yield {
-            const installer = this.installer;
-            const manager = installer.manager;
-            const lockfile = installer.lockfile;
-
-            const pkgs = installer.lockfile.packages.slice();
-            const pkg_names = pkgs.items(.name);
-            const pkg_name_hashes = pkgs.items(.name_hash);
-            const pkg_resolutions = pkgs.items(.resolution);
-            const pkg_resolutions_lists = pkgs.items(.resolutions);
-            const pkg_metas: []const Lockfile.Package.Meta = pkgs.items(.meta);
-            const pkg_bins = pkgs.items(.bin);
-            const pkg_script_lists = pkgs.items(.scripts);
-
-            const entries = installer.store.entries.slice();
-            const entry_node_ids = entries.items(.node_id);
-            const entry_dependencies = entries.items(.dependencies);
-            const entry_steps = entries.items(.step);
-            const entry_scripts = entries.items(.scripts);
-            const entry_hoisted = entries.items(.hoisted);
-
-            const nodes = installer.store.nodes.slice();
-            const node_pkg_ids = nodes.items(.pkg_id);
-            const node_dep_ids = nodes.items(.dep_id);
-
-            const node_id = entry_node_ids[this.entry_id.get()];
-            const pkg_id = node_pkg_ids[node_id.get()];
-            const dep_id = node_dep_ids[node_id.get()];
-
-            const pkg_name = pkg_names[pkg_id];
-            const pkg_name_hash = pkg_name_hashes[pkg_id];
-            const pkg_res = pkg_resolutions[pkg_id];
-
-            return next_step: switch (entry_steps[this.entry_id.get()].load(.acquire)) {
-                inline .link_package => |current_step| {
-                    const string_buf = lockfile.buffers.string_bytes.items;
-
-                    var pkg_cache_dir_subpath: bun.AutoRelPath = .from(switch (pkg_res.tag) {
-                        else => |tag| pkg_cache_dir_subpath: {
-                            const patch_info = try installer.packagePatchInfo(
-                                pkg_name,
-                                pkg_name_hash,
-                                &pkg_res,
-                            );
-
-                            break :pkg_cache_dir_subpath switch (tag) {
-                                .npm => manager.cachedNPMPackageFolderName(pkg_name.slice(string_buf), pkg_res.value.npm.version, patch_info.contentsHash()),
-                                .git => manager.cachedGitFolderName(&pkg_res.value.git, patch_info.contentsHash()),
-                                .github => manager.cachedGitHubFolderName(&pkg_res.value.github, patch_info.contentsHash()),
-                                .local_tarball => manager.cachedTarballFolderName(pkg_res.value.local_tarball, patch_info.contentsHash()),
-                                .remote_tarball => manager.cachedTarballFolderName(pkg_res.value.remote_tarball, patch_info.contentsHash()),
-
-                                else => {
-                                    if (comptime Environment.ci_assert) {
-                                        bun.assertWithLocation(false, @src());
-                                    }
-
-                                    continue :next_step this.nextStep(current_step);
-                                },
-                            };
-                        },
-
-                        .folder, .root => {
-                            const path = switch (pkg_res.tag) {
-                                .folder => pkg_res.value.folder.slice(string_buf),
-                                .root => ".",
-                                else => unreachable,
-                            };
-                            // the folder does not exist in the cache. xdev is per folder dependency
-                            const folder_dir = switch (bun.openDirForIteration(FD.cwd(), path)) {
-                                .result => |fd| fd,
-                                .err => |err| return .failure(.{ .link_package = err }),
-                            };
-                            defer folder_dir.close();
-
-                            backend: switch (PackageInstall.Method.hardlink) {
-                                .hardlink => {
-                                    var src: bun.AbsPath(.{ .unit = .os, .sep = .auto }) = .initTopLevelDirLongPath();
-                                    defer src.deinit();
-                                    src.appendJoin(pkg_res.value.folder.slice(string_buf));
-
-                                    var dest: bun.Path(.{ .unit = .os, .sep = .auto }) = .init();
-                                    defer dest.deinit();
-
-                                    installer.appendStorePath(&dest, this.entry_id);
-
-                                    var hardlinker: Hardlinker = try .init(
-                                        folder_dir,
-                                        src,
-                                        dest,
-                                        &.{comptime bun.OSPathLiteral("node_modules")},
-                                    );
-                                    defer hardlinker.deinit();
-
-                                    switch (try hardlinker.link()) {
-                                        .result => {},
-                                        .err => |err| {
-                                            if (err.getErrno() == .XDEV) {
-                                                continue :backend .copyfile;
-                                            }
-
-                                            if (PackageManager.verbose_install) {
-                                                Output.prettyErrorln(
-                                                    "<red><b>error<r><d>:<r>Failed to hardlink package folder\n{f}\n<d>From: {f}<r>\n<d>  To: {f}<r>\n<r>",
-                                                    .{
-                                                        err,
-                                                        bun.fmt.fmtOSPath(src.slice(), .{ .path_sep = .auto }),
-                                                        bun.fmt.fmtOSPath(dest.slice(), .{ .path_sep = .auto }),
-                                                    },
-                                                );
-                                                Output.flush();
-                                            }
-                                            return .failure(.{ .link_package = err });
-                                        },
-                                    }
-                                },
-
-                                .copyfile => {
-                                    var src_path: bun.AbsPath(.{ .sep = .auto, .unit = .os }) = .init();
-                                    defer src_path.deinit();
-
-                                    if (comptime Environment.isWindows) {
-                                        const src_path_len = bun.windows.GetFinalPathNameByHandleW(
-                                            folder_dir.cast(),
-                                            src_path.buf().ptr,
-                                            @intCast(src_path.buf().len),
-                                            0,
-                                        );
-
-                                        if (src_path_len == 0 or src_path_len >= src_path.buf().len) {
-                                            const err: bun.sys.SystemErrno = if (src_path_len == 0)
-                                                (bun.windows.Win32Error.get().toSystemErrno() orelse .EUNKNOWN)
-                                            else
-                                                .ENAMETOOLONG;
-                                            return .failure(
-                                                .{ .link_package = .{ .errno = @intFromEnum(err), .syscall = .copyfile } },
-                                            );
-                                        }
-
-                                        src_path.setLength(src_path_len);
-                                    }
-
-                                    var dest: bun.Path(.{ .unit = .os, .sep = .auto }) = .init();
-                                    defer dest.deinit();
-                                    installer.appendStorePath(&dest, this.entry_id);
-
-                                    var file_copier: FileCopier = try .init(
-                                        folder_dir,
-                                        src_path,
-                                        dest,
-                                        &.{comptime bun.OSPathLiteral("node_modules")},
-                                    );
-                                    defer file_copier.deinit();
-
-                                    switch (file_copier.copy()) {
-                                        .result => {},
-                                        .err => |err| {
-                                            if (PackageManager.verbose_install) {
-                                                Output.prettyErrorln(
-                                                    "<red><b>error<r><d>:<r>Failed to copy package\n{f}\n<d>From: {f}<r>\n<d>  To: {f}<r>\n<r>",
-                                                    .{
-                                                        err,
-                                                        bun.fmt.fmtOSPath(src_path.slice(), .{ .path_sep = .auto }),
-                                                        bun.fmt.fmtOSPath(dest.slice(), .{ .path_sep = .auto }),
-                                                    },
-                                                );
-                                                Output.flush();
-                                            }
-                                            return .failure(.{ .link_package = err });
-                                        },
-                                    }
-                                },
-
-                                else => unreachable,
-                            }
-
-                            continue :next_step this.nextStep(current_step);
-                        },
-                    });
-                    defer pkg_cache_dir_subpath.deinit();
-
-                    const cache_dir, const cache_dir_path = manager.getCacheDirectoryAndAbsPath();
-                    defer cache_dir_path.deinit();
-
-                    var dest_subpath: bun.Path(.{ .sep = .auto, .unit = .os }) = .init();
-                    defer dest_subpath.deinit();
-                    installer.appendRealStorePath(&dest_subpath, this.entry_id, .staging);
-
-                    const uses_global_store = installer.entryUsesGlobalStore(this.entry_id);
-
-                    if (!uses_global_store) {
-                        // An entry can lose global-store eligibility between
-                        // installs — newly patched, newly trusted, a dep that
-                        // became a workspace package. The previous install
-                        // left `node_modules/.bun/<storepath>` as a symlink
-                        // (|| junction) into the shared `<cache>/links/`
-                        // directory. Writing the new project-local tree
-                        // *through* that link would mutate the shared entry
-                        // underneath every other consumer; on Windows the
-                        // `.expect_missing` dep-symlink rewrite then bakes a
-                        // project-absolute junction target into the shared
-                        // directory, which dangles after the next
-                        // `rm -rf node_modules`. Detach first so the build
-                        // lands in a real project-local directory.
-                        var local: bun.Path(.{ .sep = .auto }) = .initTopLevelDir();
-                        defer local.deinit();
-                        installer.appendLocalStoreEntryPath(&local, this.entry_id);
-                        const is_stale_link = if (comptime Environment.isWindows)
-                            if (sys.getFileAttributes(local.sliceZ())) |a| a.is_reparse_point else false
-                        else if (sys.lstat(local.sliceZ()).asValue()) |st|
-                            std.posix.S.ISLNK(@intCast(st.mode))
-                        else
-                            false;
-                        if (is_stale_link) {
-                            const remove_err: ?sys.Error = if (comptime Environment.isWindows) win: {
-                                if (sys.rmdir(local.sliceZ()).asErr()) |_| {
-                                    if (sys.unlink(local.sliceZ()).asErr()) |e| break :win e;
-                                }
-                                break :win null;
-                            } else sys.unlink(local.sliceZ()).asErr();
-                            if (remove_err) |e| if (e.getErrno() != .NOENT) {
-                                // Do NOT proceed: the backend below would
-                                // write *through* the still-live symlink
-                                // into the shared `<cache>/links/` entry.
-                                return .failure(.{ .link_package = e });
-                            };
-                        }
-                    }
-
-                    if (uses_global_store) {
-                        // Clear any leftover staging directory from a crashed
-                        // earlier run with the same suffix (vanishingly
-                        // unlikely with a 64-bit random suffix, but cheap).
-                        var staging: bun.AbsPath(.{ .sep = .auto }) = .init();
-                        defer staging.deinit();
-                        installer.appendGlobalStoreEntryPath(&staging, this.entry_id, .staging);
-                        FD.cwd().deleteTree(staging.slice()) catch {};
-                    }
-
-                    var cached_package_dir: ?FD = null;
-                    defer if (cached_package_dir) |dir| dir.close();
-
-                    // .monotonic access of `supported_backend` is okay because it's an
-                    // optimization. It's okay if another thread doesn't see an update to this
-                    // value "in time".
-                    backend: switch (installer.supported_backend.load(.monotonic)) {
-                        .clonefile => {
-                            if (comptime !Environment.isMac) {
-                                installer.supported_backend.store(.hardlink, .monotonic);
-                                continue :backend .hardlink;
-                            }
-
-                            if (installer.manager.options.log_level.isVerbose()) {
-                                bun.Output.prettyErrorln(
-                                    "Cloning {f} to {f}",
-                                    .{
-                                        bun.fmt.fmtOSPath(pkg_cache_dir_subpath.sliceZ(), .{ .path_sep = .auto }),
-                                        bun.fmt.fmtOSPath(dest_subpath.sliceZ(), .{ .path_sep = .auto }),
-                                    },
-                                );
-                                bun.Output.flush();
-                            }
-
-                            var cloner: FileCloner = .{
-                                .cache_dir = cache_dir,
-                                .cache_dir_subpath = pkg_cache_dir_subpath,
-                                .dest_subpath = dest_subpath,
-                            };
-
-                            switch (cloner.clone()) {
-                                .result => {},
-                                .err => |err| {
-                                    switch (err.getErrno()) {
-                                        .XDEV => {
-                                            installer.supported_backend.store(.copyfile, .monotonic);
-                                            continue :backend .copyfile;
-                                        },
-                                        .OPNOTSUPP => {
-                                            installer.supported_backend.store(.hardlink, .monotonic);
-                                            continue :backend .hardlink;
-                                        },
-                                        else => {
-                                            return .failure(.{ .link_package = err });
-                                        },
-                                    }
-                                },
-                            }
-
-                            continue :next_step this.nextStep(current_step);
-                        },
-
-                        .hardlink => {
-                            cached_package_dir = switch (bun.openDirForIteration(cache_dir, pkg_cache_dir_subpath.slice())) {
-                                .result => |fd| fd,
-                                .err => |err| {
-                                    if (PackageManager.verbose_install) {
-                                        Output.prettyErrorln(
-                                            "Failed to open cache directory for hardlink: {s}",
-                                            .{
-                                                pkg_cache_dir_subpath.slice(),
-                                            },
-                                        );
-                                        Output.flush();
-                                    }
-                                    return .failure(.{ .link_package = err });
-                                },
-                            };
-
-                            var src: bun.AbsPath(.{ .sep = .auto, .unit = .os }) = .fromLongPath(cache_dir_path.slice());
-                            defer src.deinit();
-                            src.appendJoin(pkg_cache_dir_subpath.slice());
-
-                            const empty_skip: [0]bun.OSPathSlice = undefined;
-                            var hardlinker: Hardlinker = try .init(
-                                cached_package_dir.?,
-                                src,
-                                dest_subpath,
-                                empty_skip[0..0],
-                            );
-                            defer hardlinker.deinit();
-
-                            switch (try hardlinker.link()) {
-                                .result => {},
-                                .err => |err| {
-                                    if (err.getErrno() == .XDEV) {
-                                        installer.supported_backend.store(.copyfile, .monotonic);
-                                        continue :backend .copyfile;
-                                    }
-                                    if (PackageManager.verbose_install) {
-                                        Output.prettyErrorln(
-                                            "<red><b>error<r><d>:<r>Failed to hardlink package\n{f}\n<d>From: {s}<r>\n<d>  To: {f}<r>\n<r>",
-                                            .{
-                                                err,
-                                                pkg_cache_dir_subpath.slice(),
-                                                bun.fmt.fmtOSPath(dest_subpath.slice(), .{ .path_sep = .auto }),
-                                            },
-                                        );
-                                        Output.flush();
-                                    }
-                                    return .failure(.{ .link_package = err });
-                                },
-                            }
-
-                            continue :next_step this.nextStep(current_step);
-                        },
-
-                        // fallthrough copyfile
-                        else => {
-                            cached_package_dir = switch (bun.openDirForIteration(cache_dir, pkg_cache_dir_subpath.slice())) {
-                                .result => |fd| fd,
-                                .err => |err| {
-                                    if (PackageManager.verbose_install) {
-                                        Output.prettyErrorln(
-                                            "<red><b>error<r><d>:<r>Failed to open cache directory for copyfile\n{f}\n<d>From: {s}<r>\n<d>  To: {f}<r>\n<r>",
-                                            .{
-                                                err,
-                                                pkg_cache_dir_subpath.slice(),
-                                                bun.fmt.fmtOSPath(dest_subpath.slice(), .{ .path_sep = .auto }),
-                                            },
-                                        );
-                                        Output.flush();
-                                    }
-                                    return .failure(.{ .link_package = err });
-                                },
-                            };
-
-                            var src_path: bun.AbsPath(.{ .sep = .auto, .unit = .os }) = .from(cache_dir_path.slice());
-                            defer src_path.deinit();
-                            src_path.append(pkg_cache_dir_subpath.slice());
-
-                            const empty_skip: [0]bun.OSPathSlice = undefined;
-                            var file_copier: FileCopier = try .init(
-                                cached_package_dir.?,
-                                src_path,
-                                dest_subpath,
-                                empty_skip[0..0],
-                            );
-                            defer file_copier.deinit();
-
-                            switch (file_copier.copy()) {
-                                .result => {},
-                                .err => |err| {
-                                    if (PackageManager.verbose_install) {
-                                        Output.prettyErrorln(
-                                            "<red><b>error<r><d>:<r>Failed to copy package\n{f}\n<d>From: {s}<r>\n<d>  To: {f}<r>\n<r>",
-                                            .{
-                                                err,
-                                                pkg_cache_dir_subpath.slice(),
-                                                bun.fmt.fmtOSPath(dest_subpath.slice(), .{ .path_sep = .auto }),
-                                            },
-                                        );
-                                        Output.flush();
-                                    }
-                                    return .failure(.{ .link_package = err });
-                                },
-                            }
-
-                            continue :next_step this.nextStep(current_step);
-                        },
-                    }
-                },
-                inline .symlink_dependencies => |current_step| {
-                    const string_buf = lockfile.buffers.string_bytes.items;
-                    const dependencies = lockfile.buffers.dependencies.items;
-
-                    for (entry_dependencies[this.entry_id.get()].slice()) |dep| {
-                        const dep_name = dependencies[dep.dep_id].name.slice(string_buf);
-
-                        var dest: bun.Path(.{ .sep = .auto }) = .initTopLevelDir();
-                        defer dest.deinit();
-
-                        installer.appendRealStoreNodeModulesPath(&dest, this.entry_id, .staging);
-
-                        dest.append(dep_name);
-
-                        if (installer.entryStoreNodeModulesPackageName(dep_id, pkg_id, &pkg_res, pkg_names)) |entry_node_modules_name| {
-                            if (strings.eqlLong(dep_name, entry_node_modules_name, true)) {
-                                // nest the dependency in another node_modules if the name is the same as the entry name
-                                // in the store node_modules to avoid collision
-                                dest.append("node_modules");
-                                dest.append(dep_name);
-                            }
-                        }
-
-                        var dep_store_path: bun.AbsPath(.{ .sep = .auto }) = .initTopLevelDir();
-                        defer dep_store_path.deinit();
-
-                        // When this entry lives in the global virtual store, its
-                        // dep symlinks must point at sibling *global* entries
-                        // (relative `../../<dep>-<hash>/...`) so the entry stays
-                        // valid for any project. Non-global parents (root,
-                        // workspace) keep pointing at the project-local
-                        // `.bun/<storepath>` indirection so `node_modules/<pkg>`
-                        // remains a relative link into `node_modules/.bun/`.
-                        if (installer.entryUsesGlobalStore(this.entry_id)) {
-                            // The eligibility DFS + fixed-point pass guarantee
-                            // every dep of a global entry is itself global; if
-                            // that ever regressed the failure mode is a
-                            // dangling symlink with no install-time error.
-                            bun.debugAssert(installer.entryUsesGlobalStore(dep.entry_id));
-                            // Target the dep's *final* path: the relative
-                            // `../../<dep>/...` link is computed against our
-                            // staging directory but resolves identically once
-                            // we're renamed (same parent), && the dep will
-                            // have been (|| will be) renamed into that final
-                            // path by its own task.
-                            installer.appendRealStorePath(&dep_store_path, dep.entry_id, .final);
-                        } else {
-                            installer.appendStorePath(&dep_store_path, dep.entry_id);
-                        }
-
-                        const target = target: {
-                            var dest_save = dest.save();
-                            defer dest_save.restore();
-
-                            dest.undo(1);
-                            break :target dest.relative(&dep_store_path);
-                        };
-                        defer target.deinit();
-
-                        const symlinker: Symlinker = .{
-                            .dest = dest,
-                            .target = target,
-                            .fallback_junction_target = dep_store_path,
-                        };
-
-                        const link_strategy: Symlinker.Strategy = if (pkg_res.tag == .root or pkg_res.tag == .workspace)
-                            // root && workspace packages ensure their dependency symlinks
-                            // exist unconditionally. To make sure it's fast, first readlink
-                            // then create the symlink if necessary
-                            .expect_existing
-                        else
-                            // Global-store entries are built under a private
-                            // per-process staging directory, so nothing else
-                            // is touching this path.
-                            .expect_missing;
-
-                        switch (symlinker.ensureSymlink(link_strategy)) {
-                            .result => {},
-                            .err => |err| {
-                                return .failure(.{ .symlink_dependencies = err });
-                            },
-                        }
-                    }
-
-                    if (installer.entryUsesGlobalStore(this.entry_id)) {
-                        // The entry now exists in the shared global virtual store.
-                        // Project-local `node_modules/.bun/<storepath>` becomes a
-                        // symlink into it so that the relative `../../<dep>` links
-                        // created above (which live inside the global entry) remain
-                        // reachable from the project's node_modules.
-                        switch (installer.linkProjectToGlobalStore(this.entry_id)) {
-                            .result => {},
-                            .err => |err| {
-                                return .failure(.{ .symlink_dependencies = err });
-                            },
-                        }
-                    }
-
-                    continue :next_step this.nextStep(current_step);
-                },
-                inline .check_if_blocked => |current_step| {
-                    // preinstall scripts need to run before binaries can be linked. Block here if any dependencies
-                    // of this entry are not finished. Do not count cycles towards blocking.
-
-                    var parent_dedupe: std.AutoArrayHashMap(Store.Entry.Id, void) = .init(bun.default_allocator);
-                    defer parent_dedupe.deinit();
-
-                    if (installer.isTaskBlocked(this.entry_id, &parent_dedupe)) {
-                        return .blocked;
-                    }
-
-                    continue :next_step this.nextStep(current_step);
-                },
-                inline .symlink_dependency_binaries => |current_step| {
-                    installer.linkDependencyBins(this.entry_id) catch |e| {
-                        return .failure(.{ .binaries = e });
-                    };
-
-                    switch (pkg_res.tag) {
-                        .uninitialized,
-                        .root,
-                        .workspace,
-                        .folder,
-                        .symlink,
-                        .single_file_module,
-                        => {},
-
-                        _ => {},
-
-                        .npm,
-                        .git,
-                        .github,
-                        .local_tarball,
-                        .remote_tarball,
-                        => {
-                            if (!entry_hoisted[this.entry_id.get()]) {
-                                continue :next_step this.nextStep(current_step);
-                            }
-                            installer.linkToHiddenNodeModules(this.entry_id);
-                        },
-                    }
-
-                    continue :next_step this.nextStep(current_step);
-                },
-                inline .run_preinstall => |current_step| {
-                    if (!installer.manager.options.do.run_scripts or this.entry_id == .root) {
-                        continue :next_step this.nextStep(current_step);
-                    }
-
-                    // The eligibility check excludes any package whose
-                    // lifecycle scripts are trusted to run, so a global-store
-                    // entry should never reach script enqueueing. Guard it
-                    // anyway: `meta.hasInstallScript` can be a false negative
-                    // (yarn-migrated lockfiles force it to `.false`), && a
-                    // script running with cwd inside a shared content-
-                    // addressed directory would mutate every other project's
-                    // copy.
-                    if (installer.entryUsesGlobalStore(this.entry_id)) {
-                        continue :next_step this.nextStep(current_step);
-                    }
-
-                    const string_buf = installer.lockfile.buffers.string_bytes.items;
-
-                    const dep = installer.lockfile.buffers.dependencies.items[dep_id];
-                    const truncated_dep_name_hash: TruncatedPackageNameHash = @truncate(dep.name_hash);
-
-                    const is_trusted, const is_trusted_through_update_request = brk: {
-                        if (installer.trusted_dependencies_from_update_requests.contains(truncated_dep_name_hash)) {
-                            break :brk .{ true, true };
-                        }
-                        if (installer.lockfile.hasTrustedDependency(dep.name.slice(string_buf), &pkg_res)) {
-                            break :brk .{ true, false };
-                        }
-                        break :brk .{ false, false };
-                    };
-
-                    var pkg_cwd: bun.AbsPath(.{ .sep = .auto }) = .initTopLevelDir();
-                    defer pkg_cwd.deinit();
-
-                    installer.appendStorePath(&pkg_cwd, this.entry_id);
-
-                    if (pkg_res.tag != .root and (pkg_res.tag == .workspace or is_trusted)) enqueue_lifecycle_scripts: {
-                        var pkg_scripts: Package.Scripts = pkg_script_lists[pkg_id];
-                        if (is_trusted and manager.postinstall_optimizer.shouldIgnoreLifecycleScripts(
-                            .{
-                                .name_hash = pkg_name_hash,
-                                .version = if (pkg_res.tag == .npm) pkg_res.value.npm.version else null,
-                                .version_buf = lockfile.buffers.string_bytes.items,
-                            },
-                            installer.lockfile.buffers.resolutions.items,
-                            pkg_metas,
-                            manager.options.cpu,
-                            manager.options.os,
-                            null,
-                        )) {
-                            break :enqueue_lifecycle_scripts;
-                        }
-
-                        var log = bun.logger.Log.init(bun.default_allocator);
-                        defer log.deinit();
-
-                        const scripts_list = pkg_scripts.getList(
-                            &log,
-                            installer.lockfile,
-                            &pkg_cwd,
-                            dep.name.slice(string_buf),
-                            &pkg_res,
-                        ) catch |e| {
-                            return .failure(.{ .run_scripts = e });
-                        };
-
-                        if (scripts_list) |list| {
-                            const clone = bun.create(bun.default_allocator, Package.Scripts.List, list);
-                            entry_scripts[this.entry_id.get()] = clone;
-
-                            if (is_trusted_through_update_request) {
-                                const trusted_dep_to_add = try installer.manager.allocator.dupe(u8, dep.name.slice(string_buf));
-
-                                installer.trusted_dependencies_mutex.lock();
-                                defer installer.trusted_dependencies_mutex.unlock();
-
-                                try installer.manager.trusted_deps_to_add_to_package_json.append(
-                                    installer.manager.allocator,
-                                    trusted_dep_to_add,
-                                );
-                                if (installer.lockfile.trusted_dependencies == null) {
-                                    installer.lockfile.trusted_dependencies = .{};
-                                }
-                                const void_val: void = undefined;
-                                const td = &(installer.lockfile.trusted_dependencies.?);
-                                try td.put(installer.manager.allocator, truncated_dep_name_hash, void_val);
-                            }
-
-                            if (list.first_index != 0) {
-                                // has scripts but not a preinstall
-                                continue :next_step this.nextStep(current_step);
-                            }
-
-                            return .{ .run_scripts = clone };
-                        }
-                    }
-
-                    continue :next_step this.nextStep(current_step);
-                },
-                inline .binaries => |current_step| {
-                    if (this.entry_id == .root) {
-                        continue :next_step this.nextStep(current_step);
-                    }
-
-                    const bin = pkg_bins[pkg_id];
-                    if (bin.tag == .none) {
-                        switch (installer.commitGlobalStoreEntry(this.entry_id)) {
-                            .result => {},
-                            .err => |e| return .failure(.{ .link_package = e }),
-                        }
-                        continue :next_step this.nextStep(current_step);
-                    }
-
-                    const string_buf = installer.lockfile.buffers.string_bytes.items;
-                    const dependencies = installer.lockfile.buffers.dependencies.items;
-
-                    const dep_name = dependencies[dep_id].name.slice(string_buf);
-
-                    const abs_target_buf = bun.path_buffer_pool.get();
-                    defer bun.path_buffer_pool.put(abs_target_buf);
-                    const abs_dest_buf = bun.path_buffer_pool.get();
-                    defer bun.path_buffer_pool.put(abs_dest_buf);
-                    const rel_buf = bun.path_buffer_pool.get();
-                    defer bun.path_buffer_pool.put(rel_buf);
-
-                    var seen: bun.StringHashMap(void) = .init(bun.default_allocator);
-                    defer seen.deinit();
-
-                    var node_modules_path: bun.AbsPath(.{}) = .initTopLevelDir();
-                    defer node_modules_path.deinit();
-                    installer.appendRealStoreNodeModulesPath(&node_modules_path, this.entry_id, .staging);
-
-                    var target_node_modules_path: ?bun.AbsPath(.{}) = null;
-                    defer if (target_node_modules_path) |*path| path.deinit();
-
-                    var target_package_name: strings.StringOrTinyString = strings.StringOrTinyString.init(dep_name);
-
-                    if (installer.maybeReplaceNodeModulesPath(
-                        entry_node_ids,
-                        node_pkg_ids,
-                        pkg_name_hashes,
-                        pkg_resolutions_lists,
-                        installer.lockfile.buffers.resolutions.items,
-                        installer.lockfile.packages.items(.meta),
-                        pkg_id,
-                    )) |replacement_entry_id| {
-                        target_node_modules_path = bun.AbsPath(.{}).initTopLevelDir();
-                        installer.appendRealStoreNodeModulesPath(&target_node_modules_path.?, replacement_entry_id, .final);
-
-                        const replacement_node_id = entry_node_ids[replacement_entry_id.get()];
-                        const replacement_pkg_id = node_pkg_ids[replacement_node_id.get()];
-                        target_package_name = strings.StringOrTinyString.init(installer.lockfile.str(&pkg_names[replacement_pkg_id]));
-                    }
-
-                    var target_nm_path = &node_modules_path;
-                    if (target_node_modules_path != null) {
-                        target_nm_path = &target_node_modules_path.?;
-                    }
-
-                    var bin_linker: Bin.Linker = .{
-                        .bin = bin,
-                        .global_bin_path = installer.manager.options.bin_path,
-                        .package_name = strings.StringOrTinyString.init(dep_name),
-                        .target_package_name = target_package_name,
-                        .string_buf = string_buf,
-                        .extern_string_buf = installer.lockfile.buffers.extern_strings.items,
-                        .seen = &seen,
-                        .target_node_modules_path = target_nm_path,
-                        .node_modules_path = &node_modules_path,
-                        .abs_target_buf = abs_target_buf,
-                        .abs_dest_buf = abs_dest_buf,
-                        .rel_buf = rel_buf,
-                    };
-
-                    bin_linker.link(false);
-
-                    if (target_node_modules_path != null and (bin_linker.skipped_due_to_missing_bin or bin_linker.err != null)) {
-                        target_node_modules_path.?.deinit();
-                        target_node_modules_path = null;
-
-                        bin_linker.target_node_modules_path = &node_modules_path;
-                        bin_linker.target_package_name = strings.StringOrTinyString.init(dep_name);
-
-                        if (this.installer.manager.options.log_level.isVerbose()) {
-                            Output.prettyErrorln("<d>[Bin Linker]<r> {s} -> {s} retrying without native bin link", .{
-                                dep_name,
-                                bin_linker.target_package_name.slice(),
-                            });
-                        }
-
-                        bin_linker.link(false);
-                    }
-
-                    if (bin_linker.err) |err| {
-                        return .failure(.{ .binaries = err });
-                    }
-
-                    switch (installer.commitGlobalStoreEntry(this.entry_id)) {
-                        .result => {},
-                        .err => |e| return .failure(.{ .link_package = e }),
-                    }
-
-                    continue :next_step this.nextStep(current_step);
-                },
-                inline .@"run (post)install && (pre/post)prepare" => |current_step| {
-                    if (!installer.manager.options.do.run_scripts or this.entry_id == .root) {
-                        continue :next_step this.nextStep(current_step);
-                    }
-
-                    var list = entry_scripts[this.entry_id.get()] orelse {
-                        continue :next_step this.nextStep(current_step);
-                    };
-
-                    if (list.first_index == 0) {
-                        for (list.items[1..], 1..) |item, i| {
-                            if (item != null) {
-                                list.first_index = @intCast(i);
-                                break;
-                            }
-                        }
-                    }
-
-                    if (list.first_index == 0) {
-                        continue :next_step this.nextStep(current_step);
-                    }
-
-                    // when these scripts finish the package install will be
-                    // complete. the task does not have anymore work to complete
-                    // so it does not return to the thread pool.
-
-                    return .{ .run_scripts = list };
-                },
-
-                .done => {
-                    return .done;
-                },
-
-                .blocked => {
-                    bun.debugAssert(false);
-                    return .yield;
-                },
-            };
-        }
-
-        /// Called from task thread
-        pub fn callback(task: *ThreadPool.Task) void {
-            const this: *Task = @fieldParentPtr("task", task);
-
-            const res = this.run() catch |e| switch (e) {
-                error.OutOfMemory => bun.outOfMemory(),
-            };
-
-            switch (res) {
-                .yield => {},
-                .run_scripts => |list| {
-                    if (comptime Environment.ci_assert) {
-                        bun.assertWithLocation(this.installer.store.entries.items(.scripts)[this.entry_id.get()] != null, @src());
-                    }
-                    this.result = .{ .run_scripts = list };
-                    this.installer.task_queue.push(this);
-                    this.installer.manager.wake();
-                },
-                .done => {
-                    if (comptime Environment.ci_assert) {
-                        // .monotonic is okay because this should have been set by this thread.
-                        bun.assertWithLocation(this.installer.store.entries.items(.step)[this.entry_id.get()].load(.monotonic) == .done, @src());
-                    }
-                    this.result = .done;
-                    this.installer.task_queue.push(this);
-                    this.installer.manager.wake();
-                },
-                .blocked => {
-                    if (comptime Environment.ci_assert) {
-                        // .monotonic is okay because this should have been set by this thread.
-                        bun.assertWithLocation(this.installer.store.entries.items(.step)[this.entry_id.get()].load(.monotonic) == .check_if_blocked, @src());
-                    }
-                    this.result = .blocked;
-                    this.installer.task_queue.push(this);
-                    this.installer.manager.wake();
-                },
-                .fail => |err| {
-                    if (comptime Environment.ci_assert) {
-                        // .monotonic is okay because this should have been set by this thread.
-                        bun.assertWithLocation(this.installer.store.entries.items(.step)[this.entry_id.get()].load(.monotonic) != .done, @src());
-                    }
-                    this.installer.store.entries.items(.step)[this.entry_id.get()].store(.done, .release);
-                    this.result = .{ .err = err };
-                    this.installer.task_queue.push(this);
-                    this.installer.manager.wake();
-                },
-            }
-        }
-    };
-
-    const PatchInfo = union(enum) {
-        none,
-        remove: Remove,
-        patch: Patch,
-
-        pub const Remove = struct {
-            name_and_version_hash: u64,
-        };
-
-        pub const Patch = struct {
-            name_and_version_hash: u64,
-            patch_path: string,
-            contents_hash: u64,
-        };
-
-        pub fn contentsHash(this: *const @This()) ?u64 {
-            return switch (this.*) {
-                .none, .remove => null,
-                .patch => |patch| patch.contents_hash,
-            };
-        }
-
-        pub fn nameAndVersionHash(this: *const @This()) ?u64 {
-            return switch (this.*) {
-                .none, .remove => null,
-                .patch => |patch| patch.name_and_version_hash,
-            };
-        }
-    };
-
-    pub fn packagePatchInfo(
-        this: *Installer,
-        pkg_name: String,
-        pkg_name_hash: PackageNameHash,
-        pkg_res: *const Resolution,
-    ) OOM!PatchInfo {
-        if (this.lockfile.patched_dependencies.entries.len == 0 and this.manager.patched_dependencies_to_remove.entries.len == 0) {
-            return .none;
-        }
-
-        const string_buf = this.lockfile.buffers.string_bytes.items;
-
-        var version_buf: std.ArrayListUnmanaged(u8) = .empty;
-        defer version_buf.deinit(bun.default_allocator);
-
-        var writer = version_buf.writer(this.lockfile.allocator);
-        try writer.print("{s}@", .{pkg_name.slice(string_buf)});
-
-        switch (pkg_res.tag) {
-            .workspace => {
-                if (this.lockfile.workspace_versions.get(pkg_name_hash)) |workspace_version| {
-                    try writer.print("{f}", .{workspace_version.fmt(string_buf)});
-                }
-            },
-            else => {
-                try writer.print("{f}", .{pkg_res.fmt(string_buf, .posix)});
-            },
-        }
-
-        const name_and_version_hash = String.Builder.stringHash(version_buf.items);
-
-        if (this.lockfile.patched_dependencies.get(name_and_version_hash)) |patch| {
-            return .{
-                .patch = .{
-                    .name_and_version_hash = name_and_version_hash,
-                    .patch_path = patch.path.slice(string_buf),
-                    .contents_hash = patch.patchfileHash().?,
-                },
-            };
-        }
-
-        if (this.manager.patched_dependencies_to_remove.contains(name_and_version_hash)) {
-            return .{
-                .remove = .{
-                    .name_and_version_hash = name_and_version_hash,
-                },
-            };
-        }
-
-        return .none;
-    }
-
-    pub fn linkToHiddenNodeModules(this: *const Installer, entry_id: Store.Entry.Id) void {
-        const string_buf = this.lockfile.buffers.string_bytes.items;
-
-        const node_id = this.store.entries.items(.node_id)[entry_id.get()];
-        const pkg_id = this.store.nodes.items(.pkg_id)[node_id.get()];
-        const pkg_name = this.lockfile.packages.items(.name)[pkg_id];
-
-        var hidden_hoisted_node_modules: bun.Path(.{ .sep = .auto }) = .init();
-        defer hidden_hoisted_node_modules.deinit();
-
-        hidden_hoisted_node_modules.append(
-            "node_modules" ++ std.fs.path.sep_str ++ ".bun" ++ std.fs.path.sep_str ++ "node_modules",
-        );
-        hidden_hoisted_node_modules.append(pkg_name.slice(string_buf));
-
-        var target: bun.RelPath(.{ .sep = .auto }) = .init();
-        defer target.deinit();
-
-        target.append("..");
-        if (strings.containsChar(pkg_name.slice(string_buf), '/')) {
-            target.append("..");
-        }
-
-        target.appendFmt("{f}/node_modules/{s}", .{
-            Store.Entry.fmtStorePath(entry_id, this.store, this.lockfile),
-            pkg_name.slice(string_buf),
-        });
-
-        var full_target: bun.AbsPath(.{ .sep = .auto }) = .initTopLevelDir();
-        defer full_target.deinit();
-
-        this.appendStorePath(&full_target, entry_id);
-
-        const symlinker: Symlinker = .{
-            .dest = hidden_hoisted_node_modules,
-            .target = target,
-            .fallback_junction_target = full_target,
-        };
-
-        // symlinks won't exist if node_modules/.bun is new
-        const link_strategy: Symlinker.Strategy = if (this.is_new_bun_modules)
-            .expect_missing
-        else
-            .expect_existing;
-
-        _ = symlinker.ensureSymlink(link_strategy);
-    }
-
-    fn maybeReplaceNodeModulesPath(
-        this: *const Installer,
-        entry_node_ids: []const Store.Node.Id,
-        node_pkg_ids: []const PackageID,
-        name_hashes: []const PackageNameHash,
-        pkg_resolutions_lists: []const Lockfile.PackageIDSlice,
-        pkg_resolutions_buffer: []const PackageID,
-        pkg_metas: []const Package.Meta,
-        pkg_id: PackageID,
-    ) ?Store.Entry.Id {
-        const postinstall_optimizer = &this.manager.postinstall_optimizer;
-        if (!postinstall_optimizer.isNativeBinlinkEnabled()) {
-            return null;
-        }
-        const name_hash = name_hashes[pkg_id];
-
-        if (postinstall_optimizer.get(.{ .name_hash = name_hash })) |optimizer| {
-            switch (optimizer) {
-                .native_binlink => {
-                    const manager = this.manager;
-                    const target_cpu = manager.options.cpu;
-                    const target_os = manager.options.os;
-                    if (PostinstallOptimizer.getNativeBinlinkReplacementPackageID(
-                        pkg_resolutions_lists[pkg_id].get(pkg_resolutions_buffer),
-                        pkg_metas,
-                        target_cpu,
-                        target_os,
-                    )) |replacement_pkg_id| {
-                        for (entry_node_ids, 0..) |new_node_id, new_entry_id| {
-                            if (node_pkg_ids[new_node_id.get()] == replacement_pkg_id) {
-                                debug("native bin link {d} -> {d}", .{ pkg_id, replacement_pkg_id });
-                                return .from(@intCast(new_entry_id));
-                            }
-                        }
-                    }
-                },
-                .ignore => {},
-            }
-        }
-
-        return null;
-    }
-
-    pub fn linkDependencyBins(this: *const Installer, parent_entry_id: Store.Entry.Id) !void {
-        const lockfile = this.lockfile;
-        const store = this.store;
-
-        const string_buf = lockfile.buffers.string_bytes.items;
-        const extern_string_buf = lockfile.buffers.extern_strings.items;
-
-        const entries = store.entries.slice();
-        const entry_node_ids: []const Store.Node.Id = entries.items(.node_id);
-        const entry_deps = entries.items(.dependencies);
-
-        const nodes = store.nodes.slice();
-        const node_pkg_ids = nodes.items(.pkg_id);
-        const node_dep_ids = nodes.items(.dep_id);
-
-        const pkgs = lockfile.packages.slice();
-        const pkg_name_hashes = pkgs.items(.name_hash);
-        const pkg_metas = pkgs.items(.meta);
-        const pkg_resolutions_lists = pkgs.items(.resolutions);
-        const pkg_resolutions_buffer = lockfile.buffers.resolutions.items;
-        const pkg_bins = pkgs.items(.bin);
-
-        const link_target_buf = bun.path_buffer_pool.get();
-        defer bun.path_buffer_pool.put(link_target_buf);
-        const link_dest_buf = bun.path_buffer_pool.get();
-        defer bun.path_buffer_pool.put(link_dest_buf);
-        const link_rel_buf = bun.path_buffer_pool.get();
-        defer bun.path_buffer_pool.put(link_rel_buf);
-
-        var seen: bun.StringHashMap(void) = .init(bun.default_allocator);
-        defer seen.deinit();
-
-        var node_modules_path: bun.AbsPath(.{}) = .initTopLevelDir();
-        defer node_modules_path.deinit();
-
-        this.appendRealStoreNodeModulesPath(&node_modules_path, parent_entry_id, .staging);
-
-        for (entry_deps[parent_entry_id.get()].slice()) |dep| {
-            const node_id = entry_node_ids[dep.entry_id.get()];
-            const dep_id = node_dep_ids[node_id.get()];
-            const pkg_id = node_pkg_ids[node_id.get()];
-            const bin = pkg_bins[pkg_id];
-            if (bin.tag == .none) {
-                continue;
-            }
-            const alias = lockfile.buffers.dependencies.items[dep_id].name;
-
-            var target_node_modules_path: ?bun.AbsPath(.{}) = null;
-            defer if (target_node_modules_path) |*path| path.deinit();
-            const package_name = strings.StringOrTinyString.init(alias.slice(string_buf));
-
-            var target_package_name = package_name;
-
-            if (this.maybeReplaceNodeModulesPath(
-                entry_node_ids,
-                node_pkg_ids,
-                pkg_name_hashes,
-                pkg_resolutions_lists,
-                pkg_resolutions_buffer,
-                pkg_metas,
-                pkg_id,
-            )) |replacement_entry_id| {
-                target_node_modules_path = bun.AbsPath(.{}).initTopLevelDir();
-                this.appendRealStoreNodeModulesPath(&target_node_modules_path.?, replacement_entry_id, .final);
-
-                const replacement_node_id = entry_node_ids[replacement_entry_id.get()];
-                const replacement_pkg_id = node_pkg_ids[replacement_node_id.get()];
-                const pkg_names = pkgs.items(.name);
-                target_package_name = strings.StringOrTinyString.init(this.lockfile.str(&pkg_names[replacement_pkg_id]));
-            }
-
-            var target_nm_path = &node_modules_path;
-            if (target_node_modules_path != null) {
-                target_nm_path = &target_node_modules_path.?;
-            }
-
-            var bin_linker: Bin.Linker = .{
-                .bin = bin,
-                .global_bin_path = this.manager.options.bin_path,
-                .package_name = package_name,
-                .string_buf = string_buf,
-                .extern_string_buf = extern_string_buf,
-                .seen = &seen,
-                .node_modules_path = &node_modules_path,
-                .target_node_modules_path = target_nm_path,
-                .target_package_name = if (target_node_modules_path != null) target_package_name else package_name,
-                .abs_target_buf = link_target_buf,
-                .abs_dest_buf = link_dest_buf,
-                .rel_buf = link_rel_buf,
-            };
-
-            bin_linker.link(false);
-
-            if (target_node_modules_path != null and (bin_linker.skipped_due_to_missing_bin or bin_linker.err != null)) {
-                target_node_modules_path.?.deinit();
-                target_node_modules_path = null;
-
-                bin_linker.target_node_modules_path = &node_modules_path;
-                bin_linker.target_package_name = package_name;
-
-                if (this.manager.options.log_level.isVerbose()) {
-                    Output.prettyErrorln("<d>[Bin Linker]<r> {s} -> {s} retrying without native bin link", .{
-                        package_name.slice(),
-                        target_package_name.slice(),
-                    });
-                }
-
-                bin_linker.link(false);
-            }
-
-            if (bin_linker.err) |err| {
-                return err;
-            }
-        }
-    }
-
-    /// True when this entry should live in the shared global virtual store
-    /// instead of being materialized under the project's `node_modules/.bun/`.
-    /// Root, workspace, folder, symlink, && patched packages always stay
-    /// project-local because their contents are mutable / project-specific.
-    pub fn entryUsesGlobalStore(this: *const Installer, entry_id: Store.Entry.Id) bool {
-        if (this.global_store_path == null) return false;
-        return this.store.entries.items(.entry_hash)[entry_id.get()] != 0;
-    }
-
-    /// Absolute path to the global virtual-store directory for `entry_id`:
-    ///   <cache>/links/<storepath>-<entry_hash>
-    /// (no trailing `/node_modules`). Pass `.staging` to get the per-process
-    /// temp sibling that the build steps write into; the final `binaries`
-    /// step renames staging → final.
-    pub fn appendGlobalStoreEntryPath(this: *const Installer, buf: anytype, entry_id: Store.Entry.Id, which: Which) void {
-        bun.debugAssert(this.entryUsesGlobalStore(entry_id));
-        buf.clear();
-        buf.append(this.global_store_path.?);
-        switch (which) {
-            .final => buf.appendFmt("{f}", .{
-                Store.Entry.fmtGlobalStorePath(entry_id, this.store, this.lockfile),
-            }),
-            .staging => buf.appendFmt("{f}.tmp-{x}", .{
-                Store.Entry.fmtGlobalStorePath(entry_id, this.store, this.lockfile),
-                this.global_store_tmp_suffix,
-            }),
-        }
-    }
-
-    /// Atomically publish a staged global-store entry by renaming
-    /// `<entry>.tmp-<suffix>/` → `<entry>/`. The package tree, dep symlinks,
-    /// dependency-bin links && own-bin links were all written under the
-    /// staging path; every link inside is relative to the entry directory, so
-    /// they resolve identically after the rename. The final directory
-    /// existing is the only completeness signal — no separate stamp file.
-    pub fn commitGlobalStoreEntry(this: *const Installer, entry_id: Store.Entry.Id) sys.Maybe(void) {
-        if (!this.entryUsesGlobalStore(entry_id)) return .success;
-        var staging: bun.AbsPath(.{ .sep = .auto }) = .init();
-        defer staging.deinit();
-        this.appendGlobalStoreEntryPath(&staging, entry_id, .staging);
-        var final: bun.AbsPath(.{ .sep = .auto }) = .init();
-        defer final.deinit();
-        this.appendGlobalStoreEntryPath(&final, entry_id, .final);
-
-        switch (sys.renameat(FD.cwd(), staging.sliceZ(), FD.cwd(), final.sliceZ())) {
-            .result => return .success,
-            .err => |err| {
-                if (!isRenameCollision(err)) {
-                    FD.cwd().deleteTree(staging.slice()) catch {};
-                    return .initErr(err);
-                }
-                // Under --force, the existing entry may be the corrupt one
-                // we were asked to replace. Swap it aside (atomic from a
-                // reader's POV: `final` is always either the old || the new
-                // tree, never missing), publish staging, then GC the old
-                // tree. Without --force, the existing entry came from a
-                // concurrent install && is content-identical — keep it &&
-                // discard ours.
-                if (this.manager.options.enable.force_install) {
-                    var old: bun.AbsPath(.{ .sep = .auto }) = .init();
-                    defer old.deinit();
-                    old.append(this.global_store_path.?);
-                    old.appendFmt("{f}.old-{x}", .{
-                        Store.Entry.fmtGlobalStorePath(entry_id, this.store, this.lockfile),
-                        bun.fastRandom(),
-                    });
-                    if (sys.renameat(FD.cwd(), final.sliceZ(), FD.cwd(), old.sliceZ()).asErr()) |swap_err| {
-                        FD.cwd().deleteTree(staging.slice()) catch {};
-                        return .initErr(swap_err);
-                    }
-                    switch (sys.renameat(FD.cwd(), staging.sliceZ(), FD.cwd(), final.sliceZ())) {
-                        .result => {
-                            FD.cwd().deleteTree(old.slice()) catch {};
-                            return .success;
-                        },
-                        .err => |publish_err| {
-                            // Another --force install raced us in the window
-                            // between swap-out && publish. Theirs is fresh
-                            // too; clean up both temp trees.
-                            FD.cwd().deleteTree(staging.slice()) catch {};
-                            FD.cwd().deleteTree(old.slice()) catch {};
-                            return if (isRenameCollision(publish_err)) .success else .initErr(publish_err);
-                        },
-                    }
-                }
-                FD.cwd().deleteTree(staging.slice()) catch {};
-                // A concurrent install renamed first; both writers produced
-                // the same content-addressed bytes, so theirs is as good as
-                // ours.
-                return .success;
-            },
-        }
-    }
-
-    fn isRenameCollision(err: sys.Error) bool {
-        return switch (err.getErrno()) {
-            .EXIST, .NOTEMPTY => true,
-            // Windows maps a rename onto an in-use directory to
-            // ERROR_ACCESS_DENIED; on POSIX PERM/ACCES are real
-            // permission failures && must propagate.
-            .PERM, .ACCES => Environment.isWindows,
-            else => false,
-        };
-    }
-
-    /// Project-local path `node_modules/.bun/<storepath>` (the symlink that
-    /// points at the global virtual-store entry). Relative to top-level dir.
-    pub fn appendLocalStoreEntryPath(this: *const Installer, buf: anytype, entry_id: Store.Entry.Id) void {
-        buf.appendFmt("node_modules/" ++ Store.modules_dir_name ++ "/{f}", .{
-            Store.Entry.fmtStorePath(entry_id, this.store, this.lockfile),
-        });
-    }
-
-    /// Create the project-level symlink `node_modules/.bun/<storepath>` →
-    /// `<cache>/links/<storepath>-<hash>`. This is the only per-install
-    /// filesystem write for a warm global-store hit.
-    pub fn linkProjectToGlobalStore(this: *const Installer, entry_id: Store.Entry.Id) sys.Maybe(void) {
-        var dest: bun.Path(.{ .sep = .auto }) = .initTopLevelDir();
-        defer dest.deinit();
-        this.appendLocalStoreEntryPath(&dest, entry_id);
-
-        var target_abs: bun.AbsPath(.{ .sep = .auto }) = .init();
-        defer target_abs.deinit();
-        this.appendGlobalStoreEntryPath(&target_abs, entry_id, .final);
-
-        // Absolute target so the link is independent of where node_modules
-        // lives (project root may itself be behind a symlink). Symlinker's
-        // `target` field is RelPath-typed for the common in-tree case, so
-        // call sys.symlink/symlinkOrJunction directly here.
-        const do_symlink = struct {
-            fn call(d: [:0]const u8, t: [:0]const u8) sys.Maybe(void) {
-                if (comptime Environment.isWindows) {
-                    return sys.symlinkOrJunction(d, t, t);
-                }
-                return sys.symlink(t, d);
-            }
-        }.call;
-
-        switch (do_symlink(dest.sliceZ(), target_abs.sliceZ())) {
-            .result => return .success,
-            .err => |err| switch (err.getErrno()) {
-                .NOENT => {
-                    if (dest.dirname()) |parent| {
-                        FD.cwd().makePath(u8, parent) catch {};
-                    }
-                },
-                .EXIST => {
-                    // Existing entry from a previous install. If it's a
-                    // symlink, replace it (stale link from a different
-                    // hash). If it's a real directory, that's the
-                    // pre-global-store layout (`bun patch` detaches
-                    // `node_modules/<pkg>`, not this path).
-                    const is_symlink = if (comptime Environment.isWindows)
-                        if (sys.getFileAttributes(dest.sliceZ())) |a| a.is_reparse_point else true
-                    else if (sys.lstat(dest.sliceZ()).asValue()) |st|
-                        std.posix.S.ISLNK(@intCast(st.mode))
-                    else
-                        true;
-
-                    if (is_symlink) {
-                        if (comptime Environment.isWindows) {
-                            if (sys.rmdir(dest.sliceZ()).asErr()) |_| {
-                                _ = sys.unlink(dest.sliceZ());
-                            }
-                        } else {
-                            _ = sys.unlink(dest.sliceZ());
-                        }
-                    } else {
-                        FD.cwd().deleteTree(dest.slice()) catch {};
-                    }
-                },
-                else => return .initErr(err),
-            },
-        }
-        return do_symlink(dest.sliceZ(), target_abs.sliceZ());
-    }
-
-    pub fn appendStoreNodeModulesPath(this: *const Installer, buf: anytype, entry_id: Store.Entry.Id) void {
-        const string_buf = this.lockfile.buffers.string_bytes.items;
-
-        const entries = this.store.entries.slice();
-        const entry_node_ids = entries.items(.node_id);
-
-        const nodes = this.store.nodes.slice();
-        const node_pkg_ids = nodes.items(.pkg_id);
-
-        const pkgs = this.lockfile.packages.slice();
-        const pkg_resolutions = pkgs.items(.resolution);
-
-        const node_id = entry_node_ids[entry_id.get()];
-        const pkg_id = node_pkg_ids[node_id.get()];
-        const pkg_res = pkg_resolutions[pkg_id];
-
-        switch (pkg_res.tag) {
-            .root => {
-                buf.append("node_modules");
-            },
-            .workspace => {
-                buf.append(pkg_res.value.workspace.slice(string_buf));
-                buf.append("node_modules");
-            },
-            else => {
-                buf.appendFmt("node_modules/" ++ Store.modules_dir_name ++ "/{f}/node_modules", .{
-                    Store.Entry.fmtStorePath(entry_id, this.store, this.lockfile),
-                });
-            },
-        }
-    }
-
-    pub const Which = enum {
-        /// The published location (`<cache>/links/<entry>`). Use for symlink
-        /// *targets* that point at other entries, && for the warm-hit check.
-        final,
-        /// The per-process temp sibling (`<entry>.tmp-<suffix>`) the build
-        /// steps write into. Use for *destinations* of clonefile/hardlink/
-        /// dep-symlink/bin-link when building this entry.
-        staging,
-    };
-
-    /// Like `appendStoreNodeModulesPath`, but resolves to the *physical*
-    /// location of the entry's `node_modules` directory: the global virtual
-    /// store for global-eligible entries, || the project-local `.bun/` path
-    /// otherwise. See `Which` for when to pass `.staging` vs `.final`.
-    pub fn appendRealStoreNodeModulesPath(this: *const Installer, buf: anytype, entry_id: Store.Entry.Id, which: Which) void {
-        if (this.entryUsesGlobalStore(entry_id)) {
-            this.appendGlobalStoreEntryPath(buf, entry_id, which);
-            buf.append("node_modules");
-            return;
-        }
-        this.appendStoreNodeModulesPath(buf, entry_id);
-    }
-
-    /// `appendStorePath` resolved to the entry's *physical* location. See
-    /// `Which` for when to pass `.staging` vs `.final`.
-    pub fn appendRealStorePath(this: *const Installer, buf: anytype, entry_id: Store.Entry.Id, which: Which) void {
-        if (this.entryUsesGlobalStore(entry_id)) {
-            const string_buf = this.lockfile.buffers.string_bytes.items;
-            const node_id = this.store.entries.items(.node_id)[entry_id.get()];
-            const pkg_id = this.store.nodes.items(.pkg_id)[node_id.get()];
-            const pkg_name = this.lockfile.packages.items(.name)[pkg_id];
-            this.appendGlobalStoreEntryPath(buf, entry_id, which);
-            buf.append("node_modules");
-            buf.append(pkg_name.slice(string_buf));
-            return;
-        }
-        this.appendStorePath(buf, entry_id);
-    }
-
-    pub fn appendStorePath(this: *const Installer, buf: anytype, entry_id: Store.Entry.Id) void {
-        const string_buf = this.lockfile.buffers.string_bytes.items;
-
-        const entries = this.store.entries.slice();
-        const entry_node_ids = entries.items(.node_id);
-
-        const nodes = this.store.nodes.slice();
-        const node_pkg_ids = nodes.items(.pkg_id);
-        const node_dep_ids = nodes.items(.dep_id);
-        // const node_peers = nodes.items(.peers);
-
-        const pkgs = this.lockfile.packages.slice();
-        const pkg_names = pkgs.items(.name);
-        const pkg_resolutions = pkgs.items(.resolution);
-
-        const node_id = entry_node_ids[entry_id.get()];
-        // const peers = node_peers[node_id.get()];
-        const pkg_id = node_pkg_ids[node_id.get()];
-        const dep_id = node_dep_ids[node_id.get()];
-        const pkg_res = pkg_resolutions[pkg_id];
-
-        switch (pkg_res.tag) {
-            .root => {
-                if (dep_id != invalid_dependency_id) {
-                    const pkg_name = pkg_names[pkg_id];
-                    buf.append("node_modules/" ++ Store.modules_dir_name);
-                    buf.appendFmt("{f}", .{
-                        Store.Entry.fmtStorePath(entry_id, this.store, this.lockfile),
-                    });
-                    buf.append("node_modules");
-                    if (pkg_name.isEmpty()) {
-                        buf.append(std.fs.path.basename(bun.fs.FileSystem.instance.top_level_dir));
-                    } else {
-                        buf.append(pkg_name.slice(string_buf));
-                    }
-                } else {
-                    // append nothing. buf is already top_level_dir
-                }
-            },
-            .workspace => {
-                buf.append(pkg_res.value.workspace.slice(string_buf));
-            },
-            .symlink => {
-                const symlink_dir_path = this.manager.globalLinkDirPath();
-
-                buf.clear();
-                buf.append(symlink_dir_path);
-                buf.append(pkg_res.value.symlink.slice(string_buf));
-            },
-            else => {
-                const pkg_name = pkg_names[pkg_id];
-                buf.append("node_modules/" ++ Store.modules_dir_name);
-                buf.appendFmt("{f}", .{
-                    Store.Entry.fmtStorePath(entry_id, this.store, this.lockfile),
-                });
-                buf.append("node_modules");
-                buf.append(pkg_name.slice(string_buf));
-            },
-        }
-    }
-
-    /// The directory name for the entry store node_modules install
-    /// folder.
-    /// ./node_modules/.bun/jquery@3.7.1/node_modules/jquery
-    ///                                               ^ this one
-    /// Need to know this to avoid collisions with dependencies
-    /// with the same name as the package.
-    pub fn entryStoreNodeModulesPackageName(
-        this: *const Installer,
-        dep_id: DependencyID,
-        pkg_id: PackageID,
-        pkg_res: *const Resolution,
-        pkg_names: []const String,
-    ) ?[]const u8 {
-        const string_buf = this.lockfile.buffers.string_bytes.items;
-
-        return switch (pkg_res.tag) {
-            .root => {
-                if (dep_id != invalid_dependency_id) {
-                    const pkg_name = pkg_names[pkg_id];
-                    if (pkg_name.isEmpty()) {
-                        return std.fs.path.basename(bun.fs.FileSystem.instance.top_level_dir);
-                    }
-                    return pkg_name.slice(string_buf);
-                }
-                return null;
-            },
-            .workspace => null,
-            .symlink => null,
-            else => pkg_names[pkg_id].slice(string_buf),
-        };
-    }
-};
+const AbsPathAuto = bun.AbsPath(.{ .sep = .auto });
+const RelPathAuto = bun.RelPath(.{ .sep = .auto });
+const PathAuto = bun.Path(.{ .sep = .auto });
+const AbsPathOsAuto = bun.AbsPath(.{ .unit = .os, .sep = .auto });
+const PathOsAuto = bun.Path(.{ .unit = .os, .sep = .auto });
+const AbsPathEmpty = bun.AbsPath(.{});
+const EntryDedupeMap = std.AutoArrayHashMap(Store.Entry.Id, void);
+const SeenMap = bun.StringHashMap(void);

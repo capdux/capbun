@@ -55,6 +55,80 @@ pub const ZlibOptionsTuple = struct { jsc.Node.StringOrBuffer, ?JSValue };
 pub const ZstdOptionsTuple = struct { jsc.Node.StringOrBuffer, ?JSValue };
 pub const ZstdOptionsAsyncTuple = struct { jsc.Node.StringOrBuffer, ?JSValue, i32 };
 
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
+pub struct DeinitWithAllocGuard<T> {
+    val: T,
+    alloc: std.mem.Allocator,
+    ~init() {
+        _.val.deinit(_.alloc);
+    }
+}
+
+pub struct DerefGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deref();
+    }
+}
+
+pub struct FreeGuard<T> {
+    alloc: std.mem.Allocator,
+    ptr: T,
+    ~init() {
+        _.alloc.free(_.ptr);
+    }
+}
+
+pub struct CloseGuard<T> {
+    val: T,
+    ~init() {
+        _.val.close();
+    }
+}
+
+pub struct UnlockGuard<T> {
+    lock: T,
+    ~init() {
+        _.lock.unlock();
+    }
+}
+
+pub struct PathBufferGuard {
+    buf: *bun.PathBuffer,
+    ~init() {
+        bun.path_buffer_pool.put(_.buf);
+    }
+}
+
+pub struct ProtectSliceGuard {
+    slice: []const JSValue,
+    ~init() {
+        for (arg of _.slice) {
+            arg.unprotect();
+        }
+    }
+}
+
+pub struct CustomDirPathsGuard<T> {
+    resolver: T,
+    ~init() {
+        _.resolver.custom_dir_paths = null;
+    }
+}
+
+pub struct ZstdTaskEnqueueGuard {
+    job: *JSZstd.ZstdJob,
+    ~init() {
+        _.job.vm.enqueueTaskConcurrent(jsc.ConcurrentTask.create(_.job.any_task.task()));
+    }
+}
+
 @callconv("c")
 fn mmapDeallocator(ptr: *!?, size: *!?) {
     unsafe {
@@ -314,17 +388,16 @@ pub fn shellEscape(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): 
     const jsval = arguments.ptr[0];
     const bunstr = jsval.toBunString(globalThis)?;
     if (globalThis.hasException()) return JSValue.zero;
-    defer bunstr.deref();
+    const _bunstr_g = DerefGuard<bun.String>{ val: bunstr };
 
-    let outbuf = std.array_list.Managed(u8).init(bun.default_allocator);
-    defer outbuf.deinit();
+    let outbuf_g = DeinitGuard<std.array_list.Managed(u8)>{ val: std.array_list.Managed(u8).init(bun.default_allocator) };
 
     if (bun.shell.needsEscapeBunstr(bunstr)) {
-        const result = bun.shell.escapeBunStr(bunstr, &outbuf, true)?;
+        const result = bun.shell.escapeBunStr(bunstr, &outbuf_g.val, true)?;
         if (!result) {
             return globalThis.throw("String has invalid utf-16: {s}", .{ bunstr.byteSlice() });
         }
-        let str = bun.String.cloneUTF8(outbuf.items[0..]);
+        let str = bun.String.cloneUTF8(outbuf_g.val.items[0..]);
         return str.transferToJS(globalThis);
     }
 
@@ -333,19 +406,18 @@ pub fn shellEscape(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): 
 
 pub fn braces(global: *jsc.JSGlobalObject, brace_str: bun.String, opts: gen.BracesOptions): bun.JSError!jsc.JSValue {
     const brace_slice = brace_str.toUTF8(bun.default_allocator);
-    defer brace_slice.deinit();
+    const _brace_slice_g = DeinitGuard<@TypeOf(brace_slice)>{ val: brace_slice };
 
-    let arena_ = std.heap.ArenaAllocator.init(bun.default_allocator);
-    defer arena_.deinit();
+    let arena_g = DeinitGuard<std.heap.ArenaAllocator>{ val: std.heap.ArenaAllocator.init(bun.default_allocator) };
 
     let lexer_output = lexer_output: {
         if (bun.strings.isAllASCII(brace_slice.slice())) {
-            break :lexer_output Braces.Lexer.tokenize(arena_.allocator(), brace_slice.slice()) catch |e| {
+            break :lexer_output Braces.Lexer.tokenize(arena_g.val.allocator(), brace_slice.slice()) catch |e| {
                 return global.throwError(e, "failed to tokenize braces");
             };
         }
 
-        break :lexer_output Braces.NewLexer(.wtf8).tokenize(arena_.allocator(), brace_slice.slice()) catch |e| {
+        break :lexer_output Braces.NewLexer(.wtf8).tokenize(arena_g.val.allocator(), brace_slice.slice()) catch |e| {
             return global.throwError(e, "failed to tokenize braces");
         };
     };
@@ -354,17 +426,17 @@ pub fn braces(global: *jsc.JSGlobalObject, brace_str: bun.String, opts: gen.Brac
 
     if (opts.tokenize) {
         const str = bun.handleOom(std.fmt.allocPrint(global.bunVM().allocator, "{f}", .{ std.json.fmt(lexer_output.tokens.items[0..], .{}) }));
-        defer global.bunVM().allocator.free(str);
+        const _str_g = FreeGuard<@TypeOf(str)>{ alloc: global.bunVM().allocator, ptr: str };
         let bun_str = bun.String.fromBytes(str);
         return bun_str.toJS(global);
     }
     if (opts.parse) {
-        let parser = Braces.Parser.init(lexer_output.tokens.items[0..], arena_.allocator());
+        let parser = Braces.Parser.init(lexer_output.tokens.items[0..], arena_g.val.allocator());
         const ast_node = parser.parse() catch |e| {
             return global.throwError(e, "failed to parse braces");
         };
         const str = bun.handleOom(std.fmt.allocPrint(global.bunVM().allocator, "{f}", .{ std.json.fmt(ast_node, .{}) }));
-        defer global.bunVM().allocator.free(str);
+        const _str_g = FreeGuard<@TypeOf(str)>{ alloc: global.bunVM().allocator, ptr: str };
         let bun_str = bun.String.fromBytes(str);
         return bun_str.toJS(global);
     }
@@ -373,14 +445,14 @@ pub fn braces(global: *jsc.JSGlobalObject, brace_str: bun.String, opts: gen.Brac
         return bun.String.toJSArray(global, &.{ brace_str });
     }
 
-    let expanded_strings = arena_.allocator().alloc(std.array_list.Managed(u8), expansion_count)?;
+    let expanded_strings = arena_g.val.allocator().alloc(std.array_list.Managed(u8), expansion_count)?;
 
     for (i of 0..expansion_count) {
-        expanded_strings[i] = std.array_list.Managed(u8).init(arena_.allocator());
+        expanded_strings[i] = std.array_list.Managed(u8).init(arena_g.val.allocator());
     }
 
     Braces.expand(
-        arena_.allocator(),
+        arena_g.val.allocator(),
         lexer_output.tokens.items[0..],
         expanded_strings,
         lexer_output.contains_nested,
@@ -389,7 +461,7 @@ pub fn braces(global: *jsc.JSGlobalObject, brace_str: bun.String, opts: gen.Brac
         return global.throwPretty("Unexpected token while expanding braces", .{});
     };
 
-    let out_strings = arena_.allocator().alloc(bun.String, expansion_count)?;
+    let out_strings = arena_g.val.allocator().alloc(bun.String, expansion_count)?;
     for (i of 0..expansion_count) {
         out_strings[i] = bun.String.fromBytes(expanded_strings[i].items[0..]);
     }
@@ -400,65 +472,59 @@ pub fn braces(global: *jsc.JSGlobalObject, brace_str: bun.String, opts: gen.Brac
 pub fn which(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     const arguments_ = callframe.arguments_old(2);
     const path_buf = bun.path_buffer_pool.get();
-    defer bun.path_buffer_pool.put(path_buf);
-    let arguments = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments_.slice());
-    defer arguments.deinit();
-    const path_arg_opt = arguments.nextEat();
+    const _path_buf_g = PathBufferGuard{ buf: path_buf };
+    let arguments_g = DeinitGuard<jsc.CallFrame.ArgumentsSlice>{ val: jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments_.slice()) };
+    const path_arg_opt = arguments_g.val.nextEat();
     if (path_arg_opt == null) {
         return globalThis.throw("which: expected 1 argument, got 0", .{});
     }
     const path_arg = path_arg_opt.?;
 
-    let path_str: ZigString.Slice = ZigString.Slice.empty;
-    let bin_str: ZigString.Slice = ZigString.Slice.empty;
-    let cwd_str: ZigString.Slice = ZigString.Slice.empty;
-    defer {
-        path_str.deinit();
-        bin_str.deinit();
-        cwd_str.deinit();
-    }
+    let path_str_g = DeinitGuard<ZigString.Slice>{ val: ZigString.Slice.empty };
+    let bin_str_g = DeinitGuard<ZigString.Slice>{ val: ZigString.Slice.empty };
+    let cwd_str_g = DeinitGuard<ZigString.Slice>{ val: ZigString.Slice.empty };
 
     if (path_arg.isEmptyOrUndefinedOrNull()) {
         return jsc.JSValue.jsNull();
     }
 
-    bin_str = path_arg.toSlice(globalThis, globalThis.bunVM().allocator)?;
+    bin_str_g.val = path_arg.toSlice(globalThis, globalThis.bunVM().allocator)?;
     if (globalThis.hasException()) {
         return JSValue.zero;
     }
 
-    if (bin_str.len >= bun.MAX_PATH_BYTES) {
+    if (bin_str_g.val.len >= bun.MAX_PATH_BYTES) {
         return globalThis.throw("bin path is too long", .{});
     }
 
-    if (bin_str.len == 0) {
+    if (bin_str_g.val.len == 0) {
         return jsc.JSValue.jsNull();
     }
 
-    path_str = ZigString.Slice.fromUTF8NeverFree(
+    path_str_g.val = ZigString.Slice.fromUTF8NeverFree(
         globalThis.bunVM().transpiler.env.get("PATH") ?? "",
     );
-    cwd_str = ZigString.Slice.fromUTF8NeverFree(
+    cwd_str_g.val = ZigString.Slice.fromUTF8NeverFree(
         globalThis.bunVM().transpiler.fs.top_level_dir,
     );
 
-    if (arg := arguments.nextEat()) {
+    if (arg := arguments_g.val.nextEat()) {
         if (!arg.isEmptyOrUndefinedOrNull() && arg.isObject()) {
             if (str_ := arg.get(globalThis, "PATH")?) {
-                path_str = str_.toSlice(globalThis, globalThis.bunVM().allocator)?;
+                path_str_g.val = str_.toSlice(globalThis, globalThis.bunVM().allocator)?;
             }
 
             if (str_ := arg.get(globalThis, "cwd")?) {
-                cwd_str = str_.toSlice(globalThis, globalThis.bunVM().allocator)?;
+                cwd_str_g.val = str_.toSlice(globalThis, globalThis.bunVM().allocator)?;
             }
         }
     }
 
     if (bin_path := Which.which(
         path_buf,
-        path_str.slice(),
-        cwd_str.slice(),
-        bin_str.slice(),
+        path_str_g.val.slice(),
+        cwd_str_g.val.slice(),
+        bin_str_g.val.slice(),
     )) {
         return ZigString.init(bin_path).withEncoding().toJS(globalThis);
     }
@@ -475,11 +541,7 @@ pub fn inspectTable(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame):
     for (arg of all_arguments) {
         arg.protect();
     }
-    defer {
-        for (arg of all_arguments) {
-            arg.unprotect();
-        }
-    }
+    const _protect_g = ProtectSliceGuard{ slice: all_arguments };
 
     let arguments = all_arguments[0..];
     const value = arguments[0];
@@ -503,9 +565,8 @@ pub fn inspectTable(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame):
     }
 
     // very stable memory address
-    let array = std.Io.Writer.Allocating.init(bun.default_allocator);
-    defer array.deinit();
-    const writer = &array.writer;
+    let array_g = DeinitGuard<std.Io.Writer.Allocating>{ val: std.Io.Writer.Allocating.init(bun.default_allocator) };
+    const writer = &array_g.val.writer;
 
     const Writer = @TypeOf(writer);
     const properties: JSValue = if (arguments[1].jsType().isArray()) arguments[1] else .js_undefined;
@@ -529,7 +590,7 @@ pub fn inspectTable(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame):
 
     writer.flush() catch return error.OutOfMemory;
 
-    return bun.String.createUTF8ForJS(globalThis, array.written());
+    return bun.String.createUTF8ForJS(globalThis, array_g.val.written());
 }
 
 pub fn inspect(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -540,11 +601,7 @@ pub fn inspect(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.
     for (arg of arguments) {
         arg.protect();
     }
-    defer {
-        for (arg of arguments) {
-            arg.unprotect();
-        }
-    }
+    const _protect_g = ProtectSliceGuard{ slice: arguments };
 
     let formatOptions = ConsoleObject.FormatOptions{
         enable_colors: false,
@@ -559,9 +616,8 @@ pub fn inspect(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.
     }
 
     // very stable memory address
-    let array = std.Io.Writer.Allocating.init(bun.default_allocator);
-    defer array.deinit();
-    const writer = &array.writer;
+    let array_g = DeinitGuard<std.Io.Writer.Allocating>{ val: std.Io.Writer.Allocating.init(bun.default_allocator) };
+    const writer = &array_g.val.writer;
     // we buffer this because it'll almost always be < 4096
     // when it's under 4096, we want to avoid the dynamic allocation
     try ConsoleObject.format2(
@@ -577,7 +633,7 @@ pub fn inspect(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.
 
     // we are going to always clone to keep things simple for now
     // the common case here will be stack-allocated, so it should be fine
-    let out = ZigString.init(array.written()).withEncoding();
+    let out = ZigString.init(array_g.val.written()).withEncoding();
     const ret = out.toJS(globalThis);
 
     return ret;
@@ -585,21 +641,18 @@ pub fn inspect(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.
 
 @export @c fn Bun__inspect(globalThis: *JSGlobalObject, value: JSValue): bun.String {
     // very stable memory address
-    let array = std.Io.Writer.Allocating.init(bun.default_allocator);
-    defer array.deinit();
-    const writer = &array.writer;
+    let array_g = DeinitGuard<std.Io.Writer.Allocating>{ val: std.Io.Writer.Allocating.init(bun.default_allocator) };
+    const writer = &array_g.val.writer;
 
-    let formatter = ConsoleObject.Formatter{ globalThis: globalThis };
-    defer formatter.deinit();
-    writer.print("{f}", .{ value.toFmt(&formatter) }) catch return .empty;
+    let formatter_g = DeinitGuard<ConsoleObject.Formatter>{ val: ConsoleObject.Formatter{ globalThis: globalThis } };
+    writer.print("{f}", .{ value.toFmt(&formatter_g.val) }) catch return .empty;
     writer.flush() catch return .empty;
-    return bun.String.cloneUTF8(array.written());
+    return bun.String.cloneUTF8(array_g.val.written());
 }
 
 @export @c fn Bun__inspect_singleline(globalThis: *JSGlobalObject, value: JSValue): bun.String {
-    let array = std.Io.Writer.Allocating.init(bun.default_allocator);
-    defer array.deinit();
-    const writer = &array.writer;
+    let array_g = DeinitGuard<std.Io.Writer.Allocating>{ val: std.Io.Writer.Allocating.init(bun.default_allocator) };
+    const writer = &array_g.val.writer;
     ConsoleObject.format2(.Debug, globalThis, (&value)[0..1].ptr, 1, writer, {
         enable_colors: false,
         add_newline: false,
@@ -611,7 +664,7 @@ pub fn inspect(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.
     }) catch return .empty;
     if (globalThis.hasException()) return .empty;
     writer.flush() catch return .empty;
-    return bun.String.cloneUTF8(array.written());
+    return bun.String.cloneUTF8(array_g.val.written());
 }
 
 pub fn getInspect(globalObject: *jsc.JSGlobalObject, _: *jsc.JSObject): jsc.JSValue {
@@ -691,7 +744,7 @@ fn getMain(globalThis: *jsc.JSGlobalObject): jsc.JSValue {
                 0,
             ).unwrap() catch break :use_resolved_path;
 
-            defer fd.close();
+            const _fd_g = CloseGuard<@TypeOf(fd)>{ val: fd };
             if (comptime Environment.isWindows) {
                 let wpath: bun.WPathBuffer = undefined;
                 const fdpath = bun.getFdPathW(fd, &wpath) catch break :use_resolved_path;
@@ -728,22 +781,21 @@ pub fn getArgv(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject): jsc.JSValue {
 pub fn openInEditor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
     let edit = &VirtualMachine.get().rareData().editor_context;
     const args = callframe.arguments_old(4);
-    let arguments = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), args.slice());
-    defer arguments.deinit();
+    let arguments_g = DeinitGuard<jsc.CallFrame.ArgumentsSlice>{ val: jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), args.slice()) };
     let path: string = "";
     let editor_choice: Editor? = null;
     let line: string? = null;
     let column: string? = null;
 
-    if (file_path_ := arguments.nextEat()) {
-        const slice_val = file_path_.toSlice(globalThis, arguments.@"arena".allocator())?;
+    if (file_path_ := arguments_g.val.nextEat()) {
+        const slice_val = file_path_.toSlice(globalThis, arguments_g.val.@"arena".allocator())?;
         path = slice_val.slice();
     }
 
-    if (opts := arguments.nextEat()) {
+    if (opts := arguments_g.val.nextEat()) {
         if (!opts.isUndefinedOrNull()) {
             if (editor_val := opts.getTruthy(globalThis, "editor")?) {
-                let sliced = editor_val.toSlice(globalThis, arguments.@"arena".allocator())?;
+                let sliced = editor_val.toSlice(globalThis, arguments_g.val.@"arena".allocator())?;
                 const prev_name = edit.name;
 
                 if (!strings.eqlLong(prev_name, sliced.slice(), true)) {
@@ -755,19 +807,19 @@ pub fn openInEditor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame):
                         edit.* = prev;
                         return globalThis.throw("Could not find editor \"{s}\"", .{ sliced.slice() });
                     } else if (edit.name.ptr == edit.path.ptr) {
-                        edit.name = arguments.@"arena".allocator().dupe(u8, edit.path) catch unreachable;
+                        edit.name = arguments_g.val.@"arena".allocator().dupe(u8, edit.path) catch unreachable;
                         edit.path = edit.path;
                     }
                 }
             }
 
             if (line_ := opts.getTruthy(globalThis, "line")?) {
-                const line_slice = line_.toSlice(globalThis, arguments.@"arena".allocator())?;
+                const line_slice = line_.toSlice(globalThis, arguments_g.val.@"arena".allocator())?;
                 line = line_slice.slice();
             }
 
             if (column_ := opts.getTruthy(globalThis, "column")?) {
-                const col_slice = column_.toSlice(globalThis, arguments.@"arena".allocator())?;
+                const col_slice = column_.toSlice(globalThis, arguments_g.val.@"arena".allocator())?;
                 column = col_slice.slice();
             }
         }
@@ -787,7 +839,7 @@ pub fn openInEditor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame):
         return globalThis.throw("No file path specified", .{});
     }
 
-    editor.open(edit.path, path, line, column, arguments.@"arena".allocator()) catch |e| {
+    editor.open(edit.path, path, line, column, arguments_g.val.@"arena".allocator()) catch |e| {
         return globalThis.throw("Opening editor failed {s}", .{ @errorName(e) });
     };
 
@@ -881,9 +933,8 @@ pub fn shrink(globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError
 }
 
 fn doResolve(globalThis: *jsc.JSGlobalObject, arguments: []const JSValue): bun.JSError!jsc.JSValue {
-    let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
-    defer args.deinit();
-    const specifier_opt = args.protectEatNext();
+    let args_g = DeinitGuard<jsc.CallFrame.ArgumentsSlice>{ val: jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments) };
+    const specifier_opt = args_g.val.protectEatNext();
     if (specifier_opt == null) {
         return globalThis.throwInvalidArguments("Expected a specifier and a from path", .{});
     }
@@ -893,7 +944,7 @@ fn doResolve(globalThis: *jsc.JSGlobalObject, arguments: []const JSValue): bun.J
         return globalThis.throwInvalidArguments("specifier must be a string", .{});
     }
 
-    const from_opt = args.protectEatNext();
+    const from_opt = args_g.val.protectEatNext();
     if (from_opt == null) {
         return globalThis.throwInvalidArguments("Expected a from path", .{});
     }
@@ -904,7 +955,7 @@ fn doResolve(globalThis: *jsc.JSGlobalObject, arguments: []const JSValue): bun.J
     }
 
     let is_esm = true;
-    if (next := args.nextEat()) {
+    if (next := args_g.val.nextEat()) {
         if (next.isBoolean()) {
             is_esm = next.toBoolean();
         } else {
@@ -913,9 +964,9 @@ fn doResolve(globalThis: *jsc.JSGlobalObject, arguments: []const JSValue): bun.J
     }
 
     const specifier_str = specifier.toBunString(globalThis)?;
-    defer specifier_str.deref();
+    const _specifier_g = DerefGuard<bun.String>{ val: specifier_str };
     const from_str = from_val.toBunString(globalThis)?;
-    defer from_str.deref();
+    const _from_g = DerefGuard<bun.String>{ val: from_str };
     return doResolveWithArgs(
         globalThis,
         specifier_str,
@@ -928,21 +979,20 @@ fn doResolve(globalThis: *jsc.JSGlobalObject, arguments: []const JSValue): bun.J
 
 fn doResolveWithArgs(ctx: *jsc.JSGlobalObject, specifier: bun.String, from_str: bun.String, is_esm: bool, comptime is_file_path: bool, is_user_require_resolve: bool): bun.JSError!jsc.JSValue {
     let errorable: ErrorableString = undefined;
-    let query_string = bun.String.empty;
-    defer query_string.deref();
+    let query_string_g = DerefGuard<bun.String>{ val: bun.String.empty };
 
     const specifier_decoded = if (specifier.hasPrefixComptime("file://"))
         bun.jsc.URL.pathFromFileURL(specifier)
     else
         specifier.dupeRef();
-    defer specifier_decoded.deref();
+    const _spec_dec_g = DerefGuard<bun.String>{ val: specifier_decoded };
 
     try VirtualMachine.resolveMaybeNeedsTrailingSlash(
         &errorable,
         ctx,
         specifier_decoded,
         from_str,
-        &query_string,
+        &query_string_g.val,
         is_esm,
         is_file_path,
         is_user_require_resolve,
@@ -951,19 +1001,18 @@ fn doResolveWithArgs(ctx: *jsc.JSGlobalObject, specifier: bun.String, from_str: 
     if (!errorable.success) {
         return ctx.throwValue(errorable.result.err.value);
     }
-    defer errorable.result.value.deref();
+    const _err_val_g = DerefGuard<bun.String>{ val: errorable.result.value };
 
-    if (!query_string.isEmpty()) {
+    if (!query_string_g.val.isEmpty()) {
         let stack = std.heap.stackFallback(1024, ctx.allocator());
         const allocator = stack.get();
-        let arraylist = std.array_list.Managed(u8).initCapacity(allocator, 1024) catch unreachable;
-        defer arraylist.deinit();
-        try arraylist.writer().print("{f}{f}", .{ 
+        let arraylist_g = DeinitGuard<std.array_list.Managed(u8)>{ val: std.array_list.Managed(u8).initCapacity(allocator, 1024) catch unreachable };
+        try arraylist_g.val.writer().print("{f}{f}", .{ 
             errorable.result.value,
-            query_string,
+            query_string_g.val,
         });
 
-        return ZigString.initUTF8(arraylist.items).toJS(ctx);
+        return ZigString.initUTF8(arraylist_g.val.items).toJS(ctx);
     }
 
     return errorable.result.value.toJS(ctx);
@@ -984,10 +1033,10 @@ pub fn resolve(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bu
 
 @export @c fn Bun__resolve(global: *JSGlobalObject, specifier: JSValue, source: JSValue, is_esm: bool): jsc.JSValue {
     const specifier_str = specifier.toBunString(global) catch return jsc.JSValue.zero;
-    defer specifier_str.deref();
+    const _specifier_g = DerefGuard<bun.String>{ val: specifier_str };
 
     const source_str = source.toBunString(global) catch return jsc.JSValue.zero;
-    defer source_str.deref();
+    const _source_g = DerefGuard<bun.String>{ val: source_str };
 
     const value = doResolveWithArgs(global, specifier_str, source_str, is_esm, true, false) catch {
         const e = global.tryTakeException().?;
@@ -999,7 +1048,7 @@ pub fn resolve(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bu
 
 @export @c fn Bun__resolveSync(global: *JSGlobalObject, specifier: JSValue, source: JSValue, is_esm: bool, is_user_require_resolve: bool): jsc.JSValue {
     const specifier_str = specifier.toBunString(global) catch return jsc.JSValue.zero;
-    defer specifier_str.deref();
+    const _specifier_g = DerefGuard<bun.String>{ val: specifier_str };
 
     if (specifier_str.length() == 0) {
         if (global.ERR(.INVALID_ARG_VALUE, "The argument 'id' must be a non-empty string. Received ''", .{}).throw() == error.JSError) {}
@@ -1007,7 +1056,7 @@ pub fn resolve(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bu
     }
 
     const source_str = source.toBunString(global) catch return jsc.JSValue.zero;
-    defer source_str.deref();
+    const _source_g = DerefGuard<bun.String>{ val: source_str };
 
     return jsc.toJSHostCall(global, @src(), doResolveWithArgs, .{ global, specifier_str, source_str, is_esm, true, is_user_require_resolve });
 }
@@ -1021,10 +1070,10 @@ pub fn resolve(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bu
     paths_ptr: [*]const bun.String?,
     paths_len: usize,
 ): jsc.JSValue {
-    const paths: []const bun.String = if (paths_len == 0) [] else paths_ptr.?[0..paths_len];
+    const paths: []const bun.String = if (paths_len == 0) [] else unsafe { paths_ptr.?[0..paths_len] };
 
     const specifier_str = specifier.toBunString(global) catch return jsc.JSValue.zero;
-    defer specifier_str.deref();
+    const _specifier_g = DerefGuard<bun.String>{ val: specifier_str };
 
     if (specifier_str.length() == 0) {
         if (global.ERR(.INVALID_ARG_VALUE, "The argument 'id' must be a non-empty string. Received ''", .{}).throw() == error.JSError) {}
@@ -1032,12 +1081,12 @@ pub fn resolve(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bu
     }
 
     const source_str = source.toBunString(global) catch return jsc.JSValue.zero;
-    defer source_str.deref();
+    const _source_g = DerefGuard<bun.String>{ val: source_str };
 
     const bun_vm = global.bunVM();
     bun.assert(bun_vm.transpiler.resolver.custom_dir_paths == null);
     bun_vm.transpiler.resolver.custom_dir_paths = paths;
-    defer bun_vm.transpiler.resolver.custom_dir_paths = null;
+    const _custom_dir_g = CustomDirPathsGuard<@TypeOf(&bun_vm.transpiler.resolver)>{ resolver: &bun_vm.transpiler.resolver };
 
     return jsc.toJSHostCall(global, @src(), doResolveWithArgs, .{ global, specifier_str, source_str, is_esm, true, is_user_require_resolve });
 }
@@ -1049,7 +1098,7 @@ pub fn resolve(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bu
 
 @export @c fn Bun__resolveSyncWithSource(global: *JSGlobalObject, specifier: JSValue, source: *bun.String, is_esm: bool, is_user_require_resolve: bool): jsc.JSValue {
     const specifier_str = specifier.toBunString(global) catch return jsc.JSValue.zero;
-    defer specifier_str.deref();
+    const _specifier_g = DerefGuard<bun.String>{ val: specifier_str };
     if (specifier_str.length() == 0) {
         if (global.ERR(.INVALID_ARG_VALUE, "The argument 'id' must be a non-empty string. Received ''", .{}).throw() == error.JSError) {}
         return .zero;
@@ -1218,7 +1267,7 @@ pub fn serve(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.
 @callconv("c")
 @export pub fn Bun__escapeHTML16(globalObject: *jsc.JSGlobalObject, input_value: JSValue, ptr: [*]const u16, len: usize): JSValue {
     assert(len > 0);
-    const input_slice = ptr[0..len];
+    const input_slice = unsafe { ptr[0..len] };
     const escaped = strings.escapeHTMLForUTF16Input(globalObject.bunVM().allocator, input_slice) catch {
         if (globalObject.throwValue(ZigString.init("Out of memory").toErrorInstance(globalObject)) == error.JSError) {}
         return jsc.JSValue.zero;
@@ -1241,7 +1290,7 @@ pub fn serve(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.
 @export pub fn Bun__escapeHTML8(globalObject: *jsc.JSGlobalObject, input_value: JSValue, ptr: [*]const u8, len: usize): JSValue {
     assert(len > 0);
 
-    const input_slice = ptr[0..len];
+    const input_slice = unsafe { ptr[0..len] };
     let stack_allocator = std.heap.stackFallback(256, globalObject.bunVM().allocator);
     const allocator = if (input_slice.len <= 32) stack_allocator.get() else stack_allocator.fallback_allocator;
 
@@ -1298,14 +1347,13 @@ pub fn mmapFile(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun
     }
 
     const arguments_ = callframe.arguments_old(2);
-    let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments_.slice());
-    defer args.deinit();
+    let args_g = DeinitGuard<jsc.CallFrame.ArgumentsSlice>{ val: jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments_.slice()) };
 
     let buf: bun.PathBuffer = undefined;
     const path = brk: {
-        if (path := args.nextEat()) {
+        if (path := args_g.val.nextEat()) {
             if (path.isString()) {
-                const path_str = path.toSlice(globalThis, args.@"arena".allocator())?;
+                const path_str = path.toSlice(globalThis, args_g.val.@"arena".allocator())?;
                 if (path_str.len > bun.MAX_PATH_BYTES) {
                     return globalThis.throwInvalidArguments("Path too long", .{});
                 }
@@ -1326,7 +1374,7 @@ pub fn mmapFile(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun
     let offset: usize = 0;
     let map_size: usize? = null;
 
-    if (opts := args.nextEat()) {
+    if (opts := args_g.val.nextEat()) {
         if (opts.isObject()) {
             flags.TYPE = if ((try opts.getBooleanLoose(globalThis, "shared")) ?? true)
                 .SHARED
@@ -1369,7 +1417,7 @@ pub fn mmapFile(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun
         },
     };
 
-    return bun.jsc.array_buffer.makeTypedArrayWithBytesNoCopy(globalThis, .TypeUint8, map.ptr, map.len, mmapDeallocator, @ptrFromInt(map.len));
+    return bun.jsc.array_buffer.makeTypedArrayWithBytesNoCopy(globalThis, .TypeUint8, map.ptr, map.len, mmapDeallocator, unsafe { @ptrFromInt(map.len) });
 }
 
 pub fn getTranspilerConstructor(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject): jsc.JSValue {
@@ -1471,21 +1519,20 @@ pub fn getEmbeddedFiles(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject): bun.
     const graph = graph_opt.?;
 
     const unsorted_files = graph.files.values();
-    let sort_indices = bun.handleOom(std.array_list.Managed(u32).initCapacity(bun.default_allocator, unsorted_files.len));
-    defer sort_indices.deinit();
+    let sort_indices_g = DeinitGuard<std.array_list.Managed(u32)>{ val: bun.handleOom(std.array_list.Managed(u32).initCapacity(bun.default_allocator, unsorted_files.len)) };
     for (index of 0..unsorted_files.len) {
         // Some % of people using `bun build --compile` want to obscure the source code
         // We don't really do that right now, but exposing the output source
         // code here as an easily accessible Blob is even worse for them.
         // So let's omit any source code files from the list.
         if (!unsorted_files[index].appearsInEmbeddedFilesArray()) continue;
-        sort_indices.appendAssumeCapacity(@as(u32, @intCast(index)));
+        sort_indices_g.val.appendAssumeCapacity(@as(u32, @intCast(index)));
     }
 
     let i: u32 = 0;
-    let array = jsc.JSValue.createEmptyArray(globalThis, sort_indices.items.len)?;
-    std.mem.sort(u32, sort_indices.items, unsorted_files, bun.StandaloneModuleGraph.File.lessThanByIndex);
-    for (index of sort_indices.items) {
+    let array = jsc.JSValue.createEmptyArray(globalThis, sort_indices_g.val.items.len)?;
+    std.mem.sort(u32, sort_indices_g.val.items, unsorted_files, bun.StandaloneModuleGraph.File.lessThanByIndex);
+    for (index of sort_indices_g.val.items) {
         const file = &unsorted_files[index];
         // We call .dupe() on this to ensure that we don't return a blob that might get freed later.
         const input_blob = file.blob(globalThis);
@@ -1526,7 +1573,7 @@ pub struct EnvironmentVariables {
     }
 
     @export @c static fn Bun__getEnvKey(ptr: [*]EnvKeySlice, i: usize, data_ptr: *[*]const u8): usize {
-        const item = ptr[i];
+        const item = unsafe { ptr[i] };
         data_ptr.* = item.ptr;
         return item.len;
     }
@@ -1545,7 +1592,7 @@ pub struct EnvironmentVariables {
     @export @c static fn Bun__getEnvValueBunString(globalObject: *jsc.JSGlobalObject, name: *bun.String, value: *bun.String): bool {
         const vm = globalObject.bunVM();
         let name_slice = name.toUTF8(bun.default_allocator);
-        defer name_slice.deinit();
+        const _name_g = DeinitGuard<@TypeOf(name_slice)>{ val: name_slice };
         const val_opt = vm.transpiler.env.get(name_slice.slice());
         if (val_opt == null) return false;
         const val = val_opt.?;
@@ -1566,7 +1613,7 @@ pub struct EnvironmentVariables {
     @export @c static fn Bun__setEnvValue(globalObject: *jsc.JSGlobalObject, name: *bun.String, value: *bun.String) {
         const vm = globalObject.bunVM();
         let name_slice = name.toUTF8(bun.default_allocator);
-        defer name_slice.deinit();
+        const _name_g = DeinitGuard<@TypeOf(name_slice)>{ val: name_slice };
 
         const storage = &vm.proxy_env_storage;
 
@@ -1576,7 +1623,7 @@ pub struct EnvironmentVariables {
         // (refcount → 0 → free) and the null write below, then call ref()
         // on freed memory.
         storage.lock.lock();
-        defer storage.lock.unlock();
+        const _lock_g = UnlockGuard<@TypeOf(&storage.lock)>{ lock: &storage.lock };
 
         const slot_opt = storage.slot(name_slice.slice());
         if (slot_opt == null) return;
@@ -1599,7 +1646,7 @@ pub struct EnvironmentVariables {
         }
 
         let value_slice = value.toUTF8(bun.default_allocator);
-        defer value_slice.deinit();
+        const _val_g = DeinitGuard<@TypeOf(value_slice)>{ val: value_slice };
         const new_val = bun.handleOom(bun.default_allocator.create(jsc.RareData.RefCountedEnvValue));
         new_val.* = jsc.RareData.RefCountedEnvValue{
             ref_count: 1,
@@ -1625,7 +1672,7 @@ pub struct EnvironmentVariables {
     static fn getEnvValue(globalObject: *jsc.JSGlobalObject, name: ZigString): ZigString? {
         let vm = globalObject.bunVM();
         let sliced = name.toSlice(vm.allocator);
-        defer sliced.deinit();
+        const _sliced_g = DeinitGuard<@TypeOf(sliced)>{ val: sliced };
         const value_opt = vm.transpiler.env.get(sliced.slice());
         if (value_opt == null) return null;
         const value = value_opt.?;
@@ -1681,7 +1728,7 @@ pub struct JSZlib {
         const opts = (getOptions(globalThis, callframe))?;
         const buffer = opts[0];
         const options_val = opts[1];
-        defer buffer.deinit();
+        const _buf_g = DeinitGuard<jsc.Node.StringOrBuffer>{ val: buffer };
         return gzipOrDeflateSync(globalThis, buffer, options_val, true);
     }
 
@@ -1689,7 +1736,7 @@ pub struct JSZlib {
         const opts = (getOptions(globalThis, callframe))?;
         const buffer = opts[0];
         const options_val = opts[1];
-        defer buffer.deinit();
+        const _buf_g = DeinitGuard<jsc.Node.StringOrBuffer>{ val: buffer };
         return gunzipOrInflateSync(globalThis, buffer, options_val, false);
     }
 
@@ -1697,7 +1744,7 @@ pub struct JSZlib {
         const opts = (getOptions(globalThis, callframe))?;
         const buffer = opts[0];
         const options_val = opts[1];
-        defer buffer.deinit();
+        const _buf_g = DeinitGuard<jsc.Node.StringOrBuffer>{ val: buffer };
         return gzipOrDeflateSync(globalThis, buffer, options_val, false);
     }
 
@@ -1705,7 +1752,7 @@ pub struct JSZlib {
         const opts = (getOptions(globalThis, callframe))?;
         const buffer = opts[0];
         const options_val = opts[1];
-        defer buffer.deinit();
+        const _buf_g = DeinitGuard<jsc.Node.StringOrBuffer>{ val: buffer };
         return gunzipOrInflateSync(globalThis, buffer, options_val, true);
     }
 
@@ -1785,7 +1832,7 @@ pub struct JSZlib {
                 };
 
                 reader.readAll(true) catch {
-                    defer reader.deinit();
+                    const _reader_g = DeinitGuard<@TypeOf(reader)>{ val: reader };
                     return globalThis.throwValue(ZigString.init(reader.errorMessage() ?? "Zlib returned an error").toErrorInstance(globalThis));
                 };
                 reader.list = { items: reader.list.items };
@@ -1802,7 +1849,7 @@ pub struct JSZlib {
                     return globalThis.throwOutOfMemory();
                 }
                 let decompressor: *bun.libdeflate.Decompressor = decompressor_opt.?;
-                defer decompressor.deinit();
+                const _decomp_g = DeinitGuard<*bun.libdeflate.Decompressor>{ val: decompressor };
                 while (true) {
                     const result = decompressor.decompress(compressed, list.allocatedSlice(), if (is_gzip) .gzip else .deflate);
 
@@ -1887,7 +1934,7 @@ pub struct JSZlib {
                     gzip: is_gzip,
                     level: level ?? 6,
                 }) catch |e| {
-                    defer list.deinit(allocator);
+                    const _list_g = DeinitWithAllocGuard<std.ArrayListUnmanaged(u8)>{ val: list, alloc: allocator };
                     if (e == error.InvalidArgument) {
                         return globalThis.throw("Zlib error: Invalid argument", .{});
                     }
@@ -1896,7 +1943,7 @@ pub struct JSZlib {
                 };
 
                 reader.readAll() catch {
-                    defer reader.deinit();
+                    const _reader_g = DeinitGuard<@TypeOf(reader)>{ val: reader };
                     return globalThis.throwValue(ZigString.init(reader.errorMessage() ?? "Zlib returned an error").toErrorInstance(globalThis));
                 };
                 reader.list = { items: bun.handleOom(reader.list.toOwnedSlice(allocator)) };
@@ -1913,7 +1960,7 @@ pub struct JSZlib {
                 }
                 let compressor: *bun.libdeflate.Compressor = compressor_opt.?;
                 const encoding: bun.libdeflate.Encoding = if (is_gzip) .gzip else .deflate;
-                defer compressor.deinit();
+                const _comp_g = DeinitGuard<*bun.libdeflate.Compressor>{ val: compressor };
 
                 let list = try std.ArrayListUnmanaged(u8).initCapacity(
                     allocator,
@@ -2005,7 +2052,7 @@ pub struct JSZstd {
         const opts = (getOptions(globalThis, callframe))?;
         const buffer = opts[0];
         const options_val = opts[1];
-        defer buffer.deinit();
+        const _buf_g = DeinitGuard<jsc.Node.StringOrBuffer>{ val: buffer };
 
         const level = getLevel(globalThis, options_val)?;
 
@@ -2036,7 +2083,7 @@ pub struct JSZstd {
     static fn decompressSync(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
         const opts = (getOptions(globalThis, callframe))?;
         const buffer = opts[0];
-        defer buffer.deinit();
+        const _buf_g = DeinitGuard<jsc.Node.StringOrBuffer>{ val: buffer };
 
         const input = buffer.slice();
         const allocator = bun.default_allocator;
@@ -2066,7 +2113,7 @@ pub struct JSZstd {
 
         static fn runTask(task: *jsc.WorkPoolTask) {
             const job: *ZstdJob = @fieldParentPtr("task", task);
-            defer job.vm.enqueueTaskConcurrent(jsc.ConcurrentTask.create(job.any_task.task()));
+            const _enqueue_g = ZstdTaskEnqueueGuard{ job: job };
 
             const input = job.buffer.slice();
             const allocator = bun.default_allocator;
@@ -2109,7 +2156,7 @@ pub struct JSZstd {
         }
 
         fn runFromJS(*_): bun.JSTerminated!void {
-            defer _.deinit();
+            const _self_g = DeinitGuard<*ZstdJob>{ val: _ };
 
             if (_.vm.isShuttingDown()) {
                 return;

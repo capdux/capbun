@@ -1512,3 +1512,6 @@
 - **[2026-11-22] `29181` 悬垂切片与空函数体根治 + 6 大核心模块 `~init()` RAII 化**：
   - `stat_hash.cp` 省略只读接收者导致 `lastModified()` 返回栈拷贝悬垂切片（`Last-Modified` 乱码），`server.cp` 中 `new(this)` 被 `cpc` 静默清空 `ServerAllConnectionsClosedTask.schedule` 函数体导致 `server.stop()` 永不 resolve；两项均已修复并提报上游 `cp_agy` 在编译器层面根治；
   - `JSBundler.cp` / `cron.cp` / `isolated_install.cp` / `env_loader.cp` / `node_fs.cp` / `DevServer.cp` 批量以非泛型顶层 `~init()` RAII Guard 替代 329 处手工 `defer`/`errdefer` 并补全 33 处 `E0209` `unsafe {}` 包裹（`DevServer.cp` `EntryPointList` 按值传参 `entry_points.*` 保留所有权语义）。
+- **[2026-11-22] 泛型 RAII Guard 规模化复用落地（膨胀率仅 1.04x）**：
+  - 随着 `cpc` 支持泛型结构体 `~init()` 自动注入 `defer __cp_deinit()`，`Installer.cp`、`h2_frame_parser.cp`、`ConsoleObject.cp`、`BunObject.cp` 统一复用 `DeinitGuard<T>` / `DeinitWithAllocGuard<T>` / `DerefGuard<T>` / `FreeGuard<T>`，在清零 201 处手工 `defer`/`errdefer` 的同时将代码膨胀率压缩至 `1.040x ~ 1.056x`；
+  - 同步修补 `Installer.cp` 中 `version_buf` 与 `writer` allocator 混用、`TaskResult`/`TaskYield` 显式枚举返回及 `SemverString.slice` 调用，并提报 `Box<*Foo!>` 泛型实参未剥离 `!` 缺陷至上游。
