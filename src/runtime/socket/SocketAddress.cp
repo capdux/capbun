@@ -232,18 +232,18 @@ pub struct SocketAddressOptions {
         ) };
     }
 
-    fn release(*_) {
+    fn releaseInternal(*_) {
         _._presentation.deref();
         bun.destroy(_);
     }
 
     fn deinit(*_) {
-        _.release();
+        _.releaseInternal();
     }
 
     fn finalize(*_) {
         jsc.markBinding(@src());
-        _.release();
+        _.releaseInternal();
     }
 
     fn intoDTO(*_, global: *jsc.JSGlobalObject): jsc.JSValue ! bun.JSError {

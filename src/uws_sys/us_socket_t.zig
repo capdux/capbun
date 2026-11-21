@@ -42,8 +42,7 @@ pub fn localAddress(self: *us_socket_t, buf: []u8) ![]const u8 {
             _ = us_socket_local_address(self, buf.ptr, (&length));
             if ((length < 0)) {
                 var errno = bun.sys.getErrno(length);
-                var __errno_moved = false; _ = &__errno_moved;
-                defer if (!__errno_moved) { const __T = @TypeOf(errno); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = errno.release() catch {}; } else { errno.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = errno; _drop_val.release(); } };
+                _ = &errno;
                 return bun.errnoToZigErr(errno);
             }
             return buf[0..(if (comptime @typeInfo(@TypeOf(length)) == .@"enum") cp_cast_int(usize, @intFromEnum(length)) else cp_cast_int(usize, length))];
@@ -55,8 +54,7 @@ pub fn remoteAddress(self: *us_socket_t, buf: []u8) ![]const u8 {
             _ = us_socket_remote_address(self, buf.ptr, (&length));
             if ((length < 0)) {
                 var errno = bun.sys.getErrno(length);
-                var __errno_moved = false; _ = &__errno_moved;
-                defer if (!__errno_moved) { const __T = @TypeOf(errno); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = errno.release() catch {}; } else { errno.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = errno; _drop_val.release(); } };
+                _ = &errno;
                 return bun.errnoToZigErr(errno);
             }
             return buf[0..(if (comptime @typeInfo(@TypeOf(length)) == .@"enum") cp_cast_int(usize, @intFromEnum(length)) else cp_cast_int(usize, length))];
@@ -243,14 +241,14 @@ pub fn toStreamBuffer(self: us_socket_stream_buffer_t) bun.io.StreamBuffer {
             return bun.io.StreamBuffer{ .list = .{ .allocator = bun.default_allocator, .items = items, .capacity = cap }, .cursor = self.cursor };
     }
 
-pub fn release(self: *us_socket_stream_buffer_t) void {
+pub fn releaseInternal(self: *us_socket_stream_buffer_t) void {
             if ((self.list_ptr != null)) {
                 _ = bun.default_allocator.free(self.list_ptr.?[0..self.list_cap]);
             }
     }
 
 pub fn deinit(self: *us_socket_stream_buffer_t) void {
-            _ = (if (comptime @typeInfo(@TypeOf(self)) == .pointer) (self) else &(self)).release();
+            _ = self.releaseInternal();
     }
 };
 

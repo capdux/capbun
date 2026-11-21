@@ -113,3 +113,7 @@
   - 修复 `src/bundler/BundleThread.cp` 及全仓另外 7 个文件（`GlobWalker.cp`、`css/small_list.cp`、`js_printer.cp`、`NodeHTTPResponse.cp`、`crash_handler.cp`、`cli/repl.cp`、`js_parser/ast/P.cp`）共 12 处 `+|= / -|=` 饱和赋值，消除 `generation` 恒为 0 问题，`test/bundler/resolver/cache-invalidation.test.ts` **8/8 100% 全绿**；
   - 修复 `src/install/npm.cp` 中 4 处嵌套在参数内的 `?? break :bin` 被 `cpc` 静默吞掉的问题，彻底根除 `create-jsx.test.ts` 中 `bun install` 触发的 `SemverString.slice` `index out of bounds (3579139412)` panic（0 panic / 0 ASan crash）；
   - 完成全仓 15 个 P0/P1 高风险跨作用域对象的 `release()` → `releaseInternal` / `releaseLoop` 重命名排雷（`FileResponseStream`、`PosixSignalHandle`、`Listener`、`TimerObjectInternals`、`ConcurrentTask`、`udp_socket`、`UpgradedDuplex`、`Image`、`PBKDF2`、`Loop`、`WindowsNamedPipeContext`、`WindowsNamedPipe`、`s3/simple_request`、`s3/download_stream`、`ssl_wrapper`），全部通过 `cpc_brief.py` 4 项门禁。
+- **[2026-11-21 21:45] `node_fs.cp` `ptrAs` 与 5 项次级 `release()` 清雷 + `cli/{init,inspect,watch}` 扫描**：
+  - 修复 `src/runtime/node/node_fs.cp:5624` `req.ptrAs(([*:0]u8)?)` 被误生成为 `try [*:0]u8` 问题（全仓扫描确认仅此一处）；
+  - 完成剩余 5 个次级跨作用域对象 `release()` → `releaseInternal` 重命名（`S3Stat.cp`、`ObjectURLRegistry.cp`、`s3/error_jsc.cp`、`SocketAddress.cp`、`us_socket_t.cp`），均通过 `cpc_brief.py` 4 项门禁；
+  - `test/cli/{init,inspect,watch}` 扫描完成：**17 pass, 2 todo, 7 fail, 0 crash**。

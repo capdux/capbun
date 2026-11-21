@@ -1,5 +1,6 @@
 pub enum RealpathVariant { native, emulated }
 pub enum ResolvedLinkType { file, dir, junction }
+type OptCStr = ([*:0]u8)?;
 // This file contains the underlying implementation for sync & async functions
 // for interacting with the filesystem from JavaScript.
 // The top-level functions assume the arguments are already validated
@@ -5620,7 +5621,7 @@ pub struct NodeFS {
                     path: args.path.slice(),
                 } };
 
-            const result_ptr: ([*:0]u8)? = req.ptrAs(([*:0]u8)?);
+            const result_ptr: OptCStr = req.ptrAs(OptCStr);
             let buf = bun.span(result_ptr ?? return { err: Syscall.Error{
                 errno: @intFromEnum(bun.sys.E.NOENT),
                 syscall: .realpath,

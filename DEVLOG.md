@@ -1485,3 +1485,5 @@
 - **[2026-11-21] `cpc` 饱和复合赋值与参数内 `?? break` 静默吞语句修复 + 全仓 15 项 `release()` RAII 清雷**：
   - `cpc` 在结构体方法体内会静默吞掉 `+|= / -|=`（如 `BundleThread.cp` `generation +|= 1`）与函数参数内的 `?? break :label`（如 `npm.cp` `group_slice[group_i] = ...append(..., x ?? break :bin)`），展开为显式二元运算及独立变量赋值后，`resolver` 缓存失效与 `PackageManifest.parse` `0xAA` 未初始化越界 panic 均彻底修复；
   - 对全仓 58 处 `fn release(` 定义进行风险分级巡检，将 15 个跨作用域异步/Socket/Timer/SSL/Loop 对象重命名为 `releaseInternal`/`releaseLoop`，消除 `cpc` 注入 `defer ...release()` 引发的提前析构隐患。
+- **[2026-11-21] `ptrAs((T)?)` 误判 `try` 修复与次级 `release()` 清理**：
+  - `req.ptrAs(([*:0]u8)?)` 中 `)?` 后缀被 `cpc` 误降级为 `try [*:0]u8`，提取顶层类型别名 `OptCStr` 后恢复正常；同步完成剩余 5 项次级 `release()` 重命名，`cli/{init,inspect,watch}` 0 崩溃。

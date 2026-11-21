@@ -46,7 +46,7 @@ pub const JSS3Error = extern struct {
         };
     }
 
-    pub fn release(self: *JSS3Error) void {
+    pub fn releaseInternal(self: *JSS3Error) void {
         self.path.deref();
         self.code.deref();
         self.message.deref();

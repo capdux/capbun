@@ -4558,7 +4558,7 @@ pub fn realpathInner(self: *NodeFS, args: Arguments.Realpath, variant: RealpathV
                     _ = &errno;
                     return .{ .err = Syscall.Error{ .errno = errno, .syscall = .realpath, .path = args.path.slice() } };
                 }
-                const result_ptr: ?[*:0]u8 = req.ptrAs(try [*:0]u8);
+                const result_ptr: OptCStr = req.ptrAs(OptCStr);
                 var buf = bun.span(((result_ptr) orelse { return .{ .err = Syscall.Error{ .errno = @intFromEnum(bun.sys.E.NOENT), .syscall = .realpath, .path = args.path.slice() } }; }));
                 _ = &buf;
                 if ((variant == .emulated)) {
@@ -5602,6 +5602,7 @@ pub fn closeAll(items: []ZigDeleteTreeStackItem) void {
     }
 };
 
+const OptCStr = ?[*:0]u8;
 const UnalignedStatFS = *align(1) bun.StatFS;
 const ShellCpTaskPtr = *bun.shell.Interpreter.Builtin.Cp.ShellCpTask;
 pub const Binding = @import("./node_fs_binding.zig").Binding;

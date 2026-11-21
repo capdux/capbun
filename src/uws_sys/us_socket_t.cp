@@ -272,14 +272,14 @@ export @extern @value class us_socket_stream_buffer_t {
         };
     }
 
-    pub fn release(*_) {
+    pub fn releaseInternal(*_) {
         if (this.list_ptr != null) {
             bun.default_allocator.free(this.list_ptr.?[0..this.list_cap]);
         }
     }
 
     pub fn deinit(*_) {
-        this.release();
+        this.releaseInternal();
     }
 }
 
