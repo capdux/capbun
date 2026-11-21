@@ -1981,3 +1981,13 @@
 - `src/ptr/owned.{cp,zig}` (`11 -> 10` 置空重置, ratio `1.033`)
 - `src/patch_jsc/testing.{cp,zig}` (`11 -> 0`, ratio `1.184`)
 - `src/js_parser_jsc/Macro.{cp,zig}` (`11 -> 6` 状态恢复, ratio `1.047`)
+
+## [2026-11-22 Wave #15] RAII `~init()` 与 `unsafe {}` 改造（8 模块）
+- `src/sql_jsc/postgres/DataCell.{cp,zig}` (`10 -> 0`, ratio `0.928`)
+- `src/runtime/webcore/s3/credentials_jsc.{cp,zig}` (`10 -> 0`, ratio `1.068`)
+- `src/runtime/webcore/FileSink.{cp,zig}` (`10 -> 2` event_loop, ratio `0.827`)
+- `src/runtime/node/node_crypto_binding.{cp,zig}` (`10 -> 2` 队列调度, ratio `1.104`)
+- `src/runtime/api/JSON5Object.{cp,zig}` (`10 -> 2` ast_scope/visiting, ratio `1.067`)
+- `src/runtime/api/bun/subprocess.{cp,zig}` (`11 -> 7` 保活/状态, ratio `0.938`)
+- `src/jsc/Task.{cp,zig}` (`10 -> 1` 计数器, ratio `0.972`)
+- `src/install/patch_install.{cp,zig}` (`10 -> 4` 队列/唤醒, ratio `1.024`)

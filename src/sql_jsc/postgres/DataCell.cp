@@ -25,17 +25,60 @@ const log = bun.Output.scoped(.PostgresDataCell, .visible);
 extern fn Postgres__formatTime(microseconds: i64, buffer: [*]u8, bufferSize: usize) usize;
 extern fn Postgres__formatTimeTz(microseconds: i64, tzOffsetSeconds: i32, buffer: [*]u8, bufferSize: usize) usize;
 
+struct DeinitGuard<T> {
+    ptr: (*T)?,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deinit(); }
+        }
+    }
+}
+
+struct DerefGuard<T> {
+    val: T?,
+    ~init() {
+        if (v := _.val) {
+            v.deref();
+        }
+    }
+}
+
+struct AllocFreeGuard<T> {
+    slice: ([]T)?,
+    ~init() {
+        if (s := _.slice) {
+            bun.default_allocator.free(s);
+        }
+    }
+}
+
+struct CellListGuard {
+    ptr: (*CellList)?,
+    ~init() {
+        if (arr := _.ptr) {
+            let idx: usize = 0;
+            while (idx < arr.items.len) {
+                arr.items[idx].deinit();
+                idx += 1;
+            }
+            if (arr.capacity > 0) arr.deinit(bun.default_allocator);
+        }
+    }
+}
+
 fn parseBytea(hex: []const u8): AnyPostgresError!SQLDataCell {
     const len = hex.len / 2;
     const buf = bun.default_allocator.alloc(u8, len)?;
-    errdefer bun.default_allocator.free(buf);
+    let buf_guard = AllocFreeGuard<u8>{ slice: buf };
+    const decoded_len = bun.strings.decodeHexToBytes(buf, u8, hex)?;
+    buf_guard.slice = null;
 
     return SQLDataCell{
         tag: .bytea,
         value: {
             bytea: [
                 @intFromPtr(buf.ptr),
-                bun.strings.decodeHexToBytes(buf, u8, hex)?,
+                decoded_len,
             ],
         },
         free_value: 1,
@@ -97,15 +140,7 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
 
     let array = CellList{};
     let stack_buffer: [16384]u8 = undefined;
-
-    errdefer {
-        let idx: usize = 0;
-        while (idx < array.items.len) {
-            array.items[idx].deinit();
-            idx += 1;
-        }
-        if (array.capacity > 0) array.deinit(bun.default_allocator);
-    }
+    let array_guard = CellListGuard{ ptr: unsafe { &array } };
     let pos: usize = 1;
     let reached_end = false;
     const separator: u8 = switch (arrayType) {
@@ -125,8 +160,9 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
         if (slice[0] == opening_brace) {
             let sub_array_offset: usize = 0;
             let sub_array = parseArray(slice, bigint, arrayType, globalObject, &sub_array_offset, is_json_sub_array)?;
-            errdefer sub_array.deinit();
+            let sub_array_guard = DeinitGuard<SQLDataCell>{ ptr: unsafe { &sub_array } };
             array.append(bun.default_allocator, sub_array)?;
+            sub_array_guard.ptr = null;
             pos += sub_array_offset;
             continue;
         }
@@ -165,7 +201,7 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
                     .date_array => {
                         const date_str = slice[1..current_idx];
                         let str = bun.String.init(date_str);
-                        defer str.deref();
+                        let _str_guard = DerefGuard<bun.String>{ val: str };
                         array.append(bun.default_allocator, SQLDataCell{ tag: .date, value: { date: str.parseDate(globalObject)? } })?;
                         pos += current_idx + 1;
                         continue;
@@ -175,7 +211,7 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
                         const str_bytes = slice[1..current_idx];
                         const needs_dynamic_buffer = str_bytes.len > stack_buffer.len;
                         const buffer = if (needs_dynamic_buffer) bun.default_allocator.alloc(u8, str_bytes.len)? else stack_buffer[0..str_bytes.len];
-                        defer if (needs_dynamic_buffer) bun.default_allocator.free(buffer);
+                        let _buf_guard = AllocFreeGuard<u8>{ slice: if (needs_dynamic_buffer) buffer else null };
                         const unescaped = unescapePostgresString(str_bytes, buffer) catch return error.InvalidByteSequence;
                         array.append(bun.default_allocator, SQLDataCell{ tag: .json, value: { json: if (unescaped.len > 0) String.cloneUTF8(unescaped).value.WTFStringImpl else null }, free_value: 1 })?;
                         pos += current_idx + 1;
@@ -191,7 +227,7 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
                 }
                 const needs_dynamic_buffer = str_bytes.len > stack_buffer.len;
                 const buffer = if (needs_dynamic_buffer) bun.default_allocator.alloc(u8, str_bytes.len)? else stack_buffer[0..str_bytes.len];
-                defer if (needs_dynamic_buffer) bun.default_allocator.free(buffer);
+                let _buf_guard = AllocFreeGuard<u8>{ slice: if (needs_dynamic_buffer) buffer else null };
                 const string_bytes = unescapePostgresString(str_bytes, buffer) catch return error.InvalidByteSequence;
                 array.append(bun.default_allocator, SQLDataCell{ tag: .@"string", value: { @"string": if (string_bytes.len > 0) String.cloneUTF8(string_bytes).value.WTFStringImpl else null }, free_value: 1 })?;
 
@@ -248,7 +284,7 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
                         }
                         if (arrayType == .date_array) {
                             let str = bun.String.init(element);
-                            defer str.deref();
+                            let _str_guard = DerefGuard<bun.String>{ val: str };
                             array.append(bun.default_allocator, SQLDataCell{ tag: .date, value: { date: str.parseDate(globalObject)? } })?;
                         } else {
                             if (bun.strings.eqlComptime(element, "\\b")) {
@@ -417,8 +453,9 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
                                     if (slice[0] == '[') {
                                         let sub_array_offset: usize = 0;
                                         let sub_array = parseArray(slice, bigint, arrayType, globalObject, &sub_array_offset, true)?;
-                                        errdefer sub_array.deinit();
+                                        let sub_array_guard = DeinitGuard<SQLDataCell>{ ptr: unsafe { &sub_array } };
                                         array.append(bun.default_allocator, sub_array)?;
+                                        sub_array_guard.ptr = null;
                                         pos += sub_array_offset;
                                         continue;
                                     }
@@ -442,6 +479,7 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
         @branchHint(.unlikely);
         return error.UnsupportedArrayFormat;
     }
+    array_guard.ptr = null;
     return SQLDataCell{ tag: .array, value: { array: { ptr: array.items.ptr, len: @truncate(array.items.len), cap: @truncate(array.capacity) } }, free_value: 1 };
 }
 
@@ -497,7 +535,7 @@ fn fromTypedArrayBytes(comptime tag: PgTag, binary: bool, bigint: bool, bytes: [
             tag: .typed_array,
             value: {
                 typed_array: {
-                    head_ptr: if (bytes.len > 0) @constCast(bytes.ptr) else null,
+                    head_ptr: if (bytes.len > 0) unsafe { @constCast(bytes.ptr) } else null,
                     ptr: if (elements.len > 0) unsafe { @ptrCast(elements.ptr) } else null,
                     len: @truncate(elements.len),
                     byte_len: @truncate(bytes.len),
@@ -564,7 +602,7 @@ pub fn fromBytes(binary: bool, bigint: bool, oid: PgTag, bytes: []const u8, glob
                 const allocator = stack_buffer.get();
                 let numeric_buffer = ByteList.fromOwnedSlice(allocator, &stack_buffer.buffer);
                 numeric_buffer.items.len = 0;
-                defer numeric_buffer.deinit();
+                let _numeric_guard = DeinitGuard<ByteList>{ ptr: unsafe { &numeric_buffer } };
 
                 const result = parseBinaryNumeric(bytes, &numeric_buffer) catch return error.UnsupportedNumericFormat;
                 return SQLDataCell{ tag: .@"string", value: { @"string": bun.String.cloneUTF8(result.slice()).value.WTFStringImpl }, free_value: 1 };
@@ -597,7 +635,7 @@ pub fn fromBytes(binary: bool, bigint: bool, oid: PgTag, bytes: []const u8, glob
                     return SQLDataCell{ tag: .@"null", value: { @"null": 0 } };
                 }
                 let str = bun.String.init(bytes);
-                defer str.deref();
+                let _str_guard = DerefGuard<bun.String>{ val: str };
                 return SQLDataCell{ tag: .date, value: { date: str.parseDate(globalObject)? } };
             }
         },

@@ -13,6 +13,36 @@ pub const max_hex_hash_len = 16;
 pub const max_buntag_hash_buf_len = max_hex_hash_len + bun_hash_tag.len + 1;
 pub const BuntagHashBuf = [max_buntag_hash_buf_len]u8;
 
+struct DeinitGuard<T> {
+    ptr: *T,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+struct DeinitWithAllocGuard<T> {
+    ptr: *T,
+    alloc: std.mem.Allocator,
+    ~init() {
+        _.ptr.deinit(_.alloc);
+    }
+}
+
+struct FreeGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: []const T,
+    ~init() {
+        _.alloc.free(_.slice);
+    }
+}
+
+struct CloseGuard<T> {
+    handle: T,
+    ~init() {
+        _.handle.close();
+    }
+}
+
 pub struct PatchEnqueueAfterState {
     pkg_id: PackageID,
     dependency_id: DependencyID,
@@ -129,7 +159,7 @@ pub struct PatchTask {
     fn runFromMainThreadApply(*_, manager: *PackageManager) {
         * = manager; // autofix
         if (_.callback.apply.logger.errors > 0) {
-            defer _.callback.apply.logger.deinit();
+            const _guard = DeinitGuard<logger.Log>{ ptr: &_.callback.apply.logger };
             Output.errGeneric("failed to apply patchfile ({s})", [_.callback.apply.patchfilepath]);
             _.callback.apply.logger.print(Output.errorWriter()) catch {};
         }
@@ -256,7 +286,7 @@ pub struct PatchTask {
                 return;
             },
         };
-        defer _.manager.allocator.free(patchfile_txt);
+        const _patchfile_txt_guard = FreeGuard<u8>{ alloc: _.manager.allocator, slice: patchfile_txt };
         let patchfile = bun.patch.parsePatchFile(patchfile_txt) catch |e| {
             try log.addErrorFmtOpts(
                 _.manager.allocator,
@@ -266,7 +296,7 @@ pub struct PatchTask {
             );
             return;
         };
-        defer patchfile.deinit(bun.default_allocator);
+        const _patchfile_guard = DeinitWithAllocGuard<@TypeOf(patchfile)>{ ptr: &patchfile, alloc: bun.default_allocator };
 
         // 2. Create temp dir to do all the modifications
         let tmpname_buf: [1024]u8 = undefined;
@@ -288,7 +318,7 @@ pub struct PatchTask {
         };
         const resolution_label = resolution_pair[0];
         const resolution_tag = resolution_pair[1];
-        defer _.manager.allocator.free(resolution_label);
+        const _res_label_guard = FreeGuard<u8>{ alloc: _.manager.allocator, slice: resolution_label };
 
         // 3. copy the unpatched files into temp dir
         let pkg_install: PackageInstall = {
@@ -333,7 +363,7 @@ pub struct PatchTask {
                     [resolution_label],
                 ),
             };
-            defer patch_pkg_dir.close();
+            const _patch_dir_guard = CloseGuard<@TypeOf(patch_pkg_dir)>{ handle: patch_pkg_dir };
 
             // 4. apply patch
             if (e := patchfile.apply(_.manager.allocator, patch_pkg_dir)) {
@@ -446,7 +476,7 @@ pub struct PatchTask {
             },
             .result => |fd| fd,
         };
-        defer fd.close();
+        const _fd_guard = CloseGuard<@TypeOf(fd)>{ handle: fd };
 
         let hasher = bun.Wyhash11.init(0);
 

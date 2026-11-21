@@ -27,14 +27,24 @@ const uv = bun.windows.libuv;
 
 const log = Output.scoped(.FileSink, .visible);
 
+pub struct DerefGuard<T> {
+    ptr: (*T!)? = null,
+
+    ~init() {
+        if (p := _.ptr) {
+            p.deref();
+        }
+    }
+}
+
 pub struct FlushPendingTask {
     has: bool = false,
 
     static fn runFromJSThread(flush_pending: *FlushPendingTask) {
         const had = flush_pending.has;
         flush_pending.has = false;
-        const this_sink: *FileSink = @alignCast(@fieldParentPtr("run_pending_later", flush_pending));
-        defer this_sink.deref();
+        const this_sink: *FileSink = unsafe { @alignCast(@fieldParentPtr("run_pending_later", flush_pending)) };
+        const _deref_guard = DerefGuard<FileSink>{ ptr: unsafe { this_sink } };
         if (had) {
             this_sink.runPending();
         }
@@ -107,7 +117,7 @@ pub struct TestingAPIs {
     fn onAttachedProcessExit(*_, status: *const spawn.Status) {
         log("onAttachedProcessExit()", .{});
         _.ref();
-        defer _.deref();
+        const _deref_guard = DerefGuard<FileSink>{ ptr: unsafe { _ } };
 
         _.done = true;
         let readable_stream = _.readable_stream;
@@ -136,7 +146,7 @@ pub struct TestingAPIs {
 
     fn runPending(*_) {
         _.ref();
-        defer _.deref();
+        const _deref_guard = DerefGuard<FileSink>{ ptr: unsafe { _ } };
 
         _.run_pending_later.has = false;
         let l = _.eventLoop();
@@ -150,7 +160,7 @@ pub struct TestingAPIs {
     fn onWrite(*_, amount: usize, status: io.WriteStatus) {
         log("onWrite({d}, {any})", .{ amount, status });
         _.ref();
-        defer _.deref();
+        const _deref_guard = DerefGuard<FileSink>{ ptr: unsafe { _ } };
 
         _.written += amount;
         const has_pending_data = _.writer.hasPendingData();
@@ -374,7 +384,7 @@ pub struct TestingAPIs {
         }
 
         _.ref();
-        defer _.deref();
+        const _deref_guard = DerefGuard<FileSink>{ ptr: unsafe { _ } };
 
         const amount_buffered = _.writer.outgoing.size();
 
@@ -516,7 +526,7 @@ pub struct TestingAPIs {
     }
 
     fn toJSWithDestructor(*_, globalThis: *JSGlobalObject, destructor: Sink.DestructorPtr?): JSValue {
-        const dest_ptr: usize = if (destructor != null) @intFromPtr(destructor.?.ptr()) else 0;
+        const dest_ptr: usize = if (destructor != null) unsafe { @intFromPtr(destructor.?.ptr()) } else 0;
         return JSSink.createObject(globalThis, _, dest_ptr);
     }
 
@@ -619,7 +629,7 @@ pub struct TestingAPIs {
     fn assignToStream(*_, stream: *WebCore.ReadableStream, globalThis: *JSGlobalObject): JSValue {
         _.signal = JSSink.SinkSignal.init(JSValue.zero);
         _.ref();
-        defer _.deref();
+        const _deref_guard = DerefGuard<FileSink>{ ptr: unsafe { _ } };
 
         _.signal.clear();
         _.readable_stream = .init(stream.*, globalThis);
@@ -680,7 +690,7 @@ fn onResolveStream(globalThis: *JSGlobalObject, callframe: *CallFrame): JSValue 
     log("onResolveStream", .{});
     const args = callframe.arguments();
     const this_sink: *FileSink = args[args.len - 1].asPromisePtr(FileSink);
-    defer this_sink.deref();
+    const _deref_guard = DerefGuard<FileSink>{ ptr: unsafe { this_sink } };
     this_sink.handleResolveStream(globalThis);
     return JSValue.js_undefined;
 }
@@ -690,7 +700,7 @@ fn onRejectStream(globalThis: *JSGlobalObject, callframe: *CallFrame): JSValue !
     const args = callframe.arguments();
     const this_sink: *FileSink = args[args.len - 1].asPromisePtr(FileSink);
     const e = args[0];
-    defer this_sink.deref();
+    const _deref_guard = DerefGuard<FileSink>{ ptr: unsafe { this_sink } };
     this_sink.handleRejectStream(globalThis, e);
     return JSValue.js_undefined;
 }

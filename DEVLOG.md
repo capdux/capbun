@@ -1551,3 +1551,7 @@
 ## [2026-11-22 Wave #14] RAII 改造与 `unsafe {}` 经验
 - `writeOutputFilesToDisk.cp`：`FreeGuard<T>` 切片字段采用 `[]const T` 以同时兼容可变与只读切片释放。
 - `allocation_scope.cp` / `Macro.cp`：`RawFreeGuard` 与 `ClearAndFreeGuard` 在成功移交所有权路径显式解除武装，避免重复释放。
+
+## [2026-11-22 Wave #15] RAII 改造与 `unsafe {}` 经验
+- `DataCell.cp` / `credentials_jsc.cp` / `node_crypto_binding.cp`：所有返回/移交所有权的路径均在移交前显式置空 Guard 指针或切片，兼顾异常安全与零泄漏。
+- `subprocess.cp` / `FileSink.cp`：`DerefGuard<T>` 统一接管异步引用计数释放，仅保留 `loop.exit()` / `ensureStillAlive()` 等生命周期配对 `defer`。

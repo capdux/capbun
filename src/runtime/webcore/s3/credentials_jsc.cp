@@ -11,6 +11,24 @@ const S3Credentials = bun.S3.S3Credentials;
 const S3CredentialsWithOptions = bun.S3.S3CredentialsWithOptions;
 const StorageClass = bun.S3.StorageClass;
 
+struct DeinitGuard<T> {
+    ptr: (*T)?,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deinit(); }
+        }
+    }
+}
+
+struct DerefGuard<T> {
+    val: T?,
+    ~init() {
+        if (v := _.val) {
+            v.deref();
+        }
+    }
+}
+
 pub fn getCredentialsWithOptions(
     _: S3Credentials,
     default_options: MultiPartUploadOptions,
@@ -29,9 +47,7 @@ pub fn getCredentialsWithOptions(
         .storage_class = default_storage_class,
         .request_payer = default_request_payer,
     };
-    errdefer {
-        new_credentials.deinit();
-    }
+    let new_credentials_guard = DeinitGuard<S3CredentialsWithOptions>{ ptr: unsafe { &new_credentials } };
 
     if (opts := options) {
         if (opts.isObject()) {
@@ -39,7 +55,7 @@ pub fn getCredentialsWithOptions(
                 if (!js_value.isEmptyOrUndefinedOrNull()) {
                     if (js_value.isString()) {
                         const str = bun.String.fromJS(js_value, globalObject)?;
-                        defer str.deref();
+                        let _str_guard = DerefGuard<bun.String>{ val: str };
                         if (str.tag != .Empty and str.tag != .Dead) {
                             new_credentials._accessKeyIdSlice = str.toUTF8(bun.default_allocator);
                             new_credentials.credentials.accessKeyId = new_credentials._accessKeyIdSlice.?.slice();
@@ -54,7 +70,7 @@ pub fn getCredentialsWithOptions(
                 if (!js_value.isEmptyOrUndefinedOrNull()) {
                     if (js_value.isString()) {
                         const str = bun.String.fromJS(js_value, globalObject)?;
-                        defer str.deref();
+                        let _str_guard = DerefGuard<bun.String>{ val: str };
                         if (str.tag != .Empty and str.tag != .Dead) {
                             new_credentials._secretAccessKeySlice = str.toUTF8(bun.default_allocator);
                             new_credentials.credentials.secretAccessKey = new_credentials._secretAccessKeySlice.?.slice();
@@ -69,7 +85,7 @@ pub fn getCredentialsWithOptions(
                 if (!js_value.isEmptyOrUndefinedOrNull()) {
                     if (js_value.isString()) {
                         const str = bun.String.fromJS(js_value, globalObject)?;
-                        defer str.deref();
+                        let _str_guard = DerefGuard<bun.String>{ val: str };
                         if (str.tag != .Empty and str.tag != .Dead) {
                             new_credentials._regionSlice = str.toUTF8(bun.default_allocator);
                             new_credentials.credentials.region = new_credentials._regionSlice.?.slice();
@@ -84,7 +100,7 @@ pub fn getCredentialsWithOptions(
                 if (!js_value.isEmptyOrUndefinedOrNull()) {
                     if (js_value.isString()) {
                         const str = bun.String.fromJS(js_value, globalObject)?;
-                        defer str.deref();
+                        let _str_guard = DerefGuard<bun.String>{ val: str };
                         if (str.tag != .Empty and str.tag != .Dead) {
                             new_credentials._endpointSlice = str.toUTF8(bun.default_allocator);
                             const endpoint = new_credentials._endpointSlice.?.slice();
@@ -107,7 +123,7 @@ pub fn getCredentialsWithOptions(
                 if (!js_value.isEmptyOrUndefinedOrNull()) {
                     if (js_value.isString()) {
                         const str = bun.String.fromJS(js_value, globalObject)?;
-                        defer str.deref();
+                        let _str_guard = DerefGuard<bun.String>{ val: str };
                         if (str.tag != .Empty and str.tag != .Dead) {
                             new_credentials._bucketSlice = str.toUTF8(bun.default_allocator);
                             new_credentials.credentials.bucket = new_credentials._bucketSlice.?.slice();
@@ -128,7 +144,7 @@ pub fn getCredentialsWithOptions(
                 if (!js_value.isEmptyOrUndefinedOrNull()) {
                     if (js_value.isString()) {
                         const str = bun.String.fromJS(js_value, globalObject)?;
-                        defer str.deref();
+                        let _str_guard = DerefGuard<bun.String>{ val: str };
                         if (str.tag != .Empty and str.tag != .Dead) {
                             new_credentials._sessionTokenSlice = str.toUTF8(bun.default_allocator);
                             new_credentials.credentials.sessionToken = new_credentials._sessionTokenSlice.?.slice();
@@ -198,7 +214,7 @@ pub fn getCredentialsWithOptions(
                 if (!js_value.isEmptyOrUndefinedOrNull()) {
                     if (js_value.isString()) {
                         const str = bun.String.fromJS(js_value, globalObject)?;
-                        defer str.deref();
+                        let _str_guard = DerefGuard<bun.String>{ val: str };
                         if (str.tag != .Empty and str.tag != .Dead) {
                             new_credentials._contentDispositionSlice = str.toUTF8(bun.default_allocator);
                             const slice = new_credentials._contentDispositionSlice.?.slice();
@@ -217,7 +233,7 @@ pub fn getCredentialsWithOptions(
                 if (!js_value.isEmptyOrUndefinedOrNull()) {
                     if (js_value.isString()) {
                         const str = bun.String.fromJS(js_value, globalObject)?;
-                        defer str.deref();
+                        let _str_guard = DerefGuard<bun.String>{ val: str };
                         if (str.tag != .Empty and str.tag != .Dead) {
                             new_credentials._contentTypeSlice = str.toUTF8(bun.default_allocator);
                             const slice = new_credentials._contentTypeSlice.?.slice();
@@ -236,7 +252,7 @@ pub fn getCredentialsWithOptions(
                 if (!js_value.isEmptyOrUndefinedOrNull()) {
                     if (js_value.isString()) {
                         const str = bun.String.fromJS(js_value, globalObject)?;
-                        defer str.deref();
+                        let _str_guard = DerefGuard<bun.String>{ val: str };
                         if (str.tag != .Empty and str.tag != .Dead) {
                             new_credentials._contentEncodingSlice = str.toUTF8(bun.default_allocator);
                             const slice = new_credentials._contentEncodingSlice.?.slice();
@@ -256,6 +272,7 @@ pub fn getCredentialsWithOptions(
             }
         }
     }
+    new_credentials_guard.ptr = null;
     return new_credentials;
 }
 

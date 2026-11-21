@@ -23,6 +23,17 @@ const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 
 const PosixSpawn = bun.spawn;
+
+struct DerefGuard<T> {
+    ptr: (*T!)?,
+    ~init() {
+        unsafe {
+            if (p := _.ptr) {
+                p.deref();
+            }
+        }
+    }
+}
 const Process = bun.spawn.Process;
 const Rusage = bun.spawn.Rusage;
 
@@ -138,7 +149,7 @@ pub const NewStaticPipeWriter = StaticPipeWriterMod.NewStaticPipeWriter;
 pub const StaticPipeWriter = NewStaticPipeWriter(Subprocess);
 
 @c pub fn onAbortSignal(subprocess_ctx: *!?, _: jsc.JSValue) {
-    const subproc: *Subprocess = @ptrCast(@alignCast(subprocess_ctx.?));
+    const subproc: *Subprocess = unsafe { @ptrCast(@alignCast(subprocess_ctx.?)) };
     subproc.clearAbortSignal();
     * = subproc.tryKill(subproc.killSignal);
 }
@@ -157,8 +168,8 @@ pub struct TestingAPIs {
             return globalThis.throw("first argument must be a Subprocess", {});
         }
         const subprocess = sub_opt.?;
-        const kind_str = kind_value.toBunString(globalThis)?;
-        defer kind_str.deref();
+        let kind_str = kind_value.toBunString(globalThis)?;
+        const kind_guard = DerefGuard<bun.String>{ ptr: &kind_str };
 
         let out: *Readable = undefined;
         if (kind_str.eqlComptime("stdout")) {
@@ -518,7 +529,7 @@ pub struct TestingAPIs {
     pub fn onStdinDestroyed(client: *Subprocess) {
         const must_deref = client.flags.deref_on_stdin_destroyed;
         client.flags.deref_on_stdin_destroyed = false;
-        defer if (must_deref) client.deref();
+        const deref_guard = DerefGuard<Subprocess>{ ptr: if (must_deref) client else null };
 
         client.flags.has_stdin_destructor_called = true;
         client.weak_file_sink_stdin_ptr = null;
@@ -576,7 +587,7 @@ pub struct TestingAPIs {
         for (item of client.stdio_pipes.items) {
             if (Environment.isWindows) {
                 if (item == .buffer) {
-                    const fdno: usize = @intFromPtr(item.buffer.fd().cast());
+                    const fdno: usize = unsafe { @intFromPtr(item.buffer.fd().cast()) };
                     array.push(global, JSValue.jsNumber(fdno))?;
                 } else {
                     array.push(global, JSValue.jsNull())?;
@@ -632,7 +643,7 @@ pub struct TestingAPIs {
         const is_sync = client.flags.is_sync;
         client.clearAbortSignal();
 
-        defer client.deref();
+        const client_deref = DerefGuard<Subprocess>{ ptr: client };
         defer client.disconnectIPC(true);
 
         if (client.event_loop_timer.state == .ACTIVE) {
@@ -652,7 +663,7 @@ pub struct TestingAPIs {
             if (existing_value := jsc.Codegen.JSSubprocess.stdinGetCached(this_jsvalue)) {
                 if (existing_value.isCell()) {
                     if (stdin == null) {
-                        stdin = @ptrCast(@alignCast(jsc.WebCore.FileSink.JSSink.fromJS(existing_value)));
+                        stdin = unsafe { @ptrCast(@alignCast(jsc.WebCore.FileSink.JSSink.fromJS(existing_value))) };
                     }
 
                     if (!client.flags.is_stdin_a_readable_stream) {
@@ -684,12 +695,12 @@ pub struct TestingAPIs {
             client.weak_file_sink_stdin_ptr = null;
             client.flags.has_stdin_destructor_called = true;
 
-            if (@intFromPtr(pipe.signal.ptr) == @intFromPtr(&client.stdin)) {
+            if (unsafe { @intFromPtr(pipe.signal.ptr) == @intFromPtr(&client.stdin) }) {
                 pipe.signal.clear();
             }
             const must_deref = client.flags.deref_on_stdin_destroyed;
             client.flags.deref_on_stdin_destroyed = false;
-            defer if (must_deref) client.deref();
+            const stdin_deref = DerefGuard<Subprocess>{ ptr: if (must_deref) client else null };
 
             pipe.onAttachedProcessExit(&status);
         }

@@ -1,3 +1,17 @@
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+struct DerefGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deref(); }
+    }
+}
+
 pub fn create(globalThis: *jsc.JSGlobalObject): jsc.JSValue {
     const object = JSValue.createEmptyObject(globalThis, 2);
     object.put(
@@ -33,7 +47,7 @@ pub fn stringify(
     }
 
     let stringifier: Stringifier = .init(global, space_value)?;
-    defer stringifier.deinit();
+    const stringifier_guard = DeinitGuard<Stringifier>{ ptr: &stringifier };
 
     stringifier.stringifyValue(global, value) catch |e| {
         if (e == error.StackOverflow) return global.throwStackOverflow();
@@ -50,7 +64,7 @@ pub fn parse(
     callFrame: *jsc.CallFrame,
 ): bun.JSError!jsc.JSValue {
     let arena_alloc: bun.ArenaAllocator = .init(bun.default_allocator);
-    defer arena_alloc.deinit();
+    const arena_guard = DeinitGuard<bun.ArenaAllocator>{ ptr: &arena_alloc };
     const allocator = arena_alloc.allocator();
 
     let ast_memory_allocator = bun.handleOom(allocator.create(ast.ASTMemoryAllocator));
@@ -63,16 +77,16 @@ pub fn parse(
         return global.throwInvalidArguments("Expected a string to parse", {});
     }
 
-    const input: jsc.Node.BlobOrStringOrBuffer =
+    let input: jsc.Node.BlobOrStringOrBuffer =
         (jsc.Node.BlobOrStringOrBuffer.fromJS(global, allocator, input_value))? ?? input: {
             let str = input_value.toBunString(global)?;
-            defer str.deref();
+            const str_guard = DerefGuard<bun.String>{ ptr: &str };
             break :input { string_or_buffer: { string: str.toSlice(allocator) } };
         };
-    defer input.deinit();
+    const input_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: &input };
 
     let log = logger.Log.init(bun.default_allocator);
-    defer log.deinit();
+    const log_guard = DeinitGuard<logger.Log>{ ptr: &log };
 
     const source = &logger.Source.initPathString("input.json5", input.slice());
 
@@ -203,8 +217,8 @@ struct Stringifier {
         }
 
         if (unwrapped.isString()) {
-            const str = unwrapped.toBunString(global)?;
-            defer str.deref();
+            let str = unwrapped.toBunString(global)?;
+            const str_guard = DerefGuard<bun.String>{ ptr: &str };
             _.appendQuotedString(str);
             return;
         }
@@ -275,7 +289,7 @@ struct Stringifier {
             global,
             (value.toObject(global))?,
         ))?;
-        defer iter.deinit();
+        const iter_guard = DeinitGuard<PropIter>{ ptr: &iter };
 
         if (iter.len == 0) {
             _.builder.append(.latin1, "{}");
@@ -424,8 +438,8 @@ fn exprToJS(expr: Expr, global: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
                 const key_expr = prop.key.?;
                 const value = exprToJS(prop.value.?, global)?;
                 const key_js = exprToJS(key_expr, global)?;
-                const key_str = key_js.toBunString(global)?;
-                defer key_str.deref();
+                let key_str = key_js.toBunString(global)?;
+                const key_str_guard = DerefGuard<bun.String>{ ptr: &key_str };
                 (js_obj.putMayBeIndex(global, &key_str, value))?;
             }
             return js_obj;

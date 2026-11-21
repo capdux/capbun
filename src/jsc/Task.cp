@@ -118,6 +118,13 @@ const ShellRmDirTask = shell.Interpreter.Builtin.Rm.ShellRmTask.DirTask;
 
 const ProcessWaiterThreadTask = if (Environment.isPosix) bun.spawn.process.WaiterThread.ProcessQueue.ResultTask else opaque {};
 
+struct DeinitGuard<T> {
+    ptr: *T,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
 const log = Output.scoped(.Task, .hidden);
 
 /// Unified Task union containing all supported background and main thread tasks
@@ -338,22 +345,22 @@ pub fn tickQueueWithCount(*_: *EventLoop, virtual_machine: *VirtualMachine, coun
             },
             @field(Task.Tag, @typeName(AsyncGlobWalkTask)) => {
                 let globWalkTask: *AsyncGlobWalkTask = task.get(AsyncGlobWalkTask).?;
-                defer globWalkTask.deinit();
+                const _guard = DeinitGuard<AsyncGlobWalkTask>{ ptr: globWalkTask };
                 try globWalkTask.runFromJS();
             },
             @field(Task.Tag, @typeName(AsyncImageTask)) => {
                 let image_task: *AsyncImageTask = task.get(AsyncImageTask).?;
-                defer image_task.deinit();
+                const _guard = DeinitGuard<AsyncImageTask>{ ptr: image_task };
                 try image_task.runFromJS();
             },
             @field(Task.Tag, @typeName(AsyncTransformTask)) => {
                 let transform_task: *AsyncTransformTask = task.get(AsyncTransformTask).?;
-                defer transform_task.deinit();
+                const _guard = DeinitGuard<AsyncTransformTask>{ ptr: transform_task };
                 try transform_task.runFromJS();
             },
             @field(Task.Tag, @typeName(CopyFilePromiseTask)) => {
                 let transform_task: *CopyFilePromiseTask = task.get(CopyFilePromiseTask).?;
-                defer transform_task.deinit();
+                const _guard = DeinitGuard<CopyFilePromiseTask>{ ptr: transform_task };
                 try transform_task.runFromJS();
             },
             @field(Task.Tag, @typeName(bun.api.napi.napi_async_work)) => {
@@ -366,7 +373,7 @@ pub fn tickQueueWithCount(*_: *EventLoop, virtual_machine: *VirtualMachine, coun
             },
             @field(Task.Tag, @typeName(ReadFileTask)) => {
                 let transform_task: *ReadFileTask = task.get(ReadFileTask).?;
-                defer transform_task.deinit();
+                const _guard = DeinitGuard<ReadFileTask>{ ptr: transform_task };
                 try transform_task.runFromJS();
             },
             @field(Task.Tag, @typeName(JSCDeferredWorkTask)) => {
@@ -376,12 +383,12 @@ pub fn tickQueueWithCount(*_: *EventLoop, virtual_machine: *VirtualMachine, coun
             },
             @field(Task.Tag, @typeName(WriteFileTask)) => {
                 let transform_task: *WriteFileTask = task.get(WriteFileTask).?;
-                defer transform_task.deinit();
+                const _guard = DeinitGuard<WriteFileTask>{ ptr: transform_task };
                 try transform_task.runFromJS();
             },
             @field(Task.Tag, @typeName(HotReloadTask)) => {
                 const transform_task: *HotReloadTask = task.get(HotReloadTask).?;
-                defer transform_task.deinit();
+                const _guard = DeinitGuard<HotReloadTask>{ ptr: transform_task };
                 transform_task.run();
                 counter.* = 0;
                 return;
@@ -392,7 +399,7 @@ pub fn tickQueueWithCount(*_: *EventLoop, virtual_machine: *VirtualMachine, coun
             },
             @field(Task.Tag, @typeName(FSWatchTask)) => {
                 let transform_task: *FSWatchTask = task.get(FSWatchTask).?;
-                defer transform_task.deinit();
+                const _guard = DeinitGuard<FSWatchTask>{ ptr: transform_task };
                 transform_task.run();
             },
             @field(Task.Tag, @typeName(AnyTask)) => {
@@ -413,7 +420,7 @@ pub fn tickQueueWithCount(*_: *EventLoop, virtual_machine: *VirtualMachine, coun
             @field(Task.Tag, @typeName(GetAddrInfoRequestTask)) => {
                 if (Environment.os == .windows) @panic("This should not be reachable on Windows");
                 let task_ptr: *GetAddrInfoRequestTask = task.get(GetAddrInfoRequestTask).?;
-                defer task_ptr.deinit();
+                const _guard = DeinitGuard<GetAddrInfoRequestTask>{ ptr: task_ptr };
                 try task_ptr.runFromJS();
             },
             @field(Task.Tag, @typeName(Stat)) => {

@@ -18,6 +18,41 @@ const PBKDF2 = EVP.PBKDF2;
 
 type string = []const u8;
 
+pub struct DeinitGuard<T> {
+    ptr: (*T!)? = null,
+
+    ~init() {
+        if (p := _.ptr) {
+            p.deinit();
+        }
+    }
+}
+
+pub struct DeinitSyncGuard<T> {
+    ptr: (*T!)? = null,
+
+    ~init() {
+        if (p := _.ptr) {
+            p.deinitSync();
+        }
+    }
+}
+
+pub struct StringOrBufferGuard {
+    ptr: (*Node.StringOrBuffer!)? = null,
+    is_async: bool = false,
+
+    ~init() {
+        if (p := _.ptr) {
+            if (_.is_async) {
+                p.deinitAndUnprotect();
+            } else {
+                p.deinit();
+            }
+        }
+    }
+}
+
 fn ExternCryptoJob(comptime name: []const u8): type {
     return struct {
         vm: *jsc.VirtualMachine,
@@ -70,7 +105,7 @@ fn ExternCryptoJob(comptime name: []const u8): type {
         }
 
         pub fn runFromJS(job: *@This()) void {
-            defer job.deinit();
+            const _guard = DeinitGuard<@This()>{ ptr: unsafe { job } };
             const vm = job.vm;
 
             if (vm.isShuttingDown()) {
@@ -161,9 +196,10 @@ fn CryptoJob(comptime Ctx: type): type {
             // If `ctx.init` throws, we must release the callback `Strong` and any resources the
             // ctx already owns (e.g. `Scrypt` has already protected its password/salt buffers in
             // `fromJS`). `deinit` handles all of that; `poll.unref` is a no-op while inactive.
-            errdefer job.deinit();
+            let _guard = DeinitGuard<@This()>{ ptr: unsafe { job } };
             try job.ctx.init(global);
             job.any_task = jsc.AnyTask.New(@This(), &runFromJS).init(job);
+            _guard.ptr = null;
             return job;
         }
 
@@ -181,7 +217,7 @@ fn CryptoJob(comptime Ctx: type): type {
         }
 
         pub fn runFromJS(job: *@This()) void {
-            defer job.deinit();
+            const _guard = DeinitGuard<@This()>{ ptr: unsafe { job } };
             const vm = job.vm;
 
             if (vm.isShuttingDown()) {
@@ -483,7 +519,7 @@ fn pbkdf2(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSErr
 
 fn pbkdf2Sync(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     let data = PBKDF2.fromJS(globalThis, callFrame, false)?;
-    defer data.deinit();
+    const _guard = DeinitGuard<@TypeOf(data)>{ ptr: unsafe { &data } };
     const out_arraybuffer = jsc.JSValue.createBufferFromLength(globalThis, @as(usize, @intCast(data.length)))?;
 
     const output_opt = out_arraybuffer.asArrayBuffer(globalThis);
@@ -557,7 +593,7 @@ pub fn setEngine(global: *JSGlobalObject, _: *jsc.CallFrame): JSError!JSValue {
 
 fn getHashes(global: *JSGlobalObject, _: *jsc.CallFrame): JSError!JSValue {
     let hashes: bun.CaseInsensitiveASCIIStringArrayHashMap(void) = .init(bun.default_allocator);
-    defer hashes.deinit();
+    const _guard = DeinitGuard<@TypeOf(hashes)>{ ptr: unsafe { &hashes } };
 
     // TODO(dylan-conway): cache the names
     unsafe {
@@ -613,29 +649,15 @@ pub struct Scrypt {
         if (password_opt == null) {
             return global.throwInvalidArgumentTypeValue("password", "string, ArrayBuffer, Buffer, TypedArray, or DataView", password_value);
         }
-        const password = password_opt.?;
-
-        errdefer {
-            if (is_async) {
-                password.deinitAndUnprotect();
-            } else {
-                password.deinit();
-            }
-        }
+        let password = password_opt.?;
+        let _pw_guard = StringOrBufferGuard{ ptr: unsafe { &password }, is_async: is_async };
 
         const salt_opt = Node.StringOrBuffer.fromJSMaybeAsync(global, bun.default_allocator, salt_value, is_async, true)?;
         if (salt_opt == null) {
             return global.throwInvalidArgumentTypeValue("salt", "string, ArrayBuffer, Buffer, TypedArray, or DataView", salt_value);
         }
-        const salt = salt_opt.?;
-
-        errdefer {
-            if (is_async) {
-                salt.deinitAndUnprotect();
-            } else {
-                salt.deinit();
-            }
-        }
+        let salt = salt_opt.?;
+        let _salt_guard = StringOrBufferGuard{ ptr: unsafe { &salt }, is_async: is_async };
 
         const keylen = validators.validateInt32(global, keylen_value, "keylen", .{}, 0, null)?;
 
@@ -721,6 +743,9 @@ pub struct Scrypt {
         }
 
         ctx.checkScryptParams(global)?;
+
+        _pw_guard.ptr = null;
+        _salt_guard.ptr = null;
 
         if (is_async) {
             return .{ ctx, callback };
@@ -841,7 +866,7 @@ fn scrypt(global: *JSGlobalObject, callFrame: *jsc.CallFrame): JSError!JSValue {
 
 fn scryptSync(global: *JSGlobalObject, callFrame: *jsc.CallFrame): JSError!JSValue {
     let ctx = Scrypt.fromJS(global, callFrame, false)?;
-    defer ctx.deinitSync();
+    const _guard = DeinitSyncGuard<Scrypt>{ ptr: unsafe { &ctx } };
     const alloc_res = jsc.ArrayBuffer.alloc(global, .ArrayBuffer, ctx.keylen)?;
     const buf = alloc_res[0];
     const bytes = alloc_res[1];
