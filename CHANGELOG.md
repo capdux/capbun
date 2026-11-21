@@ -1875,3 +1875,4 @@
 - **[2026-11-21] `test/js/node/path` 全绿通关 (120 pass / 0 fail)**：更新 `src/runtime/node/path.{cp,zig}`、`src/runtime/webcore/{Blob,streams}.{cp,zig}`。
 - **[2026-11-21] HTTP/Weak/Blob/Util 13 模块修复 (`fuzzy-wuzzy` 154 pass, `bun-file` 6 pass)**：更新 `src/http/{HTTPContext,http}.{cp,zig}`、`src/js_printer/js_printer.{cp,zig}`、`src/jsc/{Weak,ZigString}.{cp,zig}`、`src/paths/resolve_path.zig`、`src/runtime/{dns_jsc/dns,socket/uws_handlers}.{cp,zig}`、`src/runtime/webcore/{Blob,blob/Store,fetch/FetchTasklet}.{cp,zig}`、`src/string/immutable/escapeHTML.{cp,zig}`、`src/uws_sys/SocketGroup.{cp,zig}`。
 - **[2026-11-21] `PasswordObject` RAII 提前释放修复 (`password.test.ts` 74 pass / 0 fail)**：更新 `src/runtime/crypto/PasswordObject.{cp,zig}`。
+- **[2026-11-21] `ServerConfig` RAII 提前释放修复 (`wildcard static routes` 通过)**：更新 `src/runtime/server/ServerConfig.{cp,zig}`。

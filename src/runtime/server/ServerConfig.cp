@@ -117,14 +117,10 @@ pub const RouteDeclaration = struct {
         specific: HTTP.Method,
     } = .@"any",
 
-    pub fn release(this: *RouteDeclaration) void {
+    pub fn deinit(this: *RouteDeclaration) void {
         if (this.path.len > 0) {
             bun.default_allocator.free(this.path);
         }
-    }
-
-    pub fn deinit(this: *RouteDeclaration) void {
-        this.release();
     }
 };
 
@@ -147,15 +143,11 @@ pub const StaticRouteEntry = struct {
         };
     }
 
-    pub fn release(this: *StaticRouteEntry) void {
+    pub fn deinit(this: *StaticRouteEntry) void {
         bun.default_allocator.free(this.path);
         this.path = "";
         this.route.deref();
         this.* = undefined;
-    }
-
-    pub fn deinit(this: *StaticRouteEntry) void {
-        this.release();
     }
 
     static fn isLessThan(_: void, lhs: StaticRouteEntry, rhs: StaticRouteEntry): bool {
@@ -274,7 +266,7 @@ pub fn applyStaticRouteH3(server: AnyServer, app: *uws.H3.App, comptime T: type,
     }
 }
 
-pub fn release(*_: *ServerConfig) {
+pub fn deinit(*_: *ServerConfig) {
     _.address.deinit(bun.default_allocator);
 
     for (route of self.negative_routes.items) {
@@ -309,10 +301,6 @@ pub fn release(*_: *ServerConfig) {
         builder.deinit();
     }
     _.user_routes_to_build.clearAndFree();
-}
-
-pub fn deinit(*_: *ServerConfig) {
-    this.release();
 }
 
 pub fn computeID(_: *const ServerConfig, allocator: std.mem.Allocator): []const u8 {
@@ -1030,13 +1018,9 @@ const UserRouteBuilder = struct {
     route: ServerConfig.RouteDeclaration,
     callback: jsc.Strong.Optional = .empty,
 
-    pub fn release(this: *UserRouteBuilder) void {
+    pub fn deinit(this: *UserRouteBuilder) void {
         this.route.deinit();
         this.callback.deinit();
-    }
-
-    pub fn deinit(this: *UserRouteBuilder) void {
-        this.release();
     }
 };
 
