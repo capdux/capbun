@@ -52,10 +52,7 @@ pub struct PublishCommand {
 
                 let maybe_package_json_contents: ([]const u8)? = null;
                 let maybe_readme: ReadmeInfo? = null;
-                errdefer if (r := maybe_readme) {
-                    ctx.allocator.free(r.filename);
-                    ctx.allocator.free(r.contents);
-                }
+                let readme_guard = ReadmeGuard<ReadmeInfo>{ ptr: &maybe_readme, alloc: ctx.allocator };
 
                 let iter = switch (Archive.Iterator.init(tarball_bytes)) {
                     .err => |e| {
@@ -214,14 +211,14 @@ pub struct PublishCommand {
 
                 let shasum: sha.SHA1.Digest = undefined;
                 let sha1 = sha.SHA1.init();
-                defer sha1.deinit();
+                const sha1_guard = DeinitGuard<sha.SHA1>{ ptr: &sha1 };
 
                 sha1.update(tarball_bytes);
                 sha1.final(&shasum);
 
                 let integrity: sha.SHA512.Digest = undefined;
                 let sha512 = sha.SHA512.init();
-                defer sha512.deinit();
+                const sha512_guard = DeinitGuard<sha.SHA512>{ ptr: &sha512 };
 
                 sha512.update(tarball_bytes);
                 sha512.final(&integrity);
@@ -249,6 +246,7 @@ pub struct PublishCommand {
                     manager.options.log_level,
                 );
 
+                readme_guard.active = false;
                 return {
                     manager: manager,
                     allocator: ctx.allocator,
@@ -336,7 +334,7 @@ pub struct PublishCommand {
         };
         let manager = init_res[0];
         const original_cwd = init_res[1];
-        defer ctx.allocator.free(original_cwd);
+        const original_cwd_guard = FreeGuard<@TypeOf(original_cwd)>{ slice: original_cwd, alloc: ctx.allocator };
 
         if (cli.positionals.len > 1) {
             const context = Context(false).fromTarballPath(ctx, manager, cli.positionals[1]) catch |e| {
@@ -492,7 +490,7 @@ pub struct PublishCommand {
         registry: *const Npm.Registry.Scope,
     ): bool {
         let url_buf = std.array_list.Managed(u8).init(allocator);
-        defer url_buf.deinit();
+        const url_buf_guard = DeinitGuard<std.array_list.Managed(u8)>{ ptr: &url_buf };
         const registry_url = strings.withoutTrailingSlash(registry.url.href);
         const encoded_name = bun.fmt.dependencyUrl(package_name);
 
@@ -502,13 +500,13 @@ pub struct PublishCommand {
         const package_url = URL.parse(url_buf.items);
 
         let response_buf = MutableString.init(allocator, 1024) catch return false;
-        defer response_buf.deinit();
+        const response_buf_guard = DeinitGuard<MutableString>{ ptr: &response_buf };
 
         let headers = http.HeaderBuilder{};
         headers.count("accept", "application/json");
 
         let auth_buf = std.array_list.Managed(u8).init(allocator);
-        defer auth_buf.deinit();
+        const auth_buf_guard = DeinitGuard<std.array_list.Managed(u8)>{ ptr: &auth_buf };
 
         if (registry.token.len > 0) {
             auth_buf.writer().print("Bearer {s}", .{registry.token}) catch return false;
@@ -608,7 +606,7 @@ pub struct PublishCommand {
         const publish_req_body = constructPublishRequestBody(directory_publish, ctx)?;
 
         let print_buf: std.ArrayListUnmanaged(u8) = {};
-        defer print_buf.deinit(ctx.allocator);
+        const print_buf_guard = DeinitWithAllocGuard<std.ArrayListUnmanaged(u8)>{ ptr: &print_buf, alloc: ctx.allocator };
         let print_writer = print_buf.writer(ctx.allocator);
 
         const publish_headers = try constructPublishHeaders(
@@ -1046,7 +1044,7 @@ pub struct PublishCommand {
         ));
 
         {
-            const workspace_root = bun.sys.openA(
+            let workspace_root = bun.sys.openA(
                 strings.withoutSuffixComptime(manager.original_package_json_path, "package.json"),
                 bun.O.DIRECTORY,
                 0,
@@ -1054,7 +1052,7 @@ pub struct PublishCommand {
                 Output.err(e, "failed to open workspace directory", {});
                 Global.crash();
             };
-            defer workspace_root.close();
+            const workspace_root_guard = CloseGuard<@TypeOf(workspace_root)>{ ptr: &workspace_root };
 
             try normalizeBin(
                 allocator,
@@ -1116,7 +1114,7 @@ pub struct PublishCommand {
         abs_workspace_path: string,
     ): OOM!ReadmeInfo? {
         let workspace_dir = std.fs.openDirAbsolute(abs_workspace_path, { iterate: true }) catch return null;
-        defer workspace_dir.close();
+        const workspace_dir_guard = CloseGuard<std.fs.Dir>{ ptr: &workspace_dir };
 
         let iter = bun.DirIterator.iterate(bun.FD.fromStdDir(workspace_dir), .@"u8");
         while (entry := iter.next().unwrap() catch null) {
@@ -1293,7 +1291,7 @@ pub struct PublishCommand {
                 };
 
                 let dirs: std.ArrayListUnmanaged(struct { std.fs.Dir, string, bool }) = {};
-                defer dirs.deinit(allocator);
+                const dirs_guard = DeinitWithAllocGuard<@TypeOf(dirs)>{ ptr: &dirs, alloc: allocator };
 
                 dirs.append(allocator, .{ bin_dir.stdDir(), normalized_bin_dir, false })?;
 
@@ -1301,7 +1299,7 @@ pub struct PublishCommand {
                     let dir = dir_info[0];
                     const dir_subpath = dir_info[1];
                     const close_dir = dir_info[2];
-                    defer if (close_dir) dir.close();
+                    const dir_guard = CloseGuard<@TypeOf(dir)>{ ptr: if (close_dir) &dir else null };
 
                     let iter = bun.DirIterator.iterate(bun.FD.fromStdDir(dir), .@"u8");
                     while (entry := iter.next().unwrap() catch null) {
@@ -1525,6 +1523,65 @@ pub struct PublishCommand {
         }
 
         return buf.items;
+    }
+}
+
+struct DeinitGuard<T> {
+    ptr: (*T!)? = null,
+
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deinit(); }
+        }
+    }
+}
+
+struct DeinitWithAllocGuard<T> {
+    ptr: (*T!)? = null,
+    alloc: std.mem.Allocator,
+
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deinit(_.alloc); }
+        }
+    }
+}
+
+struct CloseGuard<T> {
+    ptr: (*T!)? = null,
+
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.close(); }
+        }
+    }
+}
+
+struct FreeGuard<T> {
+    slice: T? = null,
+    alloc: std.mem.Allocator,
+
+    ~init() {
+        if (s := _.slice) {
+            _.alloc.free(s);
+        }
+    }
+}
+
+struct ReadmeGuard<T> {
+    ptr: *(T?)!,
+    alloc: std.mem.Allocator,
+    active: bool = true,
+
+    ~init() {
+        if (_.active) {
+            unsafe {
+                if (r := _.ptr.*) {
+                    _.alloc.free(r.filename);
+                    _.alloc.free(r.contents);
+                }
+            }
+        }
     }
 }
 

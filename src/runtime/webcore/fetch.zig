@@ -74,7 +74,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .array and @typeInfo(@typeInfo(__T).pointer.child).array.child == u8)) { return val[0..]; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 const Output = @import("bun").Output;
@@ -93,6 +93,112 @@ const DataURL = @import("../../resolver/data_url.zig").DataURL;
 pub const FetchTaskletMod = @import("./fetch/FetchTasklet.zig");
 const ServerConfig = @import("../server/ServerConfig.zig").ServerConfig;
 pub const UrlMod = @import("../../url/url.zig");
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        val: T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.val.deinit();
+        }
+    };
+}
+
+pub fn DerefGuard(comptime T: type) type {
+    return struct {
+        val: T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.val.deref();
+        }
+    };
+}
+
+pub fn OptDeinitGuard(comptime T: type) type {
+    return struct {
+        val: ?T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.val) |*v| {
+                    _ = &v;
+                    _ = (v.*).deinit();
+                }
+        }
+    };
+}
+
+pub fn OptDerefGuard(comptime T: type) type {
+    return struct {
+        val: ?T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.val) |v| {
+                    _ = &v;
+                    _ = v.deref();
+                }
+        }
+    };
+}
+
+pub const FetchCleanupGuard = struct {
+    allocator: std.mem.Allocator,
+    signal: *?*webcore.AbortSignal,
+    unix_socket_path: *ZigString.Slice,
+    url_proxy_buffer: *[]const u8,
+    headers: *?Headers,
+    body: *FetchTasklet.HTTPRequestBody,
+    hostname: *?[]u8,
+    range: *?[]u8,
+    ssl_config: *?ServerConfig.SSLConfig.SharedPtr,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *FetchCleanupGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            {
+                if (self.signal.*) |sig| {
+                    _ = &sig;
+                    self.signal.* = null;
+                    _ = sig.unref();
+                }
+                _ = self.unix_socket_path.deinit();
+                _ = self.allocator.free(self.url_proxy_buffer.*);
+                self.url_proxy_buffer.* = "";
+                if ((self.headers.* != null)) {
+                    _ = self.headers.*.?.buf.deinit(self.allocator);
+                    _ = self.headers.*.?.entries.deinit(self.allocator);
+                    self.headers.* = null;
+                }
+                _ = self.body.detach();
+                if (self.hostname.*) |hn| {
+                    _ = &hn;
+                    _ = default_allocator.free(hn);
+                    self.hostname.* = null;
+                }
+                if (self.range.*) |r| {
+                    _ = &r;
+                    _ = default_allocator.free(r);
+                    self.range.* = null;
+                }
+                if ((self.ssl_config.* != null)) {
+                    _ = self.ssl_config.*.?.deinit();
+                    self.ssl_config.* = null;
+                }
+            }
+    }
+};
+
 pub const StringOrURL = struct {
     
 pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; return self_ptr; }
@@ -110,7 +216,7 @@ pub fn fromJS(value: JSValue, globalThis: *JSGlobalObject) JSError!?String {
     }
 };
 
-const JSTypeErrorEnum = std.enums.EnumArray(JSType,string);
+const JSTypeErrorEnum = std.enums.EnumArray(JSType, string);
 const FetchRedirect = http.FetchRedirect;
 const Headers = http.Headers;
 const JSGlobalObject = jsc.JSGlobalObject;
@@ -176,21 +282,20 @@ pub fn Bun__fetchPreconnect_(globalObject: *JSGlobalObject, callframe: *CallFram
         if ((arguments.len < 1)) {
             return globalObject.throwNotEnoughArguments("fetch.preconnect", 1, arguments.len);
         }
-        var url_str = try jsc.URL.hrefFromJS(arguments[0], globalObject);
+        var url_str = DerefGuard(bun.String){ .val = try jsc.URL.hrefFromJS(arguments[0], globalObject) };
         _ = &url_str;
-        defer {
-        _ = url_str.deref();
-        }
+        var __url_str_moved = false; _ = &__url_str_moved;
+        defer if (!__url_str_moved) { __url_str_moved = true; const __T = @TypeOf(url_str); if (@typeInfo(__T) == .optional) { if (url_str) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { url_str.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = url_str; _drop_val.__cp_deinit(); } };
         if (globalObject.hasException()) {
             return JSValue.zero;
         }
-        if ((url_str.tag == .Dead)) {
+        if ((url_str.val.tag == .Dead)) {
             return globalObject.ERR(.INVALID_ARG_TYPE, "Invalid URL", .{}).throw();
         }
-        if (url_str.isEmpty()) {
+        if (url_str.val.isEmpty()) {
             return globalObject.ERR(.INVALID_ARG_TYPE, fetch_error_blank_url, .{}).throw();
         }
-        var url = ZigURL.parse(bun.handleOom(url_str.toOwnedSlice(default_allocator)));
+        var url = ZigURL.parse(bun.handleOom(url_str.val.toOwnedSlice(default_allocator)));
         _ = &url;
         if ((((!url.isHTTP()) and (!url.isHTTPS())) and (!url.isS3()))) {
             _ = default_allocator.free(url.href);
@@ -287,40 +392,34 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
         _ = &reject_unauthorized;
         var check_server_identity: JSValue = JSValue.zero;
         _ = &check_server_identity;
-        defer {
-        {
-            if (signal) |sig| {
-                _ = &sig;
-                signal = null;
-                _ = sig.unref();
-            }
-            _ = unix_socket_path.deinit();
-            _ = allocator.free(url_proxy_buffer);
-            url_proxy_buffer = "";
-            if (headers) |*h| {
-                _ = &h;
-                _ = (h.*).buf.deinit(allocator);
-                _ = (h.*).entries.deinit(allocator);
-                headers = null;
-            }
-            _ = body.detach();
-            if (hostname) |hn| {
-                _ = &hn;
-                _ = default_allocator.free(hn);
-                hostname = null;
-            }
-            if (range) |r| {
-                _ = &r;
-                _ = default_allocator.free(r);
-                range = null;
-            }
-            if (ssl_config) |*conf| {
-                _ = &conf;
-                _ = (conf.*).deinit();
-                ssl_config = null;
-            }
-        }
-        }
+        var _cleanup = FetchCleanupGuard{ .allocator = allocator, .signal = (blk: {
+        break :blk (&signal);
+
+}), .unix_socket_path = (blk: {
+        break :blk (&unix_socket_path);
+
+}), .url_proxy_buffer = (blk: {
+        break :blk (&url_proxy_buffer);
+
+}), .headers = (blk: {
+        break :blk (&headers);
+
+}), .body = (blk: {
+        break :blk (&body);
+
+}), .hostname = (blk: {
+        break :blk (&hostname);
+
+}), .range = (blk: {
+        break :blk (&range);
+
+}), .ssl_config = (blk: {
+        break :blk (&ssl_config);
+
+}) };
+        _ = &_cleanup;
+        var ___cleanup_moved = false; _ = &___cleanup_moved;
+        defer if (!___cleanup_moved) { ___cleanup_moved = true; const __T = @TypeOf(_cleanup); if (@typeInfo(__T) == .optional) { if (_cleanup) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _cleanup.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _cleanup; _drop_val.__cp_deinit(); } };
         var options_object: ?JSValue = null;
         _ = &options_object;
         if (args.nextEat()) |opts| {
@@ -341,53 +440,51 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
         }
         var request_init_object: ?JSValue = (if ((((request == null) and (url_str_optional == null)) and first_arg.isObject())) first_arg else null);
         _ = &request_init_object;
-        var url_str = String.empty;
+        var url_str = DerefGuard(String){ .val = String.empty };
         _ = &url_str;
+        var __url_str_moved = false; _ = &__url_str_moved;
+        defer if (!__url_str_moved) { __url_str_moved = true; const __T = @TypeOf(url_str); if (@typeInfo(__T) == .optional) { if (url_str) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { url_str.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = url_str; _drop_val.__cp_deinit(); } };
         if (url_str_optional) |str| {
             _ = &str;
-            url_str = str;
+            url_str.val = str;
         } else {
             if (request) |req| {
                 _ = &req;
                 _ = bun.handleOom(req.ensureURL());
-                url_str = req.url.dupeRef();
+                url_str.val = req.url.dupeRef();
             } else {
                 if (request_init_object) |req_init| {
                     _ = &req_init;
                     if (try req_init.fastGet(globalThis, .url)) |u| {
                         _ = &u;
                         if ((!u.isUndefined())) {
-                            url_str = try String.fromJS(u, globalThis);
+                            url_str.val = try String.fromJS(u, globalThis);
                         }
                     }
                 }
             }
         }
-        defer {
-        _ = url_str.deref();
-        }
         if (globalThis.hasException()) {
             return JSValue.zero;
         }
-        if (url_str.isEmpty()) {
+        if (url_str.val.isEmpty()) {
             var err = globalThis.toTypeError(.INVALID_URL, fetch_error_blank_url, .{});
             _ = &err;
             return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err);
         }
-        if (url_str.hasPrefixComptime("data:")) {
-            var url_slice = url_str.toUTF8WithoutRef(allocator);
+        if (url_str.val.hasPrefixComptime("data:")) {
+            var url_slice = DeinitGuard(ZigString.Slice){ .val = url_str.val.toUTF8WithoutRef(allocator) };
             _ = &url_slice;
-            defer {
-            _ = url_slice.deinit();
-            }
-            var data_url = (blk_catch_1: { break :blk_catch_1 ((DataURL.parseWithoutCheck(url_slice.slice())) catch |__ce_1| { _ = &__ce_1; var err = globalThis.createError("failed to fetch the data URL", .{});
+            var __url_slice_moved = false; _ = &__url_slice_moved;
+            defer if (!__url_slice_moved) { __url_slice_moved = true; const __T = @TypeOf(url_slice); if (@typeInfo(__T) == .optional) { if (url_slice) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { url_slice.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = url_slice; _drop_val.__cp_deinit(); } };
+            var data_url = (blk_catch_1: { break :blk_catch_1 ((DataURL.parseWithoutCheck(url_slice.val.slice())) catch |__ce_1| { _ = &__ce_1; var err = globalThis.createError("failed to fetch the data URL", .{});
             _ = &err;
             return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err); }); });
             _ = &data_url;
-            data_url.url = url_str;
+            data_url.url = url_str.val;
             return dataURLResponse(data_url, globalThis, allocator);
         }
-        url = (blk_catch_2: { break :blk_catch_2 ((ZigURL.fromString(allocator, url_str)) catch |__ce_2| { _ = &__ce_2; var err = globalThis.toTypeError(.INVALID_URL, "fetch() URL is invalid", .{});
+        url = (blk_catch_2: { break :blk_catch_2 ((ZigURL.fromString(allocator, url_str.val)) catch |__ce_2| { _ = &__ce_2; var err = globalThis.toTypeError(.INVALID_URL, "fetch() URL is invalid", .{});
         _ = &err;
         return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err); }); });
         if (url.isFile()) {
@@ -523,18 +620,17 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
             if (try obj.get(globalThis, "protocol")) |protocol_val| {
                 _ = &protocol_val;
                 if (protocol_val.isString()) {
-                    var pstr = try protocol_val.toBunString(globalThis);
+                    var pstr = DerefGuard(String){ .val = try protocol_val.toBunString(globalThis) };
                     _ = &pstr;
-                    defer {
-                    _ = pstr.deref();
-                    }
-                    if ((pstr.eqlComptime("http2") or pstr.eqlComptime("h2"))) {
+                    var __pstr_moved = false; _ = &__pstr_moved;
+                    defer if (!__pstr_moved) { __pstr_moved = true; const __T = @TypeOf(pstr); if (@typeInfo(__T) == .optional) { if (pstr) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { pstr.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = pstr; _drop_val.__cp_deinit(); } };
+                    if ((pstr.val.eqlComptime("http2") or pstr.val.eqlComptime("h2"))) {
                         force_http2 = true;
                     } else {
-                        if ((pstr.eqlComptime("http3") or pstr.eqlComptime("h3"))) {
+                        if ((pstr.val.eqlComptime("http3") or pstr.val.eqlComptime("h3"))) {
                             force_http3 = true;
                         } else {
-                            if ((pstr.eqlComptime("http1.1") or pstr.eqlComptime("h1"))) {
+                            if ((pstr.val.eqlComptime("http1.1") or pstr.val.eqlComptime("h1"))) {
                                 force_http1 = true;
                             } else {
                                 return globalThis.throwInvalidArguments("fetch: 'protocol' must be \"http2\", \"h2\", \"http3\", \"h3\", \"http1.1\", or \"h1\"", .{});
@@ -637,14 +733,10 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
                 return JSValue.zero;
             }
         }
-        var proxy_headers: ?Headers = null;
+        var proxy_headers = OptDeinitGuard(Headers){ .val = null };
         _ = &proxy_headers;
-        defer {
-        if (proxy_headers) |*hdrs| {
-            _ = &hdrs;
-            _ = (hdrs.*).deinit();
-        }
-        }
+        var __proxy_headers_moved = false; _ = &__proxy_headers_moved;
+        defer if (!__proxy_headers_moved) { __proxy_headers_moved = true; const __T = @TypeOf(proxy_headers); if (@typeInfo(__T) == .optional) { if (proxy_headers) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { proxy_headers.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = proxy_headers; _drop_val.__cp_deinit(); } };
         for (cp_iter_slice(decompress_objs)) |obj| {
             _ = &obj;
             if ((obj == JSValue.zero)) {
@@ -653,17 +745,16 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
             if (try obj.get(globalThis, "proxy")) |proxy_arg| {
                 _ = &proxy_arg;
                 if ((proxy_arg.isString() and (try proxy_arg.getLength(globalThis) > 0))) {
-                    var href = try jsc.URL.hrefFromJS(proxy_arg, globalThis);
+                    var href = DerefGuard(String){ .val = try jsc.URL.hrefFromJS(proxy_arg, globalThis) };
                     _ = &href;
-                    if ((href.tag == .Dead)) {
+                    var __href_moved = false; _ = &__href_moved;
+                    defer if (!__href_moved) { __href_moved = true; const __T = @TypeOf(href); if (@typeInfo(__T) == .optional) { if (href) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { href.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = href; _drop_val.__cp_deinit(); } };
+                    if ((href.val.tag == .Dead)) {
                         var err = globalThis.toTypeError(.INVALID_ARG_VALUE, "fetch() proxy URL is invalid", .{});
                         _ = &err;
                         return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err);
                     }
-                    defer {
-                    _ = href.deref();
-                    }
-                    var buffer = try std.fmt.allocPrint(allocator, "{s}{f}", .{ url_proxy_buffer, href });
+                    var buffer = try std.fmt.allocPrint(allocator, "{s}{f}", .{ url_proxy_buffer, href.val });
                     _ = &buffer;
                     url = ZigURL.parse(buffer[0..url.href.len]);
                     if (url.isFile()) {
@@ -683,17 +774,16 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
                         _ = &proxy_url_arg;
                         if ((!proxy_url_arg.isUndefinedOrNull())) {
                             if ((proxy_url_arg.isString() and (try proxy_url_arg.getLength(globalThis) > 0))) {
-                                var href = try jsc.URL.hrefFromJS(proxy_url_arg, globalThis);
+                                var href = DerefGuard(String){ .val = try jsc.URL.hrefFromJS(proxy_url_arg, globalThis) };
                                 _ = &href;
-                                if ((href.tag == .Dead)) {
+                                var __href_moved = false; _ = &__href_moved;
+                                defer if (!__href_moved) { __href_moved = true; const __T = @TypeOf(href); if (@typeInfo(__T) == .optional) { if (href) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { href.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = href; _drop_val.__cp_deinit(); } };
+                                if ((href.val.tag == .Dead)) {
                                     var err = globalThis.toTypeError(.INVALID_ARG_VALUE, "fetch() proxy URL is invalid", .{});
                                     _ = &err;
                                     return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err);
                                 }
-                                defer {
-                                _ = href.deref();
-                                }
-                                var buffer = try std.fmt.allocPrint(allocator, "{s}{f}", .{ url_proxy_buffer, href });
+                                var buffer = try std.fmt.allocPrint(allocator, "{s}{f}", .{ url_proxy_buffer, href.val });
                                 _ = &buffer;
                                 url = ZigURL.parse(buffer[0..url.href.len]);
                                 if (url.isFile()) {
@@ -711,14 +801,15 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
                                     if ((!headers_value.isUndefinedOrNull())) {
                                         if (headers_value.as(FetchHeaders)) |fetch_hdrs| {
                                             _ = &fetch_hdrs;
-                                            proxy_headers = (blk_catch_5: { break :blk_catch_5 ((Headers.from(fetch_hdrs, allocator, .{})) catch |e| { _ = &e; break :blk_catch_5 bun.handleOom(e); }); });
+                                            proxy_headers.val = (blk_catch_5: { break :blk_catch_5 ((Headers.from(fetch_hdrs, allocator, .{})) catch |e| { _ = &e; break :blk_catch_5 bun.handleOom(e); }); });
                                         } else {
                                             if (try FetchHeaders.createFromJS(globalThis, headers_value)) |fetch_hdrs| {
                                                 _ = &fetch_hdrs;
-                                                defer {
-                                                _ = fetch_hdrs.deref();
-                                                }
-                                                proxy_headers = (blk_catch_6: { break :blk_catch_6 ((Headers.from(fetch_hdrs, allocator, .{})) catch |e| { _ = &e; break :blk_catch_6 bun.handleOom(e); }); });
+                                                var _fh_guard = DerefGuard(*FetchHeaders){ .val = fetch_hdrs };
+                                                _ = &_fh_guard;
+                                                var ___fh_guard_moved = false; _ = &___fh_guard_moved;
+                                                defer if (!___fh_guard_moved) { ___fh_guard_moved = true; const __T = @TypeOf(_fh_guard); if (@typeInfo(__T) == .optional) { if (_fh_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _fh_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _fh_guard; _drop_val.__cp_deinit(); } };
+                                                proxy_headers.val = (blk_catch_6: { break :blk_catch_6 ((Headers.from(fetch_hdrs, allocator, .{})) catch |e| { _ = &e; break :blk_catch_6 bun.handleOom(e); }); });
                                             }
                                         }
                                     }
@@ -840,14 +931,10 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
         if (globalThis.hasException()) {
             return JSValue.zero;
         }
-        var fetch_headers_to_deref: ?*FetchHeaders = null;
+        var fetch_headers_to_deref = OptDerefGuard(*FetchHeaders){ .val = null };
         _ = &fetch_headers_to_deref;
-        defer {
-        if (fetch_headers_to_deref) |fh_deref| {
-            _ = &fh_deref;
-            _ = fh_deref.deref();
-        }
-        }
+        var __fetch_headers_to_deref_moved = false; _ = &__fetch_headers_to_deref_moved;
+        defer if (!__fetch_headers_to_deref_moved) { __fetch_headers_to_deref_moved = true; const __T = @TypeOf(fetch_headers_to_deref); if (@typeInfo(__T) == .optional) { if (fetch_headers_to_deref) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { fetch_headers_to_deref.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = fetch_headers_to_deref; _drop_val.__cp_deinit(); } };
         var fetch_headers: ?*FetchHeaders = null;
         _ = &fetch_headers;
         var headers_resolved = false;
@@ -866,7 +953,7 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
                     } else {
                         if (try FetchHeaders.createFromJS(globalThis, h_val)) |fh| {
                             _ = &fh;
-                            fetch_headers_to_deref = fh;
+                            fetch_headers_to_deref.val = fh;
                             fetch_headers = fh;
                         }
                     }
@@ -898,7 +985,7 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
                             } else {
                                 if (try FetchHeaders.createFromJS(globalThis, h_val)) |fh| {
                                     _ = &fh;
-                                    fetch_headers_to_deref = fh;
+                                    fetch_headers_to_deref.val = fh;
                                     fetch_headers = fh;
                                 }
                             }
@@ -934,12 +1021,11 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
             }
             if (fh.fastGet(FetchHeaders.HTTPHeaderName.Upgrade)) |_upgrade| {
                 _ = &_upgrade;
-                var upgrade = _upgrade.toSlice(default_allocator);
+                var upgrade = DeinitGuard(ZigString.Slice){ .val = _upgrade.toSlice(default_allocator) };
                 _ = &upgrade;
-                defer {
-                _ = upgrade.deinit();
-                }
-                var slice = upgrade.slice();
+                var __upgrade_moved = false; _ = &__upgrade_moved;
+                defer if (!__upgrade_moved) { __upgrade_moved = true; const __T = @TypeOf(upgrade); if (@typeInfo(__T) == .optional) { if (upgrade) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { upgrade.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = upgrade; _drop_val.__cp_deinit(); } };
+                var slice = upgrade.val.slice();
                 _ = &slice;
                 if (((!bun.strings.eqlComptime(slice, "h2")) and (!bun.strings.eqlComptime(slice, "h2c")))) {
                     upgraded_connection = true;
@@ -963,16 +1049,15 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
 .remote => unreachable,
 }))) catch |e| { _ = &e; return globalThis.throwError(e, "Failed to decode file url"); }); })];
             _ = &url_path_decoded;
-            var url_string = bun.String.empty;
+            var url_string = DerefGuard(bun.String){ .val = bun.String.empty };
             _ = &url_string;
-            defer {
-            _ = url_string.deref();
-            }
+            var __url_string_moved = false; _ = &__url_string_moved;
+            defer if (!__url_string_moved) { __url_string_moved = true; const __T = @TypeOf(url_string); if (@typeInfo(__T) == .optional) { if (url_string) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { url_string.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = url_string; _drop_val.__cp_deinit(); } };
             const blob_to_use = blob: {
             if ((url_type == URLType.blob)) {
                 if (jsc.WebCore.ObjectURLRegistry.singleton().resolveAndDupe(url_path_decoded)) |resolved| {
                     _ = &resolved;
-                    url_string = (blk_catch_9: { break :blk_catch_9 ((bun.String.createFormat("blob:{s}", .{ url_path_decoded })) catch |e| { _ = &e; break :blk_catch_9 bun.handleOom(e); }); });
+                    url_string.val = (blk_catch_9: { break :blk_catch_9 ((bun.String.createFormat("blob:{s}", .{ url_path_decoded })) catch |e| { _ = &e; break :blk_catch_9 bun.handleOom(e); }); });
                     break :blob resolved;
                 } else {
                     const err = globalThis.toTypeError(.INVALID_ARG_VALUE, "Failed to resolve blob:{s}", .{ url_path_decoded });
@@ -1003,12 +1088,12 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
             }
             break :brk fullpath;
 };
-            url_string = jsc.URL.fileURLFromString(bun.String.borrowUTF8(temp_file_path));
+            url_string.val = jsc.URL.fileURLFromString(bun.String.borrowUTF8(temp_file_path));
             var pathlike = jsc.Node.PathOrFileDescriptor{ .path = .{ .encoded_slice = ZigString.Slice.init(bun.default_allocator, try bun.default_allocator.dupe(u8, temp_file_path)) } };
             _ = &pathlike;
             break :blob Blob.findOrCreateFileFromPath((&pathlike), globalThis, true);
 };
-            const response = bun.new(Response, Response.init(Response.Init{ .status_code = 200 }, Body{ .value = .{ .Blob = blob_to_use } }, url_string.clone(), false));
+            const response = bun.new(Response, Response.init(Response.Init{ .status_code = 200 }, Body{ .value = .{ .Blob = blob_to_use } }, url_string.val.clone(), false));
             return JSPromise.resolvedPromiseValue(globalThis, response.toJS(globalThis));
         }
         if (((proxy != null) and (unix_socket_path.length() > 0))) {
@@ -1028,10 +1113,10 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
         _ = &promise;
         var promise_val = promise.value();
         _ = &promise_val;
-        _ = (blk_catch_13: { break :blk_catch_13 ((FetchTasklet.queue(allocator, globalThis, (&.{ .method = method, .url = url, .headers = ((headers) orelse (Headers{ .allocator = allocator })), .body = body, .disable_keepalive = disable_keepalive, .disable_timeout = disable_timeout, .disable_decompression = disable_decompression, .reject_unauthorized = reject_unauthorized, .redirect_type = redirect_type, .verbose = verbose, .proxy = proxy, .proxy_headers = proxy_headers, .url_proxy_buffer = url_proxy_buffer, .signal = signal, .globalThis = globalThis, .ssl_config = ssl_config, .hostname = hostname, .upgraded_connection = upgraded_connection, .force_http2 = force_http2, .force_http3 = force_http3, .force_http1 = force_http1, .check_server_identity = (if (check_server_identity.isEmptyOrUndefinedOrNull()) .empty else .create(check_server_identity, globalThis)), .unix_socket_path = unix_socket_path }), promise)) catch |e| { _ = &e; break :blk_catch_13 bun.handleOom(e); }); });
+        _ = (blk_catch_13: { break :blk_catch_13 ((FetchTasklet.queue(allocator, globalThis, (&.{ .method = method, .url = url, .headers = ((headers) orelse (Headers{ .allocator = allocator })), .body = body, .disable_keepalive = disable_keepalive, .disable_timeout = disable_timeout, .disable_decompression = disable_decompression, .reject_unauthorized = reject_unauthorized, .redirect_type = redirect_type, .verbose = verbose, .proxy = proxy, .proxy_headers = proxy_headers.val, .url_proxy_buffer = url_proxy_buffer, .signal = signal, .globalThis = globalThis, .ssl_config = ssl_config, .hostname = hostname, .upgraded_connection = upgraded_connection, .force_http2 = force_http2, .force_http3 = force_http3, .force_http1 = force_http1, .check_server_identity = (if (check_server_identity.isEmptyOrUndefinedOrNull()) .empty else .create(check_server_identity, globalThis)), .unix_socket_path = unix_socket_path }), promise)) catch |e| { _ = &e; break :blk_catch_13 bun.handleOom(e); }); });
         url = .{};
         headers = null;
-        proxy_headers = null;
+        proxy_headers.val = null;
         body = FetchTasklet.HTTPRequestBody.Empty;
         proxy = null;
         url_proxy_buffer = "";
@@ -1043,7 +1128,7 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
         return promise_val;
 }
 
-pub fn setHeaders(headers: ?*Headers, new_headers: []const picohttp.Header, allocator: sys.Allocator) void {
+pub fn setHeaders(headers: ?*Headers, new_headers: []const picohttp.Header, allocator: std.mem.Allocator) void {
         var old = headers.*;
         _ = &old;
         headers.* = bun.handleOom(Headers.fromPicoHttpHeaders(new_headers, allocator));

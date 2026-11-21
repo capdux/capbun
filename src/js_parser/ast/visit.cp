@@ -109,13 +109,7 @@ pub fn Visit(
         static fn visitArgs(p: *P, args: []G.Arg, opts: VisitArgsOpts) {
             const strict_loc = fnBodyContainsUseStrict(opts.body);
             const has_simple_args = isSimpleParameterList(args, opts.has_rest_arg);
-            let duplicate_args_check: (*StringVoidMap.Node)? = null;
-            defer {
-                if (checker := duplicate_args_check) {
-                    const release_fn = StringVoidMap.release;
-                    release_fn(checker);
-                }
-            }
+            let duplicate_args_check_guard = ReleaseNodeGuard<StringVoidMap>{};
 
             // Section 15.2.1 Static Semantics: Early Errors: "It is a Syntax Error if
             // FunctionBodyContainsUseStrict of FunctionBody is true and
@@ -129,11 +123,11 @@ pub fn Visit(
             // functions which have simple parameter lists and which are not defined in
             // strict mode code."
             if (opts.is_unique_formal_parameters || strict_loc != null || !has_simple_args || p.isStrictMode()) {
-                duplicate_args_check = StringVoidMap.get(bun.default_allocator);
+                duplicate_args_check_guard.node = StringVoidMap.get(bun.default_allocator);
             }
 
-            const duplicate_args_check_ptr: (*StringVoidMap)? = if (duplicate_args_check != null)
-                &duplicate_args_check.?.data
+            const duplicate_args_check_ptr: (*StringVoidMap)? = if (duplicate_args_check_guard.node != null)
+                &duplicate_args_check_guard.node.?.data
             else
                 null;
 
@@ -795,10 +789,10 @@ pub fn Visit(
                 defer p.is_control_flow_dead = old_is_control_flow_dead;
 
                 let before = ListManaged(Stmt).init(p.allocator);
-                defer before.deinit();
+                let _before_guard = DeinitGuard<ListManaged(Stmt)>{ ptr: &before };
 
                 let after = ListManaged(Stmt).init(p.allocator);
-                defer after.deinit();
+                let _after_guard = DeinitGuard<ListManaged(Stmt)>{ ptr: &after };
 
                 // Preprocess TypeScript enums to improve code generation. Otherwise
                 // uses of an enum before that enum has been declared won't be inlined:
@@ -809,7 +803,7 @@ pub fn Visit(
                 // The TypeScript compiler itself contains code with this pattern, so
                 // it's important to implement this optimization.
                 let preprocessed_enums: std.ArrayListUnmanaged([]Stmt) = {};
-                defer preprocessed_enums.deinit(p.allocator);
+                let _preprocessed_enums_guard = DeinitWithAllocGuard<std.ArrayListUnmanaged([]Stmt)>{ ptr: &preprocessed_enums, allocator: p.allocator };
                 if (p.scopes_in_order_for_enum.count() > 0) {
                     let found: usize = 0;
                     for (i of 0..stmts.items.len) {
@@ -834,7 +828,7 @@ pub fn Visit(
 
                 // visit all statements first
                 let visited = ListManaged(Stmt).initCapacity(p.allocator, stmts.items.len)?;
-                defer visited.deinit();
+                let _visited_guard = DeinitGuard<ListManaged(Stmt)>{ ptr: &visited };
 
                 const prev_nearest_stmt_list = p.nearest_stmt_list;
                 defer p.nearest_stmt_list = prev_nearest_stmt_list;
@@ -885,12 +879,9 @@ pub fn Visit(
                     let let_decls = ListManaged(G.Decl).init(p.allocator);
                     let var_decls = ListManaged(G.Decl).init(p.allocator);
                     let non_fn_stmts = ListManaged(Stmt).init(p.allocator);
+                    let _non_fn_stmts_guard = DeinitGuard<ListManaged(Stmt)>{ ptr: &non_fn_stmts };
                     let fn_stmts = std.AutoHashMap(Ref, u32).init(p.allocator);
-
-                    defer {
-                        non_fn_stmts.deinit();
-                        fn_stmts.deinit();
-                    }
+                    let _fn_stmts_guard = DeinitGuard<std.AutoHashMap(Ref, u32)>{ ptr: &fn_stmts };
 
                     for (stmt of before.items) {
                         switch (stmt.data) {
@@ -1429,3 +1420,35 @@ const options = js_parser.options;
 const AutoHashMap = std.AutoHashMap;
 const List = std.ArrayListUnmanaged;
 const ListManaged = std.array_list.Managed;
+
+struct DeinitGuard<T: type> {
+    ptr: (*T)? = null,
+
+    ~init() {
+        if (ptr := _.ptr) {
+            ptr.deinit();
+        }
+    }
+}
+
+struct DeinitWithAllocGuard<T: type> {
+    ptr: (*T)? = null,
+    allocator: std.mem.Allocator,
+
+    ~init() {
+        if (ptr := _.ptr) {
+            ptr.deinit(_.allocator);
+        }
+    }
+}
+
+struct ReleaseNodeGuard<T: type> {
+    node: (*T.Node)? = null,
+
+    ~init() {
+        if (n := _.node) {
+            const release_fn = T.release;
+            release_fn(n);
+        }
+    }
+}

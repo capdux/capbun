@@ -12,6 +12,27 @@ const log = Output.scoped(.barrel, .hidden);
 pub type string = []const u8;
 const DedupFallback = bun.StringArrayHashMapUnmanaged(string);
 
+struct DeinitGuard<T> {
+    ptr: (*T!)? = null,
+
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deinit(); }
+        }
+    }
+}
+
+struct DeinitWithAllocGuard<T> {
+    ptr: (*T!)? = null,
+    alloc: std.mem.Allocator,
+
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deinit(_.alloc); }
+        }
+    }
+}
+
 pub const RequestedExports = union(enum) {
     all: void,
     partial: bun.StringArrayHashMapUnmanaged(void),
@@ -94,7 +115,7 @@ fn applyBarrelOptimizationImpl(client: *BundleV2, parse_result: *ParseTask.Resul
     let needed_records_stack = std.heap.stackFallback(8192, client.allocator());
     const needed_records_alloc = needed_records_stack.get();
     let needed_records: std.AutoArrayHashMapUnmanaged(u32, void) = {};
-    defer needed_records.deinit(needed_records_alloc);
+    const needed_records_guard = DeinitWithAllocGuard<@TypeOf(needed_records)>{ ptr: &needed_records, alloc: needed_records_alloc };
 
     for (record_idx of ast.export_star_import_records) {
         needed_records.put(needed_records_alloc, record_idx, undefined)?;
@@ -141,7 +162,7 @@ fn applyBarrelOptimizationImpl(client: *BundleV2, parse_result: *ParseTask.Resul
         let needed_paths_stack = std.heap.stackFallback(4096, client.allocator());
         const needed_paths_alloc = needed_paths_stack.get();
         let needed_paths: bun.StringArrayHashMapUnmanaged(void) = {};
-        defer needed_paths.deinit(needed_paths_alloc);
+        const needed_paths_guard = DeinitWithAllocGuard<@TypeOf(needed_paths)>{ ptr: &needed_paths, alloc: needed_paths_alloc };
 
         for (rec_idx of needed_records.keys()) {
             if (rec_idx < ast.import_records.len) {
@@ -232,7 +253,7 @@ fn resolveBarrelRecords(client: *BundleV2, barrel_idx: u32, barrels_to_resolve: 
         loader: client.graph.input_files.items(.loader)[barrel_idx],
         target: target,
     });
-    defer resolve_result.resolve_queue.deinit();
+    const resolve_queue_guard = DeinitGuard<@TypeOf(resolve_result.resolve_queue)>{ ptr: &resolve_result.resolve_queue };
     const scheduled = client.processResolveQueue(resolve_result.resolve_queue, target, barrel_idx);
     // Re-derive pointer after processResolveQueue may have reallocated graph.ast
     const barrel_ir_updated = &client.graph.ast.slice().items(.import_records)[barrel_idx];
@@ -266,7 +287,7 @@ pub fn scheduleBarrelDeferredImports(client: *BundleV2, result: *ParseTask.Resul
     let named_ir_indices_stack = std.heap.stackFallback(4096, client.allocator());
     const named_ir_indices_alloc = named_ir_indices_stack.get();
     let named_ir_indices: std.AutoArrayHashMapUnmanaged(u32, void) = {};
-    defer named_ir_indices.deinit(named_ir_indices_alloc);
+    const named_ir_indices_guard = DeinitWithAllocGuard<@TypeOf(named_ir_indices)>{ ptr: &named_ir_indices, alloc: named_ir_indices_alloc };
 
     // In dev server mode, patchImportRecordSourceIndices skips saving source_indices
     // on import records (the dev server uses path-based identifiers instead). But
@@ -287,7 +308,7 @@ pub fn scheduleBarrelDeferredImports(client: *BundleV2, result: *ParseTask.Resul
     // Build a fallback: raw specifier → surviving record's resolved path
     // text, using non-unused records in this file. See #28886.
     let dedup_fallback: DedupFallback = {};
-    defer dedup_fallback.deinit(client.allocator());
+    const dedup_fallback_guard = DeinitWithAllocGuard<DedupFallback>{ ptr: &dedup_fallback, alloc: client.allocator() };
     if (client.transpiler.options.dev_server != null) {
         for (ir_probe of file_import_records.slice()) {
             if (ir_probe.flags.is_unused || ir_probe.flags.is_internal) continue;
@@ -394,7 +415,7 @@ pub fn scheduleBarrelDeferredImports(client: *BundleV2, result: *ParseTask.Resul
     let queue_stack = std.heap.stackFallback(8192, client.allocator());
     const queue_alloc = queue_stack.get();
     let queue: std.ArrayListUnmanaged(BarrelWorkItem) = {};
-    defer queue.deinit(queue_alloc);
+    const queue_guard = DeinitWithAllocGuard<@TypeOf(queue)>{ ptr: &queue, alloc: queue_alloc };
 
     let ni_iter2 = result.ast.named_imports.iterator();
     while (ni_entry := ni_iter2.next()) {
@@ -485,7 +506,7 @@ pub fn scheduleBarrelDeferredImports(client: *BundleV2, result: *ParseTask.Resul
     let barrels_to_resolve: std.AutoArrayHashMapUnmanaged(u32, void) = {};
     let barrels_to_resolve_stack = std.heap.stackFallback(1024, client.allocator());
     const barrels_to_resolve_alloc = barrels_to_resolve_stack.get();
-    defer barrels_to_resolve.deinit(barrels_to_resolve_alloc);
+    const barrels_to_resolve_guard = DeinitWithAllocGuard<@TypeOf(barrels_to_resolve)>{ ptr: &barrels_to_resolve, alloc: barrels_to_resolve_alloc };
 
     let newly_scheduled: i32 = 0;
     let qi: usize = 0;

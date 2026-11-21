@@ -1531,3 +1531,7 @@
 ## [2026-11-22 Wave #9] RAII 改造与 `unsafe {}` 经验
 - `backend_wic.cp`：COM 接口 `release()`、`GlobalUnlock()`、`CloseClipboard()` 与堆分配切片 `FreeSliceGuard` 统一收口为 `~init()`，并用 `unsafe {}` 包裹全部 `@ptrCast`/`@alignCast`。
 - `websocket_client.cp`：`this.deref()`、`ws.unref()`、`allocator.free(buf)` 等 12 处资源清理收口至 `DerefGuard`/`UnrefGuard`/`AllocFreeGuard`/`DeinitGuard`（膨胀率仅 `0.88`）。
+
+## [2026-11-22 Wave #10] RAII 改造与 `unsafe {}` 经验
+- `publish_command.cp`：`ReadmeGuard<T>` 指向 `ReadmeInfo?` 时需声明为 `ptr: *(T?)!`，避免 `*T?!` 被解析为可选指针 `(?*T)!`。
+- `fetch.cp`：`FetchCleanupGuard` 与 `setHeaders` 统一采用 `std.mem.Allocator`，并把 `FetchTasklet.queue` 移交的所有权状态在 Guard 上显式清零，防止双重释放。

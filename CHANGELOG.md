@@ -1935,3 +1935,11 @@
 - `src/runtime/api/bun/js_bun_spawn_bindings.{cp,zig}` (`13 -> 4` 状态/多步清理, ratio `1.041`)
 - `src/http_jsc/websocket_client.{cp,zig}` (`13 -> 1` 状态恢复, ratio `0.88`)
 - 复核达标（剩余 `defer` 全为状态/锁/配对型）：`src/resolver/resolver.cp` (`13`), `src/runtime/server/server.cp` (`11`), `src/interchange/yaml.cp` (`11`)
+
+## [2026-11-22 Wave #10] RAII `~init()` 与 `unsafe {}` 改造（5 改造 + 1 复核）
+- `src/cli/publish_command.{cp,zig}` (`13 -> 1` 控制台恢复, ratio `1.049`)
+- `src/bundler/barrel_imports.{cp,zig}` (`7 -> 0`, ratio `1.126`)
+- `src/test_runner/expect/toThrow.{cp,zig}` (`12 -> 1` 回调, ratio `1.016`)
+- `src/runtime/webcore/fetch.{cp,zig}` (`12 -> 0`, ratio `0.59`)
+- `src/js_parser/ast/visit.{cp,zig}` (`13 -> 7` 作用域/状态恢复, ratio `1.028`)
+- 复核达标：`src/js_parser/ast/visitStmt.cp` (`13` 处全为作用域/状态恢复型)
