@@ -25,6 +25,63 @@ const log = bun.Output.scoped(.Chrome, .hidden);
 
 let instance: (*ChromeProcess)? = null;
 
+struct PoolPutGuard<T> {
+    buf: T? = null,
+
+    ~init() {
+        if (b := _.buf) {
+            _.buf = null;
+            bun.path_buffer_pool.put(b);
+        }
+    }
+}
+
+struct CloseGuard<T> {
+    val: T? = null,
+
+    ~init() {
+        if (v := _.val) {
+            _.val = null;
+            v.close();
+        }
+    }
+}
+
+struct FreeGuard<T> {
+    slice: T? = null,
+    alloc: std.mem.Allocator,
+
+    ~init() {
+        if (s := _.slice) {
+            _.slice = null;
+            _.alloc.free(s);
+        }
+    }
+}
+
+struct DeinitGuard<T> {
+    ptr: (*T!)? = null,
+
+    ~init() {
+        if (p := _.ptr) {
+            _.ptr = null;
+            unsafe { p.deinit(); }
+        }
+    }
+}
+
+struct DeinitWithAllocGuard<T> {
+    ptr: (*T!)? = null,
+    alloc: std.mem.Allocator,
+
+    ~init() {
+        if (p := _.ptr) {
+            _.ptr = null;
+            unsafe { p.deinit(_.alloc); }
+        }
+    }
+}
+
 @root struct ChromeProcess {
     process: *bun.spawn.Process,
 
@@ -110,7 +167,7 @@ fn findChrome(alloc: std.mem.Allocator, explicitPath: ([*:0]const u8)?): !([:0]c
     }
 
     const buf = bun.path_buffer_pool.get();
-    defer bun.path_buffer_pool.put(buf);
+    let buf_guard = PoolPutGuard<@TypeOf(buf)>{ buf: buf };
 
     // $PATH first — `brew install chromium`, distro packages, manual symlinks
     // all land here. Same precedence as `which` at a shell prompt.
@@ -188,7 +245,7 @@ fn findPlaywrightShell(alloc: std.mem.Allocator): ([:0]const u8)? {
     const home = bun.env_var.HOME.get() ?? return null;
 
     const dir_buf = bun.path_buffer_pool.get();
-    defer bun.path_buffer_pool.put(dir_buf);
+    let dir_buf_guard = PoolPutGuard<@TypeOf(dir_buf)>{ buf: dir_buf };
     const cache_subpath = if (comptime bun.Environment.isMac)
         "Library/Caches/ms-playwright"
     else
@@ -200,7 +257,7 @@ fn findPlaywrightShell(alloc: std.mem.Allocator): ([:0]const u8)? {
         .result => |f| f,
         .err => return null,
     };
-    defer fd.close();
+    let fd_guard = CloseGuard<bun.FD>{ val: fd };
 
     // Scan for chromium_headless_shell-<rev> and track max rev.
     let best_rev: u32 = 0;
@@ -229,10 +286,10 @@ fn findPlaywrightShell(alloc: std.mem.Allocator): ([:0]const u8)? {
     const arch = if (comptime bun.Environment.isAarch64) "arm64" else "x64";
     const plat = if (comptime bun.Environment.isMac) "mac" else "linux";
     const subdir_cft = std.fmt.allocPrint(alloc, "chrome-headless-shell-{s}-{s}/chrome-headless-shell", .{ plat, arch }) catch return null;
-    defer alloc.free(subdir_cft);
+    let subdir_guard = FreeGuard<@TypeOf(subdir_cft)>{ slice: subdir_cft, alloc: alloc };
 
     const bin_buf = bun.path_buffer_pool.get();
-    defer bun.path_buffer_pool.put(bin_buf);
+    let bin_buf_guard = PoolPutGuard<@TypeOf(bin_buf)>{ buf: bin_buf };
     const bin_parts = [cache_dir, best_name[0..best_len], subdir_cft];
     const bin = bun.path.joinStringBufZ(bin_buf, &bin_parts, .auto);
     if (bun.sys.isExecutableFilePath(bin)) return alloc.dupeZ(u8, bin) catch return null;
@@ -257,7 +314,7 @@ fn @"spawn"(
     if (comptime bun.Environment.isWindows) return error.Unsupported;
 
     let arena_alloc = std.heap.ArenaAllocator.init(bun.default_allocator);
-    defer arena_alloc.deinit();
+    let arena_guard = DeinitGuard<std.heap.ArenaAllocator>{ ptr: &arena_alloc };
     const alloc = arena_alloc.allocator();
 
     const chrome_opt = findChrome(alloc, explicitPath)?;
@@ -278,10 +335,8 @@ fn @"spawn"(
         0,
         .blocking,
     ).unwrap()?;
-    errdefer {
-        fds[0].close();
-        fds[1].close();
-    }
+    let fd0_guard = CloseGuard<bun.FD>{ val: fds[0] };
+    let fd1_guard = CloseGuard<bun.FD>{ val: fds[1] };
     bun.sys.setNonblocking(fds[0]).unwrap()?;
 
     // Minimal flags. --remote-debugging-pipe is the one that matters;
@@ -306,21 +361,23 @@ fn @"spawn"(
     }
 
     let argv: std.ArrayListUnmanaged(?[*:0]u8) = {};
-    argv.append(alloc, @constCast(chrome.ptr))?;
-    argv.append(alloc, @constCast(dataDir.ptr))?;
-    argv.append(alloc, @constCast("--remote-debugging-pipe"))?;
-    argv.append(alloc, @constCast("--headless"))?;
-    argv.append(alloc, @constCast("--no-first-run"))?;
-    argv.append(alloc, @constCast("--no-default-browser-check"))?;
-    argv.append(alloc, @constCast("--disable-gpu"))?;
-    argv.append(alloc, @constCast("--disable-extensions"))?;
-    argv.append(alloc, @constCast("--disable-background-networking"))?;
-    argv.append(alloc, @constCast("--disable-background-timer-throttling"))?;
-    argv.append(alloc, @constCast("--disable-backgrounding-occluded-windows"))?;
-    argv.append(alloc, @constCast("--disable-renderer-backgrounding"))?;
-    argv.append(alloc, @constCast("--disable-ipc-flooding-protection"))?;
-    argv.append(alloc, @constCast("--no-startup-window"))?;
-    for (a of extraArgv) argv.append(alloc, @constCast(a))?;
+    unsafe {
+        argv.append(alloc, @constCast(chrome.ptr))?;
+        argv.append(alloc, @constCast(dataDir.ptr))?;
+        argv.append(alloc, @constCast("--remote-debugging-pipe"))?;
+        argv.append(alloc, @constCast("--headless"))?;
+        argv.append(alloc, @constCast("--no-first-run"))?;
+        argv.append(alloc, @constCast("--no-default-browser-check"))?;
+        argv.append(alloc, @constCast("--disable-gpu"))?;
+        argv.append(alloc, @constCast("--disable-extensions"))?;
+        argv.append(alloc, @constCast("--disable-background-networking"))?;
+        argv.append(alloc, @constCast("--disable-background-timer-throttling"))?;
+        argv.append(alloc, @constCast("--disable-backgrounding-occluded-windows"))?;
+        argv.append(alloc, @constCast("--disable-renderer-backgrounding"))?;
+        argv.append(alloc, @constCast("--disable-ipc-flooding-protection"))?;
+        argv.append(alloc, @constCast("--no-startup-window"))?;
+        for (a of extraArgv) argv.append(alloc, @constCast(a))?;
+    }
     argv.append(alloc, null)?;
 
     const env = vm.transpiler.env.map.createNullDelimitedEnvMap(alloc)?;
@@ -338,17 +395,19 @@ fn @"spawn"(
         argv0: chrome.ptr,
     };
 
-    const spawned_maybe = bun.spawn.spawnProcess(
-        &opts,
-        @ptrCast(argv.items.ptr),
-        @ptrCast(env.ptr),
-    )?;
+    const spawned_maybe = unsafe {
+        bun.spawn.spawnProcess(
+            &opts,
+            @ptrCast(argv.items.ptr),
+            @ptrCast(env.ptr),
+        )
+    }?;
     let spawned = spawned_maybe.unwrap()?;
 
     // Parent doesn't need the child's end. POSIX_SPAWN_CLOEXEC_DEFAULT
     // already closed our copy in the child (only fd 3/4 survive the exec);
     // close our reference so Chrome's death EOF's our end.
-    fds[1].close();
+    fd1_guard.~init();
 
     const self = bun.new(ChromeProcess, {
         process: spawned.toProcess(vm.eventLoop(), false),
@@ -365,13 +424,13 @@ fn @"spawn"(
             log("watch failed: {f}", .{e});
             self.process.deref();
             bun.destroy(self);
-            fds[0].close();
             return error.WatchFailed;
         },
     }
     instance = self;
     // fd returned to C++ which adopts it into usockets. Not stored here —
     // usockets owns it; we only own the process lifetime.
+    fd0_guard.val = null;
     return fds[0];
 }
 
@@ -444,7 +503,7 @@ fn readDevToolsActivePort(out_buf: *std.ArrayListUnmanaged(u8)): bool {
             .err => continue, // ENOENT or EACCES — try next
             .result => |c| c,
         };
-        defer bun.default_allocator.free(contents);
+        let contents_guard = FreeGuard<@TypeOf(contents)>{ slice: contents, alloc: bun.default_allocator };
 
         // Parse: line 1 = port, line 2 = path.
         let lines = std.mem.splitScalar(u8, contents, '\n');
@@ -477,7 +536,7 @@ fn readDevToolsActivePort(out_buf: *std.ArrayListUnmanaged(u8)): bool {
 /// because that'd need a network round-trip which defeats the file.
 @export @c fn Bun__Chrome__autoDetect(out_buf: [*]u8, out_cap: usize): usize {
     let buf: std.ArrayListUnmanaged(u8) = .empty;
-    defer buf.deinit(bun.default_allocator);
+    let buf_guard = DeinitWithAllocGuard<std.ArrayListUnmanaged(u8)>{ ptr: &buf, alloc: bun.default_allocator };
     if (readDevToolsActivePort(&buf)) {
         if (buf.items.len > out_cap) return 0;
         unsafe {

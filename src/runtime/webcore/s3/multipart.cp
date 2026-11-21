@@ -28,6 +28,17 @@ const JSTerminatedError = bun.JSTerminated;
 const OOMError = bun.OOM;
 const log = Output.scoped(.S3MultiPartUpload, .hidden);
 
+struct DerefGuard<T> {
+    ptr: (*T!)? = null,
+
+    ~init() {
+        if (p := _.ptr) {
+            _.ptr = null;
+            unsafe { p.deref(); }
+        }
+    }
+}
+
 export enum MultiPartUploadState {
     wait_stream_check,
     not_started,
@@ -86,7 +97,7 @@ export struct UploadPart {
     }
 
     static fn onPartResponse(result: S3SimpleRequest.S3PartResult, self_any: *!): JSTerminatedError!void {
-        const part: *UploadPart = @ptrCast(@alignCast(self_any));
+        const part: *UploadPart = unsafe { @ptrCast(@alignCast(self_any)) };
         if (part.state == .canceled or part.ctx.state == .finished) {
             log("onPartResponse {} canceled", .{ part.partNumber });
             part.freeAllocatedSlice();
@@ -107,7 +118,7 @@ export struct UploadPart {
                     part.state = .not_assigned;
                     log("onPartResponse {} failed", .{ part.partNumber });
                     part.freeAllocatedSlice();
-                    defer part.ctx.deref();
+                    let ctx_guard = DerefGuard<MultiPartUpload>{ ptr: part.ctx };
                     return part.ctx.fail(s3_err);
                 }
             },
@@ -120,7 +131,7 @@ export struct UploadPart {
                     .etag = handleOom(default_allocator.dupe(u8, etag)),
                 }) catch |oom_err| handleOom(oom_err);
                 part.state = .not_assigned;
-                defer part.ctx.deref();
+                let ctx_guard = DerefGuard<MultiPartUpload>{ ptr: part.ctx };
                 part.ctx.available.set(part.index);
                 part.ctx.drainEnqueuedParts(sent)?;
             },
@@ -141,7 +152,7 @@ export struct UploadPart {
             search_params: search_params,
             request_payer: this.ctx.request_payer,
         };
-        const cb: S3SimpleRequest.S3HttpSimpleTask.Callback = .{ .part = @constCast(@ptrCast(&onPartResponse)) };
+        const cb: S3SimpleRequest.S3HttpSimpleTask.Callback = .{ .part = unsafe { @constCast(@ptrCast(&onPartResponse)) } };
         executeSimpleS3Request(this.ctx.credentials, req_opts, cb, this)?;
     }
 
@@ -260,7 +271,7 @@ export class MultiPartUpload {
     }
 
     static fn singleSendUploadResponse(result: S3SimpleRequest.S3UploadResult, self_any: *!): JSTerminatedError!void {
-        const upload: *MultiPartUpload = @ptrCast(@alignCast(self_any));
+        const upload: *MultiPartUpload = unsafe { @ptrCast(@alignCast(self_any)) };
         if (upload.state == .finished) return;
         switch (result) {
             .failure(s3_err) => {
@@ -280,7 +291,7 @@ export class MultiPartUpload {
                         storage_class: upload.storage_class,
                         request_payer: upload.request_payer,
                     };
-                    const cb: S3SimpleRequest.S3HttpSimpleTask.Callback = .{ .upload = @constCast(@ptrCast(&singleSendUploadResponse)) };
+                    const cb: S3SimpleRequest.S3HttpSimpleTask.Callback = .{ .upload = unsafe { @constCast(@ptrCast(&singleSendUploadResponse)) } };
                     executeSimpleS3Request(upload.credentials, req_opts, cb, upload)?;
                     return;
                 } else {
@@ -413,14 +424,14 @@ export class MultiPartUpload {
             this.commitMultiPartRequest()?;
         } else if (this.state == .singlefile_started) {
             this.state = .finished;
-            defer this.deref();
+            let self_guard = DerefGuard<MultiPartUpload>{ ptr: this };
             this.callback(.success, this.callback_context)?;
         }
     }
 
     static fn startMultiPartRequestResult(result: S3SimpleRequest.S3DownloadResult, self_any: *!): JSTerminatedError!void {
-        const upload: *MultiPartUpload = @ptrCast(@alignCast(self_any));
-        defer upload.deref();
+        const upload: *MultiPartUpload = unsafe { @ptrCast(@alignCast(self_any)) };
+        let upload_guard = DerefGuard<MultiPartUpload>{ ptr: upload };
         if (upload.state == .finished) return;
         switch (result) {
             .failure(s3_err) => {
@@ -460,7 +471,7 @@ export class MultiPartUpload {
     }
 
     static fn onCommitMultiPartRequest(result: S3SimpleRequest.S3CommitResult, self_any: *!): JSTerminatedError!void {
-        const upload: *MultiPartUpload = @ptrCast(@alignCast(self_any));
+        const upload: *MultiPartUpload = unsafe { @ptrCast(@alignCast(self_any)) };
         log("onCommitMultiPartRequest {s}", .{ upload.upload_id });
         switch (result) {
             .failure(s3_err) => {
@@ -469,12 +480,12 @@ export class MultiPartUpload {
                     upload.commitMultiPartRequest()?;
                     return;
                 }
-                defer upload.deref();
+                let upload_guard = DerefGuard<MultiPartUpload>{ ptr: upload };
                 upload.state = .finished;
                 upload.callback(.{ .failure = s3_err }, upload.callback_context)?;
             },
             .success => {
-                defer upload.deref();
+                let upload_guard = DerefGuard<MultiPartUpload>{ ptr: upload };
                 upload.state = .finished;
                 upload.callback(.success, upload.callback_context)?;
             },
@@ -482,7 +493,7 @@ export class MultiPartUpload {
     }
 
     static fn onRollbackMultiPartRequest(result: S3SimpleRequest.S3UploadResult, self_any: *!): JSTerminatedError!void {
-        const upload: *MultiPartUpload = @ptrCast(@alignCast(self_any));
+        const upload: *MultiPartUpload = unsafe { @ptrCast(@alignCast(self_any)) };
         log("onRollbackMultiPartRequest {s}", .{ upload.upload_id });
         switch (result) {
             .failure => {
@@ -514,7 +525,7 @@ export class MultiPartUpload {
             search_params: searchParams,
             request_payer: this.request_payer,
         };
-        const cb: S3SimpleRequest.S3HttpSimpleTask.Callback = .{ .commit = @constCast(@ptrCast(&onCommitMultiPartRequest)) };
+        const cb: S3SimpleRequest.S3HttpSimpleTask.Callback = .{ .commit = unsafe { @constCast(@ptrCast(&onCommitMultiPartRequest)) } };
         executeSimpleS3Request(this.credentials, req_opts, cb, this)?;
     }
 
@@ -532,7 +543,7 @@ export class MultiPartUpload {
             .body = "",
             .search_params = search_params,
             .request_payer = this.request_payer,
-        }, .{ .upload = @constCast(@ptrCast(&onRollbackMultiPartRequest)) }, this)?;
+        }, .{ .upload = unsafe { @constCast(@ptrCast(&onRollbackMultiPartRequest)) } }, this)?;
     }
 
     fn enqueuePart(*_, chunk: string, allocated_size: usize, needs_clone: bool): JSTerminatedError!bool {
@@ -555,7 +566,7 @@ export class MultiPartUpload {
                 .acl = this.acl,
                 .storage_class = this.storage_class,
                 .request_payer = this.request_payer,
-            }, .{ .download = @ptrCast(&startMultiPartRequestResult) }, this)?;
+            }, .{ .download = unsafe { @ptrCast(&startMultiPartRequestResult) } }, this)?;
         } else if (this.state == .multipart_completed) {
             part.start()?;
         }
@@ -624,7 +635,7 @@ export class MultiPartUpload {
                 storage_class: this.storage_class,
                 request_payer: this.request_payer,
             };
-            const cb: S3SimpleRequest.S3HttpSimpleTask.Callback = .{ .upload = @constCast(@ptrCast(&singleSendUploadResponse)) };
+            const cb: S3SimpleRequest.S3HttpSimpleTask.Callback = .{ .upload = unsafe { @constCast(@ptrCast(&singleSendUploadResponse)) } };
             executeSimpleS3Request(this.credentials, req_opts, cb, this) catch {};
         } else {
             this.processMultiPart(part_size) catch {};
@@ -656,7 +667,7 @@ export class MultiPartUpload {
     fn write(*_, chunk: string, is_last: bool, comptime encoding: WriteEncoding): OOMError!ResumableSinkBackpressure {
         if (this.ended) return ResumableSinkBackpressure.done;
         this.ref();
-        defer this.deref();
+        let self_guard = DerefGuard<MultiPartUpload>{ ptr: this };
         if (this.state == .wait_stream_check and chunk.len == 0 and is_last) {
             this.ended = true;
             if (this.buffered.size() > 0) {
@@ -670,7 +681,7 @@ export class MultiPartUpload {
                 switch (encoding) {
                     .bytes => this.buffered.write(chunk)?,
                     .latin1 => this.buffered.writeLatin1(chunk, true)?,
-                    .utf16 => this.buffered.writeUTF16(@alignCast(std.mem.bytesAsSlice(u16, chunk)))?,
+                    .utf16 => this.buffered.writeUTF16(unsafe { @alignCast(std.mem.bytesAsSlice(u16, chunk)) })?,
                 }
             }
             this.processBuffered(this.partSizeInBytes());
@@ -679,7 +690,7 @@ export class MultiPartUpload {
             switch (encoding) {
                 .bytes => this.buffered.write(chunk)?,
                 .latin1 => this.buffered.writeLatin1(chunk, true)?,
-                .utf16 => this.buffered.writeUTF16(@alignCast(std.mem.bytesAsSlice(u16, chunk)))?,
+                .utf16 => this.buffered.writeUTF16(unsafe { @alignCast(std.mem.bytesAsSlice(u16, chunk)) })?,
             }
             let partSize = this.partSizeInBytes();
             if (this.buffered.size() >= partSize) {

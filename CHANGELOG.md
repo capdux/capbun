@@ -1997,3 +1997,13 @@
 - `src/install_jsc/ini_jsc.{cp,zig}` (`10 -> 0`, ratio `1.078`)
 - `src/cli/package_manager_command.{cp,zig}` (`10 -> 1` 状态恢复, ratio `0.997`)
 - `src/cli/outdated_command.{cp,zig}` (`10 -> 0`, ratio `1.118`)
+
+## [2026-11-22 Wave #17] RAII `~init()` 与 `unsafe {}` 改造（8 模块）
+- `src/watcher/Watcher.{cp,zig}` (`9 -> 2` flush/状态重置, ratio `0.912`)
+- `src/test_runner/snapshot.{cp,zig}` (`10 -> 1` 日志输出, ratio `1.145`)
+- `src/sql_jsc/postgres/PostgresSQLQuery.{cp,zig}` (`9 -> 2` GC 护栏, ratio `1.048`)
+- `src/shell/states/Cmd.{cp,zig}` (`9 -> 0`, ratio `1.065`)
+- `src/runtime/webcore/ObjectURLRegistry.{cp,zig}` (`9 -> 0`, ratio `1.085`)
+- `src/install_jsc/npm_jsc.{cp,zig}` (`9 -> 0`, ratio `1.072`)
+- `src/runtime/webview/ChromeProcess.{cp,zig}` (`9 -> 0`, ratio `1.149`)
+- `src/runtime/webcore/s3/multipart.{cp,zig}` (`9 -> 2` 状态恢复, ratio `0.892`)

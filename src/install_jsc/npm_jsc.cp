@@ -5,13 +5,28 @@ const jsc = bun.jsc;
 const strings = bun.strings;
 const npm = bun.install.Npm;
 
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() { unsafe { _.ptr.deinit(); } }
+}
+
+struct DerefGuard<T> {
+    ptr: *T!,
+    ~init() { unsafe { _.ptr.deref(); } }
+}
+
+struct CloseGuard<T> {
+    ptr: *T!,
+    ~init() { unsafe { _.ptr.close(); } }
+}
+
 pub fn operatingSystemIsMatch(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): jsc.JSValue ! bun.JSError {
     const args = callframe.arguments_old(1);
     let operating_system = npm.OperatingSystem.negatable(.none);
     let iter = unsafe { args.ptr[0].arrayIterator(globalObject)? };
     while (item := iter.next()?) {
-        const slice = item.toSlice(globalObject, bun.default_allocator)?;
-        defer slice.deinit();
+        let slice = item.toSlice(globalObject, bun.default_allocator)?;
+        const _slice_g = DeinitGuard<@TypeOf(slice)>{ ptr: &slice };
         operating_system.apply(slice.slice());
         if (globalObject.hasException()) return jsc.JSValue.zero;
     }
@@ -24,8 +39,8 @@ pub fn libcIsMatch(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame)
     let libc = npm.Libc.negatable(.none);
     let iter = unsafe { args.ptr[0].arrayIterator(globalObject) };
     while (item := iter.next()) {
-        const slice = item.toSlice(globalObject, bun.default_allocator);
-        defer slice.deinit();
+        let slice = item.toSlice(globalObject, bun.default_allocator);
+        const _slice_g = DeinitGuard<@TypeOf(slice)>{ ptr: &slice };
         libc.apply(slice.slice());
         if (globalObject.hasException()) return jsc.JSValue.zero;
     }
@@ -38,8 +53,8 @@ pub fn architectureIsMatch(globalObject: *jsc.JSGlobalObject, callframe: *jsc.Ca
     let architecture = npm.Architecture.negatable(.none);
     let iter = unsafe { args.ptr[0].arrayIterator(globalObject)? };
     while (item := iter.next()?) {
-        const slice = item.toSlice(globalObject, bun.default_allocator)?;
-        defer slice.deinit();
+        let slice = item.toSlice(globalObject, bun.default_allocator)?;
+        const _slice_g = DeinitGuard<@TypeOf(slice)>{ ptr: &slice };
         architecture.apply(slice.slice());
         if (globalObject.hasException()) return jsc.JSValue.zero;
     }
@@ -61,22 +76,22 @@ pub struct ManifestBindings {
             return global.throw("expected manifest filename and registry string arguments", {});
         }
 
-        const manifest_filename_str = args[0].toBunString(global)?;
-        defer manifest_filename_str.deref();
+        let manifest_filename_str = args[0].toBunString(global)?;
+        const _mf_str_g = DerefGuard<@TypeOf(manifest_filename_str)>{ ptr: &manifest_filename_str };
 
-        const manifest_filename = manifest_filename_str.toUTF8(bun.default_allocator);
-        defer manifest_filename.deinit();
+        let manifest_filename = manifest_filename_str.toUTF8(bun.default_allocator);
+        const _mf_g = DeinitGuard<@TypeOf(manifest_filename)>{ ptr: &manifest_filename };
 
-        const registry_str = args[1].toBunString(global)?;
-        defer registry_str.deref();
+        let registry_str = args[1].toBunString(global)?;
+        const _reg_str_g = DerefGuard<@TypeOf(registry_str)>{ ptr: &registry_str };
 
-        const registry = registry_str.toUTF8(bun.default_allocator);
-        defer registry.deinit();
+        let registry = registry_str.toUTF8(bun.default_allocator);
+        const _reg_g = DeinitGuard<@TypeOf(registry)>{ ptr: &registry };
 
-        const manifest_file = std.fs.cwd().openFile(manifest_filename.slice(), {}) catch e => {
+        let manifest_file = std.fs.cwd().openFile(manifest_filename.slice(), {}) catch e => {
             return global.throw("failed to open manifest file \"{s}\": {s}", [manifest_filename.slice(), @errorName(e)]);
         };
-        defer manifest_file.close();
+        const _file_g = CloseGuard<@TypeOf(manifest_file)>{ ptr: &manifest_file };
 
         const colon = strings.indexOfChar(registry.slice(), ':');
         const scope = npm.Registry.Scope{
@@ -112,7 +127,7 @@ pub struct ManifestBindings {
         }
 
         let result = bun.String.borrowUTF8(buf.items);
-        defer result.deref();
+        const _res_g = DerefGuard<@TypeOf(result)>{ ptr: &result };
 
         return result.toJSByParseJSON(global);
     }

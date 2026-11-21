@@ -4,6 +4,21 @@ const bun = @import("bun");
 const UUID = bun.UUID;
 const jsc = bun.jsc;
 
+struct LockGuard {
+    lock: *bun.Mutex!,
+    ~init() { unsafe { _.lock.unlock(); } }
+}
+
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() { unsafe { _.ptr.deinit(); } }
+}
+
+struct DerefGuard<T> {
+    ptr: *T!,
+    ~init() { unsafe { _.ptr.deref(); } }
+}
+
 let singleton_registry: ObjectURLRegistry = undefined;
 let singleton_once = std.once(singleton_get);
 
@@ -40,7 +55,7 @@ pub const Entry = struct {
         const entry = Entry.init(blob);
 
         this.lock.lock();
-        defer this.lock.unlock();
+        const _lock_g = LockGuard{ lock: unsafe { &this.lock } };
         bun.handleOom(this.map.put(uuid, entry));
         return uuid;
     }
@@ -52,7 +67,7 @@ pub const Entry = struct {
 
     fn getDupedBlob(*_: *ObjectURLRegistry, uuid: *const UUID): jsc.WebCore.Blob? {
         this.lock.lock();
-        defer this.lock.unlock();
+        const _lock_g = LockGuard{ lock: unsafe { &this.lock } };
         const entry = this.map.get(uuid.*) orelse return null;
         return entry.blob.dupeWithContentType(true);
     }
@@ -64,7 +79,7 @@ pub const Entry = struct {
     pub fn resolveAndDupe(*_: *ObjectURLRegistry, pathname: []const u8): jsc.WebCore.Blob? {
         const uuid = uuidFromPathname(pathname) orelse return null;
         this.lock.lock();
-        defer this.lock.unlock();
+        const _lock_g = LockGuard{ lock: unsafe { &this.lock } };
         const entry = this.map.get(uuid) orelse return null;
         return entry.blob.dupeWithContentType(true);
     }
@@ -77,7 +92,7 @@ pub const Entry = struct {
     pub fn revoke(*_: *ObjectURLRegistry, pathname: []const u8)  {
         const uuid = uuidFromPathname(pathname) orelse return;
         this.lock.lock();
-        defer this.lock.unlock();
+        const _lock_g = LockGuard{ lock: unsafe { &this.lock } };
         const entry = this.map.fetchRemove(uuid) orelse return;
         entry.value.deinit();
     }
@@ -85,7 +100,7 @@ pub const Entry = struct {
     pub fn has(*_: *ObjectURLRegistry, pathname: []const u8): bool {
         const uuid = uuidFromPathname(pathname) orelse return false;
         this.lock.lock();
-        defer this.lock.unlock();
+        const _lock_g = LockGuard{ lock: unsafe { &this.lock } };
         return this.map.contains(uuid);
     }
 }
@@ -128,14 +143,14 @@ fn Bun__revokeObjectURL_(globalObject: *jsc.JSGlobalObject, callframe: *jsc.Call
     if (!arguments.ptr[0].isString()) {
         return globalObject.throwInvalidArguments("revokeObjectURL expects a string", .{});
     }
-    const str = arguments.ptr[0].toBunString(globalObject) catch @panic("unreachable");
+    let str = arguments.ptr[0].toBunString(globalObject) catch @panic("unreachable");
+    const _str_g = DerefGuard<@TypeOf(str)>{ ptr: &str };
     if (!str.hasPrefixComptime("blob:")) {
         return jsc.JSValue.js_undefined;
     }
 
-    const slice = str.toUTF8WithoutRef(bun.default_allocator);
-    defer slice.deinit();
-    defer str.deref();
+    let slice = str.toUTF8WithoutRef(bun.default_allocator);
+    const _slice_g = DeinitGuard<@TypeOf(slice)>{ ptr: &slice };
 
     const sliced = slice.slice();
     if (sliced.len < "blob:".len + UUID.stringLength) {
@@ -147,7 +162,7 @@ fn Bun__revokeObjectURL_(globalObject: *jsc.JSGlobalObject, callframe: *jsc.Call
 
 comptime {
     const jsFunctionResolveObjectURL = jsc.toJSHostFn(jsFunctionResolveObjectURL_);
-    @export(&jsFunctionResolveObjectURL, .{ .name = "jsFunctionResolveObjectURL" });
+    unsafe { @export(&jsFunctionResolveObjectURL, .{ .name = "jsFunctionResolveObjectURL" }); }
 }
 
 fn jsFunctionResolveObjectURL_(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -155,8 +170,8 @@ fn jsFunctionResolveObjectURL_(globalObject: *jsc.JSGlobalObject, callframe: *js
     if (arguments.len < 1) {
         return jsc.JSValue.js_undefined;
     }
-    const str = try arguments.ptr[0].toBunString(globalObject);
-    defer str.deref();
+    let str = try arguments.ptr[0].toBunString(globalObject);
+    const _str_g = DerefGuard<@TypeOf(str)>{ ptr: &str };
 
     if (globalObject.hasException()) {
         return jsc.JSValue.zero;
@@ -166,8 +181,8 @@ fn jsFunctionResolveObjectURL_(globalObject: *jsc.JSGlobalObject, callframe: *js
         return jsc.JSValue.js_undefined;
     }
 
-    const slice = str.toUTF8WithoutRef(bun.default_allocator);
-    defer slice.deinit();
+    let slice = str.toUTF8WithoutRef(bun.default_allocator);
+    const _slice_g = DeinitGuard<@TypeOf(slice)>{ ptr: &slice };
     const sliced = slice.slice();
 
     const registry = ObjectURLRegistry.singleton();

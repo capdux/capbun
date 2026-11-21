@@ -1559,3 +1559,7 @@
 ## [2026-11-22 Wave #16] RAII 改造与 `unsafe {}` 经验
 - `Package.cp` / `ini_jsc.cp`：多资源 `defer { ... }` 块拆分为独立 `DerefGuard<T>` / `DeinitGuard<T>`；`Serializer.load` 等二级嵌套 `struct` 保留原 `defer` 防漏。
 - `outdated_command.cp`：`WorkspaceFiltersGuard` 与 `CatalogMapGuard` 统一接管嵌套集合析构。
+
+## [2026-11-22 Wave #17] RAII 改造与 `unsafe {}` 经验
+- `ChromeProcess.cp` / `snapshot.cp` / `Watcher.cp`：所有权移交前显式置空 Guard（`fd0_guard.val = null`、`_file_guard.file = null`、`watcher_guard.ptr = null`），并通过 `fd1_guard.~init()` 显式控制子端 fd 提前关闭时机。
+- `Cmd.cp` / `multipart.cp` / `ObjectURLRegistry.cp`：集中补齐 `@intFromPtr`/`@ptrCast`/`@alignCast`/`@constCast`/`@export` 的 `unsafe {}` 包裹。

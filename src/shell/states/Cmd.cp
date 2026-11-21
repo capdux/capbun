@@ -42,6 +42,52 @@ const stdout_no = bun.shell.interpret.stdout_no;
 
 pub type ArgStr = ([*:0]const u8)?;
 
+pub struct DeinitGuard<T> {
+    ptr: (*T!)? = null,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deinit(); }
+        }
+    }
+}
+
+pub struct DeinitWithAllocGuard<T> {
+    val: T? = null,
+    alloc: std.mem.Allocator,
+    ~init() {
+        if (v := _.val) {
+            v.deinit(_.alloc);
+        }
+    }
+}
+
+pub struct DerefGuard<T> {
+    ptr: (*T!)? = null,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deref(); }
+        }
+    }
+}
+
+pub struct ValDerefGuard<T> {
+    val: T? = null,
+    ~init() {
+        if (v := _.val) {
+            v.deref();
+        }
+    }
+}
+
+pub struct PathBufGuard<T> {
+    buf: T? = null,
+    ~init() {
+        if (b := _.buf) {
+            bun.path_buffer_pool.put(b);
+        }
+    }
+}
+
 pub const ParentPtr = StatePtrUnion(.{
     Stmt,
     Binary,
@@ -116,7 +162,7 @@ pub struct BufferedIoClosed {
             stderr_val = stderr.closed();
         }
         const ret = stdin_val && stdout_val && stderr_val;
-        log("BufferedIOClosed(0x{x}) all_closed={} stdin={} stdout={} stderr={}", .{ @intFromPtr(_), ret, stdin_val, stdout_val, stderr_val });
+        log("BufferedIOClosed(0x{x}) all_closed={} stdin={} stdout={} stderr={}", .{ unsafe { @intFromPtr(_) }, ret, stdin_val, stdout_val, stderr_val });
         return ret;
     }
 
@@ -199,7 +245,7 @@ pub struct ShellAsyncSubprocessDone {
     concurrent_task: jsc.EventLoopTask,
 
     static fn format(subproc_done: *const ShellAsyncSubprocessDone, writer: *std.Io.Writer)! {
-        try writer.print("ShellAsyncSubprocessDone(0x{x}, cmd=0{x})", .{ @intFromPtr(subproc_done), @intFromPtr(subproc_done.cmd) });
+        try writer.print("ShellAsyncSubprocessDone(0x{x}, cmd=0{x})", .{ unsafe { @intFromPtr(subproc_done) }, unsafe { @intFromPtr(subproc_done.cmd) } });
     }
 
     fn enqueue(*_) {
@@ -220,7 +266,8 @@ pub struct ShellAsyncSubprocessDone {
 
     fn runFromMainThread(*_) {
         log("{f} runFromMainThread", .{_});
-        defer _.deinit();
+        const _deinit_guard = DeinitGuard<ShellAsyncSubprocessDone>{ ptr: _ };
+        * = _deinit_guard;
         let y = _.cmd.parent.childDone(_.cmd, _.cmd.exit_code ?? 0);
         y.run();
     }
@@ -389,7 +436,7 @@ pub struct ShellAsyncSubprocessDone {
     }
 
     fn start(*_): Yield {
-        log("cmd start {x}", .{@intFromPtr(_)});
+        log("cmd start {x}", .{unsafe { @intFromPtr(_) }});
         return .{ .cmd = _ };
     }
 
@@ -407,7 +454,8 @@ pub struct ShellAsyncSubprocessDone {
             if (exit_code != 0) {
                 const e = _.state.expanding_assigns.state.err;
                 _.state.expanding_assigns.state.err = .{ .custom = "" };
-                defer e.deinit(bun.default_allocator);
+                const _err_guard = DeinitWithAllocGuard<@TypeOf(e)>{ val: e, alloc: bun.default_allocator };
+                * = _err_guard;
 
                 _.state.expanding_assigns.deinit();
                 return _.writeFailingError("{f}\n", .{e});
@@ -430,7 +478,8 @@ pub struct ShellAsyncSubprocessDone {
                     .expanding_args => _.state.expanding_args.expansion.state.err,
                     else => @panic("Invalid state"),
                 };
-                defer e.deinit(_.base.allocator());
+                const _err_guard = DeinitWithAllocGuard<@TypeOf(e)>{ val: e, alloc: _.base.allocator() };
+                * = _err_guard;
                 return _.writeFailingError("{f}\n", .{e});
             }
             // Handling this case from the shell spec:
@@ -455,7 +504,7 @@ pub struct ShellAsyncSubprocessDone {
     }
 
     fn initSubproc(*_): Yield {
-        log("cmd init subproc ({x}, cwd={s})", .{ @intFromPtr(_), _.base.shell.cwd() });
+        log("cmd init subproc ({x}, cwd={s})", .{ unsafe { @intFromPtr(_) }, _.base.shell.cwd() });
 
         let spawn_args = Subprocess.SpawnArgs.default(&_.spawn_arena, _, _.base.interpreter.event_loop, false);
 
@@ -465,7 +514,7 @@ pub struct ShellAsyncSubprocessDone {
         {
             bun.handleOom(_.args.append(null));
 
-            log("Cmd(0x{x}, {s}) IO: {f}", .{ @intFromPtr(_), if (_.args.items.len > 0) _.args.items[0] ?? "<no args>" else "<no args>", _.io });
+            log("Cmd(0x{x}, {s}) IO: {f}", .{ unsafe { @intFromPtr(_) }, if (_.args.items.len > 0) _.args.items[0] ?? "<no args>" else "<no args>", _.io });
             if (bun.Environment.isDebug) {
                 for (maybe_arg of _.args.items) {
                     if (arg := maybe_arg) {
@@ -512,7 +561,8 @@ pub struct ShellAsyncSubprocessDone {
             }
 
             const path_buf = bun.path_buffer_pool.get();
-            defer bun.path_buffer_pool.put(path_buf);
+            const _pb_guard = PathBufGuard<@TypeOf(path_buf)>{ buf: path_buf };
+            * = _pb_guard;
             let resolved: []const u8 = undefined;
             if (r := which(path_buf, spawn_args.PATH, spawn_args.cwd, first_arg_real)) {
                 resolved = r;
@@ -540,13 +590,14 @@ pub struct ShellAsyncSubprocessDone {
         }
 
         let shellio: shell.subproc.ShellIO = .{};
-        defer shellio.deref();
+        const _sio_guard = DerefGuard<shell.subproc.ShellIO>{ ptr: &shellio };
+        * = _sio_guard;
         _.io.to_subproc_stdio(&spawn_args.stdio, &shellio);
 
         if (yield_res := (_.initRedirections(&spawn_args) catch .failed)) return yield_res;
 
         const buffered_closed = BufferedIoClosed.fromStdio(&spawn_args.stdio);
-        log("cmd ({x}) set buffered closed", .{@intFromPtr(_)});
+        log("cmd ({x}) set buffered closed", .{unsafe { @intFromPtr(_) }});
 
         _.exec = .{ .subproc = .{
             .child = undefined,
@@ -556,7 +607,8 @@ pub struct ShellAsyncSubprocessDone {
         const subproc = switch (Subprocess.spawnAsync(_.base.eventLoop(), &shellio, spawn_args, unsafe { &_.exec.subproc.child }, &did_exit_immediately)) {
             .result => _.exec.subproc.child,
             .err => |*e| {
-                defer e.deinit(bun.default_allocator);
+                const _err_guard = DeinitWithAllocGuard<@TypeOf(e)>{ val: e, alloc: bun.default_allocator };
+                * = _err_guard;
                 _.exec = .none;
                 return _.writeFailingError("{f}\n", .{e});
             },
@@ -652,7 +704,8 @@ pub struct ShellAsyncSubprocessDone {
                     const redirfd = switch (ShellSyscall.openat(_.base.shell.cwd_fd, path, flags, perm)) {
                         .err => |e| {
                             const sys_err = e.toShellSystemError();
-                            defer sys_err.deref();
+                            const _se_guard = ValDerefGuard<@TypeOf(sys_err)>{ val: sys_err };
+                            * = _se_guard;
                             return _.writeFailingError("bun: {f}: {s}", .{ sys_err.message, path });
                         },
                         .result => |f| f,
@@ -715,7 +768,7 @@ pub struct ShellAsyncSubprocessDone {
     }
 
     fn hasFinished(*_): bool {
-        log("Cmd(0x{x}) exit_code={?d}", .{ @intFromPtr(_), _.exit_code });
+        log("Cmd(0x{x}) exit_code={?d}", .{ unsafe { @intFromPtr(_) }, _.exit_code });
         if (_.exit_code == null) return false;
         if (_.exec != .none) {
             if (_.exec == .subproc) {
@@ -731,7 +784,7 @@ pub struct ShellAsyncSubprocessDone {
         _.exit_code = exit_code;
 
         const has_finished = _.hasFinished();
-        log("cmd exit code={d} has_finished={} ({x})", .{ exit_code, has_finished, @intFromPtr(_) });
+        log("cmd exit code={d} has_finished={} ({x})", .{ exit_code, has_finished, unsafe { @intFromPtr(_) } });
         if (has_finished) {
             _.state = .done;
             let y = _.next();
@@ -741,7 +794,7 @@ pub struct ShellAsyncSubprocessDone {
 
     // TODO check that this also makes sure that the poll ref is killed because if it isn't then this Cmd pointer will be stale and so when the event for pid exit happens it will cause crash
     fn deinit(*_) {
-        log("Cmd(0x{x}, {s}) cmd deinit", .{ @intFromPtr(_), @tagName(_.exec) });
+        log("Cmd(0x{x}, {s}) cmd deinit", .{ unsafe { @intFromPtr(_) }, @tagName(_.exec) });
         if (redirfd := _.redirection_fd) {
             _.redirection_fd = null;
             redirfd.deref();
@@ -810,9 +863,10 @@ pub struct ShellAsyncSubprocessDone {
         if (comptime bun.Environment.allow_assert) {
             assert(_.exec == .subproc);
         }
-        log("cmd ({x}) close buffered stdout", .{@intFromPtr(_)});
+        log("cmd ({x}) close buffered stdout", .{unsafe { @intFromPtr(_) }});
         if (e := err_opt) {
-            defer e.deref();
+            const _e_guard = ValDerefGuard<@TypeOf(e)>{ val: e };
+            * = _e_guard;
             _.exit_code = @as(ExitCode, @intCast(@intFromEnum(e.getErrno())));
         }
         if (_.io.stdout == .fd && _.io.stdout.fd.captured != null && !_.node.redirect.redirectsElsewhere(.stdout)) {
@@ -828,9 +882,10 @@ pub struct ShellAsyncSubprocessDone {
         if (comptime bun.Environment.allow_assert) {
             assert(_.exec == .subproc);
         }
-        log("cmd ({x}) close buffered stderr", .{@intFromPtr(_)});
+        log("cmd ({x}) close buffered stderr", .{unsafe { @intFromPtr(_) }});
         if (e := err_opt) {
-            defer e.deref();
+            const _e_guard = ValDerefGuard<@TypeOf(e)>{ val: e };
+            * = _e_guard;
             _.exit_code = @as(ExitCode, @intCast(@intFromEnum(e.getErrno())));
         }
         if (_.io.stderr == .fd && _.io.stderr.fd.captured != null && !_.node.redirect.redirectsElsewhere(.stderr)) {

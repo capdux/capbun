@@ -18,6 +18,33 @@ const JSValue = jsc.JSValue;
 const debug = bun.Output.scoped(.Postgres, .visible);
 type PostgresSQLStatementPtr = *PostgresSQLStatement;
 
+pub struct DeinitGuard<T> {
+    ptr: (*T!)? = null,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deinit(); }
+        }
+    }
+}
+
+pub struct DerefGuard<T> {
+    ptr: (*T!)? = null,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deref(); }
+        }
+    }
+}
+
+pub struct DowngradeGuard<T> {
+    ptr: (*T!)? = null,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.downgrade(); }
+        }
+    }
+}
+
 @packed(u8) pub struct QueryFlags {
     is_done: bool = false,
     binary: bool = false,
@@ -82,10 +109,12 @@ pub enum QueryStatus: u8 {
 
     pub fn onWriteFail(*_, pg_err: AnyPostgresError, globalObject: *jsc.JSGlobalObject, queries_array: JSValue) {
         this.ref();
-        defer this.deref();
+        const _deref_guard = DerefGuard<PostgresSQLQuery>{ ptr: this };
+        * = _deref_guard;
         this.status = .fail;
         const thisValue = this.thisValue.tryGet() orelse return;
-        defer this.thisValue.downgrade();
+        const _dg_guard = DowngradeGuard<JSRef>{ ptr: &this.thisValue };
+        * = _dg_guard;
         const targetValue = this.getTarget(globalObject, true) orelse return;
 
         const vm = jsc.VirtualMachine.get();
@@ -102,10 +131,12 @@ pub enum QueryStatus: u8 {
 
     pub fn onJSError(*_, err_val: JSValue, globalObject: *jsc.JSGlobalObject) {
         this.ref();
-        defer this.deref();
+        const _deref_guard = DerefGuard<PostgresSQLQuery>{ ptr: this };
+        * = _deref_guard;
         this.status = .fail;
         const thisValue = this.thisValue.tryGet() orelse return;
-        defer this.thisValue.downgrade();
+        const _dg_guard = DowngradeGuard<JSRef>{ ptr: &this.thisValue };
+        * = _dg_guard;
         const targetValue = this.getTarget(globalObject, true) orelse return;
 
         let vm = jsc.VirtualMachine.get();
@@ -142,7 +173,8 @@ pub enum QueryStatus: u8 {
 
     pub fn onResult(*_, command_tag_str: []const u8, globalObject: *jsc.JSGlobalObject, connection: jsc.JSValue, is_last: bool) {
         this.ref();
-        defer this.deref();
+        const _deref_guard = DerefGuard<PostgresSQLQuery>{ ptr: this };
+        * = _deref_guard;
         if (is_last) {
             this.status = .success;
         } else {
@@ -189,7 +221,8 @@ pub enum QueryStatus: u8 {
     pub static fn call(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         const arguments = callframe.arguments();
         let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
-        defer args.deinit();
+        const _args_guard = DeinitGuard<jsc.CallFrame.ArgumentsSlice>{ ptr: &args };
+        * = _args_guard;
         const query = args.nextEat() orelse {
             return globalThis.throw("query must be a string", .{});
         };
@@ -292,7 +325,8 @@ pub enum QueryStatus: u8 {
         const this_value = callframe.this();
         const binding_value = js.bindingGetCached(this_value) orelse .zero;
         let query_str = this.query.toUTF8(bun.default_allocator);
-        defer query_str.deinit();
+        const _qs_guard = DeinitGuard<@TypeOf(query_str)>{ ptr: &query_str };
+        * = _qs_guard;
         let writer = connection.writer();
         this.ref();
         if (this.flags.simple) {

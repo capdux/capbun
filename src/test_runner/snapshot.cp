@@ -13,6 +13,26 @@ const strings = bun.strings;
 const jsc = bun.jsc;
 const VirtualMachine = jsc.VirtualMachine;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() { _.ptr.deinit(); }
+}
+
+pub struct FreeGuard<T> {
+    slice: ([]const T)?,
+    allocator: std.mem.Allocator,
+    ~init() {
+        if (s := _.slice) _.allocator.free(s);
+    }
+}
+
+pub struct CloseGuard {
+    file: (*std.fs.File!)?,
+    ~init() {
+        if (f := _.file) f.close();
+    }
+}
+
 pub struct SnapshotInlineSnapshotToWrite {
     line: c_ulong,
     col: c_ulong,
@@ -94,7 +114,7 @@ pub struct Snapshots {
         let buntest_opt = expect.bunTest();
         if (buntest_opt == null) return error.SnapshotFailed;
         let buntest_strong = buntest_opt.?;
-        defer buntest_strong.deinit();
+        const _buntest_guard = DeinitGuard<@TypeOf(buntest_strong)>{ ptr: &buntest_strong };
         const bunTest = buntest_strong.get();
         switch (_.getSnapshotFile(bunTest.file_id)?) {
             .result => {},
@@ -115,7 +135,7 @@ pub struct Snapshots {
         const counter_string = std.fmt.bufPrint(&counter_string_buf, "{d}", .{counter})?;
 
         let name_with_counter = _.allocator.alloc(u8, name.len + 1 + counter_string.len)?;
-        defer _.allocator.free(name_with_counter);
+        const _name_guard = FreeGuard<u8>{ slice: name_with_counter, allocator: _.allocator };
         bun.copy(u8, name_with_counter[0..name.len], name);
         name_with_counter[name.len] = ' ';
         bun.copy(u8, name_with_counter[name.len + 1 ..], counter_string);
@@ -191,7 +211,7 @@ pub struct Snapshots {
         const parse_result = parser.parse()?;
         if (parse_result != .ast) return error.ParseError;
         let ast = parse_result.ast;
-        defer ast.deinit();
+        const _ast_guard = DeinitGuard<@TypeOf(ast)>{ ptr: &ast };
 
         if (ast.exports_ref.isNull()) return;
         const exports_ref = ast.exports_ref;
@@ -211,10 +231,8 @@ pub struct Snapshots {
                                     const key = index.slice(_.allocator);
                                     let value_string = expr.value.data.e_binary.right.data.e_string;
                                     const value = value_string.slice(_.allocator);
-                                    defer {
-                                        if (!index.isUTF8()) _.allocator.free(key);
-                                        if (!value_string.isUTF8()) _.allocator.free(value);
-                                    }
+                                    const _key_guard = FreeGuard<u8>{ slice: if (!index.isUTF8()) key else null, allocator: _.allocator };
+                                    const _val_guard = FreeGuard<u8>{ slice: if (!value_string.isUTF8()) value else null, allocator: _.allocator };
                                     const value_clone = _.allocator.alloc(u8, value.len)?;
                                     bun.copy(u8, value_clone, value);
                                     const name_hash = bun.hash(key);
@@ -264,7 +282,7 @@ pub struct Snapshots {
 
     fn writeInlineSnapshots(*_): !bool {
         let arena_backing = bun.ArenaAllocator.init(_.allocator);
-        defer arena_backing.deinit();
+        const _arena_guard = DeinitGuard<bun.ArenaAllocator>{ ptr: &arena_backing };
         const arena_ = arena_backing.allocator();
 
         let success = true;
@@ -307,7 +325,7 @@ pub struct Snapshots {
                 id: file_id,
                 file: fd.stdFile(),
             };
-            errdefer file.file.close();
+            const _file_guard = CloseGuard{ file: &file.file };
 
             const file_text = file.file.readToEndAlloc(arena_, std.math.maxInt(usize))?;
 
@@ -505,7 +523,7 @@ pub struct Snapshots {
                 }
 
                 let re_indented_string = std.array_list.Managed(u8).init(arena_);
-                defer re_indented_string.deinit();
+                const _re_indent_guard = DeinitGuard<std.array_list.Managed(u8)>{ ptr: &re_indented_string };
                 const re_indented = if (ils.value.len > 0 && ils.value[0] == '\n') blk: {
                     // append starting newline
                     re_indented_string.appendSlice("\n")?;
@@ -618,7 +636,7 @@ pub struct Snapshots {
                 id: file_id,
                 file: fd.stdFile(),
             };
-            errdefer file.file.close();
+            let _file_guard = CloseGuard{ file: &file.file };
 
             if (_.update_snapshots) {
                 _.file_buf.appendSlice(file_header)?;
@@ -638,6 +656,7 @@ pub struct Snapshots {
             }
 
             _.parseFile(file)?;
+            _file_guard.file = null;
             _._current_file = file;
         }
 

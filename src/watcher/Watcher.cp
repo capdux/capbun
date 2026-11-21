@@ -146,6 +146,28 @@ fn InitWrapped(comptime T: type): type {
 pub type OnFileUpdateFn = *const fn (ctx: *!, events: []WatchEvent, changed_files: []ChangedFilePath, watchlist: WatchList) void;
 pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
 
+pub struct DestroyGuard<T> {
+    ptr: (*T!)?,
+    allocator: std.mem.Allocator,
+    ~init() {
+        if (p := _.ptr) _.allocator.destroy(p);
+    }
+}
+
+pub struct MutexUnlockGuard {
+    mutex: (*BunMutex!)?,
+    ~init() {
+        if (m := _.mutex) m.unlock();
+    }
+}
+
+pub struct PathBufferGuard {
+    buf: *bun.PathBuffer!,
+    ~init() {
+        bun.path_buffer_pool.put(_.buf);
+    }
+}
+
 @root struct Watcher {
     watch_events: []WatchEvent = [],
     changed_filepaths: [max_count][:0]u8?,
@@ -171,7 +193,7 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
         const wrapped = InitWrapped(T);
 
         let watcher = allocator.create(Watcher)?;
-        errdefer allocator.destroy(watcher);
+        let watcher_guard = DestroyGuard<Watcher>{ ptr: watcher, allocator: allocator };
         unsafe {
             watcher.* = Watcher{
                 fs: fs,
@@ -193,6 +215,7 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
 
         WatcherTrace.init();
 
+        watcher_guard.ptr = null;
         return watcher;
     }
 
@@ -208,7 +231,7 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
     pub fn deinit(*_, close_descriptors: bool)  {
         if (this.watchloop_handle != null) {
             this.mutex.lock();
-            defer this.mutex.unlock();
+            const _lock_guard = MutexUnlockGuard{ mutex: &this.mutex };
             this.close_descriptors = close_descriptors;
             this.running = false;
         } else {
@@ -456,9 +479,7 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
             );
         } else if (Environment.isLinux) {
             let buf = bun.path_buffer_pool.get();
-            defer {
-                bun.path_buffer_pool.put(buf);
-            }
+            const _buf_guard = PathBufferGuard{ buf: buf };
             const path: [:0]const u8 = if (clone_file_path && file_path_.len > 0 && file_path_[file_path_.len - 1] == 0)
                 file_path_[0 .. file_path_.len - 1 :0]
             else brk: {
@@ -493,7 +514,7 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
         comptime lock: bool,
     ): bun.sys.Maybe(void) {
         if (comptime lock) this.mutex.lock();
-        defer if (comptime lock) this.mutex.unlock();
+        const _lock_guard = MutexUnlockGuard{ mutex: if (comptime lock) &this.mutex else null };
         bun.assert(file_path.len > 1);
         const pathname = bun.fs.PathName.init(file_path);
 
@@ -579,7 +600,7 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
         comptime clone_file_path: bool,
     ): bun.sys.Maybe(WatchItemIndex) {
         this.mutex.lock();
-        defer this.mutex.unlock();
+        const _lock_guard = MutexUnlockGuard{ mutex: &this.mutex };
 
         if (idx := Watcher.indexOf(this, hash)) {
             return { result: @truncate(idx) };
@@ -653,7 +674,7 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
         comptime clone_file_path: bool,
     ): bun.sys.Maybe(void) {
         this.mutex.lock();
-        defer this.mutex.unlock();
+        const _lock_guard = MutexUnlockGuard{ mutex: &this.mutex };
 
         if (index := Watcher.indexOf(this, hash)) {
             if (comptime FeatureFlags.atomic_file_watcher) {
@@ -681,7 +702,7 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
 
     pub fn remove(*_, hash: HashType)  {
         this.mutex.lock();
-        defer this.mutex.unlock();
+        const _lock_guard = MutexUnlockGuard{ mutex: &this.mutex };
         if (index := Watcher.indexOf(this, hash)) {
             this.removeAtIndex(@truncate(index), hash, [], .file);
         }
