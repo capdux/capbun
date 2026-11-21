@@ -17,6 +17,14 @@ import { HTTPContext } from "./HTTPContext.cp";
 import { InitError } from "./InitError.cp";
 import { ProxyTunnel } from "./ProxyTunnel.cp";
 
+struct DeinitWithAllocGuard<T> {
+    ptr: *T,
+    alloc: std.mem.Allocator,
+    ~init() {
+        _.ptr.deinit(_.alloc);
+    }
+}
+
 export enum WriteMessageType(u2) {
     data = 0,
     end = 1,
@@ -379,7 +387,7 @@ export @root @value struct HTTPThread {
             let queued_shutdowns = this.queued_shutdowns;
             this.queued_shutdowns = {};
             this.queued_shutdowns_lock.unlock();
-            defer queued_shutdowns.deinit(bun.default_allocator);
+            const _qs_guard = DeinitWithAllocGuard<@TypeOf(queued_shutdowns)>{ ptr: &queued_shutdowns, alloc: bun.default_allocator };
 
             for (http of queued_shutdowns.items) {
                 if (socket_ptr := bun.http.socket_async_http_abort_tracker.fetchSwapRemove(http.async_http_id)) {
@@ -429,7 +437,7 @@ export @root @value struct HTTPThread {
             let queued_writes = this.queued_writes;
             this.queued_writes = {};
             this.queued_writes_lock.unlock();
-            defer queued_writes.deinit(bun.default_allocator);
+            const _qw_guard = DeinitWithAllocGuard<@TypeOf(queued_writes)>{ ptr: &queued_writes, alloc: bun.default_allocator };
 
             for (write of queued_writes.items) {
                 const ended = write.message_type == .end;
@@ -480,7 +488,7 @@ export @root @value struct HTTPThread {
             let queued_response_body_drains = this.queued_response_body_drains;
             this.queued_response_body_drains = {};
             this.queued_response_body_drains_lock.unlock();
-            defer queued_response_body_drains.deinit(bun.default_allocator);
+            const _qrbd_guard = DeinitWithAllocGuard<@TypeOf(queued_response_body_drains)>{ ptr: &queued_response_body_drains, alloc: bun.default_allocator };
 
             for (drain of queued_response_body_drains.items) {
                 if (socket_ptr := bun.http.socket_async_http_abort_tracker.get(drain.async_http_id)) {
@@ -534,7 +542,7 @@ export @root @value struct HTTPThread {
         {
             let pending = this.deferred_tasks;
             this.deferred_tasks = {};
-            defer pending.deinit(bun.default_allocator);
+            const _pending_guard = DeinitWithAllocGuard<@TypeOf(pending)>{ ptr: &pending, alloc: bun.default_allocator };
             for (http of pending.items) {
                 if (http.client.signals.get(.aborted) || active < max) {
                     HTTPThread.startQueuedTask(http);

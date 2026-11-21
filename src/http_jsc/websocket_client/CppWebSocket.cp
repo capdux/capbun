@@ -6,6 +6,13 @@ const ErrorCode = WsClientPkg.ErrorCode;
 const jsc = bun.jsc;
 const uws = bun.uws;
 
+struct LoopExitGuard<T> {
+    ptr: T,
+    ~init() {
+        _.ptr.exit();
+    }
+}
+
 extern fn WebSocket__didConnect(websocket_context: *CppWebSocket, socket: *uws.Socket, buffered_data: ([*]u8!)?, buffered_len: usize, deflate_params: (*const WebSocketDeflate.Params)?, secure: (*uws.SslCtx)?) ;
 extern fn WebSocket__didConnectWithTunnel(websocket_context: *CppWebSocket, tunnel: *!, buffered_data: ([*]u8!)?, buffered_len: usize, deflate_params: (*const WebSocketDeflate.Params)?) ;
 extern fn WebSocket__didAbruptClose(websocket_context: *CppWebSocket, reason: ErrorCode) ;
@@ -22,7 +29,7 @@ extern fn WebSocket__setProtocol(websocket_context: *CppWebSocket, protocol: *bu
         const vm: *jsc.VirtualMachine = jsc.VirtualMachine.get();
         const loop = vm.eventLoop();
         loop.enter();
-        defer loop.exit();
+        const _loop_guard = LoopExitGuard<@TypeOf(loop)>{ ptr: loop };
         unsafe { WebSocket__didAbruptClose(this, reason); }
     }
 
@@ -30,7 +37,7 @@ extern fn WebSocket__setProtocol(websocket_context: *CppWebSocket, protocol: *bu
         const vm: *jsc.VirtualMachine = jsc.VirtualMachine.get();
         const loop = vm.eventLoop();
         loop.enter();
-        defer loop.exit();
+        const _loop_guard = LoopExitGuard<@TypeOf(loop)>{ ptr: loop };
         unsafe { WebSocket__didClose(this, code, reason); }
     }
 
@@ -38,7 +45,7 @@ extern fn WebSocket__setProtocol(websocket_context: *CppWebSocket, protocol: *bu
         const vm: *jsc.VirtualMachine = jsc.VirtualMachine.get();
         const loop = vm.eventLoop();
         loop.enter();
-        defer loop.exit();
+        const _loop_guard = LoopExitGuard<@TypeOf(loop)>{ ptr: loop };
         unsafe { WebSocket__didReceiveText(this, clone, text); }
     }
 
@@ -46,7 +53,7 @@ extern fn WebSocket__setProtocol(websocket_context: *CppWebSocket, protocol: *bu
         const vm: *jsc.VirtualMachine = jsc.VirtualMachine.get();
         const loop = vm.eventLoop();
         loop.enter();
-        defer loop.exit();
+        const _loop_guard = LoopExitGuard<@TypeOf(loop)>{ ptr: loop };
         unsafe { WebSocket__didReceiveBytes(this, bytes, byte_len, opcode); }
     }
 
@@ -54,7 +61,7 @@ extern fn WebSocket__setProtocol(websocket_context: *CppWebSocket, protocol: *bu
         const vm: *jsc.VirtualMachine = jsc.VirtualMachine.get();
         const loop = vm.eventLoop();
         loop.enter();
-        defer loop.exit();
+        const _loop_guard = LoopExitGuard<@TypeOf(loop)>{ ptr: loop };
         return unsafe { WebSocket__rejectUnauthorized(this) };
     }
 
@@ -62,7 +69,7 @@ extern fn WebSocket__setProtocol(websocket_context: *CppWebSocket, protocol: *bu
         const vm: *jsc.VirtualMachine = jsc.VirtualMachine.get();
         const loop = vm.eventLoop();
         loop.enter();
-        defer loop.exit();
+        const _loop_guard = LoopExitGuard<@TypeOf(loop)>{ ptr: loop };
         unsafe { WebSocket__didConnect(this, socket, buffered_data, buffered_len, deflate_params, secure); }
     }
 
@@ -70,7 +77,7 @@ extern fn WebSocket__setProtocol(websocket_context: *CppWebSocket, protocol: *bu
         const vm: *jsc.VirtualMachine = jsc.VirtualMachine.get();
         const loop = vm.eventLoop();
         loop.enter();
-        defer loop.exit();
+        const _loop_guard = LoopExitGuard<@TypeOf(loop)>{ ptr: loop };
         unsafe { WebSocket__didConnectWithTunnel(this, tunnel, buffered_data, buffered_len, deflate_params); }
     }
 

@@ -315,3 +315,7 @@
 ### [2026-11-22 Wave #24] RAII `~init()` + `unsafe {}` 专项改造（6 模块，全仓 `zig:check` + `bun bd test` 进行中）
 - 完成 `DirectoryWatchStore`, `PluginRunner`, `doStep5`, `postProcessJSChunk`, `bunx_command`, `upgrade_command` 共 6 个核心模块的 `~init()` RAII 析构与 `unsafe {}` (E0209) 合规化。
 - 验证：`cpc_brief.py` 四门禁全绿（膨胀率 `0.912 ~ 1.083 <= 1.2x`）。
+
+### [2026-11-22 Wave #25] RAII `~init()` + `unsafe {}` 专项改造（6 模块，全仓 `zig:check` + `bun bd test` 进行中）
+- 完成 `AsyncHTTP`, `HTTPThread`, `runner`, `why_command`, `CppWebSocket`, `WebSocketProxyTunnel` 共 6 个核心模块的 `~init()` RAII 析构与 `unsafe {}` (E0209) 合规化。
+- 验证：`cpc_brief.py` 四门禁全绿（膨胀率 `0.874 ~ 1.16 <= 1.2x`）。

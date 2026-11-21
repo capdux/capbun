@@ -13,6 +13,21 @@ import { FetchRedirect } from "../http_types/FetchRedirect.cp";
 type MutableString = bun.MutableString;
 type ThreadPoolBatch = bun.ThreadPool.Batch;
 
+struct FreeGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: []T,
+    ~init() {
+        _.alloc.free(_.slice);
+    }
+}
+
+struct DeinitGuard<T> {
+    ptr: *T,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
 export enum State: u32 {
     pending = 0,
     scheduled = 1,
@@ -280,7 +295,7 @@ export @root @value struct AsyncHTTP {
                     bun.Output.scoped(.AsyncHTTP, .visible)("failed to decode proxy username: {}", [error_val]);
                     return async_http;
                 };
-                defer username_alloc.free(username);
+                const _username_guard = FreeGuard<u8>{ alloc: username_alloc, slice: username };
 
                 if (proxy.password.len > 0) {
                     let password_sfb = std.heap.stackFallback(4096, allocator);
@@ -289,10 +304,10 @@ export @root @value struct AsyncHTTP {
                         bun.Output.scoped(.AsyncHTTP, .visible)("failed to decode proxy password: {}", [error_val]);
                         return async_http;
                     };
-                    defer password_alloc.free(password);
+                    const _password_guard = FreeGuard<u8>{ alloc: password_alloc, slice: password };
 
                     const auth = std.fmt.allocPrint(allocator, "{s}:{s}", [username, password]) catch @panic("unreachable");
-                    defer allocator.free(auth);
+                    const _auth_guard = FreeGuard<u8>{ alloc: allocator, slice: auth };
                     const size = std.base64.standard.Encoder.calcSize(auth.len);
                     let buf = async_http.allocator.alloc(u8, size + "Basic ".len) catch @panic("unreachable");
                     const encoded = std.base64.url_safe.Encoder.encode(buf["Basic ".len..], auth);
@@ -353,7 +368,7 @@ export @root @value struct AsyncHTTP {
                     bun.Output.scoped(.AsyncHTTP, .visible)("failed to decode proxy username: {}", [error_val]);
                     return;
                 };
-                defer username_alloc.free(username);
+                const _username_guard = FreeGuard<u8>{ alloc: username_alloc, slice: username };
 
                 if (proxy.password.len > 0) {
                     let password_sfb = std.heap.stackFallback(4096, this.allocator);
@@ -362,10 +377,10 @@ export @root @value struct AsyncHTTP {
                         bun.Output.scoped(.AsyncHTTP, .visible)("failed to decode proxy password: {}", [error_val]);
                         return;
                     };
-                    defer password_alloc.free(password);
+                    const _password_guard = FreeGuard<u8>{ alloc: password_alloc, slice: password };
 
                     const auth = std.fmt.allocPrint(this.allocator, "{s}:{s}", [username, password]) catch @panic("unreachable");
-                    defer this.allocator.free(auth);
+                    const _auth_guard = FreeGuard<u8>{ alloc: this.allocator, slice: auth };
                     const size = std.base64.standard.Encoder.calcSize(auth.len);
                     let buf = this.allocator.alloc(u8, size + "Basic ".len) catch @panic("unreachable");
                     const encoded = std.base64.url_safe.Encoder.encode(buf["Basic ".len..], auth);
@@ -451,7 +466,7 @@ export @root @value struct AsyncHTTP {
             {
                 this.client.deinit();
                 const threadlocal_http: *bun.http.ThreadlocalAsyncHTTP = @fieldParentPtr("async_http", async_http);
-                defer threadlocal_http.deinit();
+                const _tl_http_guard = DeinitGuard<bun.http.ThreadlocalAsyncHTTP>{ ptr: threadlocal_http };
                 bun.Output.scoped(.AsyncHTTP, .visible)("onAsyncHTTPCallback: {D}", [this.elapsed]);
                 callback.function(callback.ctx, async_http, result);
             }

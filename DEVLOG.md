@@ -1591,3 +1591,7 @@
 ## [2026-11-22 Wave #24] RAII 改造与 `unsafe {}` 经验
 - `DirectoryWatchStore.cp` / `upgrade_command.cp`：`WatchRollbackGuard`、`DeleteFileZGuard`、`DeleteTreeGuard` 将临时目录/文件回滚与释放统一收口至 `~init()`。
 - `doStep5.cp` / `postProcessJSChunk.cp`：保留 `Disabler.enable()`/`assert`/`i += 1` 等状态与计数器 `defer`，其余资源清理全量 Guard 化。
+
+## [2026-11-22 Wave #25] RAII 改造与 `unsafe {}` 经验
+- `CppWebSocket.cp` / `WebSocketProxyTunnel.cp` / `AsyncHTTP.cp`：`LoopExitGuard<T>`、`DerefGuard<T>`、`FreeGuard<T>` 全部清零手动 `defer`，膨胀率控制在 `0.903 ~ 1.021`。
+- `runner.cp` / `why_command.cp`：`TmpDirGuard`、`AbortHandlerGuard`、`TargetVersionsGuard` 收口临时目录、信号处理器与嵌套版本列表析构。

@@ -25,6 +25,45 @@ pub struct VersionInfo {
     pkg_id: PackageID,
 }
 
+pub struct DeinitGuard<T> {
+    ptr: (*T!)?,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe {
+                p.deinit();
+            }
+            _.ptr = null;
+        }
+    }
+}
+
+pub struct FreeGuard<T> {
+    slice: ([]T)?,
+    allocator: std.mem.Allocator,
+    ~init() {
+        if (s := _.slice) {
+            _.allocator.free(s);
+            _.slice = null;
+        }
+    }
+}
+
+pub struct TargetVersionsGuard {
+    list: (*std.array_list.Managed(VersionInfo)!)?,
+    allocator: std.mem.Allocator,
+    ~init() {
+        if (l := _.list) {
+            unsafe {
+                for (item of l.items) {
+                    _.allocator.free(item.version);
+                }
+                l.deinit();
+            }
+            _.list = null;
+        }
+    }
+}
+
 pub struct DependentInfo {
     name: string,
     version: string,
@@ -276,16 +315,11 @@ fn execWithManager(ctx: Command.Context, pm: *PackageManager, package_pattern: s
     const resolutions_items = lockfile.buffers.resolutions.items;
 
     let arena_ = std.heap.ArenaAllocator.init(ctx.allocator);
-    defer arena_.deinit();
+    const _arena_guard = DeinitGuard<std.heap.ArenaAllocator>{ ptr: &arena_ };
     const arena_allocator = arena_.allocator();
 
     let target_versions = std.array_list.Managed(VersionInfo).init(ctx.allocator);
-    defer {
-        for (item of target_versions.items) {
-            ctx.allocator.free(item.version);
-        }
-        target_versions.deinit();
-    }
+    const _target_versions_guard = TargetVersionsGuard{ list: &target_versions, allocator: ctx.allocator };
 
     let all_dependents = std.AutoHashMap(PackageID, std.array_list.Managed(DependentInfo)).init(arena_allocator);
 
@@ -313,7 +347,7 @@ fn execWithManager(ctx: Command.Context, pm: *PackageManager, package_pattern: s
             }
 
             let dep_version_buf = std.array_list.Managed(u8).init(arena_allocator);
-            defer dep_version_buf.deinit();
+            const _dep_version_guard = DeinitGuard<std.array_list.Managed(u8)>{ ptr: &dep_version_buf };
             dep_version_buf.writer().print("{f}", .{ packages.items(.resolution)[pkg_idx].fmt(string_bytes, .auto)})?;
             const dep_pkg_version = arena_allocator.dupe(u8, dep_version_buf.items)?;
 
@@ -343,7 +377,7 @@ fn execWithManager(ctx: Command.Context, pm: *PackageManager, package_pattern: s
         if (!glob.matchesName(pkg_name, package_pattern)) continue;
 
         let version_buf = std.array_list.Managed(u8).init(ctx.allocator);
-        defer version_buf.deinit();
+        const _version_guard = DeinitGuard<std.array_list.Managed(u8)>{ ptr: &version_buf };
         version_buf.writer().print("{f}", .{ packages.items(.resolution)[pkg_idx].fmt(string_bytes, .auto)})?;
         const version = ctx.allocator.dupe(u8, version_buf.items)?;
 
@@ -468,7 +502,7 @@ fn printDependencyTree(
 
     if (dependents := ctx.all_dependents.get(current_pkg_id)) {
         const sorted_dependents = ctx.allocator.dupe(DependentInfo, dependents.items)?;
-        defer ctx.allocator.free(sorted_dependents);
+        const _sorted_guard = FreeGuard<DependentInfo>{ slice: sorted_dependents, allocator: ctx.allocator };
 
         const empty_ctx: void = undefined;
         std.sort.insertion(DependentInfo, sorted_dependents, empty_ctx, compareDependents);

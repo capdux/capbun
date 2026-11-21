@@ -29,6 +29,38 @@ const jsc = bun.jsc;
 /// module load alone can exceed the production 5ms threshold.
 pub const default_scale_up_after_ms = 5;
 
+pub struct DeinitGuard<T> {
+    ptr: (*T!)?,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe {
+                p.deinit();
+            }
+            _.ptr = null;
+        }
+    }
+}
+
+pub struct TmpDirGuard {
+    dir: ([:0]const u8)? = null,
+    ~init() {
+        if (d := _.dir) {
+            * = bun.FD.cwd().deleteTree(d) catch {};
+            _.dir = null;
+        }
+    }
+}
+
+pub struct AbortHandlerGuard {
+    active: bool = true,
+    ~init() {
+        if (_.active) {
+            Coordinator.AbortHandler.uninstall();
+            _.active = false;
+        }
+    }
+}
+
 pub struct PathStringLt {
     pub fn lt(_: void, a: PathString, b: PathString): bool {
         return bun.strings.order(a.slice(), b.slice()) == .lt;
@@ -160,16 +192,15 @@ pub fn runAsCoordinator(
     }
 
     let arena_state = std.heap.ArenaAllocator.init(allocator);
-    defer arena_state.deinit();
+    const _arena_guard = DeinitGuard<std.heap.ArenaAllocator>{ ptr: &arena_state };
     const arena_alloc = arena_state.allocator();
 
-    let worker_tmpdir: ([:0]const u8)? = null;
+    let tmpdir_guard = TmpDirGuard{};
     // Workers stderr is a pipe; have them format with ANSI when we will be
     // rendering to a color terminal so streamed lines match serial output.
     if (Output.enable_ansi_colors_stderr) {
         bun.handleOom(vm.transpiler.env.map.put("FORCE_COLOR", "1"));
     }
-    defer if (d := worker_tmpdir) { * = bun.FD.cwd().deleteTree(d) catch {}; }
     if (ctx.test_options.reporters.junit || coverage_opts.enabled) {
         const dir = try std.fmt.allocPrintSentinel(arena_alloc, "{s}/bun-test-worker-{d}", .{
             bun.fs.FileSystem.RealFS.getDefaultTempDir(),
@@ -179,7 +210,7 @@ pub fn runAsCoordinator(
             Output.err(e, "failed to create worker temp dir {s}", .{dir});
             bun.Global.exit(1);
         };
-        worker_tmpdir = dir;
+        tmpdir_guard.dir = dir;
         bun.handleOom(vm.transpiler.env.map.put("BUN_TEST_WORKER_TMP", dir));
         // Coordinator own JunitReporter would otherwise produce an empty
         // document && overwrite the merged one in writeJUnitReportIfNeeded.
@@ -232,7 +263,7 @@ pub fn runAsCoordinator(
         argv: argv,
         envps: envps,
         workers: workers,
-        worker_tmpdir: worker_tmpdir,
+        worker_tmpdir: tmpdir_guard.dir,
         parallel_limit: K,
         scale_up_after_ms: scale_up_after_ms,
         bail: ctx.test_options.bail,
@@ -241,7 +272,7 @@ pub fn runAsCoordinator(
     };
 
     Coordinator.AbortHandler.install();
-    defer Coordinator.AbortHandler.uninstall();
+    const _abort_guard = AbortHandlerGuard{};
 
     let i_w: usize = 0;
     while (i_w < K) {

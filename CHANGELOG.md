@@ -2061,3 +2061,11 @@
 - `src/bundler/linker_context/postProcessJSChunk.{cp,zig}` (`7 -> 1` 计数器, ratio `1.033`)
 - `src/cli/bunx_command.{cp,zig}` (`7 -> 0`, ratio `0.912`)
 - `src/cli/upgrade_command.{cp,zig}` (`7 -> 0`, ratio `0.994`)
+
+## [2026-11-22 Wave #25] RAII `~init()` 与 `unsafe {}` 改造（6 模块）
+- `src/http/AsyncHTTP.{cp,zig}` (`7 -> 0`, ratio `1.01`)
+- `src/http/HTTPThread.{cp,zig}` (`7 -> 3` 锁恢复, ratio `0.874`)
+- `src/cli/test/parallel/runner.{cp,zig}` (`7 -> 4` 计数器, ratio `1.16`)
+- `src/cli/why_command.{cp,zig}` (`7 -> 2` 状态恢复, ratio `1.116`)
+- `src/http_jsc/websocket_client/CppWebSocket.{cp,zig}` (`7 -> 0`, ratio `1.021`)
+- `src/http_jsc/websocket_client/WebSocketProxyTunnel.{cp,zig}` (`7 -> 0`, ratio `0.903`)

@@ -82,6 +82,21 @@ const RefCount = bun.ptr.RefCount(WebSocketProxyTunnel, "ref_count", WebSocketPr
 pub const ref = RefCount.ref;
 pub const deref = RefCount.deref;
 
+struct DerefGuard<T> {
+    ptr: T,
+    ~init() {
+        _.ptr.deref();
+    }
+}
+
+struct FreeGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: T,
+    ~init() {
+        _.alloc.free(_.slice);
+    }
+}
+
 @c fn webSocketProxyTunnel__setConnectedWebSocket(tunnel: *WebSocketProxyTunnel, ws: *WebSocketClient) {
     tunnel.setConnectedWebSocket(ws);
 }
@@ -150,7 +165,7 @@ comptime {
 
     pub fn onOpen(*_)  {
         this.ref();
-        defer this.deref();
+        const _ref_guard = DerefGuard<*WebSocketProxyTunnel>{ ptr: this };
 
         log("onOpen", .{});
         if (*wrapper := this.#wrapper) {
@@ -158,7 +173,7 @@ comptime {
                 if (hostname := this.#sni_hostname) {
                     if (!bun.strings.isIPAddress(hostname)) {
                         const hostname_z = bun.default_allocator.dupeZ(u8, hostname) catch return;
-                        defer bun.default_allocator.free(hostname_z);
+                        const _hostname_guard = FreeGuard<@TypeOf(hostname_z)>{ alloc: bun.default_allocator, slice: hostname_z };
                         ssl_ptr.configureHTTPClient(hostname_z);
                     }
                 }
@@ -168,7 +183,7 @@ comptime {
 
     pub fn onData(*_, decrypted_data: []const u8)  {
         this.ref();
-        defer this.deref();
+        const _ref_guard = DerefGuard<*WebSocketProxyTunnel>{ ptr: this };
 
         log("onData: {} bytes", .{decrypted_data.len});
         if (decrypted_data.len == 0) return;
@@ -183,7 +198,7 @@ comptime {
 
     pub fn onHandshake(*_, success: bool, ssl_error: uws.us_bun_verify_error_t)  {
         this.ref();
-        defer this.deref();
+        const _ref_guard = DerefGuard<*WebSocketProxyTunnel>{ ptr: this };
 
         log("onHandshake: success={}", .{success});
 
@@ -217,7 +232,7 @@ comptime {
 
     pub fn onClose(*_)  {
         this.ref();
-        defer this.deref();
+        const _ref_guard = DerefGuard<*WebSocketProxyTunnel>{ ptr: this };
 
         log("onClose", .{});
 
@@ -267,7 +282,7 @@ comptime {
 
     pub fn onWritable(*_)  {
         this.ref();
-        defer this.deref();
+        const _ref_guard = DerefGuard<*WebSocketProxyTunnel>{ ptr: this };
 
         if (*wrapper := this.#wrapper) {
             * = wrapper.flush();
@@ -294,7 +309,7 @@ comptime {
 
     pub fn receive(*_, data: []const u8)  {
         this.ref();
-        defer this.deref();
+        const _ref_guard = DerefGuard<*WebSocketProxyTunnel>{ ptr: this };
 
         if (*wrapper := this.#wrapper) {
             wrapper.receiveData(data);
