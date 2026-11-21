@@ -1567,3 +1567,7 @@
 ## [2026-11-22 Wave #18] RAII 改造与 `unsafe {}` 经验
 - `bun_alloc.cp`：新增带 `static fn acquire` 的 `MutexGuard`，将 9 处 `mutex.lock(); defer mutex.unlock();` 收口为单行 RAII 作用域守卫。
 - `s3/client.cp`：`DeinitPtrGuard<T>` 通过 `active` 标志位精准复刻条件 `if (!has_more) self.deinit()` 语义，并补齐 19 处 E0209 `unsafe {}`。
+
+## [2026-11-22 Wave #19] RAII 改造与 `unsafe {}` 经验
+- `fs_events.cp` / `libarchive.cp`：`MutexGuard.lock(&m)` 与 `PathBufferPoolGuard` / `CloseGuard` 全量替换手动 `defer`，`libarchive` 句柄移交前显式置空 Guard 避免双重关闭。
+- `Request.cp` / `SocketAddress.cp`：`errdefer`（`body_`、`url`、`headers`、`req`）全部转为 Guard 并在成功路径置空撤防。

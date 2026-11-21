@@ -30,6 +30,41 @@ const InternalBlob = jsc.WebCore.Blob.Internal;
 const Body = jsc.WebCore.Body;
 const BodyMixin = jsc.WebCore.Body.Mixin;
 
+struct DeinitGuard<T> {
+    val: T?,
+    ~init() {
+        if (_.val != null) {
+            _.val.?.deinit();
+        }
+    }
+}
+
+struct DerefGuard<T> {
+    val: T?,
+    ~init() {
+        if (_.val != null) {
+            _.val.?.deref();
+        }
+    }
+}
+
+struct FreeGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: T,
+    ~init() {
+        _.alloc.free(_.slice);
+    }
+}
+
+struct DestroyGuard<T> {
+    ptr: (*T!)?,
+    ~init() {
+        if (_.ptr != null) {
+            bun.destroy(_.ptr.?);
+        }
+    }
+}
+
 @packed(u8)
 pub struct Flags {
     redirect: FetchRedirect = .follow,
@@ -224,7 +259,7 @@ pub fn getFormDataEncoding(client: *Request): bun.JSError!(*bun.FormData.AsyncFo
     } else {
         return null;
     }
-    defer content_type_slice.deinit();
+    const _content_type_guard = DeinitGuard<ZigString.Slice>{ val: content_type_slice };
     let encoding: bun.FormData.Encoding = undefined;
     if (enc := bun.FormData.Encoding.get(content_type_slice.slice())) {
         encoding = enc;
@@ -599,7 +634,7 @@ pub fn ensureURL(client: *Request): bun.OOM!void {
                         fmt,
                         req_url,
                     })?;
-                    defer bun.default_allocator.free(temp_url);
+                    const _temp_url_guard = FreeGuard<@TypeOf(temp_url)>{ alloc: bun.default_allocator, slice: temp_url };
                     client.url = bun.String.cloneUTF8(temp_url);
                 }
 
@@ -1105,12 +1140,12 @@ pub fn cloneInto(
 
         break :brk try _.#body.value.clone(globalThis);
     };
-    errdefer body_.deinit();
+    let _body_guard = DeinitGuard<@TypeOf(body_)>{ val: body_ };
     const body = vm.initRequestBodyValue(body_)?;
     const url = if (preserve_url) req.url else _.url.dupeRef();
-    errdefer if (!preserve_url) url.deref();
+    let _url_guard = DerefGuard<@TypeOf(url)>{ val: if (preserve_url) null else url };
     const headers = _.cloneHeaders(globalThis)?;
-    errdefer if (_h := headers) _h.deref();
+    let _headers_guard = DerefGuard<@TypeOf(headers.?)>{ val: headers };
 
     req.* = Request{
         .#body = body,
@@ -1123,12 +1158,16 @@ pub fn cloneInto(
     if (signal := _.signal) {
         req.signal = signal.ref();
     }
+    _body_guard.val = null;
+    _url_guard.val = null;
+    _headers_guard.val = null;
 }
 
 pub fn clone(client: *Request, allocator: std.mem.Allocator, globalThis: *JSGlobalObject): bun.JSError!*Request {
     const req = Request.new(undefined);
-    errdefer bun.destroy(req);
+    let _req_guard = DestroyGuard<Request>{ ptr: req };
     client.cloneInto(req, allocator, globalThis, false)?;
+    _req_guard.ptr = null;
     return req;
 }
 

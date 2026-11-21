@@ -2015,3 +2015,9 @@
 - `src/cli/test/parallel/aggregate.{cp,zig}` (`9 -> 2` 计数器, ratio `1.073`)
 - `src/test_runner/Collection.{cp,zig}` (`8 -> 5` group.end, ratio `1.094`)
 - `src/runtime/webcore/s3/client.{cp,zig}` (`8 -> 1` event_loop.exit, ratio `1.077`)
+
+## [2026-11-22 Wave #19] RAII `~init()` 与 `unsafe {}` 改造（4 模块）
+- `src/runtime/webcore/Request.{cp,zig}` (`8 -> 2` 状态恢复/回滚, ratio `1.059`)
+- `src/runtime/socket/SocketAddress.{cp,zig}` (`8 -> 2` 状态恢复/透传块, ratio `0.785`)
+- `src/runtime/node/fs_events.{cp,zig}` (`8 -> 0`, ratio `1.036`)
+- `src/libarchive/libarchive.{cp,zig}` (`8 -> 0`, ratio `0.91`)

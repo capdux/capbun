@@ -10,6 +10,32 @@ const CallFrame = jsc.CallFrame;
 const JSValue = jsc.JSValue;
 const net = std.net;
 
+struct DerefGuard<T> {
+    val: T?,
+    ~init() {
+        if (_.val != null) {
+            _.val.?.deref();
+        }
+    }
+}
+
+struct DeinitGuard<T> {
+    val: T?,
+    ~init() {
+        if (_.val != null) {
+            _.val.?.deinit();
+        }
+    }
+}
+
+struct FreeGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: T,
+    ~init() {
+        _.alloc.free(_.slice);
+    }
+}
+
 pub struct SocketAddressOptions {
     family: AF = AF.INET,
     address: bun.String? = null,
@@ -63,7 +89,7 @@ pub struct SocketAddressOptions {
         const ty = global.determineSpecificType(port_) catch {
             return global.ERR(.SOCKET_BAD_PORT, "The \"options.port\" argument must be a valid IP port number.", .{}).throw();
         };
-        defer ty.deref();
+        const _ty_guard = DerefGuard<bun.String>{ val: ty };
         return global.ERR(.SOCKET_BAD_PORT, "The \"options.port\" argument must be a valid IP port number. Got {f}.", .{ty}).throw();
     }
 }
@@ -83,7 +109,7 @@ pub struct SocketAddressOptions {
         const input_arg = callframe.argument(0);
         if (!input_arg.isString()) return global.throwInvalidArgumentTypeValue("input", "string", input_arg);
         const input = bun.String.fromJS(input_arg, global)?;
-        defer input.deref();
+        const _input_guard = DerefGuard<bun.String>{ val: input };
 
         const prefix = "http://";
         const url_str = switch (input.is8Bit()) {
@@ -98,12 +124,12 @@ pub struct SocketAddressOptions {
                 break str;
             }),
         };
-        defer url_str.deref();
+        const _url_str_guard = DerefGuard<bun.String>{ val: url_str };
 
         const url_opt = jsc.URL.fromString(url_str);
         if (url_opt == null) return jsc.JSValue.js_undefined;
         const url = url_opt.?;
-        defer url.deinit();
+        const _url_guard = DeinitGuard<@TypeOf(url)>{ val: url };
         const host = url.host();
         const port32 = url.port();
         const port_: u16 = if (port32 > std.math.maxInt(u16)) 0 else @intCast(port32);
@@ -178,7 +204,7 @@ pub struct SocketAddressOptions {
                 if (address_str := options.address) {
                     presentation = address_str;
                     const slice = bun.handleOom(address_str.toOwnedSliceZ(alloc));
-                    defer alloc.free(slice);
+                    const _slice_guard = FreeGuard<@TypeOf(slice)>{ alloc: alloc, slice: slice };
                     pton(global, inet.AF_INET, slice, &sin.addr)?;
                 } else {
                     sin.addr = sockaddr.@"127.0.0.1".sin.addr;
@@ -196,7 +222,7 @@ pub struct SocketAddressOptions {
                 if (address_str := options.address) {
                     presentation = address_str;
                     const slice = bun.handleOom(address_str.toOwnedSliceZ(alloc));
-                    defer alloc.free(slice);
+                    const _slice_guard = FreeGuard<@TypeOf(slice)>{ alloc: alloc, slice: slice };
                     pton(global, inet.AF_INET6, slice, &sin6.addr)?;
                 } else {
                     sin6.addr = inet.IN6ADDR_ANY_INIT;

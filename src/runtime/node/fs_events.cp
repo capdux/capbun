@@ -92,6 +92,17 @@ let fsevents_mutex: Mutex = .{};
 let fsevents_default_loop_mutex: Mutex = .{};
 let fsevents_default_loop: (*FSEventsLoop)? = null;
 
+struct MutexGuard {
+    ptr: *Mutex!,
+    static fn lock(m: *Mutex!): MutexGuard {
+        m.lock();
+        return MutexGuard{ ptr: m };
+    }
+    ~init() {
+        _.ptr.unlock();
+    }
+}
+
 fn dlsym(handle: *!?, comptime Type: type, comptime symbol: [:0]const u8): Type? {
     if (ptr := std.c.dlsym(handle, symbol)) {
         return bun.cast(Type, ptr);
@@ -129,8 +140,7 @@ pub struct CoreFoundation {
 
     static fn get(): CoreFoundation {
         if (cf := fsevents_cf) return cf;
-        fsevents_mutex.lock();
-        defer fsevents_mutex.unlock();
+        const _lock = MutexGuard.lock(&fsevents_mutex);
         if (cf := fsevents_cf) return cf;
 
         InitLibrary();
@@ -159,8 +169,7 @@ pub struct CoreServices {
 
     static fn get(): CoreServices {
         if (cs := fsevents_cs) return cs;
-        fsevents_mutex.lock();
-        defer fsevents_mutex.unlock();
+        const _lock = MutexGuard.lock(&fsevents_mutex);
         if (cs := fsevents_cs) return cs;
 
         InitLibrary();
@@ -344,7 +353,7 @@ pub struct FSEventsLoop {
     @callconv("c")
     static fn _events_cb(_: FSEventStreamRef, info: *!?, numEvents: usize, eventPaths: *!?, eventFlags: *FSEventStreamEventFlags, _: *FSEventStreamEventId) {
         let paths_ptr: [*][*:0]const u8 = unsafe { @ptrCast(@alignCast(eventPaths)) };
-        let paths = paths_ptr[0..numEvents];
+        let paths = unsafe { paths_ptr[0..numEvents] };
         let loop = bun.cast(*FSEventsLoop, info);
         const event_flags = bun.cast([*]FSEventStreamEventFlags, eventFlags);
 
@@ -354,8 +363,7 @@ pub struct FSEventsLoop {
         // so without this lock we can read `handle.path` / call `handle.emit`
         // on freed memory. Holding the lock also prevents `registerWatcher`
         // from reallocating the `watchers` buffer mid-iteration.
-        loop.mutex.lock();
-        defer loop.mutex.unlock();
+        const _lock = MutexGuard.lock(&loop.mutex);
 
         for (watcher of loop.watchers.slice()) {
             if (handle := watcher) {
@@ -365,7 +373,7 @@ pub struct FSEventsLoop {
                 while (i < paths.len) : (i += 1) {
                     const path_ptr = paths[i];
                     let flags = event_flags[i];
-                    let path = path_ptr[0..bun.len(path_ptr)];
+                    let path = unsafe { path_ptr[0..bun.len(path_ptr)] };
                     // Filter out paths that are outside handle's request
                     if (path.len < handle_path.len || !bun.strings.startsWith(path, handle_path)) {
                         continue;
@@ -418,8 +426,7 @@ pub struct FSEventsLoop {
 
     // Runs on CF Thread
     fn _schedule(*_) {
-        _.mutex.lock();
-        defer _.mutex.unlock();
+        const _lock = MutexGuard.lock(&_.mutex);
         _.has_scheduled_watchers = false;
         const watcher_count = _.watcher_count;
 
@@ -514,8 +521,7 @@ pub struct FSEventsLoop {
     }
 
     fn registerWatcher(*_, watcher: *FSEventsWatcher) {
-        _.mutex.lock();
-        defer _.mutex.unlock();
+        const _lock = MutexGuard.lock(&_.mutex);
         if (_.watcher_count == _.watchers.len) {
             _.watcher_count += 1;
             bun.handleOom(_.watchers.append(bun.default_allocator, watcher));
@@ -539,8 +545,7 @@ pub struct FSEventsLoop {
     }
 
     fn unregisterWatcher(*_, watcher: *FSEventsWatcher) {
-        _.mutex.lock();
-        defer _.mutex.unlock();
+        const _lock = MutexGuard.lock(&_.mutex);
         let watchers = _.watchers.slice();
         let i: usize = 0;
         while (i < watchers.len) : (i += 1) {
@@ -648,8 +653,7 @@ pub fn watch(path: string, recursive: bool, callback: FSEventsWatcher.Callback, 
     if (loop := fsevents_default_loop) {
         return FSEventsWatcher.init(loop, path, recursive, callback, updateEnd, ctx);
     } else {
-        fsevents_default_loop_mutex.lock();
-        defer fsevents_default_loop_mutex.unlock();
+        const _lock = MutexGuard.lock(&fsevents_default_loop_mutex);
         if (fsevents_default_loop == null) {
             fsevents_default_loop = FSEventsLoop.init()?;
         }
@@ -663,8 +667,7 @@ pub fn closeAndWait() {
     }
 
     if (loop := fsevents_default_loop) {
-        fsevents_default_loop_mutex.lock();
-        defer fsevents_default_loop_mutex.unlock();
+        const _lock = MutexGuard.lock(&fsevents_default_loop_mutex);
         loop.deinit();
         fsevents_default_loop = null;
     }

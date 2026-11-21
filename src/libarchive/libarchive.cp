@@ -19,6 +19,35 @@ pub enum Seek: c_int {
     end = std.posix.SEEK_END,
 }
 
+struct DeinitGuard<T> {
+    ptr: (*T!)? = null,
+    ~init() {
+        if (p := _.ptr) {
+            p.deinit();
+        }
+    }
+}
+
+struct CloseGuard<T> {
+    ptr: (*T!)? = null,
+    ~init() {
+        if (p := _.ptr) {
+            p.close();
+        }
+    }
+}
+
+struct PathBufferPoolGuard {
+    ptr: (*(*bun.PathBuffer)?)? = null,
+    ~init() {
+        if (p := _.ptr) {
+            if (join_buf := unsafe { p.* }) {
+                bun.path_buffer_pool.put(join_buf);
+            }
+        }
+    }
+}
+
 export struct BufferReadStream {
     pub const Stream = BufferReadStream;
 
@@ -237,7 +266,7 @@ export struct Archiver {
 
         let stream: BufferReadStream = undefined;
         stream.init(file_buffer);
-        defer stream.deinit();
+        const _stream_guard = DeinitGuard<BufferReadStream>{ ptr: &stream };
         * = stream.openRead();
         let archive = stream.archive;
         const cwd = std.fs.cwd();
@@ -272,7 +301,7 @@ export struct Archiver {
                     if (size > 0) {
                         if (opened_val := (dir.openFileZ(pathname, { mode: .write_only }) catch null)) {
                             let opened = opened_val;
-                            defer opened.close();
+                            const _opened_guard = CloseGuard<std.fs.File>{ ptr: &opened };
                             const stat_size = opened.getEndPos()?;
 
                             if (stat_size > 0) {
@@ -317,18 +346,14 @@ export struct Archiver {
 
         let stream: BufferReadStream = undefined;
         stream.init(file_buffer);
-        defer stream.deinit();
+        const _stream_guard = DeinitGuard<BufferReadStream>{ ptr: &stream };
         * = stream.openRead();
         let archive = stream.archive;
         let count: u32 = 0;
         const dir_fd = dir.fd;
 
         let symlink_join_buf: (*bun.PathBuffer)? = null;
-        defer {
-            if (join_buf := symlink_join_buf) {
-                bun.path_buffer_pool.put(join_buf);
-            }
-        }
+        const _symlink_buf_guard = PathBufferPoolGuard{ ptr: &symlink_join_buf };
 
         let normalized_buf: bun.OSPathBuffer = undefined;
         let use_pwrite = Environment.isPosix;
@@ -352,7 +377,7 @@ export struct Archiver {
                             if (comptime Environment.isWindows) {
                                 const list = std.array_list.Managed(u8).init(default_allocator);
                                 let result = strings.toUTF8ListWithType(list, pathname[0..pathname.len])?;
-                                defer result.deinit();
+                                const _result_guard = DeinitGuard<@TypeOf(result)>{ ptr: &result };
                                 appender.onFirstDirectoryName(strings.withoutTrailingSlash(result.items));
                             } else {
                                 appender.onFirstDirectoryName(strings.withoutTrailingSlash(bun.asByteSlice(pathname)));
@@ -487,16 +512,14 @@ export struct Archiver {
                             }
 
                             const file_handle = brk: {
-                                errdefer * = file_handle_native.close();
-                                break :brk file_handle_native.makeLibUVOwned()?;
+                                let _native_guard = CloseGuard<bun.FD>{ ptr: &file_handle_native };
+                                const fh = file_handle_native.makeLibUVOwned()?;
+                                _native_guard.ptr = null;
+                                break :brk fh;
                             };
 
-                            let plucked_file = false;
-                            defer {
-                                if (options.close_handles && !plucked_file) {
-                                    file_handle.close();
-                                }
-                            }
+                            let file_handle_mut = file_handle;
+                            let _file_handle_guard = CloseGuard<bun.FD>{ ptr: if (options.close_handles) &file_handle_mut else null };
 
                             const size: usize = usize(@max(entry.size(), 0));
 
@@ -525,7 +548,7 @@ export struct Archiver {
                                             plucker_.contents.inflate(usize(read))?;
                                             plucker_.found = read > 0;
                                             plucker_.fd = file_handle;
-                                            plucked_file = true;
+                                            _file_handle_guard.ptr = null;
                                             continue :loop;
                                         }
                                     }
@@ -597,11 +620,7 @@ export struct Archiver {
             dir = cwd.openDir(root, {})?;
         }
 
-        defer {
-            if (comptime options.close_handles) {
-                dir.close();
-            }
-        }
+        const _dir_guard = CloseGuard<std.fs.Dir>{ ptr: if (comptime options.close_handles) &dir else null };
         return Archiver.extractToDir(file_buffer, dir, ctx, FilePathAppender, appender, options)?;
     }
 }

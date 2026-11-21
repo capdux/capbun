@@ -111,6 +111,7 @@ fn LockGuard(comptime __T: type) type {
         const Self = @This();
         mutex: *CpMutex(__T),
         data: *__T,
+        pub fn __cp_deinit(self: Self) void { self.release(); }
         pub fn release(self: Self) void { self.mutex.raw.unlock(); }
         pub fn unlock(self: Self) void { self.release(); }
     };
@@ -121,6 +122,7 @@ fn ReadGuard(comptime __T: type) type {
         const Self = @This();
         rwlock: *CpRwLock(__T),
         data: *const __T,
+        pub fn __cp_deinit(self: Self) void { self.release(); }
         pub fn release(self: Self) void { self.rwlock.raw.unlockShared(); }
         pub fn unlock(self: Self) void { self.release(); }
     };
@@ -131,6 +133,7 @@ fn WriteGuard(comptime __T: type) type {
         const Self = @This();
         rwlock: *CpRwLock(__T),
         data: *__T,
+        pub fn __cp_deinit(self: Self) void { self.release(); }
         pub fn release(self: Self) void { self.rwlock.raw.unlockExclusive(); }
         pub fn unlock(self: Self) void { self.release(); }
     };
@@ -209,10 +212,26 @@ fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const
 fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const path_watcher = @import("./path_watcher.zig");
 pub const bun = @import("bun");
+pub const MutexGuard = struct {
+    ptr: *Mutex,
+    __cp_dropped: bool = false,
+
+pub fn lock(m: *Mutex) MutexGuard {
+            _ = (if (comptime @typeInfo(@TypeOf(m)) == .pointer) (m) else &(m)).lock();
+            return MutexGuard{ .ptr = m };
+    }
+
+pub fn __cp_deinit(self: *MutexGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = (if (comptime @typeInfo(@TypeOf(self.ptr)) == .pointer) (self.ptr) else &(self.ptr)).unlock();
+    }
+};
+
 pub const CoreFoundation = struct {
     handle: ?*anyopaque,
     ArrayCreate: CFArrayCreateFn,
@@ -233,10 +252,10 @@ pub fn get() CoreFoundation {
                 _ = &cf;
                 return cf;
             }
-            _ = (if (comptime @typeInfo(@TypeOf(fsevents_mutex)) == .pointer) (fsevents_mutex) else &(fsevents_mutex)).lock();
-            defer {
-            _ = (if (comptime @typeInfo(@TypeOf(fsevents_mutex)) == .pointer) (fsevents_mutex) else &(fsevents_mutex)).unlock();
-            }
+            var _lock = MutexGuard.lock((&fsevents_mutex));
+            _ = &_lock;
+            var ___lock_moved = false; _ = &___lock_moved;
+            defer if (!___lock_moved) { ___lock_moved = true; const __T = @TypeOf(_lock); if (@typeInfo(__T) == .optional) { if (_lock) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _lock.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _lock; _drop_val.__cp_deinit(); } };
             if (fsevents_cf) |cf| {
                 _ = &cf;
                 return cf;
@@ -261,10 +280,10 @@ pub fn get() CoreServices {
                 _ = &cs;
                 return cs;
             }
-            _ = (if (comptime @typeInfo(@TypeOf(fsevents_mutex)) == .pointer) (fsevents_mutex) else &(fsevents_mutex)).lock();
-            defer {
-            _ = (if (comptime @typeInfo(@TypeOf(fsevents_mutex)) == .pointer) (fsevents_mutex) else &(fsevents_mutex)).unlock();
-            }
+            var _lock = MutexGuard.lock((&fsevents_mutex));
+            _ = &_lock;
+            var ___lock_moved = false; _ = &___lock_moved;
+            defer if (!___lock_moved) { ___lock_moved = true; const __T = @TypeOf(_lock); if (@typeInfo(__T) == .optional) { if (_lock) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _lock.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _lock; _drop_val.__cp_deinit(); } };
             if (fsevents_cs) |cs| {
                 _ = &cs;
                 return cs;
@@ -391,15 +410,18 @@ pub fn _events_cb(_: FSEventStreamRef, info: ?*anyopaque, numEvents: usize, even
 
 });
             _ = &paths_ptr;
-            var paths = paths_ptr[0..numEvents];
+            var paths = (blk: {
+            break :blk paths_ptr[0..numEvents];
+
+});
             _ = &paths;
             var loop = bun.cast(*FSEventsLoop, info);
             _ = &loop;
             const event_flags = bun.cast([*]FSEventStreamEventFlags, eventFlags);
-            _ = loop.mutex.lock();
-            defer {
-            _ = loop.mutex.unlock();
-            }
+            var _lock = MutexGuard.lock((&loop.mutex));
+            _ = &_lock;
+            var ___lock_moved = false; _ = &___lock_moved;
+            defer if (!___lock_moved) { ___lock_moved = true; const __T = @TypeOf(_lock); if (@typeInfo(__T) == .optional) { if (_lock) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _lock.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _lock; _drop_val.__cp_deinit(); } };
             for (cp_iter_slice(loop.watchers.slice())) |watcher| {
                 _ = &watcher;
                 if (watcher) |handle| {
@@ -411,7 +433,10 @@ pub fn _events_cb(_: FSEventStreamRef, info: ?*anyopaque, numEvents: usize, even
                         const path_ptr = paths[@as(usize, @intCast(i))];
                         var flags = event_flags[@as(usize, @intCast(i))];
                         _ = &flags;
-                        var path = path_ptr[0..bun.len(path_ptr)];
+                        var path = (blk: {
+                        break :blk path_ptr[0..bun.len(path_ptr)];
+
+});
                         _ = &path;
                         if (((std.mem.span(path).len < handle_path.len) or (!bun.strings.startsWith(path, handle_path)))) {
                             continue;
@@ -450,10 +475,10 @@ pub fn _events_cb(_: FSEventStreamRef, info: ?*anyopaque, numEvents: usize, even
     }
 
 pub fn _schedule(self: *FSEventsLoop) void {
-            _ = (if (comptime @typeInfo(@TypeOf(self.mutex)) == .pointer) (self.mutex) else &(self.mutex)).lock();
-            defer {
-            _ = (if (comptime @typeInfo(@TypeOf(self.mutex)) == .pointer) (self.mutex) else &(self.mutex)).unlock();
-            }
+            var _lock = MutexGuard.lock((&self.mutex));
+            _ = &_lock;
+            var ___lock_moved = false; _ = &___lock_moved;
+            defer if (!___lock_moved) { ___lock_moved = true; const __T = @TypeOf(_lock); if (@typeInfo(__T) == .optional) { if (_lock) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _lock.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _lock; _drop_val.__cp_deinit(); } };
             self.has_scheduled_watchers = false;
             const watcher_count = self.watcher_count;
             const watchers = self.watchers.slice();
@@ -538,10 +563,10 @@ pub fn _schedule(self: *FSEventsLoop) void {
     }
 
 pub fn registerWatcher(self: *FSEventsLoop, watcher: *FSEventsWatcher) void {
-            _ = (if (comptime @typeInfo(@TypeOf(self.mutex)) == .pointer) (self.mutex) else &(self.mutex)).lock();
-            defer {
-            _ = (if (comptime @typeInfo(@TypeOf(self.mutex)) == .pointer) (self.mutex) else &(self.mutex)).unlock();
-            }
+            var _lock = MutexGuard.lock((&self.mutex));
+            _ = &_lock;
+            var ___lock_moved = false; _ = &___lock_moved;
+            defer if (!___lock_moved) { ___lock_moved = true; const __T = @TypeOf(_lock); if (@typeInfo(__T) == .optional) { if (_lock) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _lock.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _lock; _drop_val.__cp_deinit(); } };
             if ((self.watcher_count == self.watchers.len)) {
                 self.watcher_count = (self.watcher_count + 1);
                 _ = bun.handleOom(self.watchers.append(bun.default_allocator, watcher));
@@ -566,10 +591,10 @@ pub fn registerWatcher(self: *FSEventsLoop, watcher: *FSEventsWatcher) void {
     }
 
 pub fn unregisterWatcher(self: *FSEventsLoop, watcher: *FSEventsWatcher) void {
-            _ = (if (comptime @typeInfo(@TypeOf(self.mutex)) == .pointer) (self.mutex) else &(self.mutex)).lock();
-            defer {
-            _ = (if (comptime @typeInfo(@TypeOf(self.mutex)) == .pointer) (self.mutex) else &(self.mutex)).unlock();
-            }
+            var _lock = MutexGuard.lock((&self.mutex));
+            _ = &_lock;
+            var ___lock_moved = false; _ = &___lock_moved;
+            defer if (!___lock_moved) { ___lock_moved = true; const __T = @TypeOf(_lock); if (@typeInfo(__T) == .optional) { if (_lock) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _lock.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _lock; _drop_val.__cp_deinit(); } };
             var watchers = self.watchers.slice();
             _ = &watchers;
             var i: usize = 0;
@@ -775,10 +800,10 @@ pub fn watch(path: []const u8, recursive: bool, callback: FSEventsWatcher.Callba
             _ = &loop;
             return FSEventsWatcher.init(loop, path, recursive, callback, updateEnd, ctx);
         } else {
-            _ = (if (comptime @typeInfo(@TypeOf(fsevents_default_loop_mutex)) == .pointer) (fsevents_default_loop_mutex) else &(fsevents_default_loop_mutex)).lock();
-            defer {
-            _ = (if (comptime @typeInfo(@TypeOf(fsevents_default_loop_mutex)) == .pointer) (fsevents_default_loop_mutex) else &(fsevents_default_loop_mutex)).unlock();
-            }
+            var _lock = MutexGuard.lock((&fsevents_default_loop_mutex));
+            _ = &_lock;
+            var ___lock_moved = false; _ = &___lock_moved;
+            defer if (!___lock_moved) { ___lock_moved = true; const __T = @TypeOf(_lock); if (@typeInfo(__T) == .optional) { if (_lock) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _lock.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _lock; _drop_val.__cp_deinit(); } };
             if ((fsevents_default_loop == null)) {
                 fsevents_default_loop = try FSEventsLoop.init();
             }
@@ -792,10 +817,10 @@ pub fn closeAndWait() void {
         }
         if (fsevents_default_loop) |loop| {
             _ = &loop;
-            _ = (if (comptime @typeInfo(@TypeOf(fsevents_default_loop_mutex)) == .pointer) (fsevents_default_loop_mutex) else &(fsevents_default_loop_mutex)).lock();
-            defer {
-            _ = (if (comptime @typeInfo(@TypeOf(fsevents_default_loop_mutex)) == .pointer) (fsevents_default_loop_mutex) else &(fsevents_default_loop_mutex)).unlock();
-            }
+            var _lock = MutexGuard.lock((&fsevents_default_loop_mutex));
+            _ = &_lock;
+            var ___lock_moved = false; _ = &___lock_moved;
+            defer if (!___lock_moved) { ___lock_moved = true; const __T = @TypeOf(_lock); if (@typeInfo(__T) == .optional) { if (_lock) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _lock.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _lock; _drop_val.__cp_deinit(); } };
             _ = loop.deinit();
             fsevents_default_loop = null;
         }
