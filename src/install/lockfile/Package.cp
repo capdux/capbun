@@ -1,3 +1,32 @@
+pub struct DeinitGuard<T> {
+    ptr: (*T!)? = null,
+    ~init() {
+        if (p := _.ptr) unsafe {
+            p.deinit();
+        }
+    }
+}
+
+pub struct DeinitWithAllocGuard<T> {
+    ptr: (*T!)? = null,
+    alloc: std.mem.Allocator,
+    ~init() {
+        if (p := _.ptr) unsafe {
+            p.deinit(_.alloc);
+        }
+    }
+}
+
+pub struct FreeGuard<T> {
+    slice: T? = null,
+    alloc: std.mem.Allocator,
+    ~init() {
+        if (s := _.slice) {
+            _.alloc.free(s);
+        }
+    }
+}
+
 pub fn Package(comptime SemverIntType: type): type {
     return struct {
         name: String = {},
@@ -863,7 +892,7 @@ pub fn Package(comptime SemverIntType: type): type {
                                 };
 
                                 let package_json_path: bun.AbsPath(.{ .sep = .auto }) = .initTopLevelDir();
-                                defer package_json_path.deinit();
+                                const package_json_path_guard = DeinitGuard<@TypeOf(package_json_path)>{ ptr: &package_json_path };
 
                                 package_json_path.append(workspace_path.slice(to_lockfile.buffers.string_bytes.items));
                                 package_json_path.append("package.json");
@@ -1428,7 +1457,7 @@ pub fn Package(comptime SemverIntType: type): type {
             };
 
             let workspace_names = WorkspaceMap.init(allocator);
-            defer workspace_names.deinit();
+            const workspace_names_guard = DeinitGuard<WorkspaceMap>{ ptr: &workspace_names };
 
             // pnpm/yarn synthesise an implicit `"*"` optional peer for entries
             // that appear in `peerDependenciesMeta` but not in
@@ -1436,7 +1465,7 @@ pub fn Package(comptime SemverIntType: type): type {
             // post-build pass can emit a real `Dependency` for any meta-only
             // names that nothing in the build loop consumed.
             let optional_peer_dependencies = std.ArrayHashMap(PackageNameHash, string, ArrayIdentityContext.U64, false).init(allocator);
-            defer optional_peer_dependencies.deinit();
+            const optional_peer_deps_guard = DeinitGuard<@TypeOf(optional_peer_dependencies)>{ ptr: &optional_peer_dependencies };
 
             if (features.peer_dependencies) {
                 if (peer_dependencies_meta := json.asProperty("peerDependenciesMeta")) {
@@ -1610,12 +1639,12 @@ pub fn Package(comptime SemverIntType: type): type {
             const total_len = off + total_dependencies_count;
             if (comptime Environment.allow_assert) assert(lockfile.buffers.dependencies.items.len == lockfile.buffers.resolutions.items.len);
 
-            const package_dependencies = lockfile.buffers.dependencies.items.ptr[off..total_len];
+            const package_dependencies = unsafe { lockfile.buffers.dependencies.items.ptr[off..total_len] };
 
             name: {
                 if (ResolverContext == PackageManager.GitResolver) {
                     if (resolver.new_name.len != 0) {
-                        defer lockfile.allocator.free(resolver.new_name);
+                        const new_name_guard = FreeGuard<@TypeOf(resolver.new_name)>{ slice: resolver.new_name, alloc: lockfile.allocator };
                         const external_string = string_builder.append(ExternalString, resolver.new_name);
                         package.name = external_string.value;
                         package.name_hash = external_string.hash;
@@ -1762,7 +1791,7 @@ pub fn Package(comptime SemverIntType: type): type {
             }
 
             let bundled_deps = bun.StringSet.init(allocator);
-            defer bundled_deps.deinit();
+            const bundled_deps_guard = DeinitGuard<bun.StringSet>{ ptr: &bundled_deps };
             let bundle_all_deps = false;
             if (comptime ResolverContext != void && ResolverContext.checkBundledDependencies()) {
                 if (bundled_deps_expr := json.get("bundleDependencies") orelse json.get("bundledDependencies")) {
@@ -1785,7 +1814,7 @@ pub fn Package(comptime SemverIntType: type): type {
             inline for (dependency_groups) |group| {
                 if (group.behavior.isWorkspace()) {
                     let seen_workspace_names = TrustedDependenciesSet{};
-                    defer seen_workspace_names.deinit(allocator);
+                    const seen_ws_guard = DeinitWithAllocGuard<TrustedDependenciesSet>{ ptr: &seen_workspace_names, alloc: allocator };
                     for (workspace_names.values(), workspace_names.keys()) |entry, path| {
 
                         // workspace names from their package jsons. duplicates not allowed

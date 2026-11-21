@@ -1555,3 +1555,7 @@
 ## [2026-11-22 Wave #15] RAII 改造与 `unsafe {}` 经验
 - `DataCell.cp` / `credentials_jsc.cp` / `node_crypto_binding.cp`：所有返回/移交所有权的路径均在移交前显式置空 Guard 指针或切片，兼顾异常安全与零泄漏。
 - `subprocess.cp` / `FileSink.cp`：`DerefGuard<T>` 统一接管异步引用计数释放，仅保留 `loop.exit()` / `ensureStillAlive()` 等生命周期配对 `defer`。
+
+## [2026-11-22 Wave #16] RAII 改造与 `unsafe {}` 经验
+- `Package.cp` / `ini_jsc.cp`：多资源 `defer { ... }` 块拆分为独立 `DerefGuard<T>` / `DeinitGuard<T>`；`Serializer.load` 等二级嵌套 `struct` 保留原 `defer` 防漏。
+- `outdated_command.cp`：`WorkspaceFiltersGuard` 与 `CatalogMapGuard` 统一接管嵌套集合析构。

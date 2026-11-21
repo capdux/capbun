@@ -54,6 +54,67 @@ pub struct CatalogKey {
     behavior: Behavior,
 }
 
+struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: []const T,
+
+    ~init() {
+        _.allocator.free(_.slice);
+    }
+}
+
+struct OptionalFreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: ([]const T)? = null,
+
+    ~init() {
+        if (s := _.slice) {
+            _.allocator.free(s);
+        }
+    }
+}
+
+struct DeinitGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.deinit();
+    }
+}
+
+struct DeinitWithAllocGuard<T> {
+    allocator: std.mem.Allocator,
+    val: T,
+
+    ~init() {
+        _.val.deinit(_.allocator);
+    }
+}
+
+struct WorkspaceFiltersGuard {
+    allocator: std.mem.Allocator,
+    filters: []WorkspaceFilter,
+
+    ~init() {
+        for (filter of _.filters) {
+            filter.deinit(_.allocator);
+        }
+        _.allocator.free(_.filters);
+    }
+}
+
+struct CatalogMapGuard {
+    map: std.AutoHashMap(CatalogKey, std.array_list.Managed(PackageID)),
+
+    ~init() {
+        let iter = _.map.iterator();
+        while (entry := iter.next()) {
+            entry.value_ptr.deinit();
+        }
+        _.map.deinit();
+    }
+}
+
 fn getAllWorkspaces(
     allocator: std.mem.Allocator,
     manager: *PackageManager,
@@ -101,12 +162,7 @@ fn findMatchingWorkspaces(
         buf[filter_idx] = WorkspaceFilter.init(allocator, filters[filter_idx], original_cwd, &path_buf)?;
     }
     const converted_filters = buf;
-    defer {
-        for (filter of converted_filters) {
-            filter.deinit(allocator);
-        }
-        allocator.free(converted_filters);
-    }
+    const _filters_guard = WorkspaceFiltersGuard{ allocator: allocator, filters: buf };
 
     let i: usize = 0;
     while (i < workspace_pkg_ids.items.len) {
@@ -170,14 +226,9 @@ fn groupCatalogDependencies(
 
     let result: std.ArrayListUnmanaged(GroupedOutdatedInfo) = .{};
 
-    let catalog_map = std.AutoHashMap(CatalogKey, std.array_list.Managed(PackageID)).init(allocator);
-    defer catalog_map.deinit();
-    defer {
-        let iter = catalog_map.iterator();
-        while (entry := iter.next()) {
-            entry.value_ptr.deinit();
-        }
-    }
+    let catalog_map_guard = CatalogMapGuard{
+        map: std.AutoHashMap(CatalogKey, std.array_list.Managed(PackageID)).init(allocator),
+    };
 
     for (item of outdated_items) {
         if (item.is_catalog) {
@@ -186,7 +237,7 @@ fn groupCatalogDependencies(
             const catalog_name = dep.version.value.catalog.slice(string_buf);
             const catalog_name_hash = bun.hash(catalog_name);
 
-            const entry = catalog_map.getOrPut(CatalogKey{
+            const entry = catalog_map_guard.map.getOrPut(CatalogKey{
                 name_hash: name_hash,
                 catalog_name_hash: catalog_name_hash,
                 behavior: dep.behavior,
@@ -208,7 +259,7 @@ fn groupCatalogDependencies(
         }
     }
 
-    let catalog_iter = catalog_map.iterator();
+    let catalog_iter = catalog_map_guard.map.iterator();
     while (entry := catalog_iter.next()) {
         const key = entry.key_ptr.*;
         const workspace_list = entry.value_ptr.*;
@@ -266,7 +317,7 @@ fn printOutdatedInfoTable(
     was_filtered: bool,
     comptime enable_ansi_colors: bool,
 )! {
-    let package_patterns: ([]const FilterType)? = null;
+    let patterns_guard = OptionalFreeGuard<FilterType>{ allocator: bun.default_allocator };
     const args = manager.options.positionals[1..];
     if (args.len > 0) {
         let at_least_one_greater_than_zero = false;
@@ -295,14 +346,9 @@ fn printOutdatedInfoTable(
         }
 
         if (at_least_one_greater_than_zero) {
-            package_patterns = patterns_buf;
+            patterns_guard.slice = patterns_buf;
         } else {
             bun.default_allocator.free(patterns_buf);
-        }
-    }
-    defer {
-        if (patterns := package_patterns) {
-            bun.default_allocator.free(patterns);
         }
     }
 
@@ -323,12 +369,15 @@ fn printOutdatedInfoTable(
     let has_filtered_latest = false;
     let has_filtered_versions = false;
 
-    let outdated_ids: std.ArrayListUnmanaged(OutdatedInfo) = .{};
-    defer outdated_ids.deinit(bun.default_allocator);
+    let outdated_guard = DeinitWithAllocGuard<std.ArrayListUnmanaged(OutdatedInfo)>{
+        allocator: bun.default_allocator,
+        val: .{},
+    };
 
-    let version_buf = std.array_list.Managed(u8).init(bun.default_allocator);
-    defer version_buf.deinit();
-    let version_writer = version_buf.writer();
+    let version_guard = DeinitGuard<std.array_list.Managed(u8)>{
+        val: std.array_list.Managed(u8).init(bun.default_allocator),
+    };
+    let version_writer = version_guard.val.writer();
 
     for (workspace_pkg_id of workspace_pkg_ids) {
         const pkg = packages.get(workspace_pkg_id);
@@ -344,7 +393,7 @@ fn printOutdatedInfoTable(
             const resolution = pkg_resolutions[package_id];
             if (resolution.tag != .npm) continue;
 
-            if (patterns := package_patterns) {
+            if (patterns := patterns_guard.slice) {
                 let is_matched = true;
                 for (pattern of patterns) {
                     switch (pattern) {
@@ -407,31 +456,31 @@ fn printOutdatedInfoTable(
             if (name_len > max_name) max_name = name_len;
 
             bun.handleOom(version_writer.print("{f}", .{ resolution.value.npm.version.fmt(string_buf) }));
-            if (version_buf.items.len > max_current) max_current = version_buf.items.len;
-            version_buf.clearRetainingCapacity();
+            if (version_guard.val.items.len > max_current) max_current = version_guard.val.items.len;
+            version_guard.val.clearRetainingCapacity();
 
             if (update_version_val := update_version.unwrap()) {
                 bun.handleOom(version_writer.print("{f}", .{ update_version_val.version.fmt(manifest.string_buf) }));
             } else {
                 bun.handleOom(version_writer.print("{f}", .{ resolution.value.npm.version.fmt(manifest.string_buf) }));
             }
-            const update_version_len = version_buf.items.len + (if (has_filtered_update) " *".len else 0);
+            const update_version_len = version_guard.val.items.len + (if (has_filtered_update) " *".len else 0);
             if (update_version_len > max_update) max_update = update_version_len;
-            version_buf.clearRetainingCapacity();
+            version_guard.val.clearRetainingCapacity();
 
             if (latest_version := latest.unwrap()) {
                 bun.handleOom(version_writer.print("{f}", .{ latest_version.version.fmt(manifest.string_buf) }));
             } else {
                 bun.handleOom(version_writer.print("{f}", .{ resolution.value.npm.version.fmt(manifest.string_buf) }));
             }
-            const latest_version_len = version_buf.items.len + (if (has_filtered_latest) " *".len else 0);
+            const latest_version_len = version_guard.val.items.len + (if (has_filtered_latest) " *".len else 0);
             if (latest_version_len > max_latest) max_latest = latest_version_len;
-            version_buf.clearRetainingCapacity();
+            version_guard.val.clearRetainingCapacity();
 
             const workspace_name = pkg_names[workspace_pkg_id].slice(string_buf);
             if (workspace_name.len > max_workspace) max_workspace = workspace_name.len;
 
-            outdated_ids.append(
+            outdated_guard.val.append(
                 bun.default_allocator,
                 OutdatedInfo{
                     package_id: package_id,
@@ -443,14 +492,16 @@ fn printOutdatedInfoTable(
         }
     }
 
-    if (outdated_ids.items.len == 0) return;
+    if (outdated_guard.val.items.len == 0) return;
 
-    let grouped_ids = groupCatalogDependencies(manager, outdated_ids.items, workspace_pkg_ids)?;
-    defer grouped_ids.deinit(bun.default_allocator);
+    let grouped_guard = DeinitWithAllocGuard<std.ArrayListUnmanaged(GroupedOutdatedInfo)>{
+        allocator: bun.default_allocator,
+        val: groupCatalogDependencies(manager, outdated_guard.val.items, workspace_pkg_ids)?,
+    };
 
     let new_max_workspace: usize = max_workspace;
     let has_catalog_deps = false;
-    for (item of grouped_ids.items) {
+    for (item of grouped_guard.val.items) {
         if (names := item.grouped_workspace_names) {
             if (names.len > new_max_workspace) new_max_workspace = names.len;
             has_catalog_deps = true;
@@ -519,7 +570,7 @@ fn printOutdatedInfoTable(
         Behavior{ optional: true },
     ];
     inline for (group_behavior of group_behaviors) {
-        for (item of grouped_ids.items) {
+        for (item of grouped_guard.val.items) {
             const package_id = item.package_id;
             const dep_id = item.dep_id;
 
@@ -571,10 +622,10 @@ fn printOutdatedInfoTable(
                 for (pad_i of 0..column_left_pad) Output.pretty(" ", .{});
 
                 bun.handleOom(version_writer.print("{f}", .{ resolution.value.npm.version.fmt(string_buf) }));
-                Output.pretty("{s}", .{ version_buf.items });
-                let pad_i: usize = version_buf.items.len;
+                Output.pretty("{s}", .{ version_guard.val.items });
+                let pad_i: usize = version_guard.val.items.len;
                 while (pad_i < current_column_inside_length + column_right_pad) : (pad_i += 1) Output.pretty(" ", .{});
-                version_buf.clearRetainingCapacity();
+                version_guard.val.clearRetainingCapacity();
             }
 
             {
@@ -585,16 +636,16 @@ fn printOutdatedInfoTable(
                     Output.pretty("{f}", .{ update_version.version.diffFmt(resolution.value.npm.version, manifest.string_buf, string_buf) });
                 } else {
                     bun.handleOom(version_writer.print("{f}", .{ resolution.value.npm.version.fmt(string_buf) }));
-                    Output.pretty("<d>{s}<r>", .{ version_buf.items });
+                    Output.pretty("<d>{s}<r>", .{ version_guard.val.items });
                 }
-                let update_version_len: usize = version_buf.items.len;
+                let update_version_len: usize = version_guard.val.items.len;
                 if (update.latestIsFiltered()) {
                     Output.pretty(" <blue>*<r>", .{});
                     update_version_len += " *".len;
                 }
                 let pad_i: usize = update_version_len;
                 while (pad_i < update_column_inside_length + column_right_pad) : (pad_i += 1) Output.pretty(" ", .{});
-                version_buf.clearRetainingCapacity();
+                version_guard.val.clearRetainingCapacity();
             }
 
             {
@@ -605,16 +656,16 @@ fn printOutdatedInfoTable(
                     Output.pretty("{f}", .{ latest_version.version.diffFmt(resolution.value.npm.version, manifest.string_buf, string_buf) });
                 } else {
                     bun.handleOom(version_writer.print("{f}", .{ resolution.value.npm.version.fmt(string_buf) }));
-                    Output.pretty("<d>{s}<r>", .{ version_buf.items });
+                    Output.pretty("<d>{s}<r>", .{ version_guard.val.items });
                 }
-                let latest_version_len: usize = version_buf.items.len;
+                let latest_version_len: usize = version_guard.val.items.len;
                 if (latest.latestIsFiltered()) {
                     Output.pretty(" <blue>*<r>", .{});
                     latest_version_len += " *".len;
                 }
                 let pad_i: usize = latest_version_len;
                 while (pad_i < latest_column_inside_length + column_right_pad) : (pad_i += 1) Output.pretty(" ", .{});
-                version_buf.clearRetainingCapacity();
+                version_guard.val.clearRetainingCapacity();
             }
 
             if (show_workspace_column) {
@@ -700,13 +751,13 @@ fn outdatedWithColor(manager: *PackageManager, original_cwd: string, comptime en
             manager,
             filters,
         ) catch |e| bun.handleOom(e);
-        defer bun.default_allocator.free(workspace_pkg_ids);
+        const _ws_guard = FreeGuard<PackageID>{ allocator: bun.default_allocator, slice: workspace_pkg_ids };
 
         manager.populateManifestCache({ ids: workspace_pkg_ids })?;
         printOutdatedInfoTable(manager, workspace_pkg_ids, true, enable_ansi_colors)?;
     } else if (manager.options.do.recursive) {
         const all_workspaces = bun.handleOom(getAllWorkspaces(bun.default_allocator, manager));
-        defer bun.default_allocator.free(all_workspaces);
+        const _all_ws_guard = FreeGuard<PackageID>{ allocator: bun.default_allocator, slice: all_workspaces };
 
         manager.populateManifestCache({ ids: all_workspaces })?;
         printOutdatedInfoTable(manager, all_workspaces, true, enable_ansi_colors)?;
@@ -740,7 +791,7 @@ pub struct OutdatedCommand {
         };
         const manager = init_res[0];
         const original_cwd = init_res[1];
-        defer ctx.allocator.free(original_cwd);
+        const _cwd_guard = FreeGuard<u8>{ allocator: ctx.allocator, slice: original_cwd };
 
         outdated(ctx, original_cwd, manager)?;
     }

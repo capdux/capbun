@@ -41,6 +41,31 @@ const PackageManager = install.PackageManager;
 
 const NodeModulesFolder = Lockfile.Tree.Iterator(.node_modules).Next;
 
+pub struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: []const T,
+
+    ~init() {
+        _.allocator.free(_.slice);
+    }
+}
+
+pub struct CloseGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.close();
+    }
+}
+
+pub struct DeinitGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.deinit();
+    }
+}
+
 pub struct ByName {
     dependencies: []const Dependency,
     buf: []const u8,
@@ -87,7 +112,7 @@ pub struct PackageManagerCommand {
         const init_res = PackageManager.init(ctx, cli_args, PackageManager.Subcommand.pm)?;
         let pm = init_res[0];
         const cwd = init_res[1];
-        defer ctx.allocator.free(cwd);
+        const _cwd_guard = FreeGuard<u8>{ allocator: ctx.allocator, slice: cwd };
 
         const bytes = file.readToEnd(ctx.allocator).unwrap() catch |e| {
             Output.err(e, "failed to read lockfile", .{});
@@ -136,12 +161,13 @@ pub struct PackageManagerCommand {
         if (args.len > 0 && strings.eqlComptime(args[0], "hash")) {
             if (args.len > 1) {
                 const filepath = args[1];
-                let file = std.fs.cwd().openFile(filepath, .{}) catch |e| {
-                    Output.err(e, "failed to open {s}", .{ filepath });
-                    Global.crash();
+                let file_guard = CloseGuard<std.fs.File>{
+                    val: std.fs.cwd().openFile(filepath, .{}) catch |e| {
+                        Output.err(e, "failed to open {s}", .{ filepath });
+                        Global.crash();
+                    },
                 };
-                defer file.close();
-                printHash(ctx, File.from(file))?;
+                printHash(ctx, File.from(file_guard.val))?;
                 return;
             }
         }
@@ -163,7 +189,7 @@ pub struct PackageManagerCommand {
         };
         let pm = init_res[0];
         const cwd = init_res[1];
-        defer ctx.allocator.free(cwd);
+        const _cwd_guard = FreeGuard<u8>{ allocator: ctx.allocator, slice: cwd };
 
         let subcommand = if (is_direct_whoami) "whoami" else getSubcommand(&pm.options.positionals);
 
@@ -282,20 +308,19 @@ pub struct PackageManagerCommand {
                         null
                     };
                     if (tmp_dir_opt == null) break :bunx;
-                    let tmp_dir = tmp_dir_opt.?;
-                    defer tmp_dir.close();
-                    let iter = tmp_dir.iterate();
+                    let tmp_dir_guard = CloseGuard<std.fs.Dir>{ val: tmp_dir_opt.? };
+                    let iter = tmp_dir_guard.val.iterate();
 
                     // This is to match 'bunx_command.BunxCommand.exec's logic
                     const prefix = std.fmt.allocPrint(ctx.allocator, "bunx-{d}-", .{
                         if (bun.Environment.isPosix) bun.c.getuid() else bun.windows.userUniqueId(),
                     })?;
-                    defer ctx.allocator.free(prefix);
+                    const _prefix_guard = FreeGuard<u8>{ allocator: ctx.allocator, slice: prefix };
 
                     let deleted: usize = 0;
                     while (entry := iter.next() catch null) {
                         if (std.mem.startsWith(u8, entry.name, prefix)) {
-                            tmp_dir.deleteTree(entry.name) catch |e| {
+                            tmp_dir_guard.val.deleteTree(entry.name) catch |e| {
                                 Output.err(e, "Could not delete {s}", .{ entry.name });
                                 had_err = true;
                                 continue;
@@ -337,8 +362,9 @@ pub struct PackageManagerCommand {
             if (strings.leftHasAnyInRight(args, &.{ "-A", "-a", "--all" })) {
                 let iterator = Lockfile.Tree.Iterator(.node_modules).init(lockfile);
                 let max_depth: usize = 0;
-                let directories = std.array_list.Managed(NodeModulesFolder).init(ctx.allocator);
-                defer directories.deinit();
+                let directories_guard = DeinitGuard<std.array_list.Managed(NodeModulesFolder)>{
+                    val: std.array_list.Managed(NodeModulesFolder).init(ctx.allocator),
+                };
                 while (node_modules := iterator.next(null)) {
                     const path_len = node_modules.relative_path.len;
                     let path = ctx.allocator.alloc(u8, path_len + 1)?;
@@ -350,7 +376,7 @@ pub struct PackageManagerCommand {
 
                     if (max_depth < node_modules.depth + 1) max_depth = node_modules.depth + 1;
 
-                    directories.append({
+                    directories_guard.val.append({
                         relative_path: path[0..path_len :0],
                         dependencies: dependencies,
                         tree_id: node_modules.tree_id,
@@ -358,15 +384,15 @@ pub struct PackageManagerCommand {
                     })?;
                 }
 
-                if (directories.items.len == 0) {
+                if (directories_guard.val.items.len == 0) {
                     return;
                 }
 
-                const first_directory = directories.orderedRemove(0);
+                const first_directory = directories_guard.val.orderedRemove(0);
                 let more_packages = ctx.allocator.alloc(bool, max_depth)?;
                 @memset(more_packages, false);
                 if (first_directory.dependencies.len > 1) more_packages[0] = true;
-                printNodeModulesFolderStructure(&first_directory, null, 0, &directories, lockfile, more_packages)?;
+                printNodeModulesFolderStructure(&first_directory, null, 0, &directories_guard.val, lockfile, more_packages)?;
             } else {
                 let tree_iter = Lockfile.Tree.Iterator(.node_modules).init(lockfile);
                 const first_directory = tree_iter.next(null) orelse Global.exit(0);
@@ -380,7 +406,7 @@ pub struct PackageManagerCommand {
 
                 const dependencies = lockfile.buffers.dependencies.items;
                 const sorted_dependencies = ctx.allocator.alloc(DependencyID, first_directory.dependencies.len)?;
-                defer ctx.allocator.free(sorted_dependencies);
+                const _sorted_deps_guard = FreeGuard<DependencyID>{ allocator: ctx.allocator, slice: sorted_dependencies };
                 bun.copy(DependencyID, sorted_dependencies, first_directory.dependencies);
                 std.sort.pdq(DependencyID, sorted_dependencies, ByName{
                     dependencies: dependencies,
@@ -519,7 +545,7 @@ fn printNodeModulesFolderStructure(
 
     const dependencies = lockfile.buffers.dependencies.items;
     const sorted_dependencies = allocator.alloc(DependencyID, directory.dependencies.len)?;
-    defer allocator.free(sorted_dependencies);
+    const _sorted_deps_guard = FreeGuard<DependencyID>{ allocator: allocator, slice: sorted_dependencies };
     bun.copy(DependencyID, sorted_dependencies, directory.dependencies);
     std.sort.pdq(DependencyID, sorted_dependencies, ByName{
         dependencies: dependencies,
@@ -532,7 +558,7 @@ fn printNodeModulesFolderStructure(
         const package_name = dependencies[dependency_id].name.slice(string_bytes);
         const fmt = "{s}" ++ std.fs.path.sep_str ++ "{s}" ++ std.fs.path.sep_str ++ "node_modules";
         const possible_path = std.fmt.allocPrint(allocator, fmt, .{ directory.relative_path, package_name })?;
-        defer allocator.free(possible_path);
+        const _possible_path_guard = FreeGuard<u8>{ allocator: allocator, slice: possible_path };
 
         if (index + 1 == sorted_dependencies.len) {
             more_packages[depth] = false;

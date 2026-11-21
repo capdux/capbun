@@ -1991,3 +1991,9 @@
 - `src/runtime/api/bun/subprocess.{cp,zig}` (`11 -> 7` 保活/状态, ratio `0.938`)
 - `src/jsc/Task.{cp,zig}` (`10 -> 1` 计数器, ratio `0.972`)
 - `src/install/patch_install.{cp,zig}` (`10 -> 4` 队列/唤醒, ratio `1.024`)
+
+## [2026-11-22 Wave #16] RAII `~init()` 与 `unsafe {}` 改造（4 模块）
+- `src/install/lockfile/Package.{cp,zig}` (`10 -> 4` 状态/嵌套子结构体, ratio `1.013`)
+- `src/install_jsc/ini_jsc.{cp,zig}` (`10 -> 0`, ratio `1.078`)
+- `src/cli/package_manager_command.{cp,zig}` (`10 -> 1` 状态恢复, ratio `0.997`)
+- `src/cli/outdated_command.{cp,zig}` (`10 -> 0`, ratio `1.118`)

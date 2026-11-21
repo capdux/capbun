@@ -8,21 +8,39 @@ const ConfigIterator = ini.ConfigIterator;
 const Parser = ini.Parser;
 const loadNpmrc = ini.loadNpmrc;
 
+pub struct DeinitGuard<T> {
+    ptr: (*T!)? = null,
+    ~init() {
+        if (p := _.ptr) unsafe {
+            p.deinit();
+        }
+    }
+}
+
+pub struct DerefGuard<T> {
+    ptr: (*T!)? = null,
+    ~init() {
+        if (p := _.ptr) unsafe {
+            p.deref();
+        }
+    }
+}
+
 pub struct IniTestingAPIs {
     pub static fn loadNpmrcFromJS(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): jsc.JSValue ! bun.JSError {
         const arg = callframe.argument(0);
-        const npmrc_contents = arg.toBunString(globalThis)?;
-        defer npmrc_contents.deref();
-        const npmrc_utf8 = npmrc_contents.toUTF8(bun.default_allocator);
-        defer npmrc_utf8.deinit();
+        let npmrc_contents = arg.toBunString(globalThis)?;
+        const npmrc_contents_guard = DerefGuard<@TypeOf(npmrc_contents)>{ ptr: &npmrc_contents };
+        let npmrc_utf8 = npmrc_contents.toUTF8(bun.default_allocator);
+        const npmrc_utf8_guard = DeinitGuard<@TypeOf(npmrc_utf8)>{ ptr: &npmrc_utf8 };
         const source = &bun.logger.Source.initPathString("<js>", npmrc_utf8.slice());
 
         let log = bun.logger.Log.init(bun.default_allocator);
-        defer log.deinit();
+        const log_guard = DeinitGuard<@TypeOf(log)>{ ptr: &log };
 
         let arena_alloc = bun.ArenaAllocator.init(bun.default_allocator);
+        const arena_guard = DeinitGuard<@TypeOf(arena_alloc)>{ ptr: &arena_alloc };
         const allocator = arena_alloc.allocator();
-        defer arena_alloc.deinit();
 
         const envjs = callframe.argument(1);
         const env = if (envjs.isEmptyOrUndefinedOrNull()) globalThis.bunVM().transpiler.env else brk: {
@@ -34,7 +52,7 @@ pub struct IniTestingAPIs {
                 skip_empty_name: false,
                 include_value: true,
             }).init(globalThis, envobj)?;
-            defer object_iter.deinit();
+            const object_iter_guard = DeinitGuard<@TypeOf(object_iter)>{ ptr: &object_iter };
 
             envmap.ensureTotalCapacity(object_iter.len)?;
 
@@ -72,24 +90,22 @@ pub struct IniTestingAPIs {
             install.* = std.mem.zeroes(bun.schema.api.BunInstall);
         }
         let configs = std.array_list.Managed(ConfigIterator.Item).init(allocator);
-        defer configs.deinit();
+        const configs_guard = DeinitGuard<@TypeOf(configs)>{ ptr: &configs };
         loadNpmrc(allocator, install, env, ".npmrc", &log, source, &configs) catch {
             return log.toJS(globalThis, bun.default_allocator, "error");
         };
 
         const reg = install.default_registry;
-        const default_registry_url = if (reg != null) bun.String.fromBytes(reg.?.url) else bun.String.static(Registry.default_url[0..]);
-        const default_registry_token = if (reg != null) bun.String.fromBytes(reg.?.token) else bun.String.empty;
-        const default_registry_username = if (reg != null) bun.String.fromBytes(reg.?.username) else bun.String.empty;
-        const default_registry_password = if (reg != null) bun.String.fromBytes(reg.?.password) else bun.String.empty;
-        const default_registry_email = if (reg != null) bun.String.fromBytes(reg.?.email) else bun.String.empty;
-        defer {
-            default_registry_url.deref();
-            default_registry_token.deref();
-            default_registry_username.deref();
-            default_registry_password.deref();
-            default_registry_email.deref();
-        }
+        let default_registry_url = if (reg != null) bun.String.fromBytes(reg.?.url) else bun.String.static(Registry.default_url[0..]);
+        let default_registry_token = if (reg != null) bun.String.fromBytes(reg.?.token) else bun.String.empty;
+        let default_registry_username = if (reg != null) bun.String.fromBytes(reg.?.username) else bun.String.empty;
+        let default_registry_password = if (reg != null) bun.String.fromBytes(reg.?.password) else bun.String.empty;
+        let default_registry_email = if (reg != null) bun.String.fromBytes(reg.?.email) else bun.String.empty;
+        const g_reg_url = DerefGuard<bun.String>{ ptr: &default_registry_url };
+        const g_reg_tok = DerefGuard<bun.String>{ ptr: &default_registry_token };
+        const g_reg_usr = DerefGuard<bun.String>{ ptr: &default_registry_username };
+        const g_reg_pwd = DerefGuard<bun.String>{ ptr: &default_registry_password };
+        const g_reg_eml = DerefGuard<bun.String>{ ptr: &default_registry_email };
 
         const obj = jsc.JSObject.create({
             default_registry_url: default_registry_url,
@@ -106,13 +122,13 @@ pub struct IniTestingAPIs {
         const arguments = arguments_.slice();
 
         const jsstr = arguments[0];
-        const bunstr = jsstr.toBunString(globalThis)?;
-        defer bunstr.deref();
-        const utf8str = bunstr.toUTF8(bun.default_allocator);
-        defer utf8str.deinit();
+        let bunstr = jsstr.toBunString(globalThis)?;
+        const bunstr_guard = DerefGuard<@TypeOf(bunstr)>{ ptr: &bunstr };
+        let utf8str = bunstr.toUTF8(bun.default_allocator);
+        const utf8str_guard = DeinitGuard<@TypeOf(utf8str)>{ ptr: &utf8str };
 
         let parser = Parser.init(bun.default_allocator, "<src>", utf8str.slice(), globalThis.bunVM().transpiler.env);
-        defer parser.deinit();
+        const parser_guard = DeinitGuard<@TypeOf(parser)>{ ptr: &parser };
 
         parser.parse(parser.@"arena".allocator())?;
 

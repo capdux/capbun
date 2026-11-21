@@ -64,15 +64,15 @@ fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .ar
 fn cp_index_of(__container: anytype, __needle: anytype) i32 { const __cp_slice = cp_iter_slice(__container); const __SliceT = @TypeOf(__cp_slice); if (comptime is_string_like(__SliceT) and is_string_like(@TypeOf(__needle))) { if (std.mem.indexOf(u8, to_string_slice(__cp_slice), to_string_slice(__needle))) |__idx| return @intCast(__idx); return -1; } for (__cp_slice, 0..) |__item, __idx| { if (cp_eq(__item, __needle)) return @intCast(__idx); } return -1; }
 fn cp_last_index_of(__container: anytype, __needle: anytype) i32 { const __cp_slice = cp_iter_slice(__container); const __SliceT = @TypeOf(__cp_slice); if (comptime is_string_like(__SliceT) and is_string_like(@TypeOf(__needle))) { if (std.mem.lastIndexOf(u8, to_string_slice(__cp_slice), to_string_slice(__needle))) |__idx| return @intCast(__idx); return -1; } var __idx: usize = __cp_slice.len; while (__idx > 0) { __idx -= 1; if (cp_eq(__cp_slice[__idx], __needle)) return @intCast(__idx); } return -1; }
 fn cp_includes(__container: anytype, __needle: anytype) bool { return cp_index_of(__container, __needle) != -1; }
-const Message = anyopaque;
+const Message = struct { __cp_no_message_sentinel: void = {} };
 fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
-pub fn CpUnpackElemType(comptime __T: type, comptime idx: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") return ti.@"struct".field_types[idx]; return @FieldType(__T, std.fmt.comptimePrint("{d}", .{idx})); }
-pub fn cp_unpack_elem(v: anytype, comptime idx: usize) CpUnpackElemType(@TypeOf(v), idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and idx < m.array.len) { return cp_msg_to_val(m.array[idx]); } } return ""; } else if (comptime __T == Message) { if (v == .array and idx < v.array.len) { return cp_msg_to_val(v.array[idx]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .array)) { return v[idx]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") return @field(v, ti.@"struct".field_names[idx]); return @field(v, std.fmt.comptimePrint("{d}", .{idx})); } }
-pub fn CpUnpackTailType(comptime __T: type, comptime offset_from_end: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return ti.@"struct".field_types[n - offset_from_end]; } return @FieldType(__T, std.fmt.comptimePrint("{d}", .{1})); }
-pub fn cp_unpack_tail(v: anytype, comptime offset_from_end: usize) CpUnpackTailType(@TypeOf(v), offset_from_end) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= offset_from_end) { return cp_msg_to_val(m.array[m.array.len - offset_from_end]); } } return ""; } else if (comptime __T == Message) { if (v == .array and v.array.len >= offset_from_end) { return cp_msg_to_val(v.array[v.array.len - offset_from_end]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[v.*.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .array)) { return v[v.len - offset_from_end]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return @field(v, ti.@"struct".field_names[n - offset_from_end]); } return @field(v, std.fmt.comptimePrint("{d}", .{0})); } }
-pub fn CpUnpackSliceType(comptime __T: type, comptime start_idx: usize) type { if (__T == ?Message or __T == Message) return []const Message; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return __T; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return []const @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const types = ti.@"struct".field_types; if (types.len == 0) return []const i32; const Elem = if (start_idx < types.len) types[start_idx] else types[0]; return []const CpValType(Elem); } return []const i32; }
-pub fn cp_unpack_slice(v: anytype, comptime start_idx: usize, comptime suffix_len: usize) CpUnpackSliceType(@TypeOf(v), start_idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= start_idx + suffix_len) { return m.array[start_idx .. m.array.len - suffix_len]; } } return &[_]Message{}; } else if (comptime __T == Message) { if (v == .array and v.array.len >= start_idx + suffix_len) { return v.array[start_idx .. v.array.len - suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[start_idx .. v.*.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .array)) { return v[start_idx .. v.len - suffix_len]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const names = ti.@"struct".field_names; const types = ti.@"struct".field_types; const end = names.len - suffix_len; const count = if (end > start_idx) end - start_idx else 0; const Elem = if (start_idx < types.len) CpValType(types[start_idx]) else i32; const buf = std.heap.page_allocator.alloc(Elem, count) catch unreachable; inline for (start_idx..end, 0..) |f_idx, out_idx| { buf[out_idx] = cp_val(@field(v, names[f_idx])); } return buf; } return &[_]i32{}; } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 pub const OutdatedInfo = struct {
@@ -96,6 +96,96 @@ pub const CatalogKey = struct {
     behavior: Behavior,
 };
 
+pub fn FreeGuard(comptime T: type) type {
+    return struct {
+        allocator: std.mem.Allocator,
+        slice: []const T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.allocator.free(self.slice);
+        }
+    };
+}
+
+pub fn OptionalFreeGuard(comptime T: type) type {
+    return struct {
+        allocator: std.mem.Allocator,
+        slice: ?[]const T = null,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.slice) |s| {
+                    _ = &s;
+                    _ = self.allocator.free(s);
+                }
+        }
+    };
+}
+
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        val: T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.val.deinit();
+        }
+    };
+}
+
+pub fn DeinitWithAllocGuard(comptime T: type) type {
+    return struct {
+        allocator: std.mem.Allocator,
+        val: T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.val.deinit(self.allocator);
+        }
+    };
+}
+
+pub const WorkspaceFiltersGuard = struct {
+    allocator: std.mem.Allocator,
+    filters: []WorkspaceFilter,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *WorkspaceFiltersGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            for (cp_iter_slice(self.filters)) |filter| {
+                _ = &filter;
+                _ = filter.deinit(self.allocator);
+            }
+            _ = self.allocator.free(self.filters);
+    }
+};
+
+pub const CatalogMapGuard = struct {
+    map: std.AutoHashMap(CatalogKey, std.array_list.Managed(PackageID)),
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *CatalogMapGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            var iter = self.map.iterator();
+            _ = &iter;
+            while (iter.next()) |entry| {
+                _ = entry.value_ptr.deinit();
+            }
+            _ = self.map.deinit();
+    }
+};
+
 pub const OutdatedCommand = struct {
 
 pub fn exec(ctx: Command.Context) !void {
@@ -111,9 +201,10 @@ pub fn exec(ctx: Command.Context) !void {
             break :blk_catch_0 Global.crash(); }); });
             const manager = init_res[0];
             const original_cwd = init_res[1];
-            defer {
-            _ = ctx.allocator.free(original_cwd);
-            }
+            var _cwd_guard = FreeGuard(u8){ .allocator = ctx.allocator, .slice = original_cwd };
+            _ = &_cwd_guard;
+            var ___cwd_guard_moved = false; _ = &___cwd_guard_moved;
+            defer if (!___cwd_guard_moved) { ___cwd_guard_moved = true; const __T = @TypeOf(_cwd_guard); if (@typeInfo(__T) == .optional) { if (_cwd_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _cwd_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _cwd_guard; _drop_val.__cp_deinit(); } };
             _ = try outdated(ctx, original_cwd, manager);
     }
 };
@@ -191,15 +282,10 @@ pub fn findMatchingWorkspaces(allocator: std.mem.Allocator, original_cwd: []cons
             buf[cp_cast_int(usize, filter_idx)] = try WorkspaceFilter.init(allocator, filters[@as(usize, @intCast(filter_idx))], original_cwd, (&path_buf));
         }
         const converted_filters = buf;
-        defer {
-        {
-            for (cp_iter_slice(converted_filters)) |filter| {
-                _ = &filter;
-                _ = filter.deinit(allocator);
-            }
-            _ = allocator.free(converted_filters);
-        }
-        }
+        var _filters_guard = WorkspaceFiltersGuard{ .allocator = allocator, .filters = buf };
+        _ = &_filters_guard;
+        var ___filters_guard_moved = false; _ = &___filters_guard_moved;
+        defer if (!___filters_guard_moved) { ___filters_guard_moved = true; const __T = @TypeOf(_filters_guard); if (@typeInfo(__T) == .optional) { if (_filters_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _filters_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _filters_guard; _drop_val.__cp_deinit(); } };
         var i: usize = 0;
         _ = &i;
         while ((i < workspace_pkg_ids.items.len)) {
@@ -257,20 +343,10 @@ pub fn groupCatalogDependencies(manager: *PackageManager, outdated_items: []cons
         const dependencies = lockfile.buffers.dependencies.items;
         var result: std.ArrayListUnmanaged(GroupedOutdatedInfo) = .{};
         _ = &result;
-        var catalog_map = std.AutoHashMap(CatalogKey, std.array_list.Managed(PackageID)).init(allocator);
-        _ = &catalog_map;
-        defer {
-        _ = catalog_map.deinit();
-        }
-        defer {
-        {
-            var iter = catalog_map.iterator();
-            _ = &iter;
-            while (iter.next()) |entry| {
-                _ = entry.value_ptr.deinit();
-            }
-        }
-        }
+        var catalog_map_guard = CatalogMapGuard{ .map = std.AutoHashMap(CatalogKey, std.array_list.Managed(PackageID)).init(allocator) };
+        _ = &catalog_map_guard;
+        var __catalog_map_guard_moved = false; _ = &__catalog_map_guard_moved;
+        defer if (!__catalog_map_guard_moved) { __catalog_map_guard_moved = true; const __T = @TypeOf(catalog_map_guard); if (@typeInfo(__T) == .optional) { if (catalog_map_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { catalog_map_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = catalog_map_guard; _drop_val.__cp_deinit(); } };
         for (cp_iter_slice(outdated_items)) |item| {
             _ = &item;
             if (item.is_catalog) {
@@ -278,7 +354,7 @@ pub fn groupCatalogDependencies(manager: *PackageManager, outdated_items: []cons
                 const name_hash = bun.hash((if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(string_buf));
                 const catalog_name = (if (@typeInfo(@TypeOf(dep.version)) == .@"enum") @intFromEnum(dep.version) else dep.version.value).catalog.slice(string_buf);
                 const catalog_name_hash = bun.hash(catalog_name);
-                const entry = try catalog_map.getOrPut(CatalogKey{ .name_hash = name_hash, .catalog_name_hash = catalog_name_hash, .behavior = dep.behavior });
+                const entry = try catalog_map_guard.map.getOrPut(CatalogKey{ .name_hash = name_hash, .catalog_name_hash = catalog_name_hash, .behavior = dep.behavior });
                 if ((!entry.found_existing)) {
                     entry.value_ptr.* = try std.array_list.Managed(PackageID).initCapacity(allocator, 1);
                 }
@@ -287,7 +363,7 @@ pub fn groupCatalogDependencies(manager: *PackageManager, outdated_items: []cons
                 _ = try result.append(allocator, GroupedOutdatedInfo{ .package_id = item.package_id, .dep_id = item.dep_id, .workspace_pkg_id = item.workspace_pkg_id, .is_catalog = false, .grouped_workspace_names = null });
             }
         }
-        var catalog_iter = catalog_map.iterator();
+        var catalog_iter = catalog_map_guard.map.iterator();
         _ = &catalog_iter;
         while (catalog_iter.next()) |entry| {
             const key = entry.key_ptr.*;
@@ -335,8 +411,10 @@ pub fn groupCatalogDependencies(manager: *PackageManager, outdated_items: []cons
 }
 
 pub fn printOutdatedInfoTable(manager: *PackageManager, workspace_pkg_ids: []const PackageID, was_filtered: bool, comptime enable_ansi_colors: bool) !void {
-        var package_patterns: ?[]const FilterType = null;
-        _ = &package_patterns;
+        var patterns_guard = OptionalFreeGuard(FilterType){ .allocator = bun.default_allocator };
+        _ = &patterns_guard;
+        var __patterns_guard_moved = false; _ = &__patterns_guard_moved;
+        defer if (!__patterns_guard_moved) { __patterns_guard_moved = true; const __T = @TypeOf(patterns_guard); if (@typeInfo(__T) == .optional) { if (patterns_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { patterns_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = patterns_guard; _drop_val.__cp_deinit(); } };
         const args = manager.options.positionals[1..];
         if ((args.len > 0)) {
             var at_least_one_greater_than_zero = false;
@@ -361,18 +439,10 @@ pub fn printOutdatedInfoTable(manager: *PackageManager, workspace_pkg_ids: []con
                 at_least_one_greater_than_zero = true;
             }
             if (at_least_one_greater_than_zero) {
-                package_patterns = patterns_buf;
+                patterns_guard.slice = patterns_buf;
             } else {
                 _ = bun.default_allocator.free(patterns_buf);
             }
-        }
-        defer {
-        {
-            if (package_patterns) |patterns| {
-                _ = &patterns;
-                _ = bun.default_allocator.free(patterns);
-            }
-        }
         }
         const lockfile = manager.lockfile;
         const string_buf = lockfile.buffers.string_bytes.items;
@@ -396,17 +466,15 @@ pub fn printOutdatedInfoTable(manager: *PackageManager, workspace_pkg_ids: []con
         _ = &has_filtered_latest;
         var has_filtered_versions = false;
         _ = &has_filtered_versions;
-        var outdated_ids: std.ArrayListUnmanaged(OutdatedInfo) = .{};
-        _ = &outdated_ids;
-        defer {
-        _ = outdated_ids.deinit(bun.default_allocator);
-        }
-        var version_buf = std.array_list.Managed(u8).init(bun.default_allocator);
-        _ = &version_buf;
-        defer {
-        _ = version_buf.deinit();
-        }
-        var version_writer = version_buf.writer();
+        var outdated_guard = DeinitWithAllocGuard(std.ArrayListUnmanaged(OutdatedInfo)){ .allocator = bun.default_allocator, .val = .{} };
+        _ = &outdated_guard;
+        var __outdated_guard_moved = false; _ = &__outdated_guard_moved;
+        defer if (!__outdated_guard_moved) { __outdated_guard_moved = true; const __T = @TypeOf(outdated_guard); if (@typeInfo(__T) == .optional) { if (outdated_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { outdated_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = outdated_guard; _drop_val.__cp_deinit(); } };
+        var version_guard = DeinitGuard(std.array_list.Managed(u8)){ .val = std.array_list.Managed(u8).init(bun.default_allocator) };
+        _ = &version_guard;
+        var __version_guard_moved = false; _ = &__version_guard_moved;
+        defer if (!__version_guard_moved) { __version_guard_moved = true; const __T = @TypeOf(version_guard); if (@typeInfo(__T) == .optional) { if (version_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { version_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = version_guard; _drop_val.__cp_deinit(); } };
+        var version_writer = version_guard.val.writer();
         _ = &version_writer;
         for (cp_iter_slice(workspace_pkg_ids)) |workspace_pkg_id| {
             _ = &workspace_pkg_id;
@@ -428,7 +496,7 @@ pub fn printOutdatedInfoTable(manager: *PackageManager, workspace_pkg_ids: []con
                 if ((resolution.tag != .npm)) {
                     continue;
                 }
-                if (package_patterns) |patterns| {
+                if (patterns_guard.slice) |patterns| {
                     _ = &patterns;
                     var is_matched = true;
                     _ = &is_matched;
@@ -480,52 +548,51 @@ if ((name_pattern.len == 0)) {
                     max_name = name_len;
                 }
                 _ = bun.handleOom(version_writer.print("{f}", .{ (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.version.fmt(string_buf) }));
-                if ((version_buf.items.len > max_current)) {
-                    max_current = version_buf.items.len;
+                if ((version_guard.val.items.len > max_current)) {
+                    max_current = version_guard.val.items.len;
                 }
-                _ = version_buf.clearRetainingCapacity();
+                _ = version_guard.val.clearRetainingCapacity();
                 if (update_version.unwrap()) |update_version_val| {
                     _ = &update_version_val;
                     _ = bun.handleOom(version_writer.print("{f}", .{ update_version_val.version.fmt(manifest.string_buf) }));
                 } else {
                     _ = bun.handleOom(version_writer.print("{f}", .{ (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.version.fmt(manifest.string_buf) }));
                 }
-                const update_version_len = (version_buf.items.len + (if (has_filtered_update) " *".len else 0));
+                const update_version_len = (version_guard.val.items.len + (if (has_filtered_update) " *".len else 0));
                 if ((update_version_len > max_update)) {
                     max_update = update_version_len;
                 }
-                _ = version_buf.clearRetainingCapacity();
+                _ = version_guard.val.clearRetainingCapacity();
                 if (latest.unwrap()) |latest_version| {
                     _ = &latest_version;
                     _ = bun.handleOom(version_writer.print("{f}", .{ latest_version.version.fmt(manifest.string_buf) }));
                 } else {
                     _ = bun.handleOom(version_writer.print("{f}", .{ (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.version.fmt(manifest.string_buf) }));
                 }
-                const latest_version_len = (version_buf.items.len + (if (has_filtered_latest) " *".len else 0));
+                const latest_version_len = (version_guard.val.items.len + (if (has_filtered_latest) " *".len else 0));
                 if ((latest_version_len > max_latest)) {
                     max_latest = latest_version_len;
                 }
-                _ = version_buf.clearRetainingCapacity();
+                _ = version_guard.val.clearRetainingCapacity();
                 const workspace_name = pkg_names[@as(usize, @intCast(workspace_pkg_id))].slice(string_buf);
                 if ((workspace_name.len > max_workspace)) {
                     max_workspace = workspace_name.len;
                 }
-                _ = (blk_catch_1: { break :blk_catch_1 ((outdated_ids.append(bun.default_allocator, OutdatedInfo{ .package_id = package_id, .dep_id = @as(DependencyID, @intCast(dep_id)), .workspace_pkg_id = workspace_pkg_id, .is_catalog = (dep.version.tag == .catalog) })) catch |e| { _ = &e; break :blk_catch_1 bun.handleOom(e); }); });
+                _ = (blk_catch_1: { break :blk_catch_1 ((outdated_guard.val.append(bun.default_allocator, OutdatedInfo{ .package_id = package_id, .dep_id = @as(DependencyID, @intCast(dep_id)), .workspace_pkg_id = workspace_pkg_id, .is_catalog = (dep.version.tag == .catalog) })) catch |e| { _ = &e; break :blk_catch_1 bun.handleOom(e); }); });
             }
         }
-        if ((outdated_ids.items.len == 0)) {
+        if ((outdated_guard.val.items.len == 0)) {
             return;
         }
-        var grouped_ids = try groupCatalogDependencies(manager, outdated_ids.items, workspace_pkg_ids);
-        _ = &grouped_ids;
-        defer {
-        _ = grouped_ids.deinit(bun.default_allocator);
-        }
+        var grouped_guard = DeinitWithAllocGuard(std.ArrayListUnmanaged(GroupedOutdatedInfo)){ .allocator = bun.default_allocator, .val = try groupCatalogDependencies(manager, outdated_guard.val.items, workspace_pkg_ids) };
+        _ = &grouped_guard;
+        var __grouped_guard_moved = false; _ = &__grouped_guard_moved;
+        defer if (!__grouped_guard_moved) { __grouped_guard_moved = true; const __T = @TypeOf(grouped_guard); if (@typeInfo(__T) == .optional) { if (grouped_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { grouped_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = grouped_guard; _drop_val.__cp_deinit(); } };
         var new_max_workspace: usize = max_workspace;
         _ = &new_max_workspace;
         var has_catalog_deps = false;
         _ = &has_catalog_deps;
-        for (grouped_ids.items) |item| {
+        for (grouped_guard.val.items) |item| {
             _ = &item;
             if (item.grouped_workspace_names) |names| {
                 _ = &names;
@@ -554,7 +621,7 @@ if ((name_pattern.len == 0)) {
         _ = table.printColumnNames();
         const group_behaviors: [4]Behavior = .{ Behavior{ .prod = true }, Behavior{ .dev = true }, Behavior{ .peer = true }, Behavior{ .optional = true } };
         inline for (group_behaviors) |group_behavior| {
-            for (grouped_ids.items) |item| {
+            for (grouped_guard.val.items) |item| {
                 _ = &item;
                 const package_id = item.package_id;
                 const dep_id = item.dep_id;
@@ -600,13 +667,13 @@ if ((name_pattern.len == 0)) {
                         }
                     }
                     _ = bun.handleOom(version_writer.print("{f}", .{ (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.version.fmt(string_buf) }));
-                    _ = Output.pretty("{s}", .{ version_buf.items });
-                    var pad_i: usize = version_buf.items.len;
+                    _ = Output.pretty("{s}", .{ version_guard.val.items });
+                    var pad_i: usize = version_guard.val.items.len;
                     _ = &pad_i;
                     while ((pad_i < (current_column_inside_length + column_right_pad))) : (pad_i = (pad_i + 1)) {
                         _ = Output.pretty(" ", .{});
                     }
-                    _ = version_buf.clearRetainingCapacity();
+                    _ = version_guard.val.clearRetainingCapacity();
                 }
                 {
                     _ = Output.pretty("{s}", .{ @TypeOf(table).symbols.verticalEdge() });
@@ -624,9 +691,9 @@ if ((name_pattern.len == 0)) {
                         _ = Output.pretty("{f}", .{ update_version.version.diffFmt((if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.version, manifest.string_buf, string_buf) });
                     } else {
                         _ = bun.handleOom(version_writer.print("{f}", .{ (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.version.fmt(string_buf) }));
-                        _ = Output.pretty("<d>{s}<r>", .{ version_buf.items });
+                        _ = Output.pretty("<d>{s}<r>", .{ version_guard.val.items });
                     }
-                    var update_version_len: usize = version_buf.items.len;
+                    var update_version_len: usize = version_guard.val.items.len;
                     _ = &update_version_len;
                     if (update.latestIsFiltered()) {
                         _ = Output.pretty(" <blue>*<r>", .{});
@@ -637,7 +704,7 @@ if ((name_pattern.len == 0)) {
                     while ((pad_i < (update_column_inside_length + column_right_pad))) : (pad_i = (pad_i + 1)) {
                         _ = Output.pretty(" ", .{});
                     }
-                    _ = version_buf.clearRetainingCapacity();
+                    _ = version_guard.val.clearRetainingCapacity();
                 }
                 {
                     _ = Output.pretty("{s}", .{ @TypeOf(table).symbols.verticalEdge() });
@@ -655,9 +722,9 @@ if ((name_pattern.len == 0)) {
                         _ = Output.pretty("{f}", .{ latest_version.version.diffFmt((if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.version, manifest.string_buf, string_buf) });
                     } else {
                         _ = bun.handleOom(version_writer.print("{f}", .{ (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.version.fmt(string_buf) }));
-                        _ = Output.pretty("<d>{s}<r>", .{ version_buf.items });
+                        _ = Output.pretty("<d>{s}<r>", .{ version_guard.val.items });
                     }
-                    var latest_version_len: usize = version_buf.items.len;
+                    var latest_version_len: usize = version_guard.val.items.len;
                     _ = &latest_version_len;
                     if (latest.latestIsFiltered()) {
                         _ = Output.pretty(" <blue>*<r>", .{});
@@ -668,7 +735,7 @@ if ((name_pattern.len == 0)) {
                     while ((pad_i < (latest_column_inside_length + column_right_pad))) : (pad_i = (pad_i + 1)) {
                         _ = Output.pretty(" ", .{});
                     }
-                    _ = version_buf.clearRetainingCapacity();
+                    _ = version_guard.val.clearRetainingCapacity();
                 }
                 if (show_workspace_column) {
                     _ = Output.pretty("{s}", .{ @TypeOf(table).symbols.verticalEdge() });
@@ -750,17 +817,19 @@ pub fn outdatedWithColor(manager: *PackageManager, original_cwd: []const u8, com
         if ((manager.options.filter_patterns.len > 0)) {
             const filters = manager.options.filter_patterns;
             const workspace_pkg_ids = (blk_catch_2: { break :blk_catch_2 ((findMatchingWorkspaces(bun.default_allocator, original_cwd, manager, filters)) catch |e| { _ = &e; break :blk_catch_2 @as([]const PackageID, bun.handleOom(e)); }); });
-            defer {
-            _ = bun.default_allocator.free(workspace_pkg_ids);
-            }
+            var _ws_guard = FreeGuard(PackageID){ .allocator = bun.default_allocator, .slice = workspace_pkg_ids };
+            _ = &_ws_guard;
+            var ___ws_guard_moved = false; _ = &___ws_guard_moved;
+            defer if (!___ws_guard_moved) { ___ws_guard_moved = true; const __T = @TypeOf(_ws_guard); if (@typeInfo(__T) == .optional) { if (_ws_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _ws_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _ws_guard; _drop_val.__cp_deinit(); } };
             _ = try manager.populateManifestCache(.{ .ids = workspace_pkg_ids });
             _ = try printOutdatedInfoTable(manager, workspace_pkg_ids, true, enable_ansi_colors);
         } else {
             if (manager.options.do.recursive) {
                 const all_workspaces = bun.handleOom(getAllWorkspaces(bun.default_allocator, manager));
-                defer {
-                _ = bun.default_allocator.free(all_workspaces);
-                }
+                var _all_ws_guard = FreeGuard(PackageID){ .allocator = bun.default_allocator, .slice = all_workspaces };
+                _ = &_all_ws_guard;
+                var ___all_ws_guard_moved = false; _ = &___all_ws_guard_moved;
+                defer if (!___all_ws_guard_moved) { ___all_ws_guard_moved = true; const __T = @TypeOf(_all_ws_guard); if (@typeInfo(__T) == .optional) { if (_all_ws_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _all_ws_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _all_ws_guard; _drop_val.__cp_deinit(); } };
                 _ = try manager.populateManifestCache(.{ .ids = all_workspaces });
                 _ = try printOutdatedInfoTable(manager, all_workspaces, true, enable_ansi_colors);
             } else {
