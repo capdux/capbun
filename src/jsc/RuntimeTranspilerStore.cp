@@ -33,6 +33,67 @@ const debug = Output.scoped(.RuntimeTranspilerStore, .hidden);
 
 type string = []const u8;
 
+struct UnlockGuard<T> {
+    ptr: (*T)?,
+    ~init() {
+        if (p := _.ptr) {
+            p.unlock();
+            _.ptr = null;
+        }
+    }
+}
+
+struct CloseGuard<T> {
+    ptr: (*T)?,
+    ~init() {
+        if (p := _.ptr) {
+            p.close();
+            _.ptr = null;
+        }
+    }
+}
+
+struct DerefGuard<T> {
+    ptr: (*T)?,
+    ~init() {
+        if (p := _.ptr) {
+            p.deref();
+            _.ptr = null;
+        }
+    }
+}
+
+struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: T?,
+    ~init() {
+        if (s := _.slice) {
+            _.allocator.free(s);
+            _.slice = null;
+        }
+    }
+}
+
+struct DeinitGuard<T> {
+    ptr: (*T)?,
+    ~init() {
+        if (p := _.ptr) {
+            p.deinit();
+            _.ptr = null;
+        }
+    }
+}
+
+struct ExitGuard<T> {
+    ptr: (*T)?,
+    ~init() {
+        if (p := _.ptr) {
+            p.exit();
+            _.ptr = null;
+        }
+    }
+}
+
 pub fn dumpSource(vm: *VirtualMachine, specifier: string, printer: auto) {
     dumpSourceString(vm, specifier, printer.ctx.getWritten());
 }
@@ -51,7 +112,8 @@ pub fn dumpSourceStringFailiable(vm: *VirtualMachine, specifier: string, written
     if (bun.feature_flag.BUN_DEBUG_NO_DUMP.get()) return;
 
     bun_debug_lock.lock();
-    defer bun_debug_lock.unlock();
+    const lock_guard = UnlockGuard<@TypeOf(bun_debug_lock)>{ .ptr = &bun_debug_lock };
+    * = lock_guard;
 
     const dir = bun_debug_dir ?? dir: {
         const base_name = switch (Environment.os) {
@@ -77,7 +139,8 @@ pub fn dumpSourceStringFailiable(vm: *VirtualMachine, specifier: string, written
             .windows => bun.path.windowsFilesystemRoot(dir_path).len,
         };
         let parent = dir.makeOpenPath(dir_path[root_len..], .{})?;
-        defer parent.close();
+        const parent_guard = CloseGuard<@TypeOf(parent)>{ .ptr = &parent };
+        * = parent_guard;
         parent.writeFile(.{
             .sub_path = std.fs.path.basename(specifier),
             .data = written,
@@ -86,18 +149,22 @@ pub fn dumpSourceStringFailiable(vm: *VirtualMachine, specifier: string, written
             return;
         };
         if (mappings := vm.source_mappings.get(specifier)) {
-            defer mappings.deref();
+            const mappings_guard = DerefGuard<std.@"meta".Child(@TypeOf(mappings))>{ .ptr = mappings };
+            * = mappings_guard;
             const map_path = bun.handleOom(std.mem.concat(bun.default_allocator, u8, &[ std.fs.path.basename(specifier), ".map" ]));
-            defer bun.default_allocator.free(map_path);
-            const file = parent.createFile(map_path, .{})?;
-            defer file.close();
+            const map_path_guard = FreeGuard<@TypeOf(map_path)>{ .allocator = bun.default_allocator, .slice = map_path };
+            * = map_path_guard;
+            let file = parent.createFile(map_path, .{})?;
+            const file_guard = CloseGuard<@TypeOf(file)>{ .ptr = &file };
+            * = file_guard;
 
             const source_file = parent.readFileAlloc(
                 bun.default_allocator,
                 specifier,
                 std.math.maxInt(u64),
             ) catch "";
-            defer bun.default_allocator.free(source_file);
+            const source_file_guard = FreeGuard<@TypeOf(source_file)>{ .allocator = bun.default_allocator, .slice = source_file };
+            * = source_file_guard;
 
             let bufw_buffer: [4096]u8 = undefined;
             let bufw = file.writerStreaming(&bufw_buffer);
@@ -232,7 +299,8 @@ pub struct TranspilerJobInternal {
 
     fn run(*_) {
         let arena_ = bun.ArenaAllocator.init(bun.default_allocator);
-        defer arena_.deinit();
+        const arena_guard = DeinitGuard<@TypeOf(arena_)>{ .ptr = &arena_ };
+        * = arena_guard;
         const allocator = arena_.allocator();
 
         defer _.dispatchToMainThread();
@@ -250,7 +318,8 @@ pub struct TranspilerJobInternal {
         }
 
         let ast_scope = ast_memory_store.?.enter(allocator);
-        defer ast_scope.exit();
+        const ast_scope_guard = ExitGuard<@TypeOf(ast_scope)>{ .ptr = &ast_scope };
+        * = ast_scope_guard;
 
         const path = _.path;
         const specifier = _.path.text;

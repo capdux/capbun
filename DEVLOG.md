@@ -1535,3 +1535,7 @@
 ## [2026-11-22 Wave #10] RAII 改造与 `unsafe {}` 经验
 - `publish_command.cp`：`ReadmeGuard<T>` 指向 `ReadmeInfo?` 时需声明为 `ptr: *(T?)!`，避免 `*T?!` 被解析为可选指针 `(?*T)!`。
 - `fetch.cp`：`FetchCleanupGuard` 与 `setHeaders` 统一采用 `std.mem.Allocator`，并把 `FetchTasklet.queue` 移交的所有权状态在 Guard 上显式清零，防止双重释放。
+
+## [2026-11-22 Wave #11] RAII 改造与 `unsafe {}` 经验
+- `RuntimeTranspilerStore.cp`：`mappings` 已是指针类型时，`DerefGuard` 类型参数使用 `std.@"meta".Child(@TypeOf(mappings))` 避免二次取址 `**T` 导致单层解引用报错。
+- `cares_jsc.cp` / `path_watcher.cp`：`unsafe {}` 外层块标签使用具名 `inet_blk:`/`name_blk:` 避免标签名冲突；`fs.cp` 中 `readdir` 的 `errdefer dir.deinit(allocator)` 通过在 `return` 前置空 `dir_guard.ptr = null` 保持仅出错释放语义。

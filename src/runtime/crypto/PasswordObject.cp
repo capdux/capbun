@@ -12,6 +12,24 @@ const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 const ZigString = jsc.ZigString;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!? = null;
+    ~init() {
+        if (p := _.ptr) {
+            p.deinit();
+        }
+    }
+}
+
+pub struct FreeGuard<T> {
+    slice: ([]const T)? = null;
+    ~init() {
+        if (s := _.slice) {
+            bun.default_allocator.free(s);
+        }
+    }
+}
+
 pub struct Argon2Params_ {
     memory_cost: u32 = std.crypto.pwhash.argon2.Params.interactive_2id.m;
     time_cost: u32 = std.crypto.pwhash.argon2.Params.interactive_2id.t;
@@ -304,7 +322,7 @@ pub class PasswordObject {
                 let password_to_use = password;
                 if (password.len > 72) {
                     let sha_512 = bun.sha.SHA512.init();
-                    defer sha_512.deinit();
+                    const _sha_guard = DeinitGuard<bun.sha.SHA512>{ ptr: &sha_512 };
                     sha_512.update(password);
                     sha_512.final(outbuf[0..64]);
                     password_to_use = outbuf[0..64];
@@ -375,7 +393,7 @@ pub class PasswordObject {
 
                 if (password.len > 72) {
                     let sha_512 = bun.sha.SHA512.init();
-                    defer sha_512.deinit();
+                    const _sha_guard = DeinitGuard<bun.sha.SHA512>{ ptr: &sha_512 };
                     sha_512.update(password);
                     sha_512.final(outbuf[0..64]);
                     password_to_use = outbuf[0..64];
@@ -425,7 +443,7 @@ pub enum HashJobResultValue {
     pub fn toErrorInstance(_: HashJobResultValue, globalObject: *jsc.JSGlobalObject): jsc.JSValue {
         const err_name = @errorName(this.err);
         const error_code = formatPasswordErrorCode(err_name);
-        defer bun.default_allocator.free(error_code);
+        const _err_code_guard = FreeGuard<u8>{ slice: error_code };
         const instance = globalObject.createErrorInstance("Password hashing failed with error \"{s}\"", .{ err_name });
         instance.put(globalObject, ZigString.static("code"), jsc.ZigString.init(error_code).toJS(globalObject));
         return instance;
@@ -445,7 +463,7 @@ pub struct HashJobResult_ {
 
     pub fn runFromJS(*_: *HashJobResult_): bun.JSError!void {
         let promise = this.promise;
-        defer promise.deinit();
+        const _promise_guard = DeinitGuard<jsc.JSPromise.Strong>{ ptr: &promise };
         this.promise = .{};
         this.ref.unref(this.global.bunVM());
         const global = this.global;
@@ -456,7 +474,7 @@ pub struct HashJobResult_ {
                 promise.rejectWithAsyncStack(global, error_instance)?;
             },
             .hash value => {
-                defer bun.default_allocator.free(value);
+                const _value_guard = FreeGuard<u8>{ slice: value };
                 const js_string = jsc.ZigString.init(value).toJS(global);
                 bun.destroy(this);
                 promise.resolve(global, js_string)?;
@@ -522,7 +540,7 @@ pub enum VerifyJobResultValue {
     pub fn toErrorInstance(_: VerifyJobResultValue, globalObject: *jsc.JSGlobalObject): jsc.JSValue {
         const err_name = @errorName(this.err);
         const error_code = formatPasswordErrorCode(err_name);
-        defer bun.default_allocator.free(error_code);
+        const _err_code_guard = FreeGuard<u8>{ slice: error_code };
         const instance = globalObject.createErrorInstance("Password verification failed with error \"{s}\"", .{ err_name });
         instance.put(globalObject, ZigString.static("code"), jsc.ZigString.init(error_code).toJS(globalObject));
         return instance;
@@ -542,7 +560,7 @@ pub struct VerifyJobResult_ {
 
     pub fn runFromJS(*_: *VerifyJobResult_): bun.JSError!void {
         let promise = this.promise;
-        defer promise.deinit();
+        const _promise_guard = DeinitGuard<jsc.JSPromise.Strong>{ ptr: &promise };
         this.promise = .{};
         this.ref.unref(this.global.bunVM());
         const global = this.global;
@@ -636,7 +654,7 @@ pub class JSPasswordObject {
                     return globalObject.throwValue(error_instance);
                 },
                 .hash h => {
-                    defer bun.default_allocator.free(h);
+                    const _h_guard = FreeGuard<u8>{ slice: h };
                     return jsc.ZigString.init(h).toJS(globalObject);
                 },
             }
@@ -708,13 +726,15 @@ pub class JSPasswordObject {
         }
 
         const password_to_hash = jsc.Node.StringOrBuffer.fromJSToOwnedSlice(globalObject, arguments[0], bun.default_allocator)?;
-        errdefer bun.default_allocator.free(password_to_hash);
+        let _pw_guard = FreeGuard<u8>{ slice: password_to_hash };
 
         if (password_to_hash.len == 0) {
             return globalObject.throwInvalidArguments("password must not be empty", .{});
         }
 
-        return hash(globalObject, password_to_hash, algorithm, false);
+        const res = hash(globalObject, password_to_hash, algorithm, false)?;
+        _pw_guard.slice = null;
+        return res;
     }
 
     static fn JSPasswordObject__hashSync(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -736,7 +756,7 @@ pub class JSPasswordObject {
             return globalObject.throwInvalidArgumentType("hash", "password", "string or TypedArray");
         }
         let string_or_buffer = maybe_sob.?;
-        defer string_or_buffer.deinit();
+        const _sob_guard = DeinitGuard<jsc.Node.StringOrBuffer>{ ptr: &string_or_buffer };
 
         if (string_or_buffer.slice().len == 0) {
             return globalObject.throwInvalidArguments("password must not be empty", .{});
@@ -832,8 +852,8 @@ pub class JSPasswordObject {
         }
         let hash_ = maybe_hash.?;
 
-        defer password.deinit();
-        defer hash_.deinit();
+        const _pw_guard = DeinitGuard<jsc.Node.StringOrBuffer>{ ptr: &password };
+        const _hash_guard = DeinitGuard<jsc.Node.StringOrBuffer>{ ptr: &hash_ };
 
         if (hash_.slice().len == 0) {
             return jsc.JSValue.@"false";

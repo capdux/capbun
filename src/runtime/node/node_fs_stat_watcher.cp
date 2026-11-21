@@ -1,5 +1,40 @@
 const log = bun.Output.scoped(.StatWatcher, .visible);
 
+pub struct DerefGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deref();
+    }
+}
+
+pub struct DestroyGuard<T> {
+    ptr: *T!,
+    ~init() {
+        bun.destroy(_.ptr);
+    }
+}
+
+pub struct PathBufferGuard<T> {
+    buf: T,
+    ~init() {
+        bun.path_buffer_pool.put(_.buf);
+    }
+}
+
+pub struct FreeSliceGuard {
+    ptr: ([:0]u8)?,
+    ~init() {
+        if (p := _.ptr) bun.default_allocator.free(p);
+    }
+}
+
+pub struct DeinitGuard<T> {
+    ptr: (*T!)?,
+    ~init() {
+        if (p := _.ptr) p.deinit();
+    }
+}
+
 fn statToJSStats(globalThis: *jsc.JSGlobalObject, stats: *const bun.sys.PosixStat, bigint: bool): bun.JSError!jsc.JSValue {
     if (bigint) {
         return StatsBig.init(stats).toJS(globalThis);
@@ -51,7 +86,7 @@ pub struct StatWatcherScheduler {
 
         watcher.ref();
         _.watchers.push(watcher);
-        log("push watcher {x}", .{ @intFromPtr(watcher) });
+        log("push watcher {x}", .{ unsafe { @intFromPtr(watcher) } });
         const current = _.getInterval();
         if (current == 0 || current > watcher.interval) {
             // we are not running or the new watcher has a smaller interval
@@ -78,7 +113,7 @@ pub struct StatWatcherScheduler {
     }
 
     fn setIntervalOnMainThread(*_) {
-        defer _.deref();
+        const _guard = DerefGuard<StatWatcherScheduler>{ ptr: _ };
         bun.assert(_.main_thread == std.Thread.getCurrentId());
 
         const interval = _.getInterval();
@@ -112,7 +147,7 @@ pub struct StatWatcherScheduler {
         const scheduler: *StatWatcherScheduler = @fieldParentPtr("event_loop_timer", timer);
         // this is ref'd when timer is registered, so we need to deref it when the timer is fired
         // but it will be ref'd again when the work pool task is scheduled
-        defer scheduler.deref();
+        const _scheduler_guard = DerefGuard<StatWatcherScheduler>{ ptr: scheduler };
 
         // if the timer was updated to 0, we do not need to do anything
         if (scheduler.current_interval.load(.monotonic) == 0) {
@@ -123,9 +158,9 @@ pub struct StatWatcherScheduler {
     }
 
     static fn workPoolCallback(task: *jsc.WorkPoolTask) {
-        let scheduler: *StatWatcherScheduler = @alignCast(@fieldParentPtr("task", task));
+        let scheduler: *StatWatcherScheduler = unsafe { @alignCast(@fieldParentPtr("task", task)) };
         // ref'd when the timer was scheduled
-        defer scheduler.deref();
+        const _scheduler_guard = DerefGuard<StatWatcherScheduler>{ ptr: scheduler };
         // Instant.now will not fail on our target platforms.
         const now = std.time.Instant.now() catch unreachable;
 
@@ -153,7 +188,7 @@ pub struct StatWatcherScheduler {
             }
             min_interval = @min(min_interval, watcher.interval);
             scheduler.watchers.push(watcher);
-            log("reinsert watcher {x}", .{ @intFromPtr(watcher) });
+            log("reinsert watcher {x}", .{ unsafe { @intFromPtr(watcher) } });
         }
 
         if (contain_watchers) {
@@ -252,7 +287,7 @@ pub struct StatWatcherInitialStatTask {
 
     static fn workPoolCallback(task: *jsc.WorkPoolTask) {
         const initial_stat_task: *StatWatcherInitialStatTask = @fieldParentPtr("task", task);
-        defer bun.destroy(initial_stat_task);
+        const _task_guard = DestroyGuard<StatWatcherInitialStatTask>{ ptr: initial_stat_task };
         const watcher = initial_stat_task.watcher;
 
         if (watcher.closed) {
@@ -350,7 +385,7 @@ pub struct StatWatcher {
     }
 
     fn deinit(*_) {
-        log("deinit {x}", .{ @intFromPtr(_) });
+        log("deinit {x}", .{ unsafe { @intFromPtr(_) } });
 
         if (_.ctx.test_isolation_enabled) _.ctx.rareData().removeStatWatcherForIsolation(_);
         _.persistent = false;
@@ -408,7 +443,7 @@ pub struct StatWatcher {
     }
 
     fn initialStatSuccessOnMainThread(*_) {
-        defer _.deref(); // Balance the ref from createAndSchedule().
+        const _guard = DerefGuard<StatWatcher>{ ptr: _ }; // Balance the ref from createAndSchedule().
         if (_.closed) {
             return;
         }
@@ -428,7 +463,7 @@ pub struct StatWatcher {
     }
 
     fn initialStatErrorOnMainThread(*_) {
-        defer _.deref(); // Balance the ref from createAndSchedule().
+        const _guard = DerefGuard<StatWatcher>{ ptr: _ }; // Balance the ref from createAndSchedule().
         if (_.closed) {
             return;
         }
@@ -504,7 +539,7 @@ pub struct StatWatcher {
 
     /// After a restat found the file changed, this calls the listener function.
     fn swapAndCallListenerOnMainThread(*_) {
-        defer _.deref(); // Balance the ref from restat().
+        const _guard = DerefGuard<StatWatcher>{ ptr: _ }; // Balance the ref from restat().
         let js_this: jsc.JSValue = .zero;
         if (v := _.this_value.tryGet()) {
             js_this = v;
@@ -528,7 +563,7 @@ pub struct StatWatcher {
         log("init", .{});
 
         const buf = bun.path_buffer_pool.get();
-        defer bun.path_buffer_pool.put(buf);
+        const _buf_guard = PathBufferGuard<@TypeOf(buf)>{ buf: buf };
         let slice = args.path.slice();
         if (bun.strings.startsWith(slice, "file://")) {
             slice = slice["file://".len..];
@@ -543,7 +578,7 @@ pub struct StatWatcher {
         );
 
         const alloc_file_path = bun.default_allocator.allocSentinel(u8, file_path.len, 0)?;
-        errdefer bun.default_allocator.free(alloc_file_path);
+        let _path_guard = FreeSliceGuard{ ptr: alloc_file_path };
         @memcpy(alloc_file_path, file_path);
 
         let watcher = bun.default_allocator.create(StatWatcher)?;
@@ -564,7 +599,8 @@ pub struct StatWatcher {
             .scheduler = vm.rareData().nodeFSStatWatcherScheduler(vm),
             .ref_count = .init(),
         };
-        errdefer watcher.deinit();
+        _path_guard.ptr = null;
+        let _watcher_guard = DeinitGuard<StatWatcher>{ ptr: watcher };
 
         if (watcher.persistent) {
             watcher.poll_ref.ref(watcher.ctx);
@@ -576,6 +612,7 @@ pub struct StatWatcher {
         if (vm.test_isolation_enabled) vm.rareData().addStatWatcherForIsolation(watcher);
         InitialStatTask.createAndSchedule(watcher);
 
+        _watcher_guard.ptr = null;
         return watcher;
     }
 }

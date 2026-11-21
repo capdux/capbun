@@ -1943,3 +1943,13 @@
 - `src/runtime/webcore/fetch.{cp,zig}` (`12 -> 0`, ratio `0.59`)
 - `src/js_parser/ast/visit.{cp,zig}` (`13 -> 7` 作用域/状态恢复, ratio `1.028`)
 - 复核达标：`src/js_parser/ast/visitStmt.cp` (`13` 处全为作用域/状态恢复型)
+
+## [2026-11-22 Wave #11] RAII `~init()` 与 `unsafe {}` 改造（8 模块）
+- `src/runtime/dns_jsc/cares_jsc.{cp,zig}` (`12 -> 2` 状态恢复, ratio `1.155`)
+- `src/runtime/crypto/PasswordObject.{cp,zig}` (`12 -> 0`, ratio `1.146`)
+- `src/runtime/node/path_watcher.{cp,zig}` (`12 -> 3` 互斥锁恢复, ratio `1.057`)
+- `src/runtime/node/node_fs_stat_watcher.{cp,zig}` (`13 -> 2` 互斥锁恢复, ratio `1.102`)
+- `src/runtime/api/YAMLObject.{cp,zig}` (`12 -> 0`, ratio `1.047`)
+- `src/runtime/api/glob.{cp,zig}` (`12 -> 1` 计数器恢复, ratio `1.111`)
+- `src/resolver/fs.{cp,zig}` (`11 -> 0`, ratio `1.042`)
+- `src/jsc/RuntimeTranspilerStore.{cp,zig}` (`12 -> 4` 状态恢复, ratio `1.066`)

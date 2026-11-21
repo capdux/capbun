@@ -1,3 +1,30 @@
+pub struct DeinitGuard<T> {
+    ptr: (*T)?,
+    ~init() {
+        if (p := _.ptr) {
+            p.deinit();
+        }
+    }
+}
+
+pub struct DerefGuard<T> {
+    ptr: (*T)?,
+    ~init() {
+        if (p := _.ptr) {
+            p.deref();
+        }
+    }
+}
+
+pub struct ExitGuard<T> {
+    ptr: (*T)?,
+    ~init() {
+        if (p := _.ptr) {
+            p.exit();
+        }
+    }
+}
+
 pub fn create(globalThis: *jsc.JSGlobalObject): jsc.JSValue {
     const object = JSValue.createEmptyObject(globalThis, 2);
     object.put(
@@ -43,10 +70,10 @@ pub fn stringify(global: *JSGlobalObject, callFrame: *jsc.CallFrame): JSError!JS
     }
 
     let scope: bun.AllocationScope = .init(bun.default_allocator);
-    defer scope.deinit();
+    let _scope_guard = DeinitGuard<bun.AllocationScope>{ ptr: unsafe { &scope } };
 
     let stringifier: Stringifier = .init(scope.allocator(), global, space_value)?;
-    defer stringifier.deinit();
+    let _stringifier_guard = DeinitGuard<Stringifier>{ ptr: unsafe { &stringifier } };
 
     stringifier.findAnchorsAndAliases(global, value, .root) catch |e| {
         if (e == error.StackOverflow) return global.throwStackOverflow();
@@ -274,7 +301,7 @@ pub struct Stringifier {
             global,
             (unwrapped.toObject(global))?,
         ))?;
-        defer iter_props.deinit();
+        let _iter_props_guard = DeinitGuard<PropIter>{ ptr: unsafe { &iter_props } };
 
         while (prop_name := iter_props.next()?) {
             if (iter_props.value.isUndefined() || iter_props.value.isSymbol() || iter_props.value.isFunction()) {
@@ -336,8 +363,8 @@ pub struct Stringifier {
         }
 
         if (unwrapped.isString()) {
-            const value_str = unwrapped.toBunString(global)?;
-            defer value_str.deref();
+            let value_str = unwrapped.toBunString(global)?;
+            let _value_str_guard = DerefGuard<String>{ ptr: unsafe { &value_str } };
 
             _.appendString(value_str);
             return;
@@ -450,7 +477,7 @@ pub struct Stringifier {
             global,
             (unwrapped.toObject(global))?,
         ))?;
-        defer iter_props.deinit();
+        let _iter_props_guard = DeinitGuard<PropIter>{ ptr: unsafe { &iter_props } };
 
         if (iter_props.len == 0) {
             _.builder.append(.latin1, "{}");
@@ -921,12 +948,12 @@ pub struct Stringifier {
     callFrame: *jsc.CallFrame,
 ): bun.JSError!jsc.JSValue {
     let arena_allocator = bun.ArenaAllocator.init(bun.default_allocator);
-    defer arena_allocator.deinit();
+    let _arena_guard = DeinitGuard<bun.ArenaAllocator>{ ptr: unsafe { &arena_allocator } };
     const allocator = arena_allocator.allocator();
 
     let ast_memory_allocator = bun.handleOom(allocator.create(ast.ASTMemoryAllocator));
     let ast_scope = ast_memory_allocator.enter(allocator);
-    defer ast_scope.exit();
+    let _ast_scope_guard = ExitGuard<@TypeOf(ast_scope)>{ ptr: unsafe { &ast_scope } };
 
     const input_value = callFrame.argumentsAsArray(1)[0];
 
@@ -936,13 +963,13 @@ pub struct Stringifier {
         input = v;
     } else {
         let str = input_value.toBunString(global)?;
-        defer str.deref();
+        let _str_guard = DerefGuard<String>{ ptr: unsafe { &str } };
         input = jsc.Node.BlobOrStringOrBuffer{ string_or_buffer: .{ .string = str.toSlice(arena_allocator.allocator()) } };
     }
-    defer input.deinit();
+    let _input_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &input } };
 
     let log = logger.Log.init(bun.default_allocator);
-    defer log.deinit();
+    let _log_guard = DeinitGuard<logger.Log>{ ptr: unsafe { &log } };
 
     const source = &logger.Source.initPathString("input.yaml", input.slice());
 
@@ -964,7 +991,7 @@ pub struct Stringifier {
         root: root,
         result: .zero,
     };
-    defer ctx.deinit();
+    let _ctx_guard = DeinitGuard<ParserCtx>{ ptr: unsafe { &ctx } };
 
     MarkedArgumentBuffer.run(ParserCtx, &ctx, &ParserCtx.run);
 
@@ -1060,8 +1087,8 @@ struct ParserCtx {
                     const key = ctx.toJS(args, key_expr)?;
                     const value = ctx.toJS(args, value_expr)?;
 
-                    const key_str = key.toBunString(ctx.global)?;
-                    defer key_str.deref();
+                    let key_str = key.toBunString(ctx.global)?;
+                    let _key_str_guard = DerefGuard<String>{ ptr: unsafe { &key_str } };
 
                     obj.putMayBeIndex(ctx.global, &key_str, value)?;
                 }

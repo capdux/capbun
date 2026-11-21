@@ -10,6 +10,24 @@ const jsc = bun.jsc;
 const strings = bun.strings;
 const GetAddrInfo = bun.dns.GetAddrInfo;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!? = null;
+    ~init() {
+        if (p := _.ptr) {
+            p.deinit();
+        }
+    }
+}
+
+pub struct DestroyGuard<T> {
+    ptr: *T!? = null;
+    ~init() {
+        if (p := _.ptr) {
+            bun.default_allocator.destroy(p);
+        }
+    }
+}
+
 // ── struct_hostent ─────────────────────────────────────────────────────────
 pub fn hostentToJSResponse(reply: *c_ares.struct_hostent, parent_alloc: std.mem.Allocator, globalThis: *jsc.JSGlobalObject, comptime lookup_name: []const u8): !jsc.JSValue {
     * = parent_alloc;
@@ -119,12 +137,12 @@ pub fn addrInfoToJSArray(addr_info: *c_ares.AddrInfo, globalThis: *jsc.JSGlobalO
     while (current != null) {
         const this_node = current.?;
         current = this_node.next;
-        const addr_val: std.net.Address = if (this_node.family == c_ares.AF.INET) blk: {
-            const in_ptr: *const std.posix.sockaddr.in = @ptrCast(@alignCast(this_node.addr.?));
-            break :blk std.net.Address{ .in = .{ .sa = in_ptr.* } };
-        } else if (this_node.family == c_ares.AF.INET6) blk: {
-            const in6_ptr: *const std.posix.sockaddr.in6 = @ptrCast(@alignCast(this_node.addr.?));
-            break :blk std.net.Address{ .in6 = .{ .sa = in6_ptr.* } };
+        const addr_val: std.net.Address = if (this_node.family == c_ares.AF.INET) inet_blk: {
+            const in_ptr: *const std.posix.sockaddr.in = unsafe { @ptrCast(@alignCast(this_node.addr.?)) };
+            break :inet_blk std.net.Address{ .in = .{ .sa = in_ptr.* } };
+        } else if (this_node.family == c_ares.AF.INET6) inet6_blk: {
+            const in6_ptr: *const std.posix.sockaddr.in6 = unsafe { @ptrCast(@alignCast(this_node.addr.?)) };
+            break :inet6_blk std.net.Address{ .in6 = .{ .sa = in6_ptr.* } };
         } else unreachable;
         const res = GetAddrInfo.Result{
             .address = addr_val,
@@ -143,7 +161,7 @@ pub fn caaReplyToJSResponse(reply: *c_ares.struct_ares_caa_reply, parent_allocat
     * = lookup_name;
     let stack = std.heap.stackFallback(2048, parent_allocator);
     let arena_allocator = bun.ArenaAllocator.init(stack.get());
-    defer arena_allocator.deinit();
+    const _arena_guard = DeinitGuard<bun.ArenaAllocator>{ ptr: &arena_allocator };
 
     const allocator = arena_allocator.allocator();
     let count: usize = 0;
@@ -186,7 +204,7 @@ pub fn srvReplyToJSResponse(reply: *c_ares.struct_ares_srv_reply, parent_allocat
     * = lookup_name;
     let stack = std.heap.stackFallback(2048, parent_allocator);
     let arena_allocator = bun.ArenaAllocator.init(stack.get());
-    defer arena_allocator.deinit();
+    const _arena_guard = DeinitGuard<bun.ArenaAllocator>{ ptr: &arena_allocator };
 
     const allocator = arena_allocator.allocator();
     let count: usize = 0;
@@ -230,7 +248,7 @@ pub fn mxReplyToJSResponse(reply: *c_ares.struct_ares_mx_reply, parent_allocator
     * = lookup_name;
     let stack = std.heap.stackFallback(2048, parent_allocator);
     let arena_allocator = bun.ArenaAllocator.init(stack.get());
-    defer arena_allocator.deinit();
+    const _arena_guard = DeinitGuard<bun.ArenaAllocator>{ ptr: &arena_allocator };
 
     const allocator = arena_allocator.allocator();
     let count: usize = 0;
@@ -271,7 +289,7 @@ pub fn txtReplyToJSResponse(reply: *c_ares.struct_ares_txt_reply, parent_allocat
     * = lookup_name;
     let stack = std.heap.stackFallback(2048, parent_allocator);
     let arena_allocator = bun.ArenaAllocator.init(stack.get());
-    defer arena_allocator.deinit();
+    const _arena_guard = DeinitGuard<bun.ArenaAllocator>{ ptr: &arena_allocator };
 
     const allocator = arena_allocator.allocator();
     let count: usize = 0;
@@ -336,7 +354,7 @@ pub fn naptrReplyToJSResponse(reply: *c_ares.struct_ares_naptr_reply, parent_all
     * = lookup_name;
     let stack = std.heap.stackFallback(2048, parent_allocator);
     let arena_allocator = bun.ArenaAllocator.init(stack.get());
-    defer arena_allocator.deinit();
+    const _arena_guard = DeinitGuard<bun.ArenaAllocator>{ ptr: &arena_allocator };
 
     const allocator = arena_allocator.allocator();
     let count: usize = 0;
@@ -391,7 +409,7 @@ pub fn soaReplyToJSResponse(reply: *c_ares.struct_ares_soa_reply, parent_allocat
     * = lookup_name;
     let stack = std.heap.stackFallback(2048, parent_allocator);
     let arena_allocator = bun.ArenaAllocator.init(stack.get());
-    defer arena_allocator.deinit();
+    const _arena_guard = DeinitGuard<bun.ArenaAllocator>{ ptr: &arena_allocator };
 
     const allocator = arena_allocator.allocator();
     return reply.toJS(globalThis, allocator);
@@ -423,7 +441,7 @@ pub fn anyReplyToJSResponse(reply: *c_ares.struct_any_reply, parent_allocator: s
     * = lookup_name;
     let stack = std.heap.stackFallback(2048, parent_allocator);
     let arena_allocator = bun.ArenaAllocator.init(stack.get());
-    defer arena_allocator.deinit();
+    const _arena_guard = DeinitGuard<bun.ArenaAllocator>{ ptr: &arena_allocator };
 
     const allocator = arena_allocator.allocator();
     return reply.toJS(globalThis, allocator);
@@ -497,6 +515,15 @@ pub fn anyReplyToJS(reply: *c_ares.struct_any_reply, globalThis: *jsc.JSGlobalOb
 }
 
 // ── Error ──────────────────────────────────────────────────────────────────
+pub struct ErrorDeferredRejectContext {
+    deferred: *ErrorDeferred,
+    globalThis: *jsc.JSGlobalObject,
+    pub fn callback(context: *ErrorDeferredRejectContext): !void {
+        const _ctx_guard = DestroyGuard<ErrorDeferredRejectContext>{ ptr: context };
+        context.deferred.reject(context.globalThis) catch |e| return e;
+    }
+}
+
 export struct ErrorDeferred {
     errno: c_ares.Error;
     syscall: []const u8;
@@ -537,25 +564,16 @@ export struct ErrorDeferred {
         const dns_name = bun.String.static("DNSException").toJS(globalThis) catch |e| return e;
         instance.put(globalThis, "name", dns_name);
 
-        defer this.deinit();
+        const _self_guard = DeinitGuard<ErrorDeferred>{ ptr: this };
         defer this.hostname = null;
         return this.promise.reject(globalThis, instance);
     }
 
     pub fn rejectLater(*_, globalThis: *jsc.JSGlobalObject) {
-        const Context = struct {
-            deferred: *ErrorDeferred,
-            globalThis: *jsc.JSGlobalObject,
-            pub fn callback(context: *@This()) !void {
-                defer bun.default_allocator.destroy(context);
-                context.deferred.reject(context.globalThis) catch |e| return e;
-            }
-        };
-
-        let context = bun.handleOom(bun.default_allocator.create(Context));
+        let context = bun.handleOom(bun.default_allocator.create(ErrorDeferredRejectContext));
         context.deferred = this;
         context.globalThis = globalThis;
-        globalThis.bunVM().enqueueTask(jsc.ManagedTask.New(Context, Context.callback).init(context));
+        globalThis.bunVM().enqueueTask(jsc.ManagedTask.New(ErrorDeferredRejectContext, ErrorDeferredRejectContext.callback).init(context));
     }
 
     pub fn deinit(*_) {
@@ -653,8 +671,8 @@ pub fn Bun__canonicalizeIP_(globalThis: *jsc.JSGlobalObject, callframe: *jsc.Cal
     }
     const INET6_ADDRSTRLEN = if (comptime bun.Environment.isWindows) 65 else 46;
 
-    const addr_arg = arguments[0].toSlice(globalThis, bun.default_allocator) catch |e| return e;
-    defer addr_arg.deinit();
+    let addr_arg = arguments[0].toSlice(globalThis, bun.default_allocator) catch |e| return e;
+    const _addr_guard = DeinitGuard<jsc.ZigString.Slice>{ ptr: &addr_arg };
     const addr_str = addr_arg.slice();
     if (addr_str.len >= INET6_ADDRSTRLEN) {
         return .js_undefined;
@@ -677,7 +695,7 @@ pub fn Bun__canonicalizeIP_(globalThis: *jsc.JSGlobalObject, callframe: *jsc.Cal
             return .js_undefined;
         }
     }
-    if (c_ares.ares_inet_ntop(af, @ptrCast(&ip_binary), &ip_addr, @sizeOf(@TypeOf(ip_addr))) == null) {
+    if (c_ares.ares_inet_ntop(af, unsafe { @ptrCast(&ip_binary) }, &ip_addr, @sizeOf(@TypeOf(ip_addr))) == null) {
         return .js_undefined;
     }
     const slice = bun.sliceTo(ip_addr[0..], 0);

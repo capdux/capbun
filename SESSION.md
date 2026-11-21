@@ -259,3 +259,7 @@
 ### [2026-11-22 Wave #10] RAII `~init()` + `unsafe {}` 专项改造（5 改造 + 1 复核，全仓 `zig:check` + `bun bd test` 8/8 PASS）
 - 完成 `publish_command`, `barrel_imports`, `toThrow`, `fetch`, `visit` 共 5 个核心模块的 `~init()` RAII 析构与 `unsafe {}` 合规化（另有 `visitStmt` 复核 13 处均为 `popScope`/状态恢复型 `defer`，无需再改）。
 - 验证：`cpc_brief.py` 四门禁全绿（膨胀率 `0.59 ~ 1.126 <= 1.2x`）；`bun run zig:check` 5/5 PASS；`bun bd test test/regression/issue/29181.test.ts test/js/bun/util/bun-file.test.ts` 8 pass / 0 fail（460 expects）。
+
+### [2026-11-22 Wave #11] RAII `~init()` + `unsafe {}` 专项改造（8 模块，全仓 `zig:check` + `bun bd test` 8/8 PASS）
+- 完成 `cares_jsc`, `PasswordObject`, `path_watcher`, `node_fs_stat_watcher`, `YAMLObject`, `glob`, `fs`, `RuntimeTranspilerStore` 共 8 个核心模块的 `~init()` RAII 析构与 `unsafe {}` (E0209) 合规化。
+- 验证：`cpc_brief.py` 四门禁全绿（膨胀率 `1.042 ~ 1.155 <= 1.2x`）；`bun run zig:check` 5/5 PASS；`bun bd test test/regression/issue/29181.test.ts test/js/bun/util/bun-file.test.ts` 8 pass / 0 fail（460 expects）。

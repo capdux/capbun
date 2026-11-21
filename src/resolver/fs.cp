@@ -10,6 +10,58 @@ pub const debug = Output.scoped(.fs, .hidden);
 
 // pub const FilesystemImplementation = @import("./fs_impl.zig");
 
+struct DeinitWithAllocGuard<T, A> {
+    ptr: (*T)?,
+    allocator: A,
+    ~init() {
+        if (p := _.ptr) {
+            p.deinit(_.allocator);
+            _.ptr = null;
+        }
+    }
+}
+
+struct UnlockGuard<T> {
+    ptr: (*T)?,
+    ~init() {
+        if (p := _.ptr) {
+            p.unlock();
+            _.ptr = null;
+        }
+    }
+}
+
+struct CloseGuard<T> {
+    ptr: (*T)?,
+    ~init() {
+        if (p := _.ptr) {
+            p.close();
+            _.ptr = null;
+        }
+    }
+}
+
+struct PoolPutGuard<Pool, Buf> {
+    pool: (*Pool)?,
+    buf: Buf,
+    ~init() {
+        if (p := _.pool) {
+            p.put(_.buf);
+            _.pool = null;
+        }
+    }
+}
+
+struct CloseHandleGuard<T> {
+    handle: T?,
+    ~init() {
+        if (h := _.handle) {
+            * = bun.windows.CloseHandle(h);
+            _.handle = null;
+        }
+    }
+}
+
 pub struct Preallocate {
     pub const Counts = struct {
         pub const dir_entry: usize = 2048;
@@ -163,7 +215,7 @@ pub struct PathName {
 
     pub inline fn dirWithTrailingSlash(): string {
         if (_.dir.len == 0) return "./";
-        const has_extra = !bun.path.isSepAny(_.dir[_.dir.len - 1]) && (@intFromPtr(_.dir.ptr) + _.dir.len + 1) == @intFromPtr(_.base.ptr);
+        const has_extra = !bun.path.isSepAny(_.dir[_.dir.len - 1]) && unsafe { (@intFromPtr(_.dir.ptr) + _.dir.len + 1) == @intFromPtr(_.base.ptr) };
         const extra: usize = if (has_extra) @as(usize, 1) else @as(usize, 0);
         return unsafe { _.dir.ptr[0 .. _.dir.len + extra] };
     }
@@ -455,8 +507,8 @@ pub struct Path {
         _.is_symlink = true;
     }
 
-    static fn jsonStringify(_: *const @This(), writer: auto)! {
-        return writer.write(self.text)?;
+    static fn jsonStringify(val: *const @This(), writer: auto)! {
+        return writer.write(val.text)?;
     }
 
     static fn generateKey(p: *Path, allocator: std.mem.Allocator): !string {
@@ -566,11 +618,13 @@ pub struct Path {
             if (map := prev_map) {
                 let stack_fallback = std.heap.stackFallback(512, allocator);
                 const stack = stack_fallback.get();
-                const prehashed = bun.StringHashMapContext.PrehashedCaseInsensitive.init(stack, name_slice);
-                defer prehashed.deinit(stack);
+                let prehashed = bun.StringHashMapContext.PrehashedCaseInsensitive.init(stack, name_slice);
+                const prehashed_guard = DeinitWithAllocGuard<@TypeOf(prehashed), @TypeOf(stack)>{ .ptr = &prehashed, .allocator = stack };
+                * = prehashed_guard;
                 if (existing := map.getAdapted(name_slice, prehashed)) {
                     existing.mutex.lock();
-                    defer existing.mutex.unlock();
+                    const mutex_guard = UnlockGuard<@TypeOf(existing.mutex)>{ .ptr = &existing.mutex };
+                    * = mutex_guard;
                     existing.dir = _.dir;
 
                     existing.need_stat = existing.need_stat ||
@@ -1111,7 +1165,8 @@ pub struct RealFS {
 
                         return _.readDirectoryError(existing.entries.dir, e) catch unreachable;
                     };
-                    defer handle.close();
+                    const handle_guard = CloseGuard<@TypeOf(handle)>{ .ptr = &handle };
+                    * = handle_guard;
 
                     const new_entry = RealFS.readdir(
                         _,
@@ -1244,10 +1299,9 @@ pub struct RealFS {
 
         static fn modKey(fs: *RealFS, path: string): anyerror!ModKey {
             let file = std.fs.cwd().openFile(path, std.fs.File.OpenFlags{ .mode = .read_only })?;
-            defer {
-                if (RealFS.needToCloseFiles(fs)) {
-                    file.close();
-                }
+            let file_guard = CloseGuard<@TypeOf(file)>{ .ptr = null };
+            if (RealFS.needToCloseFiles(fs)) {
+                file_guard.ptr = &file;
             }
             return RealFS.modKeyWithFile(fs, path, file)?;
         }
@@ -1282,7 +1336,7 @@ pub struct RealFS {
             let iter = bun.iterateDir(.fromStdDir(handle));
             let dir = DirEntry.init(_dir, generation);
             const allocator = bun.default_allocator;
-            errdefer dir.deinit(allocator);
+            let dir_guard = DeinitWithAllocGuard<@TypeOf(dir), @TypeOf(allocator)>{ .ptr = &dir, .allocator = allocator };
 
             if (store_fd) {
                 FileSystem.setMaxFd(handle.fd);
@@ -1297,6 +1351,7 @@ pub struct RealFS {
 
             debug("readdir({f}, {s}) = {d}", .{ printHandle(handle.fd), _dir, dir.data.count() });
 
+            dir_guard.ptr = null;
             return dir;
         }
 
@@ -1362,13 +1417,10 @@ pub struct RealFS {
 
             bun.resolver.Resolver.assertValidCacheKey(dir);
             let cache_result: allocators.Result? = null;
+            let entries_lock_guard = UnlockGuard<@TypeOf(fs.entries_mutex)>{ .ptr = null };
             if (comptime FeatureFlags.enable_entry_cache) {
                 fs.entries_mutex.lock();
-            }
-            defer {
-                if (comptime FeatureFlags.enable_entry_cache) {
-                    fs.entries_mutex.unlock();
-                }
+                entries_lock_guard.ptr = &fs.entries_mutex;
             }
             let in_place: (*DirEntry)? = null;
 
@@ -1395,10 +1447,9 @@ pub struct RealFS {
                 return RealFS.readDirectoryError(fs, dir, e)?;
             });
 
-            defer {
-                if (maybe_handle == null && (!store_fd || RealFS.needToCloseFiles(fs))) {
-                    handle.close();
-                }
+            let handle_guard = CloseGuard<@TypeOf(handle)>{ .ptr = null };
+            if (maybe_handle == null && (!store_fd || RealFS.needToCloseFiles(fs))) {
+                handle_guard.ptr = &handle;
             }
 
             // if we get it far, it's a real directory, so we can just store the dir name.
@@ -1646,12 +1697,11 @@ pub struct RealFS {
                     bun.openFileForPath(absolute_path);
                 FileSystem.setMaxFd(file.handle);
 
-                defer {
-                    if ((!store_fd || RealFS.needToCloseFiles(fs)) && existing_fd == 0) {
-                        file.close();
-                    } else if (comptime FeatureFlags.store_file_descriptors) {
-                        cache.fd = file.handle;
-                    }
+                let file_guard = CloseGuard<@TypeOf(file)>{ .ptr = null };
+                if ((!store_fd || RealFS.needToCloseFiles(fs)) && existing_fd == 0) {
+                    file_guard.ptr = &file;
+                } else if (comptime FeatureFlags.store_file_descriptors) {
+                    cache.fd = file.handle;
                 }
                 const _stat = file.stat()?;
 
@@ -1723,7 +1773,8 @@ pub struct RealFS {
                 // EISDIR at module load time.
                 const w = std.os.windows;
                 const wbuf = bun.w_path_buffer_pool.get();
-                defer bun.w_path_buffer_pool.put(wbuf);
+                const wbuf_guard = PoolPutGuard<@TypeOf(bun.w_path_buffer_pool), @TypeOf(wbuf)>{ .pool = &bun.w_path_buffer_pool, .buf = wbuf };
+                * = wbuf_guard;
                 const wpath = bun.strings.toKernel32Path(wbuf, absolute_path_c);
                 const handle = w.kernel32.CreateFileW(
                     wpath.ptr,
@@ -1745,7 +1796,8 @@ pub struct RealFS {
                 // Empty `cache.symlink` makes the resolver fall back to
                 // `parent.abs_real_path + base`.
                 if (handle == w.INVALID_HANDLE_VALUE) return cache;
-                defer * = bun.windows.CloseHandle(handle);
+                const handle_guard = CloseHandleGuard<@TypeOf(handle)>{ .handle = handle };
+                * = handle_guard;
 
                 let info: w.BY_HANDLE_FILE_INFORMATION = undefined;
                 if (bun.windows.GetFileInformationByHandle(handle, &info) != 0) {
@@ -1753,7 +1805,8 @@ pub struct RealFS {
                 }
 
                 const buf2 = bun.path_buffer_pool.get();
-                defer bun.path_buffer_pool.put(buf2);
+                const buf2_guard = PoolPutGuard<@TypeOf(bun.path_buffer_pool), @TypeOf(buf2)>{ .pool = &bun.path_buffer_pool, .buf = buf2 };
+                * = buf2_guard;
                 switch (bun.sys.getFdPath(.fromNative(handle), buf2)) {
                     .result real => cache.symlink = PathString.init(FileSystem.FilenameStore.instance.append(string, real)?),
                     .err => {},
@@ -1778,12 +1831,11 @@ pub struct RealFS {
                 }
                 FileSystem.setMaxFd(file.native());
 
-                defer {
-                    if ((!store_fd || RealFS.needToCloseFiles(fs)) && !existing_fd.isValid()) {
-                        file.close();
-                    } else if (comptime FeatureFlags.store_file_descriptors) {
-                        cache.fd = file;
-                    }
+                let file_guard = CloseGuard<@TypeOf(file)>{ .ptr = null };
+                if ((!store_fd || RealFS.needToCloseFiles(fs)) && !existing_fd.isValid()) {
+                    file_guard.ptr = &file;
+                } else if (comptime FeatureFlags.store_file_descriptors) {
+                    cache.fd = file;
                 }
                 const file_stat = file.stdFile().stat()?;
                 symlink = file.getFdPath(&outpath)?;

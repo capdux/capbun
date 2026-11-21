@@ -44,6 +44,28 @@ let default_manager_mutex: Mutex = {};
 
 const log = Output.scoped(.@"fs.watch", .hidden);
 
+pub struct PathBufferGuard<T> {
+    buf: T,
+    ~init() {
+        bun.path_buffer_pool.put(_.buf);
+    }
+}
+
+pub struct CloseGuard<T> {
+    fd: T,
+    ~init() {
+        _.fd.close();
+    }
+}
+
+pub struct DeinitWithAllocGuard<T> {
+    ptr: *T!,
+    alloc: std.mem.Allocator,
+    ~init() {
+        _.ptr.deinit(_.alloc);
+    }
+}
+
 pub struct PathWatcherManager {
     /// Guards `watchers` and all per-platform dispatch maps. The reader thread holds
     /// this while dispatching, so `detach()` on the JS thread cannot free a PathWatcher
@@ -274,7 +296,7 @@ pub fn watch(
     // of lstat + open + (stat) in the old code. `O.PATH` is 0 on macOS (degrades to
     // O_RDONLY, which is what F_GETPATH needs anyway).
     let resolve_buf = bun.path_buffer_pool.get();
-    defer bun.path_buffer_pool.put(resolve_buf);
+    const _resolve_buf_guard = PathBufferGuard<@TypeOf(resolve_buf)>{ buf: resolve_buf };
     let is_file = false;
     let probe_fd: bun.FD = undefined;
     switch (bun.sys.open(path, bun.O.PATH | bun.O.DIRECTORY | bun.O.CLOEXEC, 0)) {
@@ -295,7 +317,7 @@ pub fn watch(
             }
         },
     }
-    defer probe_fd.close();
+    const _probe_fd_guard = CloseGuard<bun.FD>{ fd: probe_fd };
     const resolved: [:0]const u8 = switch (bun.sys.getFdPath(probe_fd, resolve_buf)) {
         .err => path, // fall back to the caller's path; best effort
         .result => |r| brk: {
@@ -305,7 +327,7 @@ pub fn watch(
     };
 
     const key_buf = bun.path_buffer_pool.get();
-    defer bun.path_buffer_pool.put(key_buf);
+    const _key_buf_guard = PathBufferGuard<@TypeOf(key_buf)>{ buf: key_buf };
     const key = PathWatcherManager.makeKey(key_buf, resolved, recursive);
 
     manager.mutex.lock();
@@ -406,12 +428,12 @@ fn walkSubtree(
             dfd = f;
         },
     }
-    defer dfd.close();
+    const _dfd_guard = CloseGuard<bun.FD>{ fd: dfd };
     let it = bun.DirIterator.iterate(dfd, bun.DirIterator.PathType.u8);
     const abs_buf = bun.path_buffer_pool.get();
-    defer bun.path_buffer_pool.put(abs_buf);
+    const _abs_buf_guard = PathBufferGuard<@TypeOf(abs_buf)>{ buf: abs_buf };
     const rel_buf = bun.path_buffer_pool.get();
-    defer bun.path_buffer_pool.put(rel_buf);
+    const _rel_buf_guard = PathBufferGuard<@TypeOf(rel_buf)>{ buf: rel_buf };
     while (true) {
         switch (it.next()) {
             .err => { return; },
@@ -634,11 +656,11 @@ struct Linux {
             manager.mutex.lock();
             // Track which PathWatchers got at least one event so we flush() each once.
             let touched: std.AutoArrayHashMapUnmanaged(*PathWatcher, void) = {};
-            defer touched.deinit(bun.default_allocator);
+            const _touched_guard = DeinitWithAllocGuard<@TypeOf(touched)>{ ptr: unsafe { &touched }, alloc: bun.default_allocator };
 
             let i: usize = 0;
             while (i < n) {
-                const ev: *align(1) const InotifyEvent = @ptrCast(buf[i..].ptr);
+                const ev: *align(1) const InotifyEvent = unsafe { @ptrCast(buf[i..].ptr) };
                 i += @sizeOf(InotifyEvent) + ev.name_len;
                 const wd = ev.watch_descriptor;
 
@@ -659,9 +681,9 @@ struct Linux {
 
                 if (plat.wd_map.getPtr(wd) == null) continue;
 
-                const name: []const u8 = if (ev.name_len > 0) blk: {
-                    const name_ptr: [*:0]const u8 = @ptrCast(buf[i - ev.name_len ..].ptr);
-                    break :blk bun.sliceTo(name_ptr, 0);
+                const name: []const u8 = if (ev.name_len > 0) name_blk: {
+                    const name_ptr: [*:0]const u8 = unsafe { @ptrCast(buf[i - ev.name_len ..].ptr) };
+                    break :name_blk bun.sliceTo(name_ptr, 0);
                 } else "";
 
                 const is_dir_child = (ev.mask & IN.ISDIR) != 0;
@@ -707,7 +729,7 @@ struct Linux {
                     // after the initial crawl (#15939/#15085).
                     if (watcher.recursive && is_dir_child && ((ev.mask & (IN.CREATE | IN.MOVED_TO)) != 0) && name.len > 0) {
                         const abs_buf = bun.path_buffer_pool.get();
-                        defer bun.path_buffer_pool.put(abs_buf);
+                        const _abs_buf_guard = PathBufferGuard<@TypeOf(abs_buf)>{ buf: abs_buf };
                         const child_abs = bun.path.joinZBuf(abs_buf, &[ watcher.path, owner.subpath, name ], .posix);
                         // These may rehash `wd_map`; `owners` is re-fetched next iteration.
                         * = addOne(manager, watcher, child_abs, rel);
@@ -756,7 +778,7 @@ struct Darwin {
             watcher.recursive,
             onFSEvent,
             onFSEventFlush,
-            @ptrCast(watcher),
+            unsafe { @ptrCast(watcher) },
         ) catch |e| return { err: {
             errno: @intFromEnum(if (e == error.FailedToCreateCoreFoudationSourceLoop) bun.sys.E.INVAL else bun.sys.E.NOMEM),
             syscall: .watch,
@@ -786,7 +808,7 @@ struct Darwin {
     /// `watcher.manager == null` check catches the window where detach has already
     /// unlinked us but hasn't yet called `fse.deinit()`.
     static fn onFSEvent(ctx: *!?, event: Event, is_file: bool) {
-        const watcher: *PathWatcher = @ptrCast(@alignCast(ctx.?));
+        const watcher: *PathWatcher = unsafe { @ptrCast(@alignCast(ctx.?)) };
         if (default_manager == null) return;
         const manager = default_manager.?;
         manager.mutex.lock();
@@ -801,7 +823,7 @@ struct Darwin {
     }
 
     static fn onFSEventFlush(ctx: *!?) {
-        const watcher: *PathWatcher = @ptrCast(@alignCast(ctx.?));
+        const watcher: *PathWatcher = unsafe { @ptrCast(@alignCast(ctx.?)) };
         if (default_manager == null) return;
         const manager = default_manager.?;
         manager.mutex.lock();
@@ -946,7 +968,7 @@ struct Kqueue {
 
             manager.mutex.lock();
             let touched: std.AutoArrayHashMapUnmanaged(*PathWatcher, void) = {};
-            defer touched.deinit(bun.default_allocator);
+            const _touched_guard = DeinitWithAllocGuard<@TypeOf(touched)>{ ptr: unsafe { &touched }, alloc: bun.default_allocator };
 
             for (kev of events[0..@intCast(count)]) {
                 // Validate via the map — the entry may have been freed by a racing

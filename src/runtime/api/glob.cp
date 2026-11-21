@@ -14,6 +14,45 @@ const ArgumentsSlice = jsc.CallFrame.ArgumentsSlice;
 
 const MAX_PATH_BYTES_2 = bun.MAX_PATH_BYTES * 2;
 
+pub struct DeinitGuard<T> {
+    ptr: (*T)?,
+    ~init() {
+        if (p := _.ptr) {
+            p.deinit();
+        }
+    }
+}
+
+pub struct DerefGuard<T> {
+    ptr: (*T)?,
+    ~init() {
+        if (p := _.ptr) {
+            p.deref();
+        }
+    }
+}
+
+pub struct DestroyGuard<T> {
+    alloc: Allocator,
+    ptr: (*T)?,
+    ~init() {
+        if (p := _.ptr) {
+            _.alloc.destroy(p);
+        }
+    }
+}
+
+pub struct GlobWalkerGuard {
+    alloc: Allocator,
+    walker: (*GlobWalker)?,
+    ~init() {
+        if (w := _.walker) {
+            w.deinit(true);
+            _.alloc.destroy(w);
+        }
+    }
+}
+
 pub struct ScanOpts {
     cwd: ([]const u8)? = null,
     dot: bool = false,
@@ -23,12 +62,12 @@ pub struct ScanOpts {
     error_on_broken_symlinks: bool = false,
 
     static fn parseCWD(globalThis: *JSGlobalObject, allocator: std.mem.Allocator, cwdVal: jsc.JSValue, absolute: bool, comptime fnName: string): bun.JSError![]const u8 {
-        const cwd_string: bun.String = (bun.String.fromJS(cwdVal, globalThis))?;
-        defer cwd_string.deref();
+        let cwd_string: bun.String = (bun.String.fromJS(cwdVal, globalThis))?;
+        let _cwd_guard = DerefGuard<bun.String>{ ptr: unsafe { &cwd_string } };
         if (cwd_string.isEmpty()) return "";
 
         const cwd_str: []const u8 = cwd_str: {
-            const cwd_utf8 = cwd_string.toUTF8WithoutRef(allocator);
+            let cwd_utf8 = cwd_string.toUTF8WithoutRef(allocator);
 
             // If its absolute return as is
             if (ResolvePath.Platform.auto.isAbsolute(cwd_utf8.slice())) {
@@ -36,7 +75,7 @@ pub struct ScanOpts {
                 break :cwd_str cloned.slice();
             }
 
-            defer cwd_utf8.deinit();
+            let _utf8_guard = DeinitGuard<@TypeOf(cwd_utf8)>{ ptr: unsafe { &cwd_utf8 } };
             let path_buf2: [MAX_PATH_BYTES_2]u8 = undefined;
 
             if (!absolute) {
@@ -184,7 +223,7 @@ pub struct WalkTask {
     }
 
     fn then(*_, promise: *jsc.JSPromise): bun.JSTerminated!void {
-        defer _.deinit();
+        let _self_guard = DeinitGuard<WalkTask>{ ptr: _ };
 
         if (task_err := _.e) {
             let mut_err = task_err;
@@ -243,7 +282,7 @@ fn decrPendingActivityFlag(has_pending_activity: *std.atomic.Value(usize)) {
         const only_files = matchOpts.only_files;
 
         let globWalker = alloc.create(GlobWalker)?;
-        errdefer alloc.destroy(globWalker);
+        let _walker_guard = DestroyGuard<GlobWalker>{ alloc: alloc, ptr: globWalker };
         globWalker.* = GlobWalker{};
 
         if (cwd != null) {
@@ -262,6 +301,7 @@ fn decrPendingActivityFlag(has_pending_activity: *std.atomic.Value(usize)) {
                 },
                 else => {},
             }
+            _walker_guard.ptr = null;
             return globWalker;
         }
 
@@ -279,13 +319,14 @@ fn decrPendingActivityFlag(has_pending_activity: *std.atomic.Value(usize)) {
             },
             else => {},
         }
+        _walker_guard.ptr = null;
         return globWalker;
     }
 
     pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!*Glob {
         const arguments_ = callframe.arguments_old(1);
         let arguments = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments_.slice());
-        defer arguments.deinit();
+        let _args_guard = DeinitGuard<ArgumentsSlice>{ ptr: unsafe { &arguments } };
         const pat_arg_opt = arguments.nextEat();
         if (pat_arg_opt == null) {
             return globalThis.throw("Glob.constructor: expected 1 arguments, got 0", {});
@@ -318,7 +359,7 @@ fn decrPendingActivityFlag(has_pending_activity: *std.atomic.Value(usize)) {
 
         const arguments_ = callframe.arguments_old(1);
         let arguments = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments_.slice());
-        defer arguments.deinit();
+        let _args_guard = DeinitGuard<ArgumentsSlice>{ ptr: unsafe { &arguments } };
 
         let arena_alloc = std.heap.ArenaAllocator.init(alloc);
         const globWalkerOpt = client.makeGlobWalker(globalThis, unsafe { &arguments }, "scan", alloc, unsafe { &arena_alloc }) catch |e| {
@@ -348,7 +389,7 @@ fn decrPendingActivityFlag(has_pending_activity: *std.atomic.Value(usize)) {
 
         const arguments_ = callframe.arguments_old(1);
         let arguments = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments_.slice());
-        defer arguments.deinit();
+        let _args_guard = DeinitGuard<ArgumentsSlice>{ ptr: unsafe { &arguments } };
 
         let arena_alloc = std.heap.ArenaAllocator.init(alloc);
         const globWalkerOpt = client.makeGlobWalker(globalThis, unsafe { &arguments }, "scanSync", alloc, unsafe { &arena_alloc }) catch |e| {
@@ -360,10 +401,7 @@ fn decrPendingActivityFlag(has_pending_activity: *std.atomic.Value(usize)) {
             return jsc.JSValue.js_undefined;
         }
         let globWalker = globWalkerOpt.?;
-        defer {
-            globWalker.deinit(true);
-            alloc.destroy(globWalker);
-        }
+        let _walker_guard = GlobWalkerGuard{ alloc: alloc, walker: globWalker };
 
         switch ((globWalker.walk())?) {
             .err => |e| {
@@ -380,11 +418,11 @@ fn decrPendingActivityFlag(has_pending_activity: *std.atomic.Value(usize)) {
     pub fn match(client: *Glob, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         const alloc = bun.default_allocator;
         let arena_alloc = Arena.init(alloc);
-        defer arena_alloc.deinit();
+        let _arena_guard = DeinitGuard<Arena>{ ptr: unsafe { &arena_alloc } };
 
         const arguments_ = callframe.arguments_old(1);
         let arguments = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments_.slice());
-        defer arguments.deinit();
+        let _args_guard = DeinitGuard<ArgumentsSlice>{ ptr: unsafe { &arguments } };
         const str_arg_opt = arguments.nextEat();
         if (str_arg_opt == null) {
             return globalThis.throw("Glob.matchString: expected 1 arguments, got 0", {});
@@ -396,7 +434,7 @@ fn decrPendingActivityFlag(has_pending_activity: *std.atomic.Value(usize)) {
         }
 
         let str = str_arg.toSlice(globalThis, arena_alloc.allocator())?;
-        defer str.deinit();
+        let _str_guard = DeinitGuard<@TypeOf(str)>{ ptr: unsafe { &str } };
 
         return jsc.JSValue.jsBoolean(bun.glob.match(client.pattern, str.slice()).matches());
     }
