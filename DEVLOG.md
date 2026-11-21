@@ -1515,3 +1515,6 @@
 - **[2026-11-22] 泛型 RAII Guard 规模化复用落地（膨胀率仅 1.04x）**：
   - 随着 `cpc` 支持泛型结构体 `~init()` 自动注入 `defer __cp_deinit()`，`Installer.cp`、`h2_frame_parser.cp`、`ConsoleObject.cp`、`BunObject.cp` 统一复用 `DeinitGuard<T>` / `DeinitWithAllocGuard<T>` / `DerefGuard<T>` / `FreeGuard<T>`，在清零 201 处手工 `defer`/`errdefer` 的同时将代码膨胀率压缩至 `1.040x ~ 1.056x`；
   - 同步修补 `Installer.cp` 中 `version_buf` 与 `writer` allocator 混用、`TaskResult`/`TaskYield` 显式枚举返回及 `SemverString.slice` 调用，并提报 `Box<*Foo!>` 泛型实参未剥离 `!` 缺陷至上游。
+- **[2026-11-22] 10 大模块规模化泛型 RAII 化与 `E0209` `unsafe {}` 收窄**：
+  - 全部 10 个模块统一采用顶层泛型/专用 `~init()` Guard 替换 322 处手工 `defer`/`errdefer` 并补全 57 处 `E0209` `unsafe {}`；
+  - `VirtualMachine.cp` 拆分 `PrintInternalTraceGuard` 编译期 `allow_ansi_color` 分支与 `OptDeinitPtrGuard`；`process.cp` `PosixSpawnResult.toProcess()` 按值传 `_.*` 给 `Process.initPosix`；`JSTranspiler.cp` 抽离 `type OptBufferWriter` 规避结构体内 `*(T?)!` 解析与 `unsafe {}` 后缀调用问题。

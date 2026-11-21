@@ -9,6 +9,227 @@ const fd_t = if (Environment.isPosix) std.posix.fd_t else i32;
 const log = bun.Output.scoped(.PROCESS, .visible);
 type OptFD = bun.FD?;
 
+pub struct DeinitPtrGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+pub struct DeinitWithAllocPtrGuard<T> {
+    ptr: *T!,
+    allocator: std.mem.Allocator,
+    ~init() {
+        _.ptr.deinit(_.allocator);
+    }
+}
+
+pub struct ErrDeinitPtrGuard<T> {
+    ptr: *T!,
+    armed: bool = true,
+    ~init() {
+        if (_.armed) _.ptr.deinit();
+    }
+}
+
+pub struct ActiveRemoveOrAdvanceGuard<T> {
+    active: *T!,
+    i: *usize!,
+    remove: bool = false,
+    ~init() {
+        if (_.remove) {
+            * = _.active.orderedRemove(unsafe { _.i.* });
+        } else {
+            unsafe { _.i.* += 1; }
+        }
+    }
+}
+
+pub struct PosixSpawnCleanupGuard {
+    to_set_cloexec: *std.array_list.Managed(bun.FD)!,
+    to_close_at_end: *std.array_list.Managed(bun.FD)!,
+    ~init() {
+        for (fd of _.to_set_cloexec.items) {
+            * = bun.sys.setCloseOnExec(fd);
+        }
+        _.to_set_cloexec.clearAndFree();
+
+        for (fd of _.to_close_at_end.items) {
+            fd.close();
+        }
+        _.to_close_at_end.clearAndFree();
+    }
+}
+
+pub struct FdCloseOnErrorGuard {
+    list: *std.array_list.Managed(bun.FD)!,
+    armed: bool = true,
+    ~init() {
+        if (_.armed) {
+            for (fd of _.list.items) {
+                fd.close();
+            }
+        }
+        _.list.clearAndFree();
+    }
+}
+
+pub struct UvFilesCleanupGuard {
+    list: *std.array_list.Managed(uv.uv_file)!,
+    loop: *uv.Loop,
+    ~init() {
+        for (fd of _.list.items) {
+            bun.Async.Closer.close(.fromUV(fd), _.loop);
+        }
+        _.list.clearAndFree();
+    }
+}
+
+pub struct WinProcessOnErrGuard {
+    process: *Process,
+    armed: bool = true,
+    ~init() {
+        if (_.armed) {
+            _.process.close();
+            _.process.deref();
+        }
+    }
+}
+
+pub struct WinDupFdsGuard {
+    dup_src: u32?,
+    dup_tgt: u32?,
+    dup_fds: [2]uv.uv_file,
+    armed: bool = true,
+    ~init() {
+        if (_.dup_src != null) {
+            if (Environment.allow_assert) bun.assert(_.dup_src != null && _.dup_tgt != null);
+        }
+
+        if (_.armed) {
+            if (_.dup_fds[0] != -1) {
+                bun.FD.fromUV(_.dup_fds[0]).close();
+            }
+        }
+
+        if (_.dup_fds[1] != -1) {
+            bun.FD.fromUV(_.dup_fds[1]).close();
+        }
+    }
+}
+
+pub struct ProcessDetachDerefGuard {
+    process: *Process,
+    ~init() {
+        _.process.detach();
+        _.process.deref();
+    }
+}
+
+pub struct SubreaperGuard {
+    no_orphans: bool,
+    siblings: []const std.c.pid_t,
+    ~init() {
+        if (comptime Environment.isLinux) {
+            if (_.no_orphans) {
+                bun.ParentDeathWatchdog.killSubreaperAdoptees(_.siblings);
+                * = std.posix.prctl(.SET_CHILD_SUBREAPER, .{0}) catch {};
+            }
+        }
+    }
+}
+
+pub struct MacNoOrphansKqGuard {
+    no_orphans_kq: *bun.FD!,
+    ~init() {
+        if (comptime Environment.isMac) {
+            if (unsafe { _.no_orphans_kq.* } != bun.invalid_fd) {
+                Bun__noOrphans_releaseKq();
+                unsafe { _.no_orphans_kq.* }.close();
+            }
+        }
+    }
+}
+
+pub struct SignalForwardingGuard {
+    ~init() {
+        Bun__unregisterSignalsForForwarding();
+        bun.crash_handler.resetOnPosix();
+    }
+}
+
+pub struct PosixNoOrphansPostSpawnGuard {
+    no_orphans: bool,
+    jc: *SyncJobControl!,
+    pgid_pushed: bool,
+    ~init() {
+        if (_.no_orphans) {
+            _.jc.restore();
+            bun.ParentDeathWatchdog.killSyncScriptTree();
+            if (_.pgid_pushed) bun.ParentDeathWatchdog.popSyncPgid();
+            if (comptime Environment.isLinux) {
+                while (true) {
+                    switch (PosixSpawn.wait4(-1, std.posix.W.NOHANG, null)) {
+                        .err => break,
+                        .result => |w| if (w.pid <= 0) break,
+                    }
+                }
+            }
+        }
+    }
+}
+
+pub struct SpawnPosixCleanupGuard {
+    out: *[2]std.array_list.Managed(u8)!,
+    out_fds: *[2]bun.FD!,
+    pid: pid_t,
+    pidfd: i32?,
+    success: bool = false,
+    ~init() {
+        if (!_.success) {
+            for (*array_list of unsafe { _.out.* }) {
+                array_list.clearAndFree();
+            }
+            * = std.c.kill(_.pid, 1);
+        }
+
+        for (fd of unsafe { _.out_fds.* }) {
+            if (fd != bun.invalid_fd) {
+                fd.close();
+            }
+        }
+
+        if (comptime Environment.isLinux) {
+            if (pidfd := _.pidfd) {
+                bun.FD.fromNative(pidfd).close();
+            }
+        }
+    }
+}
+
+pub struct SigprocmaskGuard {
+    old_mask: *std.posix.sigset_t!,
+    ~init() {
+        std.posix.sigprocmask(std.posix.SIG.SETMASK, _.old_mask, null);
+    }
+}
+
+pub struct FdCloseGuard {
+    fd: bun.FD,
+    ~init() {
+        if (_.fd != bun.invalid_fd) _.fd.close();
+    }
+}
+
+pub struct PdeathsigRestoreGuard {
+    ppid: std.c.pid_t,
+    ~init() {
+        if (_.ppid > 1) {
+            * = std.posix.prctl(.SET_PDEATHSIG, .{std.posix.SIG.KILL}) catch {};
+        }
+    }
+}
+
 struct WinTimeval {
     sec: i64 = 0,
     usec: i64 = 0,
@@ -899,28 +1120,25 @@ struct WaiterThreadPosix {
                 }
 
                 let i: usize = 0;
+                const active_ptr = &this.active;
                 while (i < this.active.items.len) {
-                    let remove = false;
-                    defer {
-                        if (remove) {
-                            * = this.active.orderedRemove(i);
-                        } else {
-                            i += 1;
-                        }
-                    }
+                    let step_guard = ActiveRemoveOrAdvanceGuard<@TypeOf(active_ptr.*)>{
+                        active: active_ptr,
+                        i: &i,
+                    };
 
                     const process = this.active.items[i];
                     const pid = process.pid;
                     // this case shouldn't really happen
                     if (pid == 0) {
-                        remove = true;
+                        step_guard.remove = true;
                         continue;
                     }
 
                     let rusage = std.mem.zeroes(Rusage);
                     const result = PosixSpawn.wait4(pid, std.posix.W.NOHANG, &rusage);
                     if (result == .err || (result == .result && result.result.pid == pid)) {
-                        remove = true;
+                        step_guard.remove = true;
 
                         switch (process.event_loop) {
                             .js => |event_loop| {
@@ -1261,7 +1479,7 @@ pub struct PosixSpawnResult {
         sync_: bool,
     ): *Process {
         return Process.initPosix(
-            _,
+            _.*,
             event_loop,
             sync_,
         );
@@ -1375,10 +1593,10 @@ pub fn spawnProcessPosix(
 ): !bun.sys.Maybe(PosixSpawnResult) {
     bun.analytics.Features.spawn += 1;
     let actions = PosixSpawn.Actions.init()?;
-    defer actions.deinit();
+    const actions_guard = DeinitPtrGuard<@TypeOf(actions)>{ ptr: &actions };
 
     let attr = PosixSpawn.Attr.init()?;
-    defer attr.deinit();
+    const attr_guard = DeinitPtrGuard<@TypeOf(attr)>{ ptr: &attr };
 
     let flags: i32 = bun.c.POSIX_SPAWN_SETSIGDEF | bun.c.POSIX_SPAWN_SETSIGMASK;
 
@@ -1424,31 +1642,18 @@ pub fn spawnProcessPosix(
     }
     let spawned = PosixSpawnResult{};
     let extra_fds = std.array_list.Managed(PosixSpawnResult.ExtraPipe).init(bun.default_allocator);
-    errdefer extra_fds.deinit();
+    let extra_fds_guard = ErrDeinitPtrGuard<@TypeOf(extra_fds)>{ ptr: &extra_fds };
     let stack_fallback = std.heap.stackFallback(2048, bun.default_allocator);
     const allocator = stack_fallback.get();
     let to_close_at_end = std.array_list.Managed(bun.FD).init(allocator);
     let to_set_cloexec = std.array_list.Managed(bun.FD).init(allocator);
-    defer {
-        for (fd of to_set_cloexec.items) {
-            * = bun.sys.setCloseOnExec(fd);
-        }
-        to_set_cloexec.clearAndFree();
-
-        for (fd of to_close_at_end.items) {
-            fd.close();
-        }
-        to_close_at_end.clearAndFree();
-    }
+    const posix_cleanup_guard = PosixSpawnCleanupGuard{
+        to_set_cloexec: &to_set_cloexec,
+        to_close_at_end: &to_close_at_end,
+    };
 
     let to_close_on_error = std.array_list.Managed(bun.FD).init(allocator);
-
-    errdefer {
-        for (fd of to_close_on_error.items) {
-            fd.close();
-        }
-    }
-    defer to_close_on_error.clearAndFree();
+    let err_fds_guard = FdCloseOnErrorGuard{ list: &to_close_on_error };
 
     attr.set(@intCast(flags)) catch {};
     attr.resetSignals() catch {};
@@ -1631,25 +1836,16 @@ pub fn spawnProcessPosix(
         argv,
         envp,
     );
-    let failed_after_spawn = false;
-    defer {
-        if (failed_after_spawn) {
-            for (fd of to_close_on_error.items) {
-                fd.close();
-            }
-            to_close_on_error.clearAndFree();
-        }
-    }
 
     switch (spawn_result) {
         .err => {
-            failed_after_spawn = true;
             return { err: spawn_result.err };
         },
         .result => |pid| {
             spawned.pid = pid;
             spawned.extra_pipes = extra_fds;
             extra_fds = std.array_list.Managed(PosixSpawnResult.ExtraPipe).init(bun.default_allocator);
+            extra_fds_guard.armed = false;
 
             if (comptime Environment.isLinux) {
                 // If it's spawnSync and we want to block the entire thread
@@ -1670,7 +1866,6 @@ pub fn spawnProcessPosix(
 
                                 // a real error occurred. one we should not assume means pidfd_open is blocked.
                             } else if (!WaiterThread.shouldUseWaiterThread()) {
-                                failed_after_spawn = true;
                                 return { err: e };
                             }
                         },
@@ -1678,6 +1873,7 @@ pub fn spawnProcessPosix(
                 }
             }
 
+            err_fds_guard.armed = false;
             return { result: spawned };
         },
     }
@@ -1711,17 +1907,7 @@ pub fn spawnProcessWindows(
     uv_process_options.cwd = cwd.ptr;
 
     let uv_files_to_close = std.array_list.Managed(uv.uv_file).init(allocator);
-
-    let failed = false;
-
-    defer {
-        for (fd of uv_files_to_close.items) {
-            bun.Async.Closer.close(.fromUV(fd), loop);
-        }
-        uv_files_to_close.clearAndFree();
-    }
-
-    errdefer failed = true;
+    const uv_files_guard = UvFilesCleanupGuard{ list: &uv_files_to_close, loop: loop };
 
     if (hpcon := options.pseudoconsole) {
         uv_process_options.pseudoconsole = hpcon;
@@ -1740,7 +1926,7 @@ pub fn spawnProcessWindows(
     }
 
     let stdio_containers = std.array_list.Managed(uv.uv_stdio_container_t).initCapacity(allocator, 3 + options.extra_fds.len)?;
-    defer stdio_containers.deinit();
+    const stdio_containers_guard = DeinitPtrGuard<@TypeOf(stdio_containers)>{ ptr: &stdio_containers };
     @memset(stdio_containers.allocatedSlice(), std.mem.zeroes(uv.uv_stdio_container_t));
     stdio_containers.items.len = 3 + options.extra_fds.len;
 
@@ -1790,11 +1976,10 @@ pub fn spawnProcessWindows(
             },
             .path => |path| {
                 let req = uv.fs_t.uninitialized;
-                defer req.deinit();
+                const req_guard = DeinitPtrGuard<uv.fs_t>{ ptr: &req };
                 const posix_path = std.posix.toPosixPath(path)?;
                 const rc = uv.uv_fs_open(loop, &req, &posix_path, flag | uv.O.CREAT, 0o644, null);
                 if (e := rc.toError(.open)) {
-                    failed = true;
                     return { err: e };
                 }
 
@@ -1806,7 +1991,7 @@ pub fn spawnProcessWindows(
             .buffer => |my_pipe| {
                 my_pipe.init(loop, false).unwrap()?;
                 stdio.flags = pipe_flags;
-                stdio.data.stream = @ptrCast(my_pipe);
+                stdio.data.stream = unsafe { @ptrCast(my_pipe) };
             },
             .pipe => |fd| {
                 stdio.flags = uv.UV_INHERIT_FD;
@@ -1843,11 +2028,10 @@ pub fn spawnProcessWindows(
             },
             .path => |path| {
                 let req = uv.fs_t.uninitialized;
-                defer req.deinit();
+                const req_guard = DeinitPtrGuard<uv.fs_t>{ ptr: &req };
                 const posix_path = std.posix.toPosixPath(path)?;
                 const rc = uv.uv_fs_open(loop, &req, &posix_path, flag | uv.O.CREAT, 0o644, null);
                 if (e := rc.toError(.open)) {
-                    failed = true;
                     return { err: e };
                 }
 
@@ -1859,12 +2043,12 @@ pub fn spawnProcessWindows(
             .ipc => |my_pipe| {
                 my_pipe.init(loop, true).unwrap()?;
                 stdio.flags = uv.UV_CREATE_PIPE | uv.UV_WRITABLE_PIPE | uv.UV_READABLE_PIPE | uv.UV_OVERLAPPED_PIPE;
-                stdio.data.stream = @ptrCast(my_pipe);
+                stdio.data.stream = unsafe { @ptrCast(my_pipe) };
             },
             .buffer => |my_pipe| {
                 my_pipe.init(loop, false).unwrap()?;
                 stdio.flags = uv.UV_CREATE_PIPE | uv.UV_WRITABLE_PIPE | uv.UV_READABLE_PIPE | uv.UV_OVERLAPPED_PIPE;
-                stdio.data.stream = @ptrCast(my_pipe);
+                stdio.data.stream = unsafe { @ptrCast(my_pipe) };
             },
             .pipe => |fd| {
                 stdio.flags = uv.StdioFlags.inherit_fd;
@@ -1883,33 +2067,15 @@ pub fn spawnProcessWindows(
         pid: 0,
     });
 
-    defer {
-        if (failed) {
-            process.close();
-            process.deref();
-        }
-    }
-
-    errdefer failed = true;
+    let process_err_guard = WinProcessOnErrGuard{ process: process };
     process.poller = { uv: std.mem.zeroes(uv.Process) };
 
-    defer {
-        if (dup_src != null) {
-            if (Environment.allow_assert) bun.assert(dup_src != null && dup_tgt != null);
-        }
-
-        if (failed) {
-            if (dup_fds[0] != -1) {
-                bun.FD.fromUV(dup_fds[0]).close();
-            }
-        }
-
-        if (dup_fds[1] != -1) {
-            bun.FD.fromUV(dup_fds[1]).close();
-        }
-    }
+    let dup_fds_guard = WinDupFdsGuard{
+        dup_src: dup_src,
+        dup_tgt: dup_tgt,
+        dup_fds: dup_fds,
+    };
     if (e := process.poller.uv.spawn(loop, &uv_process_options).toError(.uv_spawn)) {
-        failed = true;
         return { err: e };
     }
 
@@ -1933,7 +2099,7 @@ pub fn spawnProcessWindows(
             result_stdio.* = { buffer_fd: .fromUV(dup_fds[0]) };
         } else switch (stdio_options[i]) {
             .buffer => {
-                result_stdio.* = { buffer: @ptrCast(stdio.data.stream) };
+                result_stdio.* = { buffer: unsafe { @ptrCast(stdio.data.stream) } };
             },
             else => {
                 result_stdio.* = .unavailable;
@@ -1945,7 +2111,7 @@ pub fn spawnProcessWindows(
         const input = &options.extra_fds[i];
         switch (input.*) {
             .ipc, .buffer => {
-                result.extra_pipes.appendAssumeCapacity({ buffer: @ptrCast(stdio_containers.items[3 + i].data.stream) });
+                result.extra_pipes.appendAssumeCapacity({ buffer: unsafe { @ptrCast(stdio_containers.items[3 + i].data.stream) } });
             },
             else => {
                 result.extra_pipes.appendAssumeCapacity({ unavailable: {} });
@@ -1953,6 +2119,8 @@ pub fn spawnProcessWindows(
         }
     }
 
+    dup_fds_guard.armed = false;
+    process_err_guard.armed = false;
     return { result: result };
 }
 
@@ -2101,7 +2269,7 @@ pub struct sync {
         }
 
         fn onRead(*_, data: []const u8) {
-            bun.handleOom(_.chunks.append(@constCast(data)));
+            bun.handleOom(_.chunks.append(unsafe { @constCast(data) }));
         }
 
         fn onError(*_, e: bun.sys.E) {
@@ -2195,10 +2363,7 @@ pub struct sync {
         };
 
         let process = spawned.toProcess(undefined, true);
-        defer {
-            process.detach();
-            process.deref();
-        }
+        const process_guard = ProcessDetachDerefGuard{ process: process };
         process.enableKeepingEventLoopAlive();
 
         while (!process.hasExited()) {
@@ -2227,7 +2392,7 @@ pub struct sync {
         });
         win_proc.process.ref();
         win_proc.process.setExitHandler(win_proc);
-        defer win_proc.deinit();
+        const win_proc_guard = DeinitPtrGuard<SyncWindowsProcess>{ ptr: win_proc };
         win_proc.process.enableKeepingEventLoopAlive();
         inline for (tag of .{ .stdout, .stderr }) {
             if (@field(spawned, @tagName(tag)) == .buffer) {
@@ -2289,10 +2454,10 @@ pub struct sync {
     ): !Maybe(Result) {
         // [*:null]?[*:0]const u8
         // [*:null]?[*:0]u8
-        const envp = options.envp ?? @as([*:null]OptCStr, @ptrCast(std.c.environ));
+        const envp = options.envp ?? unsafe { @as([*:null]OptCStr, @ptrCast(std.c.environ)) };
         const argv = options.argv;
         let string_builder = bun.StringBuilder{};
-        defer string_builder.deinit(bun.default_allocator);
+        const sb_guard = DeinitWithAllocPtrGuard<bun.StringBuilder>{ ptr: &string_builder, allocator: bun.default_allocator };
         for (arg of argv) {
             string_builder.countZ(arg);
         }
@@ -2300,14 +2465,14 @@ pub struct sync {
         string_builder.allocate(bun.default_allocator)?;
 
         let args = bun.handleOom(std.array_list.Managed(ArgPtr).initCapacity(bun.default_allocator, argv.len + 1));
-        defer args.deinit();
+        const args_guard = DeinitPtrGuard<@TypeOf(args)>{ ptr: &args };
 
         for (arg of argv) {
-            args.appendAssumeCapacity(@constCast(string_builder.appendZ(arg).ptr));
+            args.appendAssumeCapacity(unsafe { @constCast(string_builder.appendZ(arg).ptr) });
         }
         args.appendAssumeCapacity(null);
 
-        return spawnWithArgv(options, @ptrCast(args.items.ptr), @ptrCast(envp));
+        return spawnWithArgv(options, unsafe { @ptrCast(args.items.ptr) }, unsafe { @ptrCast(envp) });
     }
 
     const JobControl = SyncJobControl;
@@ -2357,19 +2522,10 @@ pub struct sync {
                 * = std.posix.prctl(.SET_CHILD_SUBREAPER, .{1}) catch {};
             }
         }
-        defer {
-            if (comptime Environment.isLinux) {
-                if (no_orphans) {
-                    // Kill subreaper-adopted setsid daemons (ppid==us, not in the
-                    // pre-arm snapshot) *before* disarming, while we can still find
-                    // them. Without this, a daemon whose intermediate parent exits
-                    // between disarm and `onProcessExit`→`killDescendants()` escapes
-                    // to init.
-                    bun.ParentDeathWatchdog.killSubreaperAdoptees(siblings);
-                    * = std.posix.prctl(.SET_CHILD_SUBREAPER, .{0}) catch {};
-                }
-            }
-        }
+        const subreaper_guard = SubreaperGuard{
+            no_orphans: no_orphans,
+            siblings: siblings,
+        };
 
         // macOS no_orphans: kqueue passed to `waitMacKqueue` for ppid/child
         // NOTE_EXIT and per-descendant NOTE_FORK. NOTE_TRACK (auto-attach to
@@ -2390,21 +2546,11 @@ pub struct sync {
                 }
             }
         }
-        // LIFO: this runs LAST — after killSyncScriptTree() (which scans via
-        // m_kq) and releaseKq().
-        defer if (comptime Environment.isMac) if (no_orphans_kq != bun.invalid_fd)
-            no_orphans_kq.close();
-        // LIFO: runs after killSyncScriptTree() (which needs m_kq live for
-        // its NOTE_FORK-drain rescan), before the close above.
-        defer if (comptime Environment.isMac) if (no_orphans_kq != bun.invalid_fd)
-            Bun__noOrphans_releaseKq();
+        const kq_guard = MacNoOrphansKqGuard{ no_orphans_kq: &no_orphans_kq };
 
         Bun__currentSyncPID = 0;
         Bun__registerSignalsForForwarding();
-        defer {
-            Bun__unregisterSignalsForForwarding();
-            bun.crash_handler.resetOnPosix();
-        }
+        const sig_fwd_guard = SignalForwardingGuard{};
         const process = switch (spawnProcessPosix(&options.toSpawnOptions(no_orphans), argv, envp)?) {
             .err => |e| return { err: e },
             .result => |proces| proces,
@@ -2429,29 +2575,11 @@ pub struct sync {
             if (comptime Environment.isMac) if (no_orphans_kq != bun.invalid_fd)
                 Bun__noOrphans_begin(no_orphans_kq.native(), process.pid);
         }
-        defer {
-            if (no_orphans) {
-                jc.restore();
-                // pgroup → tracked uniqueids (macOS). Do NOT call the
-                // getpid()-rooted `killDescendants()` here — `spawnSync` can be
-                // reached from inside a live VM (ffi.zig xcrun probe, etc.) and
-                // that would SIGKILL the user's unrelated `Bun.spawn` children.
-                // The full-tree walk runs from `onProcessExit` when the whole
-                // process is actually exiting.
-                bun.ParentDeathWatchdog.killSyncScriptTree();
-                if (pgid_pushed) bun.ParentDeathWatchdog.popSyncPgid();
-                if (comptime Environment.isLinux) {
-                    // One last reap for anything we adopted as subreaper before
-                    // the disarm defer above drops it (LIFO: this runs first).
-                    while (true) {
-                        switch (PosixSpawn.wait4(-1, std.posix.W.NOHANG, null)) {
-                            .err => break,
-                            .result => |w| if (w.pid <= 0) break,
-                        }
-                    }
-                }
-            }
-        }
+        const post_spawn_guard = PosixNoOrphansPostSpawnGuard{
+            no_orphans: no_orphans,
+            jc: &jc,
+            pgid_pushed: pgid_pushed,
+        };
 
         Bun__sendPendingSignalIfNecessary();
 
@@ -2460,30 +2588,12 @@ pub struct sync {
             std.array_list.Managed(u8).init(bun.default_allocator),
         ];
         let out_fds: [2]bun.FD = [ process.stdout ?? bun.invalid_fd, process.stderr ?? bun.invalid_fd ];
-        let success = false;
-        defer {
-            // If we're going to return an error,
-            // let's make sure to clean up the output buffers
-            // and kill the process
-            if (!success) {
-                for (*array_list of out) {
-                    array_list.clearAndFree();
-                }
-                * = std.c.kill(process.pid, 1);
-            }
-
-            for (fd of out_fds) {
-                if (fd != bun.invalid_fd) {
-                    fd.close();
-                }
-            }
-
-            if (comptime Environment.isLinux) {
-                if (pidfd := process.pidfd) {
-                    bun.FD.fromNative(pidfd).close();
-                }
-            }
-        }
+        let cleanup_guard = SpawnPosixCleanupGuard{
+            out: &out,
+            out_fds: &out_fds,
+            pid: process.pid,
+            pidfd: process.pidfd,
+        };
 
         let out_fds_to_wait_for: [2]bun.FD = [
             process.stdout ?? bun.invalid_fd,
@@ -2561,7 +2671,7 @@ pub struct sync {
             }
         }
 
-        success = true;
+        cleanup_guard.success = true;
         return {
             result: Result{
                 status: status,
@@ -2790,7 +2900,7 @@ pub struct sync {
         let old_mask = std.posix.sigemptyset();
         std.posix.sigaddset(&libc_mask, std.posix.SIG.CHLD);
         std.posix.sigprocmask(std.posix.SIG.BLOCK, &libc_mask, &old_mask);
-        defer std.posix.sigprocmask(std.posix.SIG.SETMASK, &old_mask, null);
+        const sigmask_guard = SigprocmaskGuard{ old_mask: &old_mask };
         const chld_fd: bun.FD = blk: {
             let kmask = linux.sigemptyset();
             linux.sigaddset(&kmask, std.posix.SIG.CHLD);
@@ -2800,7 +2910,7 @@ pub struct sync {
                 else => break :blk bun.invalid_fd,
             }
         };
-        defer if (chld_fd != bun.invalid_fd) chld_fd.close();
+        const chld_fd_guard = FdCloseGuard{ fd: chld_fd };
 
         // Parent-death: pidfd when available (instant wake). When not
         // (gVisor, sandboxes, pre-5.3): bound the poll at 100ms and recheck
@@ -2813,7 +2923,7 @@ pub struct sync {
                     bun.Global.exit(bun.ParentDeathWatchdog.exit_code),
             }
         }
-        defer if (ppid_fd != bun.invalid_fd) ppid_fd.close();
+        const ppid_fd_guard = FdCloseGuard{ fd: ppid_fd };
         // `enable()` armed `PDEATHSIG=SIGKILL` on us. The kernel queues
         // PDEATHSIG to children inside `exit_notify()` *before*
         // `do_notify_pidfd()` wakes pidfd pollers (both under tasklist_lock),
@@ -2825,11 +2935,7 @@ pub struct sync {
         if (ppid > 1) {
             * = std.posix.prctl(.SET_PDEATHSIG, .{0}) catch {};
         }
-        defer {
-            if (ppid > 1) {
-                * = std.posix.prctl(.SET_PDEATHSIG, .{std.posix.SIG.KILL}) catch {};
-            }
-        }
+        const pdeathsig_guard = PdeathsigRestoreGuard{ ppid: ppid };
         if (ppid > 1 && std.c.getppid() != ppid)
             bun.Global.exit(bun.ParentDeathWatchdog.exit_code);
 

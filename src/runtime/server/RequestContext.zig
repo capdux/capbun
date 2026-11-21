@@ -4,6 +4,19 @@
 const std = @import("std");
 const string = []const u8;
 
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        val: T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.val.deinit();
+        }
+    };
+}
+
 pub const AdditionalOnAbortCallback = struct {
     cb: *const fn (*anyopaque) void,
     data: *anyopaque,
@@ -2701,9 +2714,10 @@ pub fn getContentType(headers: ?*WebCore.FetchHeaders, blob: *const WebCore.Blob
                 needs_content_type = false;
                 var content_slice = content.toSlice(allocator);
                 _ = &content_slice;
-                defer {
-                _ = content_slice.deinit();
-                }
+                var _cs_guard = DeinitGuard(@TypeOf(content_slice)){ .val = content_slice };
+                _ = &_cs_guard;
+                var ___cs_guard_moved = false; _ = &___cs_guard_moved;
+                defer if (!___cs_guard_moved) { ___cs_guard_moved = true; const __T = @TypeOf(_cs_guard); if (@typeInfo(__T) == .optional) { if (_cs_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _cs_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _cs_guard; _drop_val.__cp_deinit(); } };
                 const content_type_allocator = (if (content_slice.allocator.isNull()) null else allocator);
                 return .{ MimeType.init(content_slice.slice(), content_type_allocator, (&content_type_needs_free)), needs_content_type, content_type_needs_free };
             }

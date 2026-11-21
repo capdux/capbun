@@ -24,12 +24,118 @@ const debug = bun.Output.scoped(.RedisJS, .visible);
 
 let empty_u8: [0]u8 = undefined;
 
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
+pub struct DeinitWithAllocGuard<T> {
+    val: T,
+    alloc: std.mem.Allocator,
+    ~init() {
+        _.val.deinit(_.alloc);
+    }
+}
+
+pub struct DerefGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deref();
+    }
+}
+
+pub struct ExitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.exit();
+    }
+}
+
+pub struct UpdatePollRefGuard<T> {
+    val: T,
+    ~init() {
+        _.val.updatePollRef();
+    }
+}
+
+pub struct CloseGuard<T> {
+    val: T,
+    ~init() {
+        _.val.close();
+    }
+}
+
+pub struct DestroyGuard<T> {
+    val: T,
+    ~init() {
+        bun.default_allocator.destroy(_.val);
+    }
+}
+
+pub struct FreeSliceGuard {
+    ptr: *[]u8!,
+    alloc: std.mem.Allocator,
+    active: bool,
+    ~init() {
+        if (_.active) {
+            const s = unsafe { _.ptr.* };
+            if (s.len != 0) _.alloc.free(s);
+        }
+    }
+}
+
+pub struct SubscriptionInsertGuard {
+    ctx: *SubscriptionCtx,
+    ~init() {
+        _.ctx.parent().onNewSubscriptionCallbackInsert();
+    }
+}
+
+pub struct ParentPollRefGuard {
+    ctx: *SubscriptionCtx,
+    ~init() {
+        _.ctx.parent().updatePollRef();
+    }
+}
+
+pub struct WritablePollGuard {
+    client: *JSValkeyClient,
+    ~init() {
+        _.client.client.onWritable();
+        _.client.updatePollRef();
+    }
+}
+
+pub struct ConnectErrGuard {
+    client: *JSValkeyClient,
+    active: bool,
+    ~init() {
+        if (_.active) {
+            _.client.client.status = .disconnected;
+            _.client.updatePollRef();
+            _.client.deref();
+        }
+    }
+}
+
+pub struct DisconnectDerefGuard {
+    client: *JSValkeyClient,
+    ~init() {
+        _.client.client.status = .disconnected;
+        _.client.updatePollRef();
+        _.client.deref();
+    }
+}
+
 pub struct CloseSocketHolder {
     ctx: *JSValkeyClient,
     task: jsc.AnyTask,
 
     pub fn run(*_) {
-        defer bun.default_allocator.destroy(_);
+        const self_ptr = _;
+        const _destroy_guard = DestroyGuard<@TypeOf(self_ptr)>{ val: self_ptr };
 
         _.ctx.client.close();
         _.ctx.deref();
@@ -60,7 +166,7 @@ pub struct SubscriptionCtx {
     }
 
     fn parent(*_): *JSValkeyClient {
-        return @alignCast(@fieldParentPtr("_subscription_ctx", this));
+        return unsafe { @alignCast(@fieldParentPtr("_subscription_ctx", this)) };
     }
 
     fn subscriptionCallbackMap(*_): *jsc.JSMap {
@@ -160,7 +266,7 @@ pub struct SubscriptionCtx {
         channelName: JSValue,
         callback: JSValue,
     ): void ! bun.JSError {
-        defer this.parent().onNewSubscriptionCallbackInsert();
+        const _sub_guard = SubscriptionInsertGuard{ ctx: this };
         const map = this.subscriptionCallbackMap();
 
         let handlers_array: JSValue = .js_undefined;
@@ -223,11 +329,11 @@ pub struct SubscriptionCtx {
         const vm = jsc.VirtualMachine.get();
         const event_loop = vm.eventLoop();
         event_loop.enter();
-        defer event_loop.exit();
+        const _exit_guard = ExitGuard<@TypeOf(event_loop)>{ val: event_loop };
 
         // After we go through every single callback, we will have to update the poll ref.
         // The user may, for example, unsubscribe in the callbacks, or even stop the client.
-        defer this.parent().updatePollRef();
+        const _poll_guard = ParentPollRefGuard{ ctx: this };
 
         // If callbacks is an array, iterate and call each one
         let iter = try callbacks.arrayIterator(globalObject);
@@ -314,7 +420,7 @@ pub struct JSValkeyClient {
         } else {
             url_str = bun.String.static("valkey://localhost:6379");
         }
-        defer url_str.deref();
+        const _url_str_guard = DerefGuard<@TypeOf(url_str)>{ val: url_str };
         let fallback_url_buf: [2048]u8 = undefined;
 
         // Parse and validate the URL using URL.zig's fromString which returns null for invalid URLs
@@ -325,7 +431,7 @@ pub struct JSValkeyClient {
         // a stop-gap.
         const parsed_url = get_url: {
             const url_slice = url_str.toUTF8WithoutRef(this_allocator);
-            defer url_slice.deinit();
+            const _url_slice_guard = DeinitGuard<@TypeOf(url_slice)>{ val: url_slice };
 
             const url_byte_slice = url_slice.slice();
 
@@ -356,13 +462,13 @@ pub struct JSValkeyClient {
                 return globalObject.throwInvalidArguments("Invalid URL format", .{});
             };
         };
-        defer parsed_url.deinit();
+        const _parsed_url_guard = DeinitGuard<@TypeOf(parsed_url)>{ val: parsed_url };
 
         // Extract protocol string
         const protocol_str = parsed_url.protocol();
-        defer protocol_str.deref();
+        const _protocol_str_guard = DerefGuard<@TypeOf(protocol_str)>{ val: protocol_str };
         const protocol_utf8 = protocol_str.toUTF8WithoutRef(this_allocator);
-        defer protocol_utf8.deinit();
+        const _protocol_utf8_guard = DeinitGuard<@TypeOf(protocol_utf8)>{ val: protocol_utf8 };
         // Remove the trailing ':' from protocol (e.g., "redis:" -> "redis")
         const protocol_slice = if (protocol_utf8.slice().len > 0 and protocol_utf8.slice()[protocol_utf8.slice().len - 1] == ':')
             protocol_utf8.slice()[0 .. protocol_utf8.slice().len - 1]
@@ -380,24 +486,24 @@ pub struct JSValkeyClient {
 
         // Extract all URL components
         const username_str = parsed_url.username();
-        defer username_str.deref();
+        const _username_str_guard = DerefGuard<@TypeOf(username_str)>{ val: username_str };
         const username_utf8 = username_str.toUTF8WithoutRef(this_allocator);
-        defer username_utf8.deinit();
+        const _username_utf8_guard = DeinitGuard<@TypeOf(username_utf8)>{ val: username_utf8 };
 
         const password_str = parsed_url.password();
-        defer password_str.deref();
+        const _password_str_guard = DerefGuard<@TypeOf(password_str)>{ val: password_str };
         const password_utf8 = password_str.toUTF8WithoutRef(this_allocator);
-        defer password_utf8.deinit();
+        const _password_utf8_guard = DeinitGuard<@TypeOf(password_utf8)>{ val: password_utf8 };
 
         const hostname_str = parsed_url.host();
-        defer hostname_str.deref();
+        const _hostname_str_guard = DerefGuard<@TypeOf(hostname_str)>{ val: hostname_str };
         const hostname_utf8 = hostname_str.toUTF8WithoutRef(this_allocator);
-        defer hostname_utf8.deinit();
+        const _hostname_utf8_guard = DeinitGuard<@TypeOf(hostname_utf8)>{ val: hostname_utf8 };
 
         const pathname_str = parsed_url.pathname();
-        defer pathname_str.deref();
+        const _pathname_str_guard = DerefGuard<@TypeOf(pathname_str)>{ val: pathname_str };
         const pathname_utf8 = pathname_str.toUTF8WithoutRef(this_allocator);
-        defer pathname_utf8.deinit();
+        const _pathname_utf8_guard = DeinitGuard<@TypeOf(pathname_utf8)>{ val: pathname_utf8 };
 
         // Determine hostname based on protocol type
         const hostname_slice = switch (uri) {
@@ -444,7 +550,7 @@ pub struct JSValkeyClient {
         let password: []const u8 = "";
         let hostname: []const u8 = "";
 
-        errdefer if (connection_strings.len != 0) this_allocator.free(connection_strings);
+        let _cs_guard = FreeSliceGuard{ ptr: &connection_strings, alloc: this_allocator, active: true };
 
         if (username_utf8.slice().len > 0 or password_utf8.slice().len > 0 or hostname_slice.len > 0) {
             let b = bun.StringBuilder{};
@@ -452,7 +558,7 @@ pub struct JSValkeyClient {
             b.count(password_utf8.slice());
             b.count(hostname_slice);
             try b.allocate(this_allocator);
-            defer b.deinit(this_allocator);
+            const _b_guard = DeinitWithAllocGuard<*bun.StringBuilder>{ val: &b, alloc: this_allocator };
             username = b.append(username_utf8.slice());
             password = b.append(password_utf8.slice());
             hostname = b.append(hostname_slice);
@@ -466,6 +572,7 @@ pub struct JSValkeyClient {
             0;
 
         bun.analytics.Features.valkey += 1;
+        _cs_guard.active = false;
 
         return JSValkeyClient.new(.{
             .ref_count = .init(),
@@ -607,7 +714,7 @@ pub struct JSValkeyClient {
         debug("addSubscription: entering, current subscriber state: {}", .{this._subscription_ctx.is_subscriber});
         bun.debugAssert(this.client.status == .connected);
         this.ref();
-        defer this.deref();
+        const _deref_guard = DerefGuard<*JSValkeyClient>{ val: _ };
 
         if (!this._subscription_ctx.is_subscriber) {
             this._subscription_ctx.original_enable_offline_queue = this.client.flags.enable_offline_queue;
@@ -623,7 +730,7 @@ pub struct JSValkeyClient {
     pub fn removeSubscription(*_) {
         debug("removeSubscription: entering, has subscriptions: {}", .{this._subscription_ctx.hasSubscriptions(this.globalObject) catch false});
         this.ref();
-        defer this.deref();
+        const _deref_guard = DerefGuard<*JSValkeyClient>{ val: _ };
 
         // This is the last subscription, restore original flags
         if (!(this._subscription_ctx.hasSubscriptions(this.globalObject) catch false)) {
@@ -663,7 +770,7 @@ pub struct JSValkeyClient {
         this_value: JSValue,
     ): JSValue ! bun.JSError {
         this.ref();
-        defer this.deref();
+        const _deref_guard = DerefGuard<*JSValkeyClient>{ val: _ };
 
         // If already connected, resolve immediately
         if (this.client.status == .connected) {
@@ -685,7 +792,7 @@ pub struct JSValkeyClient {
         // Without this, every subsequent command rejects with "Connection has
         // failed" forever — see https://github.com/oven-sh/bun/issues/29925.
         this.client.flags.failed = false;
-        defer this.updatePollRef();
+        const _poll_guard = UpdatePollRefGuard<*JSValkeyClient>{ val: _ };
 
         if (this.client.flags.needs_to_open_socket) {
             this.poll_ref.ref(this.client.vm);
@@ -696,7 +803,7 @@ pub struct JSValkeyClient {
                 const err_value = globalObject.ERR(.SOCKET_CLOSED_BEFORE_CONNECTION, " {s} connecting to Valkey", .{@errorName(e)}).toJS();
                 const event_loop = this.client.vm.eventLoop();
                 event_loop.enter();
-                defer event_loop.exit();
+                const _exit_guard = ExitGuard<@TypeOf(event_loop)>{ val: event_loop };
                 try promise_ptr.reject(globalObject, err_value);
                 return promise;
             };
@@ -756,7 +863,7 @@ pub struct JSValkeyClient {
     /// Safely add a timer with proper reference counting and event loop keepalive
     fn addTimer(*_, timer: *Timer.EventLoopTimer, next_timeout_ms: u32) {
         this.ref();
-        defer this.deref();
+        const _deref_guard = DerefGuard<*JSValkeyClient>{ val: _ };
 
         // If the timer is already active, we need to remove it first
         if (timer.state == .ACTIVE) {
@@ -821,7 +928,7 @@ pub struct JSValkeyClient {
 
         // Increment ref to ensure 'this' stays alive throughout the function
         this.ref();
-        defer this.deref();
+        const _deref_guard = DerefGuard<*JSValkeyClient>{ val: _ };
         if (this.client.flags.failed) {
             return;
         }
@@ -852,7 +959,7 @@ pub struct JSValkeyClient {
 
         // Increment ref to ensure 'this' stays alive throughout the function
         this.ref();
-        defer this.deref();
+        const _deref_guard = DerefGuard<*JSValkeyClient>{ val: _ };
 
         // Execute reconnection logic
         this.reconnect();
@@ -872,7 +979,7 @@ pub struct JSValkeyClient {
 
         // Ref to keep this alive during the reconnection
         this.ref();
-        defer this.deref();
+        const _deref_guard = DerefGuard<*JSValkeyClient>{ val: _ };
 
         // Ref the poll to keep event loop alive during connection
         this.poll_ref.disable();
@@ -895,15 +1002,11 @@ pub struct JSValkeyClient {
         // we should always have a strong reference to the object here
         bun.debugAssert(this.this_value.isStrong());
 
-        defer {
-            this.client.onWritable();
-            // update again after running the callback
-            this.updatePollRef();
-        }
+        const _writable_guard = WritablePollGuard{ client: _ };
         const globalObject = this.globalObject;
         const event_loop = this.client.vm.eventLoop();
         event_loop.enter();
-        defer event_loop.exit();
+        const _exit_guard = ExitGuard<@TypeOf(event_loop)>{ val: event_loop };
 
         if (this_value := this.this_value.tryGet()) {
             const hello_value: JSValue = value.toJS(globalObject) catch |e| {
@@ -938,7 +1041,7 @@ pub struct JSValkeyClient {
     /// `SubscriptionCtx` will invoke this to communicate that it has added a new listener.
     pub fn onNewSubscriptionCallbackInsert(*_) {
         this.ref();
-        defer this.deref();
+        const _deref_guard = DerefGuard<*JSValkeyClient>{ val: _ };
 
         this.client.onWritable();
         this.updatePollRef();
@@ -949,7 +1052,7 @@ pub struct JSValkeyClient {
         bun.debugAssert(this.this_value.isStrong());
 
         this.ref();
-        defer this.deref();
+        const _deref_guard = DerefGuard<*JSValkeyClient>{ val: _ };
 
         let _v = value;
 
@@ -974,7 +1077,7 @@ pub struct JSValkeyClient {
         const globalObject = this.globalObject;
         const event_loop = this.client.vm.eventLoop();
         event_loop.enter();
-        defer event_loop.exit();
+        const _exit_guard = ExitGuard<@TypeOf(event_loop)>{ val: event_loop };
 
         // The message push should be an array with [channel, message]
         if (value.len < 2) {
@@ -1022,11 +1125,9 @@ pub struct JSValkeyClient {
     pub fn onValkeyClose(*_): void ! bun.JSTerminated {
         const globalObject = this.globalObject;
 
-        defer {
-            // Update poll reference to allow garbage collection of disconnected clients
-            this.updatePollRef();
-            this.deref();
-        }
+        // Update poll reference to allow garbage collection of disconnected clients
+        const _deref_guard = DerefGuard<*JSValkeyClient>{ val: _ };
+        const _poll_guard = UpdatePollRefGuard<*JSValkeyClient>{ val: _ };
 
         let this_jsvalue: JSValue = undefined;
         if (v := this.this_value.tryGet()) {
@@ -1039,7 +1140,7 @@ pub struct JSValkeyClient {
 
         const loop = this.client.vm.eventLoop();
         loop.enter();
-        defer loop.exit();
+        const _exit_guard = ExitGuard<@TypeOf(loop)>{ val: loop };
 
         if (!this_jsvalue.isUndefined()) {
             if (promise := js.connectionPromiseGetCached(this_jsvalue)) {
@@ -1073,7 +1174,7 @@ pub struct JSValkeyClient {
         if (on_close := js.oncloseGetCached(this_value)) {
             const loop = this.client.vm.eventLoop();
             loop.enter();
-            defer loop.exit();
+            const _exit_guard = ExitGuard<@TypeOf(loop)>{ val: loop };
             * = on_close.call(
                 globalObject,
                 this_value,
@@ -1099,7 +1200,7 @@ pub struct JSValkeyClient {
     }
 
     pub fn finalize(*_) {
-        defer this.deref();
+        const _deref_guard = DerefGuard<*JSValkeyClient>{ val: _ };
 
         this.stopTimers();
         this.this_value.finalize();
@@ -1128,7 +1229,7 @@ pub struct JSValkeyClient {
         const vm = this.client.vm;
 
         this.ref();
-        defer this.deref();
+        const _deref_guard = DerefGuard<*JSValkeyClient>{ val: _ };
 
         const is_tls = this.client.tls != .none;
         const group = if (is_tls) vm.rareData().valkeyGroup(vm, true) else vm.rareData().valkeyGroup(vm, false);
@@ -1161,14 +1262,11 @@ pub struct JSValkeyClient {
         this.ref();
         // Balance the ref above if connect() throws — the caller (e.g. send())
         // only knows to clean up its own state, not the keep-alive ref.
-        errdefer this.deref();
+        let _connect_guard = ConnectErrGuard{ client: _, active: true };
         this.client.status = .connecting;
         this.updatePollRef();
-        errdefer {
-            this.client.status = .disconnected;
-            this.updatePollRef();
-        }
         this.client.socket = try this.client.address.connect(&this.client, group, ssl_ctx, is_tls);
+        _connect_guard.active = false;
     }
 
     pub fn send(*_, globalThis: *jsc.JSGlobalObject, _: JSValue, command: *const Command): !*jsc.JSPromise {
@@ -1181,14 +1279,14 @@ pub struct JSValkeyClient {
                 const promise = jsc.JSPromise.create(globalThis);
                 const event_loop = this.client.vm.eventLoop();
                 event_loop.enter();
-                defer event_loop.exit();
+                const _exit_guard = ExitGuard<@TypeOf(event_loop)>{ val: event_loop };
                 try promise.reject(globalThis, err_value);
                 return promise;
             };
             this.resetConnectionTimeout();
         }
 
-        defer this.updatePollRef();
+        const _poll_guard = UpdatePollRefGuard<*JSValkeyClient>{ val: _ };
         const send_fn = valkey.ValkeyClient.send;
         return try send_fn(&this.client, globalThis, command);
     }
@@ -1485,8 +1583,8 @@ pub fn SocketHandler(comptime ssl: bool): type {
             });
             const handshake_success = if (success == 1) true else false;
             client.ref();
-            defer client.deref();
-            defer client.updatePollRef();
+            const _deref_guard = DerefGuard<@TypeOf(client)>{ val: client };
+            const _poll_guard = UpdatePollRefGuard<@TypeOf(client)>{ val: client };
             const vm = client.client.vm;
             if (handshake_success) {
                 if (client.client.tls.rejectUnauthorized(vm)) {
@@ -1553,9 +1651,9 @@ pub fn SocketHandler(comptime ssl: bool): type {
             client.client.flags.is_authenticated = false;
             const loop = vm.eventLoop();
             loop.enter();
-            defer loop.exit();
+            const _exit_guard = ExitGuard<@TypeOf(loop)>{ val: loop };
             client.client.flags.is_manually_closed = true;
-            defer client.client.close();
+            const _close_guard = CloseGuard<@TypeOf(&client.client)>{ val: &client.client };
             (client.client.failWithJSValue(client.globalObject, err_value))?;
         }
 
@@ -1568,11 +1666,7 @@ pub fn SocketHandler(comptime ssl: bool): type {
             client.ref();
             // Ensure the socket pointer is updated.
             client.client.socket = .{ .SocketTCP = .detached };
-            defer {
-                client.client.status = .disconnected;
-                client.updatePollRef();
-                client.deref();
-            }
+            const _disc_guard = DisconnectDerefGuard{ client: client };
 
             client.client.onClose() catch {}; // TODO: properly propagate exception upwards
         }
@@ -1589,11 +1683,7 @@ pub fn SocketHandler(comptime ssl: bool): type {
             // Ensure the socket pointer is updated.
             client.client.socket = .{ .SocketTCP = .detached };
             client.ref();
-            defer {
-                client.client.status = .disconnected;
-                client.updatePollRef();
-                client.deref();
-            }
+            const _disc_guard = DisconnectDerefGuard{ client: client };
 
             (client.client.onClose())?;
         }
@@ -1610,7 +1700,7 @@ pub fn SocketHandler(comptime ssl: bool): type {
             client.client.socket = to_socket(socket);
 
             client.ref();
-            defer client.deref();
+            const _deref_guard = DerefGuard<@TypeOf(client)>{ val: client };
             client.client.onData(data) catch {}; // TODO: properly propagate exception upwards
             client.updatePollRef();
         }
@@ -1618,7 +1708,7 @@ pub fn SocketHandler(comptime ssl: bool): type {
         pub fn onWritable(client: *JSValkeyClient, socket: SocketType) {
             client.client.socket = to_socket(socket);
             client.ref();
-            defer client.deref();
+            const _deref_guard = DerefGuard<@TypeOf(client)>{ val: client };
             client.client.onWritable();
             client.updatePollRef();
         }

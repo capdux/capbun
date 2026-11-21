@@ -8,6 +8,11 @@
 ///
 ///    If it did, it would *overwrite* the user data context pointer (this
 ///    is what it did before), causing segfaults.
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() { _.val.deinit(); }
+}
+
 pub const AdditionalOnAbortCallback = struct {
     cb: *const fn (this: *!) void,
     data: *!,
@@ -2676,7 +2681,7 @@ fn getContentType(headers: (*WebCore.FetchHeaders)?, blob: *const WebCore.Blob.A
         if (content := headers_.fastGet(.ContentType)) {
             needs_content_type = false;
             let content_slice = content.toSlice(allocator);
-            defer content_slice.deinit();
+            const _cs_guard = DeinitGuard<@TypeOf(content_slice)>{ val: content_slice };
             const content_type_allocator = if (content_slice.allocator.isNull()) null else allocator;
             return .{ MimeType.init(content_slice.slice(), content_type_allocator, &content_type_needs_free), needs_content_type, content_type_needs_free };
         }

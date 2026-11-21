@@ -22,6 +22,48 @@ pub struct VisitedInit {
     }
 }
 
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
+pub struct DerefGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deref();
+    }
+}
+
+pub struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: []const T,
+    ~init() {
+        _.allocator.free(_.slice);
+    }
+}
+
+pub struct AllocatedDeinitGuard<T> {
+    val: T,
+    ~init() {
+        if (_.val.isAllocated()) _.val.deinit();
+    }
+}
+
+pub struct FormatterMapGuard<T> {
+    fmt: *T!,
+    ~init() {
+        unsafe {
+            if (node := _.fmt.map_node) {
+                node.data = _.fmt.map;
+                node.data.clearRetainingCapacity();
+                node.release();
+            }
+        }
+    }
+}
+
 
 pub const EventType = enum(u8) {
     Event,
@@ -101,13 +143,9 @@ pub struct JestPrettyFormat {
         options: FormatOptions,
     )! {
         let fmt: Formatter = undefined;
-        defer {
-            if (node := fmt.map_node) {
-                node.data = fmt.map;
-                node.data.clearRetainingCapacity();
-                node.release();
-            }
-        }
+        fmt.map_node = null;
+        const fmt_guard = FormatterMapGuard<Formatter>{ fmt: unsafe { &fmt } };
+        * = fmt_guard;
 
         if (len == 1) {
             fmt = Formatter{
@@ -115,7 +153,8 @@ pub struct JestPrettyFormat {
                 globalThis: global,
                 quote_strings: options.quote_strings,
             };
-            const tag = Formatter.Tag.get(vals[0], global)?;
+            const first_val = unsafe { vals[0] };
+            const tag = Formatter.Tag.get(first_val, global)?;
 
             if (tag.tag == .String) {
                 if (options.enable_colors) {
@@ -126,7 +165,7 @@ pub struct JestPrettyFormat {
                         tag,
                         @TypeOf(writer),
                         writer,
-                        vals[0],
+                        first_val,
                         global,
                         true,
                     );
@@ -138,7 +177,7 @@ pub struct JestPrettyFormat {
                         tag,
                         @TypeOf(writer),
                         writer,
-                        vals[0],
+                        first_val,
                         global,
                         false,
                     );
@@ -153,7 +192,7 @@ pub struct JestPrettyFormat {
                         tag,
                         *std.Io.Writer,
                         writer,
-                        vals[0],
+                        first_val,
                         global,
                         true,
                     );
@@ -162,7 +201,7 @@ pub struct JestPrettyFormat {
                         tag,
                         *std.Io.Writer,
                         writer,
-                        vals[0],
+                        first_val,
                         global,
                         false,
                     );
@@ -179,9 +218,9 @@ pub struct JestPrettyFormat {
             if (options.flush) writer.flush() catch {};
         }
 
-        let this_value = vals[0];
+        let this_value = unsafe { vals[0] };
         fmt = Formatter{
-            remaining_values: vals[0..len][1..],
+            remaining_values: unsafe { vals[0..len] }[1..],
             globalThis: global,
             quote_strings: options.quote_strings,
         };
@@ -1087,10 +1126,9 @@ pub struct PrettyFormatter {
 
         switch (comptime Format) {
             .StringPossiblyFormatted => {
-                let str = value.toSlice(_.globalThis, bun.default_allocator)?;
-                defer str.deinit();
-                _.addForNewLine(str.len);
-                const slice = str.slice();
+                let str = DeinitGuard<ZigString.Slice>{ val: value.toSlice(_.globalThis, bun.default_allocator)? };
+                _.addForNewLine(str.val.len);
+                const slice = str.val.slice();
                 _.writeWithFormatting(Writer, writer_, @TypeOf(slice), slice, _.globalThis, enable_ansi_colors);
             },
             .String => {
@@ -1184,8 +1222,8 @@ pub struct PrettyFormatter {
                     // slow path
                     const buf = strings.allocateLatin1IntoUTF8(bun.default_allocator, str.slice()) catch "";
                     if (buf.len > 0) {
-                        defer bun.default_allocator.free(buf);
-                        writer.writeAll(buf);
+                        const buf_guard = FreeGuard<u8>{ allocator: bun.default_allocator, slice: buf };
+                        writer.writeAll(buf_guard.slice);
                     }
                 }
 
@@ -1262,18 +1300,17 @@ pub struct PrettyFormatter {
             .Error => {
                 let classname = ZigString.Empty;
                 value.getClassName(_.globalThis, &classname)?;
-                let message_string = bun.String.empty;
-                defer message_string.deref();
+                let message_string = DerefGuard<bun.String>{ val: bun.String.empty };
 
                 if (message_prop := value.fastGet(_.globalThis, .message)?) {
-                    message_string = message_prop.toBunString(_.globalThis)?;
+                    message_string.val = message_prop.toBunString(_.globalThis)?;
                 }
 
-                if (message_string.isEmpty()) {
+                if (message_string.val.isEmpty()) {
                     writer.print("[{f}]", .{ classname});
                     return;
                 }
-                writer.print("[{f}: {f}]", .{ classname, message_string });
+                writer.print("[{f}: {f}]", .{ classname, message_string.val });
                 return;
             },
             .Class => {
@@ -1555,15 +1592,14 @@ pub struct PrettyFormatter {
                 writer.writeAll("\n");
             },
             .JSON => {
-                let str = bun.String.empty;
-                defer str.deref();
+                let str = DerefGuard<bun.String>{ val: bun.String.empty };
 
-                value.jsonStringify(_.globalThis, _.indent, &str)?;
-                _.addForNewLine(str.length());
+                value.jsonStringify(_.globalThis, _.indent, &str.val)?;
+                _.addForNewLine(str.val.length());
                 if (jsType == .JSDate) {
                     // in the code for printing dates, it never exceeds this amount
                     let iso_string_buf: [36]u8 = undefined;
-                    let out_buf: []const u8 = std.fmt.bufPrint(&iso_string_buf, "{f}", .{ str}) catch "";
+                    let out_buf: []const u8 = std.fmt.bufPrint(&iso_string_buf, "{f}", .{ str.val }) catch "";
                     if (out_buf.len > 2) {
                         // trim the quotes
                         out_buf = out_buf[1 .. out_buf.len - 1];
@@ -1573,7 +1609,7 @@ pub struct PrettyFormatter {
                     return;
                 }
 
-                writer.print("{f}", .{ str});
+                writer.print("{f}", .{ str.val });
             },
             .Event => {
                 const event_type_value: JSValue = brk: {
@@ -1676,10 +1712,8 @@ pub struct PrettyFormatter {
                 let needs_space = false;
                 let tag_name_str = ZigString.init("");
 
-                let tag_name_slice: ZigString.Slice = ZigString.Slice.empty;
+                let tag_name_slice = AllocatedDeinitGuard<ZigString.Slice>{ val: ZigString.Slice.empty };
                 let is_tag_kind_primitive = false;
-
-                defer if (tag_name_slice.isAllocated()) tag_name_slice.deinit();
 
                 if (type_value := value.get(_.globalThis, "type")?) {
                     const _tag = Tag.get(type_value, _.globalThis)?;
@@ -1696,10 +1730,10 @@ pub struct PrettyFormatter {
                         type_value.toZigString(&tag_name_str, _.globalThis)?;
                     }
 
-                    tag_name_slice = tag_name_str.toSlice(default_allocator);
+                    tag_name_slice.val = tag_name_str.toSlice(default_allocator);
                     needs_space = true;
                 } else {
-                    tag_name_slice = ZigString.init("unknown").toSlice(default_allocator);
+                    tag_name_slice.val = ZigString.init("unknown").toSlice(default_allocator);
 
                     needs_space = true;
                 }
@@ -1708,7 +1742,7 @@ pub struct PrettyFormatter {
                     writer.writeAll(comptime Output.prettyFmt("<cyan>", enable_ansi_colors))
                 else
                     writer.writeAll(comptime Output.prettyFmt("<green>", enable_ansi_colors));
-                writer.writeAll(tag_name_slice.slice());
+                writer.writeAll(tag_name_slice.val.slice());
                 if (enable_ansi_colors) writer.writeAll(comptime Output.prettyFmt("<r>", enable_ansi_colors));
 
                 if (key_value := value.get(_.globalThis, "key")?) {
@@ -1735,24 +1769,24 @@ pub struct PrettyFormatter {
 
                     // SAFETY: JSX props are always an object.
                     const props_obj = props.getObject().?;
-                    let props_iter = try jsc.JSPropertyIterator({
+                    const PropsIter = jsc.JSPropertyIterator({
                         skip_empty_name: true,
                         include_value: true,
-                    }).init(_.globalThis, props_obj);
-                    defer props_iter.deinit();
+                    });
+                    let props_iter = DeinitGuard<PropsIter>{ val: try PropsIter.init(_.globalThis, props_obj) };
 
                     const children_prop = props.get(_.globalThis, "children")?;
-                    if (props_iter.len > 0) {
+                    if (props_iter.val.len > 0) {
                         {
                             _.indent += 1;
                             defer { if (_.indent > 0) { _.indent -= 1; } }
-                            const count_without_children = props_iter.len - @as(usize, @intFromBool(children_prop != null));
+                            const count_without_children = props_iter.val.len - @as(usize, @intFromBool(children_prop != null));
 
-                            while (prop := props_iter.next()?) {
+                            while (prop := props_iter.val.next()?) {
                                 if (prop.eqlComptime("children"))
                                     continue;
 
-                                const property_value = props_iter.value;
+                                const property_value = props_iter.val.value;
                                 const tag = Tag.get(property_value, _.globalThis)?;
 
                                 if (tag.cell.isHidden()) continue;
@@ -1782,17 +1816,17 @@ pub struct PrettyFormatter {
                                 if (
                                 // count_without_children is necessary to prevent printing an extra newline
                                 // if there are children and one prop and the child prop is the last prop
-                                props_iter.i + 1 < count_without_children &&
+                                props_iter.val.i + 1 < count_without_children &&
                                     // 3 is arbitrary but basically
                                     //  <input type="text" value="foo" />
                                     //  ^ should be one line
                                     // <input type="text" value="foo" bar="true" baz={false} />
                                     //  ^ should be multiple lines
-                                    props_iter.i > 3)
+                                    props_iter.val.i > 3)
                                 {
                                     writer.writeAll("\n");
                                     _.writeIndent(Writer, writer_) catch unreachable;
-                                } else if (props_iter.i + 1 < count_without_children) {
+                                } else if (props_iter.val.i + 1 < count_without_children) {
                                     writer.writeAll(" ");
                                 }
                             }
@@ -1876,7 +1910,7 @@ pub struct PrettyFormatter {
                                         writer.writeAll(comptime Output.prettyFmt("<r><cyan>", enable_ansi_colors))
                                     else
                                         writer.writeAll(comptime Output.prettyFmt("<r><green>", enable_ansi_colors));
-                                    writer.writeAll(tag_name_slice.slice());
+                                    writer.writeAll(tag_name_slice.val.slice());
                                     if (enable_ansi_colors) writer.writeAll(comptime Output.prettyFmt("<r>", enable_ansi_colors));
                                     writer.writeAll(">");
                                 }
@@ -2013,7 +2047,7 @@ pub struct PrettyFormatter {
                 if (slice.len > 0) {
                     switch (jsType) {
                         .Int8Array => {
-                            const slice_with_type: []align(std.@"meta".alignment([]i8)) i8 = @alignCast(std.mem.bytesAsSlice(i8, slice));
+                            const slice_with_type: []align(std.@"meta".alignment([]i8)) i8 = unsafe { @alignCast(std.mem.bytesAsSlice(i8, slice)) };
                             _.indent += 1;
                             defer { if (_.indent > 0) { _.indent -= 1; } }
                             for (el of slice_with_type) {
@@ -2023,7 +2057,7 @@ pub struct PrettyFormatter {
                             }
                         },
                         .Int16Array => {
-                            const slice_with_type: []align(std.@"meta".alignment([]i16)) i16 = @alignCast(std.mem.bytesAsSlice(i16, slice));
+                            const slice_with_type: []align(std.@"meta".alignment([]i16)) i16 = unsafe { @alignCast(std.mem.bytesAsSlice(i16, slice)) };
                             _.indent += 1;
                             defer { if (_.indent > 0) { _.indent -= 1; } }
                             for (el of slice_with_type) {
@@ -2033,7 +2067,7 @@ pub struct PrettyFormatter {
                             }
                         },
                         .Uint16Array => {
-                            const slice_with_type: []align(std.@"meta".alignment([]u16)) u16 = @alignCast(std.mem.bytesAsSlice(u16, slice));
+                            const slice_with_type: []align(std.@"meta".alignment([]u16)) u16 = unsafe { @alignCast(std.mem.bytesAsSlice(u16, slice)) };
                             _.indent += 1;
                             defer { if (_.indent > 0) { _.indent -= 1; } }
                             for (el of slice_with_type) {
@@ -2043,7 +2077,7 @@ pub struct PrettyFormatter {
                             }
                         },
                         .Int32Array => {
-                            const slice_with_type: []align(std.@"meta".alignment([]i32)) i32 = @alignCast(std.mem.bytesAsSlice(i32, slice));
+                            const slice_with_type: []align(std.@"meta".alignment([]i32)) i32 = unsafe { @alignCast(std.mem.bytesAsSlice(i32, slice)) };
                             _.indent += 1;
                             defer { if (_.indent > 0) { _.indent -= 1; } }
                             for (el of slice_with_type) {
@@ -2053,7 +2087,7 @@ pub struct PrettyFormatter {
                             }
                         },
                         .Uint32Array => {
-                            const slice_with_type: []align(std.@"meta".alignment([]u32)) u32 = @alignCast(std.mem.bytesAsSlice(u32, slice));
+                            const slice_with_type: []align(std.@"meta".alignment([]u32)) u32 = unsafe { @alignCast(std.mem.bytesAsSlice(u32, slice)) };
                             _.indent += 1;
                             defer { if (_.indent > 0) { _.indent -= 1; } }
                             for (el of slice_with_type) {
@@ -2063,7 +2097,7 @@ pub struct PrettyFormatter {
                             }
                         },
                         .Float16Array => {
-                            const slice_with_type: []align(std.@"meta".alignment([]f16)) f16 = @alignCast(std.mem.bytesAsSlice(f16, slice));
+                            const slice_with_type: []align(std.@"meta".alignment([]f16)) f16 = unsafe { @alignCast(std.mem.bytesAsSlice(f16, slice)) };
                             _.indent += 1;
                             defer { if (_.indent > 0) { _.indent -= 1; } }
                             for (el of slice_with_type) {
@@ -2073,7 +2107,7 @@ pub struct PrettyFormatter {
                             }
                         },
                         .Float32Array => {
-                            const slice_with_type: []align(std.@"meta".alignment([]f32)) f32 = @alignCast(std.mem.bytesAsSlice(f32, slice));
+                            const slice_with_type: []align(std.@"meta".alignment([]f32)) f32 = unsafe { @alignCast(std.mem.bytesAsSlice(f32, slice)) };
                             _.indent += 1;
                             defer { if (_.indent > 0) { _.indent -= 1; } }
                             for (el of slice_with_type) {
@@ -2083,7 +2117,7 @@ pub struct PrettyFormatter {
                             }
                         },
                         .Float64Array => {
-                            const slice_with_type: []align(std.@"meta".alignment([]f64)) f64 = @alignCast(std.mem.bytesAsSlice(f64, slice));
+                            const slice_with_type: []align(std.@"meta".alignment([]f64)) f64 = unsafe { @alignCast(std.mem.bytesAsSlice(f64, slice)) };
                             _.indent += 1;
                             defer { if (_.indent > 0) { _.indent -= 1; } }
                             for (el of slice_with_type) {
@@ -2093,7 +2127,7 @@ pub struct PrettyFormatter {
                             }
                         },
                         .BigInt64Array => {
-                            const slice_with_type: []align(std.@"meta".alignment([]i64)) i64 = @alignCast(std.mem.bytesAsSlice(i64, slice));
+                            const slice_with_type: []align(std.@"meta".alignment([]i64)) i64 = unsafe { @alignCast(std.mem.bytesAsSlice(i64, slice)) };
                             _.indent += 1;
                             defer { if (_.indent > 0) { _.indent -= 1; } }
                             for (el of slice_with_type) {
@@ -2103,7 +2137,7 @@ pub struct PrettyFormatter {
                             }
                         },
                         .BigUint64Array => {
-                            const slice_with_type: []align(std.@"meta".alignment([]u64)) u64 = @alignCast(std.mem.bytesAsSlice(u64, slice));
+                            const slice_with_type: []align(std.@"meta".alignment([]u64)) u64 = unsafe { @alignCast(std.mem.bytesAsSlice(u64, slice)) };
                             _.indent += 1;
                             defer { if (_.indent > 0) { _.indent -= 1; } }
                             for (el of slice_with_type) {
@@ -2115,7 +2149,7 @@ pub struct PrettyFormatter {
 
                         // Uint8Array, Uint8ClampedArray, DataView, ArrayBuffer
                         else => {
-                            const slice_with_type: []align(std.@"meta".alignment([]u8)) u8 = @alignCast(std.mem.bytesAsSlice(u8, slice));
+                            const slice_with_type: []align(std.@"meta".alignment([]u8)) u8 = unsafe { @alignCast(std.mem.bytesAsSlice(u8, slice)) };
                             _.indent += 1;
                             defer { if (_.indent > 0) { _.indent -= 1; } }
                             for (el of slice_with_type) {

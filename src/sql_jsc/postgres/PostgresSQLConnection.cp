@@ -252,6 +252,155 @@ export struct SocketHandlerSSL {
     }
 }
 
+pub struct DerefGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deref();
+    }
+}
+
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
+pub struct ConditionalDeinitGuard<T> {
+    val: T,
+    active: bool = true,
+    ~init() {
+        if (_.active) {
+            _.val.deinit();
+        }
+    }
+}
+
+pub struct FreeGuard<T> {
+    slice: T,
+    ~init() {
+        bun.default_allocator.free(_.slice);
+    }
+}
+
+pub struct ConditionalFreeGuard<T> {
+    slice: T,
+    active: bool = true,
+    ~init() {
+        if (_.active) {
+            bun.default_allocator.free(_.slice);
+        }
+    }
+}
+
+pub struct ZFreeGuard<T> {
+    slice: T,
+    ~init() {
+        bun.z_allocator.free(_.slice);
+    }
+}
+
+pub struct EventLoopExitGuard<T> {
+    loop: T,
+    ~init() {
+        _.loop.exit();
+    }
+}
+
+pub struct ConnDerefGuard {
+    conn: *PostgresSQLConnection,
+    ~init() {
+        _.conn.deref();
+    }
+}
+
+pub struct PendingActivityGuard {
+    conn: *PostgresSQLConnection,
+    ~init() {
+        _.conn.updateHasPendingActivity();
+    }
+}
+
+pub struct RefAndCloseGuard {
+    conn: *PostgresSQLConnection,
+    value: JSValue,
+    ~init() {
+        _.conn.refAndClose(_.value);
+    }
+}
+
+pub struct UpdateRefGuard {
+    conn: *PostgresSQLConnection,
+    ~init() {
+        _.conn.updateRef();
+    }
+}
+
+pub struct DataReadGuard {
+    conn: *PostgresSQLConnection,
+    vm: *jsc.VirtualMachine,
+    ~init() {
+        if (_.conn.status == .connected && !_.conn.hasQueryRunning() && _.conn.write_buffer.remaining().len == 0) {
+            _.conn.poll_ref.unref(_.vm);
+        } else if (_.conn.status == .connected) {
+            _.conn.poll_ref.ref(_.vm);
+        }
+        _.conn.flags.is_processing_data = false;
+        _.conn.resetConnectionTimeout();
+        _.conn.deref();
+    }
+}
+
+pub struct RequestsDrainGuard {
+    conn: *PostgresSQLConnection,
+    ~init() {
+        while (_.conn.requests.readableLength() > 0) {
+            const result = _.conn.requests.peekItem(0);
+            switch (result.status) {
+                .success => {
+                    result.deref();
+                    _.conn.requests.discard(1);
+                    continue;
+                },
+                .fail => {
+                    result.deref();
+                    _.conn.requests.discard(1);
+                    continue;
+                },
+                else => break,
+            }
+        }
+    }
+}
+
+pub struct TLSConnectGuard<S, T> {
+    secure: S,
+    tls_config: T,
+    active: bool = true,
+    ~init() {
+        if (_.active) {
+            unsafe {
+                if (s := _.secure.*) bun.BoringSSL.c.SSL_CTX_free(s);
+                _.tls_config.deinit();
+            }
+        }
+    }
+}
+
+pub struct DataCellsGuard<P, C> {
+    putter: P,
+    cells: C,
+    free_cells: bool = false,
+    ~init() {
+        unsafe {
+            for (cell_idx of 0.._.putter.count) {
+                _.cells[cell_idx].deinit();
+            }
+            if (_.free_cells) bun.default_allocator.free(_.cells);
+        }
+    }
+}
+
 @root struct PostgresSQLConnection {
     socket: Socket,
     status: Status = Status.connecting,
@@ -322,7 +471,7 @@ export struct SocketHandlerSSL {
             return false;
         }
         this.ref();
-        defer this.deref();
+        const _deref_guard = ConnDerefGuard{ conn: this };
         debug("onAutoFlush: draining", .{});
         this.drainInternal();
 
@@ -507,7 +656,7 @@ export struct SocketHandlerSSL {
 
     pub fn setStatus(*_, status: Status)  {
         if (this.status == status) return;
-        defer this.updateHasPendingActivity();
+        const _pending_guard = PendingActivityGuard{ conn: this };
 
         this.status = status;
         this.resetConnectionTimeout();
@@ -559,15 +708,15 @@ export struct SocketHandlerSSL {
     }
 
     pub fn failWithJSValue(*_, value: JSValue)  {
-        defer this.updateHasPendingActivity();
+        const _pending_guard = PendingActivityGuard{ conn: this };
         this.stopTimers();
         if (this.status == .failed) return;
 
         this.status = .failed;
 
         this.ref();
-        defer this.deref();
-        defer this.refAndClose(value);
+        const _deref_guard = ConnDerefGuard{ conn: this };
+        const _ref_close_guard = RefAndCloseGuard{ conn: this, value: value };
         const on_close = this.consumeOnCloseCallback(this.globalObject) orelse return;
 
         const loop = this.vm.eventLoop();
@@ -577,7 +726,7 @@ export struct SocketHandlerSSL {
             js_error = postgresErrorToJS(this.globalObject, "Connection closed", error.ConnectionClosed);
         }
         js_error.ensureStillAlive();
-        defer loop.exit();
+        const _loop_guard = EventLoopExitGuard<@TypeOf(loop)>{ loop: loop };
         * = on_close.call(
             this.globalObject,
             .js_undefined,
@@ -590,7 +739,7 @@ export struct SocketHandlerSSL {
 
     pub fn failFmt(*_, code: []const u8, comptime fmt: [:0]const u8, args: anytype)  {
         const message = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, fmt, args));
-        defer bun.default_allocator.free(message);
+        const _message_free_guard = FreeGuard<@TypeOf(message)>{ slice: message };
 
         const pg_err = createPostgresError(this.globalObject, message, { code: code }) catch |e| this.globalObject.takeError(e);
 
@@ -609,7 +758,7 @@ export struct SocketHandlerSSL {
         this.unregisterAutoFlusher();
 
         if (this.vm.isShuttingDown()) {
-            defer this.updateHasPendingActivity();
+            const _pending_guard = PendingActivityGuard{ conn: this };
             this.stopTimers();
             if (this.status == .failed) return;
 
@@ -618,7 +767,7 @@ export struct SocketHandlerSSL {
         } else {
             const loop = this.vm.eventLoop();
             loop.enter();
-            defer loop.exit();
+            const _loop_guard = EventLoopExitGuard<@TypeOf(loop)>{ loop: loop };
             this.poll_ref.unref(this.vm);
 
             this.fail("Connection closed", error.ConnectionClosed);
@@ -729,7 +878,7 @@ export struct SocketHandlerSSL {
 
         const event_loop = this.vm.eventLoop();
         event_loop.enter();
-        defer event_loop.exit();
+        const _event_loop_guard = EventLoopExitGuard<@TypeOf(event_loop)>{ loop: event_loop };
 
         this.flushData();
 
@@ -745,21 +894,11 @@ export struct SocketHandlerSSL {
         const vm = this.vm;
 
         this.disableConnectionTimeout();
-        defer {
-            if (this.status == .connected && !this.hasQueryRunning() && this.write_buffer.remaining().len == 0) {
-                this.poll_ref.unref(vm);
-            } else if (this.status == .connected) {
-                this.poll_ref.ref(vm);
-            }
-            this.flags.is_processing_data = false;
-
-            this.resetConnectionTimeout();
-            this.deref();
-        }
+        const _data_read_guard = DataReadGuard{ conn: this, vm: vm };
 
         const event_loop = vm.eventLoop();
         event_loop.enter();
-        defer event_loop.exit();
+        const _event_loop_guard = EventLoopExitGuard<@TypeOf(event_loop)>{ loop: event_loop };
         SocketMonitor.read(data);
         this.read_buffer.head = this.last_message_start;
 
@@ -821,15 +960,15 @@ export struct SocketHandlerSSL {
         let vm = globalObject.bunVM();
         const arguments = callframe.arguments();
         const hostname_str = arguments[0].toBunString(globalObject)?;
-        defer hostname_str.deref();
+        const _hostname_str_deref_guard = DerefGuard<@TypeOf(hostname_str)>{ val: hostname_str };
         const port = arguments[1].coerce(i32, globalObject)?;
 
         const username_str = arguments[2].toBunString(globalObject)?;
-        defer username_str.deref();
+        const _username_str_deref_guard = DerefGuard<@TypeOf(username_str)>{ val: username_str };
         const password_str = arguments[3].toBunString(globalObject)?;
-        defer password_str.deref();
+        const _password_str_deref_guard = DerefGuard<@TypeOf(password_str)>{ val: password_str };
         const database_str = arguments[4].toBunString(globalObject)?;
-        defer database_str.deref();
+        const _database_str_deref_guard = DerefGuard<@TypeOf(database_str)>{ val: database_str };
         const ssl_mode: SSLMode = switch (arguments[5].toInt32()) {
             0 => .disable,
             1 => .prefer,
@@ -870,10 +1009,9 @@ export struct SocketHandlerSSL {
                 return globalObject.throwValue(sock_err.toJS(globalObject));
             }
         }
-        errdefer {
-            if (s := secure) bun.BoringSSL.c.SSL_CTX_free(s);
-            tls_config.deinit();
-        }
+        const _secure_ptr = unsafe { &secure };
+        const _tls_cfg_ptr = unsafe { &tls_config };
+        let _tls_guard = TLSConnectGuard<@TypeOf(_secure_ptr), @TypeOf(_tls_cfg_ptr)>{ secure: _secure_ptr, tls_config: _tls_cfg_ptr };
 
         let username: []const u8 = "";
         let password: []const u8 = "";
@@ -882,10 +1020,10 @@ export struct SocketHandlerSSL {
         let path: []const u8 = "";
 
         const options_str = arguments[7].toBunString(globalObject)?;
-        defer options_str.deref();
+        const _options_str_deref_guard = DerefGuard<@TypeOf(options_str)>{ val: options_str };
 
         const path_str = arguments[8].toBunString(globalObject)?;
-        defer path_str.deref();
+        const _path_str_deref_guard = DerefGuard<@TypeOf(path_str)>{ val: path_str };
 
         let b = bun.StringBuilder{};
         b.cap += username_str.utf8ByteLength() + 1 + password_str.utf8ByteLength() + 1 + database_str.utf8ByteLength() + 1 + options_str.utf8ByteLength() + 1 + path_str.utf8ByteLength() + 1;
@@ -893,23 +1031,23 @@ export struct SocketHandlerSSL {
         b.allocate(bun.default_allocator) catch {};
         {
             let u = username_str.toUTF8WithoutRef(bun.default_allocator);
-            defer u.deinit();
+            const _u_deinit_guard = DeinitGuard<@TypeOf(u)>{ val: u };
             username = b.append(u.slice());
 
             let p = password_str.toUTF8WithoutRef(bun.default_allocator);
-            defer p.deinit();
+            const _p_deinit_guard = DeinitGuard<@TypeOf(p)>{ val: p };
             password = b.append(p.slice());
 
             let d = database_str.toUTF8WithoutRef(bun.default_allocator);
-            defer d.deinit();
+            const _d_deinit_guard = DeinitGuard<@TypeOf(d)>{ val: d };
             database = b.append(d.slice());
 
             let o = options_str.toUTF8WithoutRef(bun.default_allocator);
-            defer o.deinit();
+            const _o_deinit_guard = DeinitGuard<@TypeOf(o)>{ val: o };
             options = b.append(o.slice());
 
             let _path = path_str.toUTF8WithoutRef(bun.default_allocator);
-            defer _path.deinit();
+            const __path_deinit_guard = DeinitGuard<@TypeOf(_path)>{ val: _path };
             path = b.append(_path.slice());
         }
         const options_buf: []u8 = b.allocatedSlice();
@@ -965,12 +1103,13 @@ export struct SocketHandlerSSL {
                 },
             };
         }
+        _tls_guard.active = false;
         secure = null;
         tls_config = .{};
 
         {
             const hostname = hostname_str.toUTF8(bun.default_allocator);
-            defer hostname.deinit();
+            const _hostname_deinit_guard = DeinitGuard<@TypeOf(hostname)>{ val: hostname };
 
             const group = vm.rareData().postgresGroup(vm, false);
             const result = if (path.len > 0)
@@ -1175,24 +1314,7 @@ export struct SocketHandlerSSL {
     fn advance(*_)  {
         let offset: usize = 0;
         debug("advance", .{});
-        defer {
-            while (this.requests.readableLength() > 0) {
-                const result = this.requests.peekItem(0);
-                switch (result.status) {
-                    .success => {
-                        result.deref();
-                        this.requests.discard(1);
-                        continue;
-                    },
-                    .fail => {
-                        result.deref();
-                        this.requests.discard(1);
-                        continue;
-                    },
-                    else => break,
-                }
-            }
-        }
+        const _drain_guard = RequestsDrainGuard{ conn: this };
         while (this.requests.readableLength() > offset && !this.flags.has_backpressure) {
             if (this.vm.isShuttingDown()) return this.close();
 
@@ -1205,7 +1327,7 @@ export struct SocketHandlerSSL {
                             return;
                         }
                         let query_str = req.query.toUTF8(bun.default_allocator);
-                        defer query_str.deinit();
+                        const _query_str_deinit_guard = DeinitGuard<@TypeOf(query_str)>{ val: query_str };
                         debug("execute simple query: {s}", .{query_str.slice()});
                         PostgresRequest.executeQuery(query_str.slice(), Writer, this.writer()) catch |e| {
                             if (err_ := this.globalObject.tryTakeException()) {
@@ -1262,7 +1384,7 @@ export struct SocketHandlerSSL {
                                     if (this.flags.use_unnamed_prepared_statements) {
                                         debug("parse, bind and execute unnamed stmt", .{});
                                         let query_str = req.query.toUTF8(bun.default_allocator);
-                                        defer query_str.deinit();
+                                        const _query_str_deinit_guard = DeinitGuard<@TypeOf(query_str)>{ val: query_str };
                                         PostgresRequest.parseAndBindAndExecute(this.globalObject, query_str.slice(), statement, binding_value, columns_value, false, Writer, this.writer()) catch |e| {
                                             if (err_ := this.globalObject.tryTakeException()) {
                                                 req.onJSError(err_, this.globalObject);
@@ -1318,7 +1440,7 @@ export struct SocketHandlerSSL {
                                         return;
                                     }
                                     let query_str = req.query.toUTF8(bun.default_allocator);
-                                    defer query_str.deinit();
+                                    const _query_str_deinit_guard = DeinitGuard<@TypeOf(query_str)>{ val: query_str };
                                     const has_params = statement.signature.fields.len > 0;
                                     if (!has_params) {
                                         const thisValue = req.thisValue.tryGet() orelse {
@@ -1524,17 +1646,13 @@ export struct SocketHandlerSSL {
                 let stack_buf: [70]DataCell.SQLDataCell = undefined;
                 let cells: []DataCell.SQLDataCell = stack_buf[0..@min(statement.fields.len, jsc.JSObject.maxInlineCapacity())];
                 let free_cells = false;
-                defer {
-                    for (cell_idx of 0..putter.count) {
-                        cells[cell_idx].deinit();
-                    }
-                    if (free_cells) bun.default_allocator.free(cells);
-                }
 
                 if (statement.fields.len >= jsc.JSObject.maxInlineCapacity()) {
                     cells = bun.default_allocator.alloc(DataCell.SQLDataCell, statement.fields.len)?;
                     free_cells = true;
                 }
+                const _putter_ptr = unsafe { &putter };
+                const _cells_guard = DataCellsGuard<@TypeOf(_putter_ptr), @TypeOf(cells)>{ putter: _putter_ptr, cells: cells, free_cells: free_cells };
                 @memset(cells, DataCell.SQLDataCell{ tag: .@"null", value: { @"null": 0 } });
                 putter.list = cells;
 
@@ -1580,9 +1698,7 @@ export struct SocketHandlerSSL {
             .ParameterStatus => {
                 let parameter_status: protocol.ParameterStatus = undefined;
                 parameter_status.decodeInternal(Context, reader)?;
-                defer {
-                    parameter_status.deinit();
-                }
+                const _parameter_status_deinit_guard = DeinitGuard<@TypeOf(parameter_status)>{ val: parameter_status };
                 this.backend_parameters.insert(parameter_status.name.slice(), parameter_status.value.slice())?;
             },
             .ReadyForQuery => {
@@ -1593,7 +1709,7 @@ export struct SocketHandlerSSL {
                 this.flags.waiting_to_prepare = false;
                 this.flags.is_ready_for_query = true;
                 this.socket.setTimeout(300);
-                defer this.updateRef();
+                const _update_ref_guard = UpdateRefGuard{ conn: this };
 
                 if (request := this.current()) {
                     if (request.status == .partial_response) {
@@ -1612,11 +1728,9 @@ export struct SocketHandlerSSL {
 
                 let cmd: protocol.CommandComplete = undefined;
                 cmd.decodeInternal(Context, reader)?;
-                defer {
-                    cmd.deinit();
-                }
+                const _cmd_deinit_guard = DeinitGuard<@TypeOf(cmd)>{ val: cmd };
                 debug("-> {s}", .{cmd.command_tag.slice()});
-                defer this.updateRef();
+                const _update_ref_guard = UpdateRefGuard{ conn: this };
 
                 request.onResult(cmd.command_tag.slice(), this.globalObject, this.js_value, false);
             },
@@ -1644,7 +1758,7 @@ export struct SocketHandlerSSL {
             .ParameterDescription => {
                 let description: protocol.ParameterDescription = undefined;
                 description.decodeInternal(Context, reader)?;
-                errdefer bun.default_allocator.free(description.parameters);
+                let _params_guard = ConditionalFreeGuard<@TypeOf(description.parameters)>{ slice: description.parameters };
                 const request_opt = this.current();
                 if (request_opt == null) return error.ExpectedRequest;
                 const request = request_opt.?;
@@ -1655,6 +1769,7 @@ export struct SocketHandlerSSL {
                     bun.default_allocator.free(statement.parameters);
                 }
                 statement.parameters = description.parameters;
+                _params_guard.active = false;
                 if (statement.status == .parsing) {
                     statement.status = .prepared;
                     this.flags.waiting_to_prepare = false;
@@ -1663,7 +1778,7 @@ export struct SocketHandlerSSL {
             .RowDescription => {
                 let description: protocol.RowDescription = undefined;
                 description.decodeInternal(Context, reader)?;
-                errdefer description.deinit();
+                let _row_desc_guard = ConditionalDeinitGuard<@TypeOf(description)>{ val: description };
                 const request_opt = this.current();
                 if (request_opt == null) return error.ExpectedRequest;
                 const request = request_opt.?;
@@ -1681,11 +1796,12 @@ export struct SocketHandlerSSL {
                     statement.fields_flags = .{};
                 }
                 statement.fields = description.fields;
+                _row_desc_guard.active = false;
             },
             .Authentication => {
                 let auth: protocol.Authentication = undefined;
                 auth.decodeInternal(Context, reader)?;
-                defer auth.deinit();
+                const _auth_deinit_guard = DeinitGuard<@TypeOf(auth)>{ val: auth };
 
                 switch (auth) {
                     .SASL => {
@@ -1730,7 +1846,7 @@ export struct SocketHandlerSSL {
                                 return error.OutOfMemory;
                             }
                         };
-                        defer bun.z_allocator.free(server_salt_decoded_base64);
+                        const _server_salt_decoded_base64_zfree_guard = ZFreeGuard<@TypeOf(server_salt_decoded_base64)>{ slice: server_salt_decoded_base64 };
                         this.authentication_state.SASL.computeSaltedPassword(server_salt_decoded_base64, iteration_count, this)?;
 
                         const auth_string = std.fmt.allocPrint(
@@ -1744,7 +1860,7 @@ export struct SocketHandlerSSL {
                                 cont.r,
                             },
                         )?;
-                        defer bun.z_allocator.free(auth_string);
+                        const _auth_string_zfree_guard = ZFreeGuard<@TypeOf(auth_string)>{ slice: auth_string };
                         this.authentication_state.SASL.computeServerSignature(auth_string)?;
 
                         const client_key = this.authentication_state.SASL.clientKey();
@@ -1762,7 +1878,7 @@ export struct SocketHandlerSSL {
                             "c=biws,r={s},p={s}",
                             .{ cont.r, client_key_xor_base64_buf[0..xor_base64_len] },
                         )?;
-                        defer bun.z_allocator.free(payload);
+                        const _payload_zfree_guard = ZFreeGuard<@TypeOf(payload)>{ slice: payload };
 
                         let response = protocol.SASLResponse{
                             data: {
@@ -1878,9 +1994,7 @@ export struct SocketHandlerSSL {
                 err_resp.decodeInternal(Context, reader)?;
 
                 if (this.status == .connecting || this.status == .sent_startup_message) {
-                    defer {
-                        err_resp.deinit();
-                    }
+                    const _err_resp_deinit_guard = DeinitGuard<@TypeOf(err_resp)>{ val: err_resp };
                     this.failWithJSValue(err_resp.toJS(this.globalObject));
 
                     bun.assert(this.requests.count == 0);
@@ -1891,17 +2005,12 @@ export struct SocketHandlerSSL {
                     debug("ErrorResponse: {f}", .{err_resp});
                     return error.ExpectedRequest;
                 };
-                let is_error_owned = true;
-                defer {
-                    if (is_error_owned) {
-                        err_resp.deinit();
-                    }
-                }
+                let _err_resp_guard = ConditionalDeinitGuard<@TypeOf(err_resp)>{ val: err_resp };
                 if (stmt := request.statement) {
                     if (stmt.status == PostgresSQLStatement.Status.parsing) {
                         stmt.status = PostgresSQLStatement.Status.failed;
                         stmt.error_response = { protocol: err_resp };
-                        is_error_owned = false;
+                        _err_resp_guard.active = false;
                         if (this.statements.remove(bun.hash(stmt.signature.name))) {
                             stmt.deref();
                         }
@@ -1920,7 +2029,7 @@ export struct SocketHandlerSSL {
                 const request_opt = this.current();
                 if (request_opt == null) return error.ExpectedRequest;
                 let request = request_opt.?;
-                defer this.updateRef();
+                const _update_ref_guard = UpdateRefGuard{ conn: this };
                 request.onResult("CLOSECOMPLETE", this.globalObject, this.js_value, false);
             },
             .CopyInResponse => {
@@ -1938,7 +2047,7 @@ export struct SocketHandlerSSL {
                 const request_opt = this.current();
                 if (request_opt == null) return error.ExpectedRequest;
                 let request = request_opt.?;
-                defer this.updateRef();
+                const _update_ref_guard = UpdateRefGuard{ conn: this };
                 request.onResult("", this.globalObject, this.js_value, false);
             },
             .CopyOutResponse => {

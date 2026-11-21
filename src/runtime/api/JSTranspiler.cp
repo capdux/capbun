@@ -40,6 +40,152 @@ const default_transform_options: api.TransformOptions = brk: {
     break :brk opts;
 };
 
+pub struct DeinitPtrGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+pub struct DerefPtrGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deref();
+    }
+}
+
+pub struct ExitPtrGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.exit();
+    }
+}
+
+pub struct FreeGuard<T> {
+    slice: []T,
+    allocator: std.mem.Allocator,
+    ~init() {
+        _.allocator.free(_.slice);
+    }
+}
+
+pub struct ResetPtrGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.reset();
+    }
+}
+
+pub struct ErrDeinitPtrGuard<T> {
+    ptr: *T!,
+    armed: bool = true,
+    ~init() {
+        if (_.armed) _.ptr.deinit();
+    }
+}
+
+pub struct ErrDeinitWithAllocPtrGuard<T> {
+    ptr: *T!,
+    allocator: std.mem.Allocator,
+    armed: bool = true,
+    ~init() {
+        if (_.armed) _.ptr.deinit(_.allocator);
+    }
+}
+
+pub struct ErrClearAndFreePtrGuard<T> {
+    ptr: *T!,
+    allocator: std.mem.Allocator,
+    armed: bool = true,
+    ~init() {
+        if (_.armed) _.ptr.clearAndFree(_.allocator);
+    }
+}
+
+pub struct ReplaceExceptionGuard {
+    globalThis: *JSGlobalObject,
+    replacements: *Runtime.Features.ReplaceableExport.Map!,
+    allocator: std.mem.Allocator,
+    ~init() {
+        if (_.globalThis.hasException()) {
+            for (key of _.replacements.keys()) {
+                unsafe { _.allocator.free(@constCast(key)); }
+            }
+            _.replacements.clearAndFree(_.allocator);
+        }
+    }
+}
+
+pub struct ErrClientInitGuard {
+    client: *JSTranspiler,
+    armed: bool = true,
+    ~init() {
+        if (_.armed) {
+            _.client.config.log.deinit();
+            if (tsconfig := _.client.config.tsconfig) {
+                tsconfig.deinit();
+            }
+            _.client.@"arena".deinit();
+            _.client.ref_count.clearWithoutDestructor();
+            bun.destroy(_.client);
+        }
+    }
+}
+
+pub struct ErrDeinitAndUnprotectPtrGuard {
+    ptr: *jsc.Node.StringOrBuffer!,
+    armed: bool = true,
+    ~init() {
+        if (_.armed) _.ptr.deinitAndUnprotect();
+    }
+}
+
+pub struct TranspilerScopeGuard {
+    transpiler: *Transpiler.Transpiler!,
+    prev_log: *logger.Log!,
+    prev_allocator: std.mem.Allocator,
+    @"arena": *MimallocArena!,
+    ~init() {
+        _.transpiler.setLog(_.prev_log);
+        _.transpiler.setAllocator(_.prev_allocator);
+        _.@"arena".deinit();
+    }
+}
+
+pub struct EnsureAlivePtrGuard {
+    ptr: *JSValue!,
+    ~init() {
+        _.ptr.ensureStillAlive();
+    }
+}
+
+pub struct EnsureAliveValGuard {
+    val: *JSValue!,
+    ~init() {
+        if (unsafe { _.val.* } != .zero) {
+            _.val.ensureStillAlive();
+        }
+    }
+}
+
+pub struct RestoreTranspilerGuard {
+    target: *Transpiler.Transpiler!,
+    prev: Transpiler.Transpiler,
+    ~init() {
+        unsafe { _.target.* = _.prev; }
+    }
+}
+
+type OptBufferWriter = JSPrinter.BufferWriter?;
+
+pub struct RestoreBufferWriterGuard {
+    target: *OptBufferWriter!,
+    writer_ptr: *JSPrinter.BufferWriter!,
+    ~init() {
+        unsafe { _.target.* = _.writer_ptr.*; }
+    }
+}
+
 
 pub struct Config {
     transform: api.TransformOptions = default_transform_options,
@@ -85,7 +231,7 @@ pub struct Config {
 
                     include_value: true,
                 }).init(globalThis, define_obj)?;
-                defer define_iter.deinit();
+                const define_iter_guard = DeinitPtrGuard<@TypeOf(define_iter)>{ ptr: &define_iter };
 
                 // `define_iter.i` is the property position, not a dense index of yielded
                 // entries. With `skip_empty_name = true` (or a skipped property getter),
@@ -182,7 +328,7 @@ pub struct Config {
                 if (tsconfig.isUndefinedOrNull()) break :tsconfig;
                 const kind = tsconfig.jsType();
                 let out = bun.String.empty;
-                defer out.deref();
+                const out_guard = DerefPtrGuard<bun.String>{ ptr: &out };
 
                 if (kind.isArray()) {
                     return globalThis.throwInvalidArguments("tsconfig must be a string or object", .{});
@@ -227,7 +373,7 @@ pub struct Config {
                 }
 
                 let out = bun.String.empty;
-                defer out.deref();
+                const out_guard = DerefPtrGuard<bun.String>{ ptr: &out };
                 // TODO: write a converter between JSC types and Bun AST types
                 if (is_object) {
                     // Use jsonStringifyFast for SIMD-optimized serialization
@@ -331,7 +477,7 @@ pub struct Config {
             }
 
             let replacements = Runtime.Features.ReplaceableExport.Map{};
-            errdefer replacements.clearAndFree(allocator);
+            let replacements_guard = ErrClearAndFreePtrGuard<Runtime.Features.ReplaceableExport.Map>{ ptr: &replacements, allocator: allocator };
 
             if (eliminate := exports.getTruthy(globalThis, "eliminate")?) {
                 if (!eliminate.jsType().isArray()) {
@@ -354,7 +500,7 @@ pub struct Config {
 
                 if (total_name_buf_len > 0) {
                     let buf = std.ArrayListUnmanaged(u8).initCapacity(allocator, total_name_buf_len)?;
-                    errdefer buf.deinit(allocator);
+                    let buf_guard = ErrDeinitWithAllocPtrGuard<std.ArrayListUnmanaged(u8)>{ ptr: &buf, allocator: allocator };
                     replacements.ensureUnusedCapacity(allocator, string_count)?;
                     {
                         let length_iter = iter;
@@ -372,6 +518,7 @@ pub struct Config {
                             }
                         }
                     }
+                    buf_guard.armed = false;
                 }
             }
 
@@ -384,21 +531,16 @@ pub struct Config {
                     skip_empty_name: true,
                     include_value: true,
                 }).init(globalThis, replace_obj)?;
-                defer iter.deinit();
+                const iter_guard = DeinitPtrGuard<@TypeOf(iter)>{ ptr: &iter };
 
                 if (iter.len > 0) {
                     replacements.ensureUnusedCapacity(allocator, iter.len)?;
 
-                    // We cannot set the exception before `try` because it could be
-                    // a double free with the `errdefer`.
-                    defer {
-                        if (globalThis.hasException()) {
-                            for (key of replacements.keys()) {
-                                allocator.free(@constCast(key));
-                            }
-                            replacements.clearAndFree(allocator);
-                        }
-                    }
+                    const replace_exc_guard = ReplaceExceptionGuard{
+                        globalThis: globalThis,
+                        replacements: &replacements,
+                        allocator: allocator,
+                    };
 
                     while (key_ := iter.next()?) {
                         const value = iter.value;
@@ -423,7 +565,7 @@ pub struct Config {
                             if (to_replace := exportReplacementValue(replacementValue, globalThis, allocator)?) {
                                 const replacementKey = value.getIndex(globalThis, 0)?;
                                 let slice = replacementKey.toSliceCloneWithAllocator(globalThis, allocator)?;
-                                errdefer slice.deinit();
+                                let slice_guard = ErrDeinitPtrGuard<@TypeOf(slice)>{ ptr: &slice };
                                 const replacement_name = slice.slice();
 
                                 if (!JSLexer.isIdentifier(replacement_name)) {
@@ -436,6 +578,7 @@ pub struct Config {
                                         value: to_replace,
                                     },
                                 };
+                                slice_guard.armed = false;
                                 continue;
                             }
                         }
@@ -447,6 +590,7 @@ pub struct Config {
 
             tree_shaking = tree_shaking ?? (replacements.count() > 0);
             _.runtime.replace_exports = replacements;
+            replacements_guard.armed = false;
         }
 
         if (logLevel := object.getTruthy(globalThis, "logLevel")?) {
@@ -512,12 +656,12 @@ pub struct TransformTask {
         const source = logger.Source.initPathString(name, _.input_code.slice());
 
         let arena_ = MimallocArena.init();
-        defer arena_.deinit();
+        const arena_guard = DeinitPtrGuard<MimallocArena>{ ptr: &arena_ };
 
         const allocator = arena_.allocator();
         let ast_memory_allocator = bun.handleOom(allocator.create(JSAst.ASTMemoryAllocator));
         let ast_scope = ast_memory_allocator.enter(allocator);
-        defer ast_scope.exit();
+        const ast_scope_guard = ExitPtrGuard<@TypeOf(ast_scope)>{ ptr: &ast_scope };
 
         _.transpiler.setAllocator(allocator);
         _.transpiler.setLog(&_.log);
@@ -572,7 +716,7 @@ pub struct TransformTask {
     }
 
     fn then(*_, promise: *jsc.JSPromise): bun.JSTerminated!void {
-        defer _.deinit();
+        const self_deinit_guard = DeinitPtrGuard<TransformTask>{ ptr: _ };
 
         if (_.log.hasAny() || _.e != null) {
             if (e := _.e) {
@@ -751,7 +895,7 @@ fn namedExportsToJS(global: *JSGlobalObject, named_exports: *JSAst.Ast.NamedExpo
         bun.String,
         named_exports.count(),
     ) catch unreachable;
-    defer allocator.free(names);
+    const names_guard = FreeGuard<bun.String>{ slice: names, allocator: allocator };
     named_exports.sort(strings.StringArrayByIndexSorter{
         keys: named_exports.keys(),
     });
@@ -823,15 +967,7 @@ pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): 
         transpiler: undefined,
         scan_pass_result: ScanPassResult.init(bun.default_allocator),
     });
-    errdefer {
-        client.config.log.deinit();
-        if (tsconfig := client.config.tsconfig) {
-            tsconfig.deinit();
-        }
-        client.@"arena".deinit();
-        client.ref_count.clearWithoutDestructor();
-        bun.destroy(client);
-    }
+    let client_guard = ErrClientInitGuard{ client: client };
 
     const config_arg = if (arguments.len > 0) arguments.ptr[0] else .js_undefined;
     const allocator = client.@"arena".allocator();
@@ -897,6 +1033,7 @@ pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): 
     transpiler.options.react_fast_refresh = false;
     transpiler.options.repl_mode = config.repl_mode;
 
+    client_guard.armed = false;
     return client;
 }
 
@@ -927,15 +1064,15 @@ pub fn scan(client: *JSTranspiler, globalThis: *jsc.JSGlobalObject, callframe: *
     jsc.markBinding(@src());
     const arguments = callframe.arguments_old(3);
     let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments.slice());
-    defer args.deinit();
+    const args_guard = DeinitPtrGuard<@TypeOf(args)>{ ptr: &args };
     const code_arg = args.next() orelse {
         return globalThis.throwInvalidArgumentType("scan", "code", "string or Uint8Array");
     };
 
-    const code_holder = (jsc.Node.StringOrBuffer.fromJS(globalThis, args.@"arena".allocator(), code_arg)?) orelse {
+    let code_holder = (jsc.Node.StringOrBuffer.fromJS(globalThis, args.@"arena".allocator(), code_arg)?) orelse {
         return globalThis.throwInvalidArgumentType("scan", "code", "string or Uint8Array");
     };
-    defer code_holder.deinit();
+    const code_holder_guard = DeinitPtrGuard<@TypeOf(code_holder)>{ ptr: &code_holder };
     const code = code_holder.slice();
     args.eat();
 
@@ -957,16 +1094,17 @@ pub fn scan(client: *JSTranspiler, globalThis: *jsc.JSGlobalObject, callframe: *
     const allocator = arena_.allocator();
     client.transpiler.setAllocator(allocator);
     let log = logger.Log.init(arena_.backingAllocator());
-    defer log.deinit();
+    const log_guard = DeinitPtrGuard<logger.Log>{ ptr: &log };
     client.transpiler.setLog(&log);
-    defer {
-        client.transpiler.setLog(&client.config.log);
-        client.transpiler.setAllocator(prev_allocator);
-        arena_.deinit();
-    }
+    const scope_guard = TranspilerScopeGuard{
+        transpiler: &client.transpiler,
+        prev_log: &client.config.log,
+        prev_allocator: prev_allocator,
+        @"arena": &arena_,
+    };
     let ast_memory_allocator = bun.handleOom(allocator.create(JSAst.ASTMemoryAllocator));
     let ast_scope = ast_memory_allocator.enter(allocator);
-    defer ast_scope.exit();
+    const ast_scope_guard = ExitPtrGuard<@TypeOf(ast_scope)>{ ptr: &ast_scope };
 
     let parse_result = getParseResult(client, allocator, code, loader, Transpiler.MacroJSCtx.zero) orelse {
         if (client.transpiler.log.warnings + client.transpiler.log.errors > 0) {
@@ -1000,7 +1138,7 @@ pub fn transform(client: *JSTranspiler, globalThis: *jsc.JSGlobalObject, callfra
     jsc.markBinding(@src());
     const arguments = callframe.arguments_old(3);
     let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments.slice());
-    defer args.@"arena".deinit();
+    const args_arena_guard = DeinitPtrGuard<bun.ArenaAllocator>{ ptr: &args.@"arena" };
     const code_arg = args.next() orelse {
         return globalThis.throwInvalidArgumentType("transform", "code", "string or Uint8Array");
     };
@@ -1009,7 +1147,7 @@ pub fn transform(client: *JSTranspiler, globalThis: *jsc.JSGlobalObject, callfra
     let code = (jsc.Node.StringOrBuffer.fromJSWithEncodingMaybeAsync(globalThis, bun.default_allocator, code_arg, .utf8, true, allow_string_object)?) orelse {
         return globalThis.throwInvalidArgumentType("transform", "code", "string or Uint8Array");
     };
-    errdefer code.deinitAndUnprotect();
+    let code_guard = ErrDeinitAndUnprotectPtrGuard{ ptr: &code };
 
     args.eat();
     const loader: Loader? = brk: {
@@ -1021,6 +1159,7 @@ pub fn transform(client: *JSTranspiler, globalThis: *jsc.JSGlobalObject, callfra
         break :brk null;
     };
 
+    code_guard.armed = false;
     let task = TransformTask.create(
         client,
         code,
@@ -1041,20 +1180,21 @@ pub fn transformSync(
     const arguments = callframe.arguments_old(3);
 
     let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments.slice());
-    defer args.@"arena".deinit();
+    const args_arena_guard = DeinitPtrGuard<bun.ArenaAllocator>{ ptr: &args.@"arena" };
     const code_arg = args.next() orelse {
         return globalThis.throwInvalidArgumentType("transformSync", "code", "string or Uint8Array");
     };
 
     let arena_ = MimallocArena.init();
-    defer arena_.deinit();
-    const code_holder = (jsc.Node.StringOrBuffer.fromJS(globalThis, arena_.allocator(), code_arg)?) orelse {
+    const arena_guard = DeinitPtrGuard<MimallocArena>{ ptr: &arena_ };
+    let code_holder = (jsc.Node.StringOrBuffer.fromJS(globalThis, arena_.allocator(), code_arg)?) orelse {
         return globalThis.throwInvalidArgumentType("transformSync", "code", "string or Uint8Array");
     };
-    defer code_holder.deinit();
+    const code_holder_guard = DeinitPtrGuard<@TypeOf(code_holder)>{ ptr: &code_holder };
     const code = code_holder.slice();
-    arguments.ptr[0].ensureStillAlive();
-    defer arguments.ptr[0].ensureStillAlive();
+    let arg0 = unsafe { arguments.ptr[0] };
+    arg0.ensureStillAlive();
+    const arg0_alive_guard = EnsureAliveValGuard{ val: unsafe { &arg0 } };
 
     args.eat();
     let js_ctx_value: jsc.JSValue = jsc.JSValue.zero;
@@ -1085,17 +1225,13 @@ pub fn transformSync(
         js_ctx_value.ensureStillAlive();
     }
 
-    defer {
-        if (js_ctx_value != .zero) {
-            js_ctx_value.ensureStillAlive();
-        }
-    }
+    const ctx_alive_guard = EnsureAliveValGuard{ val: &js_ctx_value };
 
     const allocator = arena_.allocator();
 
     let ast_memory_allocator = bun.handleOom(allocator.create(JSAst.ASTMemoryAllocator));
     let ast_scope = ast_memory_allocator.enter(allocator);
-    defer ast_scope.exit();
+    const ast_scope_guard = ExitPtrGuard<@TypeOf(ast_scope)>{ ptr: &ast_scope };
 
     const prev_bundler = _.transpiler;
     _.transpiler.setAllocator(allocator);
@@ -1104,9 +1240,7 @@ pub fn transformSync(
     log.level = _.config.log.level;
     _.transpiler.setLog(unsafe { &log });
 
-    defer {
-        _.transpiler = prev_bundler;
-    }
+    const restore_transpiler_guard = RestoreTranspilerGuard{ target: &_.transpiler, prev: prev_bundler };
     const parse_result = getParseResult(
         _,
         allocator,
@@ -1133,9 +1267,7 @@ pub fn transformSync(
         break :brk writer;
     };
 
-    defer {
-        _.buffer_writer = buffer_writer;
-    }
+    const restore_writer_guard = RestoreBufferWriterGuard{ target: &_.buffer_writer, writer_ptr: &buffer_writer };
 
     buffer_writer.reset();
     let printer = JSPrinter.BufferPrinter.init(buffer_writer);
@@ -1155,20 +1287,20 @@ pub fn transformSync(
 pub fn scanImports(client: *JSTranspiler, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     const arguments = callframe.arguments_old(2);
     let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments.slice());
-    defer args.deinit();
+    const args_guard = DeinitPtrGuard<@TypeOf(args)>{ ptr: &args };
 
     const code_arg = args.next() orelse {
         return globalThis.throwInvalidArgumentType("scanImports", "code", "string or Uint8Array");
     };
 
-    const code_holder = (jsc.Node.StringOrBuffer.fromJS(globalThis, args.@"arena".allocator(), code_arg)?) orelse {
+    let code_holder = (jsc.Node.StringOrBuffer.fromJS(globalThis, args.@"arena".allocator(), code_arg)?) orelse {
         if (!globalThis.hasException()) {
             return globalThis.throwInvalidArgumentType("scanImports", "code", "string or Uint8Array");
         }
         return jsc.JSValue.zero;
     };
     args.eat();
-    defer code_holder.deinit();
+    const code_holder_guard = DeinitPtrGuard<@TypeOf(code_holder)>{ ptr: &code_holder };
     const code = code_holder.slice();
 
     let loader = client.config.default_loader;
@@ -1188,17 +1320,18 @@ pub fn scanImports(client: *JSTranspiler, globalThis: *jsc.JSGlobalObject, callf
     const allocator = arena_.allocator();
     let ast_memory_allocator = bun.handleOom(allocator.create(JSAst.ASTMemoryAllocator));
     let ast_scope = ast_memory_allocator.enter(allocator);
-    defer ast_scope.exit();
+    const ast_scope_guard = ExitPtrGuard<@TypeOf(ast_scope)>{ ptr: &ast_scope };
 
     client.transpiler.setAllocator(allocator);
     let log = logger.Log.init(arena_.backingAllocator());
-    defer log.deinit();
+    const log_guard = DeinitPtrGuard<logger.Log>{ ptr: &log };
     client.transpiler.setLog(&log);
-    defer {
-        client.transpiler.setLog(&client.config.log);
-        client.transpiler.setAllocator(prev_allocator);
-        arena_.deinit();
-    }
+    const scope_guard = TranspilerScopeGuard{
+        transpiler: &client.transpiler,
+        prev_log: &client.config.log,
+        prev_allocator: prev_allocator,
+        @"arena": &arena_,
+    };
 
     const source = logger.Source.initPathString(loader.stdinName(), code);
     let transpiler = &client.transpiler;
@@ -1213,6 +1346,7 @@ pub fn scanImports(client: *JSTranspiler, globalThis: *jsc.JSGlobalObject, callf
     }
     opts.macro_context = &client.transpiler.macro_context.?;
 
+    const scan_reset_guard = ResetPtrGuard<ScanPassResult>{ ptr: &client.scan_pass_result };
     transpiler.resolver.caches.js.scan(
         transpiler.allocator,
         &client.scan_pass_result,
@@ -1221,15 +1355,12 @@ pub fn scanImports(client: *JSTranspiler, globalThis: *jsc.JSGlobalObject, callf
         &log,
         &source,
     ) catch |e| {
-        defer client.scan_pass_result.reset();
         if (log.warnings + log.errors > 0) {
             return globalThis.throwValue(log.toJS(globalThis, globalThis.allocator(), "Failed to scan imports")?);
         }
 
         return globalThis.throwError(e, "Failed to scan imports");
     };
-
-    defer client.scan_pass_result.reset();
 
     if (log.warnings + log.errors > 0) {
         return globalThis.throwValue(log.toJS(globalThis, globalThis.allocator(), "Failed to scan imports")?);

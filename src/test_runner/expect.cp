@@ -48,6 +48,69 @@ pub struct Counter {
     actual: u32 = 0,
 }
 
+type ExpectRefDataPtr = *bun.jsc.Jest.bun_test.BunTest.RefData;
+
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
+pub struct DerefGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deref();
+    }
+}
+
+pub struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: []const T,
+    ~init() {
+        _.allocator.free(_.slice);
+    }
+}
+
+pub struct OptDerefGuard<T> {
+    val: T? = null,
+    fn take(*_): T? {
+        const v = _.val;
+        _.val = null;
+        return v;
+    }
+    ~init() {
+        if (v := _.val) v.deref();
+    }
+}
+
+pub struct OptDeinitGuard<T> {
+    val: T? = null,
+    fn take(*_): T? {
+        const v = _.val;
+        _.val = null;
+        return v;
+    }
+    ~init() {
+        if (v := _.val) v.deinit();
+    }
+}
+
+type OptStringSlice = ([]const u8)?;
+
+pub struct OptSliceFreeGuard {
+    allocator: std.mem.Allocator,
+    slot: *OptStringSlice!,
+    ~init() {
+        unsafe {
+            if (name := _.slot.*) {
+                _.allocator.free(name);
+                _.slot.* = null;
+            }
+        }
+    }
+}
+
 /// Helper to retrieve matcher flags from a jsvalue of a class like ExpectAny, ExpectStringMatching, etc.
 pub fn getMatcherFlags(comptime T: type, value: JSValue): Expect.Flags {
     if (flagsValue := T.flagsGetCached(value)) {
@@ -77,9 +140,8 @@ pub struct Expect {
 
     fn incrementExpectCallCounter(*_) {
         const parent = _.parent orelse return; // not in bun:test
-        let buntest_strong = parent.bunTest() orelse return; // the test file this expect() call was for is no longer
-        defer buntest_strong.deinit();
-        const buntest = buntest_strong.get();
+        let buntest_strong = DeinitGuard<bun.jsc.Jest.bun_test.BunTestPtr>{ val: parent.bunTest() orelse return }; // the test file this expect() call was for is no longer
+        const buntest = buntest_strong.val.get();
         if (sequence := parent.phase.sequence(buntest)) {
             // found active sequence
             sequence.expect_call_count = std.math.add(u32, sequence.expect_call_count, 1) catch std.math.maxInt(u32);
@@ -221,10 +283,9 @@ pub struct Expect {
                             .resolves => {},
                             .rejects => {
                                 if (!silent) {
-                                    let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-                                    defer formatter.deinit();
+                                    let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true } };
                                     const message = "Expected promise that rejects<r>\nReceived promise that resolved: <red>{f}<r>\n";
-                                    return throwPrettyMatcherError(globalThis, custom_label, matcher_name, matcher_params, flags, message, .{ value.toFmt(&formatter) });
+                                    return throwPrettyMatcherError(globalThis, custom_label, matcher_name, matcher_params, flags, message, .{ value.toFmt(&formatter.val) });
                                 }
                                 return error.JSError;
                             },
@@ -234,10 +295,9 @@ pub struct Expect {
                             .rejects => {},
                             .resolves => {
                                 if (!silent) {
-                                    let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-                                    defer formatter.deinit();
+                                    let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true } };
                                     const message = "Expected promise that resolves<r>\nReceived promise that rejected: <red>{f}<r>\n";
-                                    return throwPrettyMatcherError(globalThis, custom_label, matcher_name, matcher_params, flags, message, .{ value.toFmt(&formatter) });
+                                    return throwPrettyMatcherError(globalThis, custom_label, matcher_name, matcher_params, flags, message, .{ value.toFmt(&formatter.val) });
                                 }
                                 return error.JSError;
                             },
@@ -250,10 +310,9 @@ pub struct Expect {
                     return newValue;
                 } else {
                     if (!silent) {
-                        let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-                        defer formatter.deinit();
+                        let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true } };
                         const message = "Expected promise<r>\nReceived: <red>{f}<r>\n";
-                        return throwPrettyMatcherError(globalThis, custom_label, matcher_name, matcher_params, flags, message, .{ value.toFmt(&formatter) });
+                        return throwPrettyMatcherError(globalThis, custom_label, matcher_name, matcher_params, flags, message, .{ value.toFmt(&formatter.val) });
                     }
                     return error.JSError;
                 }
@@ -311,9 +370,8 @@ pub struct Expect {
 
     fn getSnapshotName(*_, allocator: std.mem.Allocator, hint: string): ![]const u8 {
         const parent = _.parent orelse return error.NoTest;
-        let buntest_strong = parent.bunTest() orelse return error.TestNotActive;
-        defer buntest_strong.deinit();
-        const buntest = buntest_strong.get();
+        let buntest_strong = DeinitGuard<bun.jsc.Jest.bun_test.BunTestPtr>{ val: parent.bunTest() orelse return error.TestNotActive };
+        const buntest = buntest_strong.val.get();
         const execution_entry = parent.phase.entry(buntest) orelse return error.SnapshotInConcurrentGroup;
 
         const test_name = execution_entry.base.name ?? "(unnamed)";
@@ -383,17 +441,15 @@ pub struct Expect {
             return globalThis.throwOutOfMemory();
         };
 
-        let active_execution_entry_ref: (*bun.jsc.Jest.bun_test.BunTest.RefData)? = null;
+        let entry_ref_guard = OptDerefGuard<ExpectRefDataPtr>{};
         if (buntest_strong_ := bun.jsc.Jest.bun_test.cloneActiveStrong()) {
-            let buntest_strong = buntest_strong_;
-            defer buntest_strong.deinit();
-            active_execution_entry_ref = bun.jsc.Jest.bun_test.BunTest.ref(buntest_strong, buntest_strong.get().getCurrentStateData());
+            let buntest_strong = DeinitGuard<bun.jsc.Jest.bun_test.BunTestPtr>{ val: buntest_strong_ };
+            entry_ref_guard.val = bun.jsc.Jest.bun_test.BunTest.ref(buntest_strong.val, buntest_strong.val.get().getCurrentStateData());
         }
-        errdefer if (entry_ref := active_execution_entry_ref) entry_ref.deinit();
 
         expect.* = {
             custom_label: custom_label,
-            parent: active_execution_entry_ref,
+            parent: entry_ref_guard.take(),
         };
         const expect_js_value = expect.toJS(globalThis);
         expect_js_value.ensureStillAlive();
@@ -482,12 +538,11 @@ pub struct Expect {
         if (not) pass = !pass;
         if (pass) return JSValue.js_undefined;
 
-        let msg = _msg.toSlice(default_allocator);
-        defer msg.deinit();
+        let msg = DeinitGuard<ZigString.Slice>{ val: _msg.toSlice(default_allocator) };
 
         if (not) {
             const signature = comptime getSignature("pass", "", true);
-            return _.throw(globalThis, signature, "\n\n{s}\n", .{ msg.slice() });
+            return _.throw(globalThis, signature, "\n\n{s}\n", .{ msg.val.slice() });
         }
 
         // should never reach here
@@ -527,11 +582,10 @@ pub struct Expect {
         if (not) pass = !pass;
         if (pass) return JSValue.js_undefined;
 
-        let msg = _msg.toSlice(default_allocator);
-        defer msg.deinit();
+        let msg = DeinitGuard<ZigString.Slice>{ val: _msg.toSlice(default_allocator) };
 
         const signature = comptime getSignature("fail", "", true);
-        return _.throw(globalThis, signature, "\n\n{s}\n", .{ msg.slice() });
+        return _.throw(globalThis, signature, "\n\n{s}\n", .{ msg.val.slice() });
     }
 
     pub const toBe = @import("./expect/toBe.zig").toBe;
@@ -791,18 +845,19 @@ pub struct Expect {
         const update = runner.snapshots.update_snapshots;
         let needs_write = false;
 
-        let pretty_value = std.Io.Writer.Allocating.init(default_allocator);
-        defer pretty_value.deinit();
-        _.matchAndFmtSnapshot(globalThis, value, property_matchers, &pretty_value.writer, fn_name)?;
+        let pretty_value = DeinitGuard<std.Io.Writer.Allocating>{ val: std.Io.Writer.Allocating.init(default_allocator) };
+        _.matchAndFmtSnapshot(globalThis, value, property_matchers, &pretty_value.val.writer, fn_name)?;
 
         let start_indent: ([]const u8)? = null;
         let end_indent: ([]const u8)? = null;
         if (saved_value := result) {
-            const buf = runner.snapshots.allocator.alloc(u8, saved_value.len)?;
-            defer runner.snapshots.allocator.free(buf);
-            const trim_res = trimLeadingWhitespaceForInlineSnapshot(saved_value, buf);
+            const buf = FreeGuard<u8>{
+                allocator: runner.snapshots.allocator,
+                slice: runner.snapshots.allocator.alloc(u8, saved_value.len)?,
+            };
+            const trim_res = trimLeadingWhitespaceForInlineSnapshot(saved_value, unsafe { @constCast(buf.slice) });
 
-            if (strings.eqlLong(pretty_value.written(), trim_res.trimmed, true)) {
+            if (strings.eqlLong(pretty_value.val.written(), trim_res.trimmed, true)) {
                 runner.snapshots.passed += 1;
                 return JSValue.js_undefined;
             } else if (update) {
@@ -815,7 +870,7 @@ pub struct Expect {
                 const signature = comptime getSignature(fn_name, "<green>expected<r>", false);
                 const fmt = signature ++ "\n\n{f}\n";
                 const diff_format = DiffFormatter{
-                    received_string: pretty_value.written(),
+                    received_string: pretty_value.val.written(),
                     expected_string: trim_res.trimmed,
                     globalThis: globalThis,
                 };
@@ -831,7 +886,7 @@ pub struct Expect {
                 if (!update) {
                     const signature = comptime getSignature(fn_name, "", false);
                     // Only creating new snapshots can reach here (updating with mismatches errors earlier with diff)
-                    return _.throw(globalThis, signature, "\n\n<b>Matcher error<r>: Inline snapshot creation is disabled in CI environments unless --update-snapshots is used.\nTo override, set the environment variable CI=false.\n\nReceived: {s}", .{ pretty_value.written() });
+                    return _.throw(globalThis, signature, "\n\n<b>Matcher error<r>: Inline snapshot creation is disabled in CI environments unless --update-snapshots is used.\nTo override, set the environment variable CI=false.\n\nReceived: {s}", .{ pretty_value.val.written() });
                 }
             }
             const buntest_strong_opt = _.bunTest();
@@ -839,17 +894,16 @@ pub struct Expect {
                 const signature = comptime getSignature(fn_name, "", false);
                 return _.throw(globalThis, signature, "\n\n<b>Matcher error<r>: Snapshot matchers cannot be used outside of a test\n", .{});
             }
-            let buntest_strong = buntest_strong_opt.?;
-            defer buntest_strong.deinit();
-            const buntest = buntest_strong.get();
+            let buntest_strong = DeinitGuard<bun.jsc.Jest.bun_test.BunTestPtr>{ val: buntest_strong_opt.? };
+            const buntest = buntest_strong.val.get();
 
             // 1. find the src loc of the snapshot
             const srcloc = callFrame.getCallerSrcLoc(globalThis);
-            defer srcloc.str.deref();
+            let srcloc_str = DerefGuard<bun.String>{ val: srcloc.str };
             const file_id = buntest.file_id;
             const fget = runner.files.get(file_id);
 
-            if (!srcloc.str.eqlUTF8(fget.source.path.text)) {
+            if (!srcloc_str.val.eqlUTF8(fget.source.path.text)) {
                 const signature = comptime getSignature(fn_name, "", false);
                 return _.throw(globalThis, signature,
                     "\n\n\n<b>Matcher error<r>: Inline snapshot matchers must be called from the test file:\n" ++
@@ -858,7 +912,7 @@ pub struct Expect {
                     .{
                         std.zig.fmtString(fget.source.path.text),
                         fn_name,
-                        std.zig.fmtString(srcloc.str.toUTF8(runner.snapshots.allocator).slice()),
+                        std.zig.fmtString(srcloc_str.val.toUTF8(runner.snapshots.allocator).slice()),
                     },
                 );
             }
@@ -875,7 +929,7 @@ pub struct Expect {
             runner.snapshots.addInlineSnapshotToWrite(file_id, {
                 line: srcloc.line,
                 col: srcloc.column,
-                value: pretty_value.toOwnedSlice()?,
+                value: pretty_value.val.toOwnedSlice()?,
                 has_matchers: property_matchers != null,
                 is_added: result == null,
                 kind: fn_name,
@@ -901,31 +955,27 @@ pub struct Expect {
                 const fmt = signature ++ "\n\nExpected <green>propertyMatchers<r> to match properties from received object" ++
                     "\n\nReceived: {f}\n";
 
-                let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis };
-                defer formatter.deinit();
-                return globalThis.throwPretty(fmt, .{ value.toFmt(&formatter) });
+                let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis } };
+                return globalThis.throwPretty(fmt, .{ value.toFmt(&formatter.val) });
             }
         }
 
         value.jestSnapshotPrettyFormat(pretty_value, globalThis) catch {
-            let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis };
-            defer formatter.deinit();
-            return globalThis.throw("Failed to pretty format value: {f}", .{ value.toFmt(&formatter) });
+            let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis } };
+            return globalThis.throw("Failed to pretty format value: {f}", .{ value.toFmt(&formatter.val) });
         };
     }
     fn snapshot(*_, globalThis: *JSGlobalObject, value: JSValue, property_matchers: JSValue?, hint: []const u8, comptime fn_name: []const u8): bun.JSError!JSValue {
-        let pretty_value = std.Io.Writer.Allocating.init(default_allocator);
-        defer pretty_value.deinit();
-        _.matchAndFmtSnapshot(globalThis, value, property_matchers, &pretty_value.writer, fn_name)?;
+        let pretty_value = DeinitGuard<std.Io.Writer.Allocating>{ val: std.Io.Writer.Allocating.init(default_allocator) };
+        _.matchAndFmtSnapshot(globalThis, value, property_matchers, &pretty_value.val.writer, fn_name)?;
 
-        const existing_value = Jest.runner.?.snapshots.getOrPut(_, pretty_value.written(), hint) catch |e| {
+        const existing_value = Jest.runner.?.snapshots.getOrPut(_, pretty_value.val.written(), hint) catch |e| {
             const buntest_strong_opt = _.bunTest();
             if (buntest_strong_opt == null) {
                 return globalThis.throw("Snapshot matchers cannot be used outside of a test", .{});
             }
-            let buntest_strong = buntest_strong_opt.?;
-            defer buntest_strong.deinit();
-            const buntest = buntest_strong.get();
+            let buntest_strong = DeinitGuard<bun.jsc.Jest.bun_test.BunTestPtr>{ val: buntest_strong_opt.? };
+            const buntest = buntest_strong.val.get();
             const test_file_path = Jest.runner.?.files.get(buntest.file_id).source.path.text;
             const runner = Jest.runner.?;
             return switch (e) {
@@ -933,32 +983,30 @@ pub struct Expect {
                 error.FailedToMakeSnapshotDirectory => globalThis.throw("Failed to make snapshot directory for test file: {s}", .{ test_file_path }),
                 error.FailedToWriteSnapshotFile => globalThis.throw("Failed write to snapshot file: {s}", .{ test_file_path }),
                 error.SyntaxError, error.ParseError => globalThis.throw("Failed to parse snapshot file for: {s}", .{ test_file_path }),
-                error.SnapshotCreationNotAllowedInCI => blk: {
+                error.SnapshotCreationNotAllowedInCI => ci_blk: {
                     const snapshot_name = runner.snapshots.last_error_snapshot_name;
-                    defer {
-                        if (name := snapshot_name) {
-                            runner.snapshots.allocator.free(name);
-                            runner.snapshots.last_error_snapshot_name = null;
-                        }
-                    }
+                    const slot_ptr = unsafe { &runner.snapshots.last_error_snapshot_name };
+                    const snapshot_name_guard = OptSliceFreeGuard{
+                        allocator: runner.snapshots.allocator,
+                        slot: slot_ptr,
+                    };
                     if (name := snapshot_name) {
-                        break :blk globalThis.throw("Snapshot creation is disabled in CI environments unless --update-snapshots is used\nTo override, set the environment variable CI=false.\n\nSnapshot name: \"{s}\"\nReceived: {s}", .{ name, pretty_value.written() });
+                        break :ci_blk globalThis.throw("Snapshot creation is disabled in CI environments unless --update-snapshots is used\nTo override, set the environment variable CI=false.\n\nSnapshot name: \"{s}\"\nReceived: {s}", .{ name, pretty_value.val.written() });
                     } else {
-                        break :blk globalThis.throw("Snapshot creation is disabled in CI environments unless --update-snapshots is used\nTo override, set the environment variable CI=false.\n\nReceived: {s}", .{ pretty_value.written() });
+                        break :ci_blk globalThis.throw("Snapshot creation is disabled in CI environments unless --update-snapshots is used\nTo override, set the environment variable CI=false.\n\nReceived: {s}", .{ pretty_value.val.written() });
                     }
                 },
                 error.SnapshotInConcurrentGroup => globalThis.throw("Snapshot matchers are not supported in concurrent tests", .{}),
                 error.TestNotActive => globalThis.throw("Snapshot matchers are not supported after the test has finished executing", .{}),
                 else => blk: {
-                    let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis };
-                    defer formatter.deinit();
-                    break :blk globalThis.throw("Failed to snapshot value: {f}", .{ value.toFmt(&formatter) });
+                    let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis } };
+                    break :blk globalThis.throw("Failed to snapshot value: {f}", .{ value.toFmt(&formatter.val) });
                 },
             };
         };
 
         if (saved_value := existing_value) {
-            if (strings.eqlLong(pretty_value.written(), saved_value, true)) {
+            if (strings.eqlLong(pretty_value.val.written(), saved_value, true)) {
                 Jest.runner.?.snapshots.passed += 1;
                 return JSValue.js_undefined;
             }
@@ -967,7 +1015,7 @@ pub struct Expect {
             const signature = comptime getSignature(fn_name, "<green>expected<r>", false);
             const fmt = signature ++ "\n\n{f}\n";
             const diff_format = DiffFormatter{
-                received_string: pretty_value.written(),
+                received_string: pretty_value.val.written(),
                 expected_string: saved_value,
                 globalThis: globalThis,
             };
@@ -1033,16 +1081,16 @@ pub struct Expect {
         // SAFETY: already checked that args[0] is an object
         const matchers_to_register = args[0].getObject().?;
         {
-            let iter = try jsc.JSPropertyIterator({
+            const PropIter = jsc.JSPropertyIterator({
                 skip_empty_name: false,
                 include_value: true,
                 own_properties_only: false,
-            }).init(globalThis, matchers_to_register);
-            defer iter.deinit();
+            });
+            let iter = DeinitGuard<PropIter>{ val: try PropIter.init(globalThis, matchers_to_register) };
 
-            while (matcher_name_val := iter.next()?) {
+            while (matcher_name_val := iter.val.next()?) {
                 const matcher_name = &matcher_name_val;
-                const matcher_fn: JSValue = iter.value;
+                const matcher_fn: JSValue = iter.val.value;
 
                 if (!matcher_fn.jsType().isFunction()) {
                     const type_name = if (matcher_fn.isNull()) bun.String.static("null") else bun.String.init(matcher_fn.jsTypeString(globalThis).getZigString(globalThis));
@@ -1074,10 +1122,9 @@ pub struct Expect {
         fn format(writer: *std.Io.Writer)! {
             // try to detect param names from matcher_fn (user function) source code
             if (source_str := jsc.JSFunction.getSourceCode(_.matcher_fn)) {
-                const source_slice = source_str.toUTF8(_.globalThis.allocator());
-                defer source_slice.deinit();
+                const source_slice = DeinitGuard<ZigString.Slice>{ val: source_str.toUTF8(_.globalThis.allocator()) };
 
-                let source: string = source_slice.slice();
+                let source: string = source_slice.val.slice();
                 if (lparen := std.mem.indexOfScalar(u8, source, '(')) {
                     if (rparen := std.mem.indexOfScalarPos(u8, source, lparen, ')')) {
                         const params_str = source[(lparen + 1)..rparen];
@@ -1116,8 +1163,7 @@ pub struct Expect {
     static fn throwInvalidMatcherError(globalThis: *JSGlobalObject, matcher_name: bun.String, result: JSValue): bun.JSError {
         @branchHint(.cold);
 
-        let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-        defer formatter.deinit();
+        let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true } };
 
         const fmt =
             "Unexpected return from matcher function `{f}`.\n" ++
@@ -1125,7 +1171,7 @@ pub struct Expect {
             "  {{message?: string | function, pass: boolean}}\n" ++
             "'{f}' was returned";
         const e = switch (Output.enable_ansi_colors_stderr) {
-            inline else => |colors| globalThis.createErrorInstance(Output.prettyFmt(fmt, colors), .{ matcher_name, result.toFmt(&formatter) }),
+            inline else => |colors| globalThis.createErrorInstance(Output.prettyFmt(fmt, colors), .{ matcher_name, result.toFmt(&formatter.val) }),
         };
         e.put(globalThis, ZigString.static("name"), try bun.String.static("InvalidMatcherError").toJS(globalThis));
         return globalThis.throwValue(e);
@@ -1196,18 +1242,17 @@ pub struct Expect {
         if (pass || silent) return pass;
 
         // handle failure
-        let message_text: bun.String = bun.String.dead;
-        defer message_text.deref();
+        let message_text = DerefGuard<bun.String>{ val: bun.String.dead };
         if (message.isUndefined()) {
-            message_text = bun.String.static("No message was specified for this matcher.");
+            message_text.val = bun.String.static("No message was specified for this matcher.");
         } else if (message.isString()) {
-            message_text = message.toBunString(globalThis)?;
+            message_text.val = message.toBunString(globalThis)?;
         } else {
             if (comptime Environment.allow_assert)
                 assert(message.isCallable()); // checked above
 
             const message_result = message.callWithGlobalThis(globalThis, [])?;
-            message_text = bun.String.fromJS(message_result, globalThis)?;
+            message_text.val = bun.String.fromJS(message_result, globalThis)?;
         }
 
         const matcher_params = CustomMatcherParamsFormatter{
@@ -1215,7 +1260,7 @@ pub struct Expect {
             globalThis: globalThis,
             matcher_fn: matcher_fn,
         };
-        return throwPrettyMatcherError(globalThis, bun.String.empty, matcher_name, matcher_params, .{}, "{f}", .{ message_text });
+        return throwPrettyMatcherError(globalThis, bun.String.empty, matcher_name, matcher_params, .{}, "{f}", .{ message_text.val });
     }
 
     /// Function that is run for either `expect.myMatcher()` call or `expect().myMatcher` call,
@@ -1285,9 +1330,8 @@ pub struct Expect {
         if (buntest_strong_opt == null) {
             return globalThis.throw("expect.assertions() must be called within a test", .{});
         }
-        let buntest_strong = buntest_strong_opt.?;
-        defer buntest_strong.deinit();
-        const buntest = buntest_strong.get();
+        let buntest_strong = DeinitGuard<bun.jsc.Jest.bun_test.BunTestPtr>{ val: buntest_strong_opt.? };
+        const buntest = buntest_strong.val.get();
         const state_data = buntest.getCurrentStateData();
         const execution_opt = state_data.sequence(buntest);
         if (execution_opt == null) return globalThis.throw("expect.assertions() is not supported in the describe phase, in concurrent tests, between tests, or after test execution has completed", .{});
@@ -1328,9 +1372,8 @@ pub struct Expect {
         if (buntest_strong_opt2 == null) {
             return globalThis.throw("expect.assertions() must be called within a test", .{});
         }
-        let buntest_strong2 = buntest_strong_opt2.?;
-        defer buntest_strong2.deinit();
-        const buntest2 = buntest_strong2.get();
+        let buntest_strong2 = DeinitGuard<bun.jsc.Jest.bun_test.BunTestPtr>{ val: buntest_strong_opt2.? };
+        const buntest2 = buntest_strong2.val.get();
         const state_data2 = buntest2.getCurrentStateData();
         const execution_opt = state_data2.sequence(buntest2);
         if (execution_opt == null) return globalThis.throw("expect.assertions() is not supported in the describe phase, in concurrent tests, between tests, or after test execution has completed", .{});
@@ -1880,12 +1923,11 @@ pub struct ExpectCustomAsymmetricMatcher {
 
     fn toAsymmetricMatcher(*_, globalThis: *JSGlobalObject, callframe: *CallFrame): bun.JSError!JSValue {
         let stack_fallback = std.heap.stackFallback(512, globalThis.allocator());
-        let mutable_string = bun.MutableString.init2048(stack_fallback.get())?;
-        defer mutable_string.deinit();
+        let mutable_string = DeinitGuard<bun.MutableString>{ val: bun.MutableString.init2048(stack_fallback.get())? };
 
-        const printed = _.customPrint(callframe.@"this"(), globalThis, mutable_string.writer())?;
+        const printed = _.customPrint(callframe.@"this"(), globalThis, mutable_string.val.writer())?;
         if (printed) {
-            return bun.String.init(mutable_string.slice()).toJS();
+            return bun.String.init(mutable_string.val.slice()).toJS();
         }
         return ExpectMatcherUtils.printValue(globalThis, _, null);
     }
@@ -1959,10 +2001,9 @@ pub struct ExpectMatcherUtils {
 
     static fn printValue(globalThis: *JSGlobalObject, value: JSValue, comptime color_or_null: ([]const u8)?): !JSValue {
         let stack_fallback = std.heap.stackFallback(512, globalThis.allocator());
-        let mutable_string = bun.MutableString.init2048(stack_fallback.get())?;
-        defer mutable_string.deinit();
+        let mutable_string = DeinitGuard<bun.MutableString>{ val: bun.MutableString.init2048(stack_fallback.get())? };
 
-        let buffered_writer = bun.MutableString.BufferedWriter{ context: &mutable_string };
+        let buffered_writer = bun.MutableString.BufferedWriter{ context: &mutable_string.val };
         let writer = buffered_writer.writer();
 
         if (color := color_or_null) {
@@ -1971,9 +2012,8 @@ pub struct ExpectMatcherUtils {
             }
         }
 
-        let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-        defer formatter.deinit();
-        writer.print("{f}", .{ value.toFmt(&formatter) })?;
+        let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true } };
+        writer.print("{f}", .{ value.toFmt(&formatter.val) })?;
 
         if (color_or_null != null) {
             if (Output.enable_ansi_colors_stderr) {
@@ -1983,7 +2023,7 @@ pub struct ExpectMatcherUtils {
 
         buffered_writer.flush()?;
 
-        return bun.String.createUTF8ForJS(globalThis, mutable_string.slice());
+        return bun.String.createUTF8ForJS(globalThis, mutable_string.val.slice());
     }
 
     inline fn printValueCatched(globalThis: *JSGlobalObject, value: JSValue, comptime color_or_null: ([]const u8)?): JSValue {
@@ -2022,8 +2062,7 @@ pub struct ExpectMatcherUtils {
         if (arguments.len == 0 || !arguments[0].isString()) {
             return globalThis.throw("matcherHint: the first argument (matcher name) must be a string", .{});
         }
-        const matcher_name = arguments[0].toBunString(globalThis)?;
-        defer matcher_name.deref();
+        const matcher_name = DerefGuard<bun.String>{ val: arguments[0].toBunString(globalThis)? };
 
         const received = if (arguments.len > 1) arguments[1] else try bun.String.static("received").toJS(globalThis);
         const expected = if (arguments.len > 2) arguments[2] else try bun.String.static("expected").toJS(globalThis);
@@ -2066,11 +2105,11 @@ pub struct ExpectMatcherUtils {
         if (is_not) {
             const signature = comptime Expect.getSignature("{f}", "<green>expected<r>", true);
             const fmt = signature ++ "\n\n{f}\n";
-            return JSValue.printStringPretty(globalThis, 2048, fmt, .{ matcher_name, diff_formatter })?;
+            return JSValue.printStringPretty(globalThis, 2048, fmt, .{ matcher_name.val, diff_formatter })?;
         } else {
             const signature = comptime Expect.getSignature("{f}", "<green>expected<r>", false);
             const fmt = signature ++ "\n\n{f}\n";
-            return JSValue.printStringPretty(globalThis, 2048, fmt, .{ matcher_name, diff_formatter })?;
+            return JSValue.printStringPretty(globalThis, 2048, fmt, .{ matcher_name.val, diff_formatter })?;
         }
     }
 }
@@ -2120,9 +2159,8 @@ pub struct mock {
     static fn jestMockIterator(globalThis: *JSGlobalObject, value: bun.jsc.JSValue): bun.JSError!bun.jsc.JSArrayIterator {
         const returns: bun.jsc.JSValue = bun.cpp.JSMockFunction__getReturns(globalThis, value)?;
         if (!returns.jsType().isArray()) {
-            let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-            defer formatter.deinit();
-            return globalThis.throw("Expected value must be a mock function: {f}", .{ value.toFmt(&formatter) });
+            let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true } };
+            return globalThis.throw("Expected value must be a mock function: {f}", .{ value.toFmt(&formatter.val) });
         }
 
         return returns.arrayIterator(globalThis)?;
@@ -2133,9 +2171,8 @@ pub struct mock {
                 if (val := ReturnStatus.Map.fromJS(globalThis, type_string)?) return val;
             }
         }
-        let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-        defer formatter.deinit();
-        return globalThis.throw("Expected value must be a mock function with returns: {f}", .{ value.toFmt(&formatter) });
+        let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true } };
+        return globalThis.throw("Expected value must be a mock function with returns: {f}", .{ value.toFmt(&formatter.val) });
     }
     static fn jestMockReturnObject_value(globalThis: *JSGlobalObject, value: bun.jsc.JSValue): bun.JSError!JSValue {
         return (try value.get(globalThis, "value")) ?? .js_undefined;
@@ -2261,10 +2298,12 @@ comptime {
 }
 
 fn testTrimLeadingWhitespaceForSnapshot(src: []const u8, expected: []const u8)! {
-    const cpy = std.testing.allocator.alloc(u8, src.len)?;
-    defer std.testing.allocator.free(cpy);
+    const cpy = FreeGuard<u8>{
+        allocator: std.testing.allocator,
+        slice: std.testing.allocator.alloc(u8, src.len)?,
+    };
 
-    const res = Expect.trimLeadingWhitespaceForInlineSnapshot(src, cpy);
+    const res = Expect.trimLeadingWhitespaceForInlineSnapshot(src, cpy.slice);
     sanityCheck(src, res);
 
     std.testing.expectEqualStrings(expected, res.trimmed)?;
@@ -2285,9 +2324,11 @@ fn sanityCheck(input: []const u8, res: Expect.TrimResult) {
     }
 }
 fn testOne(input: []const u8): anyerror!void {
-    const cpy = std.testing.allocator.alloc(u8, input.len)?;
-    defer std.testing.allocator.free(cpy);
-    const res = Expect.trimLeadingWhitespaceForInlineSnapshot(input, cpy);
+    const cpy = FreeGuard<u8>{
+        allocator: std.testing.allocator,
+        slice: std.testing.allocator.alloc(u8, input.len)?,
+    };
+    const res = Expect.trimLeadingWhitespaceForInlineSnapshot(input, cpy.slice);
     sanityCheck(input, res);
 }
 

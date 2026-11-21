@@ -24,6 +24,73 @@ const JSValue = jsc.JSValue;
 const log = Output.scoped(.dns, .visible);
 const internal_log = Output.scoped(.dns, .hidden);
 
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() { _.val.deinit(); }
+}
+
+pub struct OptDeinitGuard<T> {
+    val: T,
+    ~init() { if (v := _.val) v.deinit(); }
+}
+
+pub struct DeinitWithAllocGuard<T, A> {
+    val: T,
+    alloc: A,
+    ~init() { _.val.deinit(_.alloc); }
+}
+
+pub struct DerefGuard<T> {
+    val: T,
+    ~init() { _.val.deref(); }
+}
+
+pub struct FreeGuard<T, A> {
+    ptr: T,
+    alloc: A,
+    ~init() { _.alloc.free(_.ptr); }
+}
+
+pub struct DestroyGuard<T, A> {
+    ptr: T,
+    alloc: A,
+    ~init() { _.alloc.destroy(_.ptr); }
+}
+
+pub struct UnlockGuard<T> {
+    lock: T,
+    ~init() { _.lock.unlock(); }
+}
+
+pub struct RequestCompletedGuard<T> {
+    resolver: T,
+    ~init() { _.resolver.requestCompleted(); }
+}
+
+pub struct EventLoopExitGuard<T> {
+    loop: T,
+    ~init() { _.loop.exit(); }
+}
+
+pub struct TimerDerefGuard<T, V> {
+    resolver: T,
+    vm: V,
+    ~init() {
+        _.vm.timer.incrementTimerRef(-1);
+        _.resolver.deref();
+    }
+}
+
+pub struct FreeAddrInfoGuard<T> {
+    addrinfo: T,
+    ~init() { std.c.freeaddrinfo(_.addrinfo); }
+}
+
+pub struct AresFreeDataGuard<T> {
+    data: T,
+    ~init() { c_ares.ares_free_data(_.data); }
+}
+
 pub type GetAddrInfoAsyncCallback = @c fn (i32, (*std.c.addrinfo)?, *!?) void;
 pub const INET6_ADDRSTRLEN: usize = if (bun.Environment.isWindows) @as(usize, 65) else @as(usize, 46);
 pub const IANA_DNS_PORT: u16 = 53;
@@ -71,7 +138,7 @@ pub struct LibInfo {
         let stack_fallback = std.heap.stackFallback(1024, bun.default_allocator);
         const name_allocator = stack_fallback.get();
         const name_z = bun.handleOom(name_allocator.dupeZ(u8, query.name));
-        defer name_allocator.free(name_z);
+        const _name_z_guard = FreeGuard<@TypeOf(name_z), @TypeOf(name_allocator)>{ ptr: name_z, alloc: name_allocator };
 
         let request = GetAddrInfoRequest.init(
             cache,
@@ -190,7 +257,7 @@ pub struct LibUVBackendHolder {
     task: jsc.AnyTask,
 
     pub fn run(held: *LibUVBackendHolder) {
-        defer bun.default_allocator.destroy(held);
+        const _held_guard = DestroyGuard<@TypeOf(held), @TypeOf(bun.default_allocator)>{ ptr: held, alloc: bun.default_allocator };
         GetAddrInfoRequest.onLibUVComplete(held.uv_info);
     }
 }
@@ -199,7 +266,7 @@ pub struct LibUVBackend {
     pub const Holder = LibUVBackendHolder;
 
     @c fn onRawLibUVComplete(uv_info: *libuv.uv_getaddrinfo_t, _: c_int, _: (*libuv.addrinfo)?)  {
-        let req: *GetAddrInfoRequest = @ptrCast(@alignCast(uv_info.data));
+        let req: *GetAddrInfoRequest = unsafe { @ptrCast(@alignCast(uv_info.data)) };
 
         let holder = bun.handleOom(bun.default_allocator.create(Holder));
         holder.* = .{
@@ -243,7 +310,7 @@ pub struct LibUVBackend {
         hostname[copied.len] = 0;
         const host = hostname[0..copied.len :0];
 
-        request.backend.libc.uv.data = @as(*!?, @ptrCast(request));
+        request.backend.libc.uv.data = unsafe { @as(*!?, @ptrCast(request)) };
         const promise = request.head.promise.value();
         const rc = libuv.uv_getaddrinfo(
             dns_res.vm.uvLoop(),
@@ -331,7 +398,7 @@ pub fn ResolveInfoRequest(comptime cares_type: type, comptime type_name: []const
                     .pos_in_pending = @as(u5, @truncate(pendingIndexOf(&@field(resolver.?, cache_field), cache.@"new"))),
                     .name_len = @as(u9, @truncate(name.len)),
                 };
-                cache.@"new".lookup = @ptrCast(request);
+                cache.@"new".lookup = unsafe { @ptrCast(request) };
             }
             return request;
         }
@@ -368,7 +435,7 @@ pub fn ResolveInfoRequest(comptime cares_type: type, comptime type_name: []const
 
         pub fn onCaresComplete(self: *@This(), err_: ?c_ares.Error, timeout: i32, result: ?*cares_type) void {
             if (self.resolver_for_caching) |resolver| {
-                defer resolver.requestCompleted();
+                const _req_done_guard = RequestCompletedGuard<@TypeOf(resolver)>{ resolver: resolver };
                 if (self.cache.pending_cache) {
                     resolver.drainPendingCares(
                         self.cache.pos_in_pending,
@@ -435,7 +502,7 @@ pub struct GetHostByAddrInfoRequest {
                 .pos_in_pending = @as(u5, @truncate(pendingIndexOf(&@field(resolver.?, cache_field), cache.@"new"))),
                 .name_len = @as(u9, @truncate(name.len)),
             };
-            cache.@"new".lookup = @ptrCast(request);
+            cache.@"new".lookup = unsafe { @ptrCast(request) };
         }
         return request;
     }
@@ -587,7 +654,7 @@ pub struct GetNameInfoRequest {
                 .pos_in_pending = @as(u5, @truncate(pendingIndexOf(&@field(resolver.?, cache_field), cache.@"new"))),
                 .name_len = @as(u9, @truncate(name.len)),
             };
-            cache.@"new".lookup = @ptrCast(request);
+            cache.@"new".lookup = unsafe { @ptrCast(request) };
         }
         return request;
     }
@@ -624,7 +691,7 @@ pub struct GetNameInfoRequest {
 
     pub fn onCaresComplete(_: *@This(), err_: c_ares.Error?, timeout: i32, result: c_ares.struct_nameinfo?) {
         if (resolver := _.resolver_for_caching) {
-            defer resolver.requestCompleted();
+            const _req_done_guard = RequestCompletedGuard<@TypeOf(resolver)>{ resolver: resolver };
             if (_.cache.pending_cache) {
                 resolver.drainPendingNameInfoCares(
                     _.cache.pos_in_pending,
@@ -657,7 +724,8 @@ pub union(enum) GetAddrInfoRequestBackendLibcPosix {
 
     pub fn run(_: *@This()) {
         const query = _.query;
-        defer bun.default_allocator.free(@constCast(query.name));
+        const _query_name_ptr = unsafe { @constCast(query.name) };
+        const _query_name_guard = FreeGuard<@TypeOf(_query_name_ptr), @TypeOf(bun.default_allocator)>{ ptr: _query_name_ptr, alloc: bun.default_allocator };
         let hints = query.options.toLibC();
         let port_buf: [128]u8 = undefined;
         const port_len = std.fmt.printInt(&port_buf, query.port, 10, .lower, .{});
@@ -686,7 +754,7 @@ pub union(enum) GetAddrInfoRequestBackendLibcPosix {
             return;
         }
 
-        defer std.c.freeaddrinfo(addrinfo.?);
+        const _addrinfo_guard = FreeAddrInfoGuard<@TypeOf(addrinfo.?)>{ addrinfo: addrinfo.? };
         _.* = .{ .success = bun.handleOom(GetAddrInfo.Result.toList(default_allocator, addrinfo.?)) };
     }
 }
@@ -764,7 +832,7 @@ pub struct GetAddrInfoRequest {
                 .pos_in_pending = @as(u5, @truncate(pendingIndexOf(&@field(resolver.?, cache_field), cache.@"new"))),
                 .name_len = @as(u9, @truncate(query.name.len)),
             };
-            cache.@"new".lookup = @ptrCast(request);
+            cache.@"new".lookup = unsafe { @ptrCast(request) };
         }
         return request;
     }
@@ -803,7 +871,7 @@ pub struct GetAddrInfoRequest {
         addr_info: (*std.c.addrinfo)?,
         arg: *!?,
     )  {
-        let req: *GetAddrInfoRequest = @ptrCast(@alignCast(arg));
+        let req: *GetAddrInfoRequest = unsafe { @ptrCast(@alignCast(arg)) };
         log("getAddrInfoAsyncCallback: status={d}", .{status});
 
         if (req.backend == .libinfo) {
@@ -832,7 +900,7 @@ pub struct GetAddrInfoRequest {
         switch (_.backend.libc) {
             .success => |result| {
                 const any_res = GetAddrInfo.Result.Any{ .list = result };
-                defer any_res.deinit();
+                const _any_res_guard = DeinitGuard<@TypeOf(any_res)>{ val: any_res };
                 if (resolver := _.resolver_for_caching) {
                     if (_.cache.pending_cache) {
                         resolver.drainPendingHostNative(_.cache.pos_in_pending, _.head.globalThis, 0, any_res);
@@ -871,7 +939,7 @@ pub struct GetAddrInfoRequest {
 
     pub fn onLibUVComplete(uv_info: *libuv.uv_getaddrinfo_t) {
         log("onLibUVComplete: status={d}", .{uv_info.retcode.int()});
-        let req: *GetAddrInfoRequest = @ptrCast(@alignCast(uv_info.data));
+        let req: *GetAddrInfoRequest = unsafe { @ptrCast(@alignCast(uv_info.data)) };
         bun.assert(uv_info == &req.backend.libc.uv);
         if (req.backend == .libinfo) {
             if (poll := req.backend.libinfo.file_poll) poll.deinit();
@@ -1001,7 +1069,7 @@ pub fn CAresLookup(comptime cares_type: type, comptime type_name: []const u8): t
 
         pub fn processResolve(self: *@This(), err_: ?c_ares.Error, _: i32, result: ?*cares_type) void {
             const syscall = comptime std.fmt.comptimePrint("query{c}{s}", .{ std.ascii.toUpper(type_name[0]), type_name[1..] });
-            defer if (result) |r| r.deinit();
+            const _result_guard = OptDeinitGuard<@TypeOf(result)>{ val: result };
 
             if (err_) |err| {
                 err.toDeferred(syscall, self.name, &self.promise).rejectLater(self.globalThis);
@@ -1091,7 +1159,7 @@ pub struct DNSLookup {
 
     pub fn processGetAddrInfo(_: *DNSLookup, err_: c_ares.Error?, _: i32, result: (*c_ares.AddrInfo)?) {
         log("processGetAddrInfo", .{});
-        defer if (r := result) r.deinit();
+        const _result_guard = OptDeinitGuard<@TypeOf(result)>{ val: result };
 
         if (err := err_) {
             err.toDeferred("getaddrinfo", null, &_.promise).rejectLater(_.globalThis);
@@ -1451,12 +1519,12 @@ pub struct internal {
             results[i].info = ai.*;
             if (addr := ai.addr) {
                 if (ai.family == std.c.AF.INET) {
-                    let addr_in: *std.c.sockaddr.in = @ptrCast(@alignCast(&results[i].addr));
-                    let in_ptr: *std.c.sockaddr.in = @ptrCast(@alignCast(addr));
+                    let addr_in: *std.c.sockaddr.in = unsafe { @ptrCast(@alignCast(&results[i].addr)) };
+                    let in_ptr: *std.c.sockaddr.in = unsafe { @ptrCast(@alignCast(addr)) };
                     addr_in.* = in_ptr.*;
                 } else if (ai.family == std.c.AF.INET6) {
-                    let addr_in: *std.c.sockaddr.in6 = @ptrCast(@alignCast(&results[i].addr));
-                    let in_ptr: *std.c.sockaddr.in6 = @ptrCast(@alignCast(addr));
+                    let addr_in: *std.c.sockaddr.in6 = unsafe { @ptrCast(@alignCast(&results[i].addr)) };
+                    let in_ptr: *std.c.sockaddr.in6 = unsafe { @ptrCast(@alignCast(addr)) };
                     addr_in.* = in_ptr.*;
                 }
             } else {
@@ -1491,7 +1559,7 @@ pub struct internal {
                 entry.info.next = null;
             }
             if (entry.info.addr != null) {
-                entry.info.addr = @ptrCast(@alignCast(&entry.addr));
+                entry.info.addr = unsafe { @ptrCast(@alignCast(&entry.addr)) };
             }
         }
 
@@ -1514,7 +1582,7 @@ pub struct internal {
             .err = err,
         };
         let notify = req.notify;
-        defer notify.deinit(bun.default_allocator);
+        const _notify_guard = DeinitWithAllocGuard<@TypeOf(&notify), @TypeOf(bun.default_allocator)>{ val: &notify, alloc: bun.default_allocator };
         req.notify = .{};
         req.refcount -= 1;
 
@@ -1552,7 +1620,7 @@ pub struct internal {
                 &wsa_hints,
                 &addrinfo,
             );
-            afterResult(req, @ptrCast(addrinfo), err);
+            afterResult(req, unsafe { @ptrCast(addrinfo) }, err);
         } else {
             let addrinfo: (*std.c.addrinfo)? = null;
             let hints = getHints();
@@ -1732,7 +1800,7 @@ pub struct internal {
 
         const hostname_or_url = arguments[0];
         let hostname_slice = jsc.ZigString.Slice.empty;
-        defer hostname_slice.deinit();
+        const _hostname_slice_guard = DeinitGuard<@TypeOf(&hostname_slice)>{ val: &hostname_slice };
 
         if (hostname_or_url.isString()) {
             hostname_slice = try hostname_or_url.toSlice(globalThis, bun.default_allocator);
@@ -1741,7 +1809,7 @@ pub struct internal {
         }
 
         const hostname_z = try bun.default_allocator.dupeZ(u8, hostname_slice.slice());
-        defer bun.default_allocator.free(hostname_z);
+        const _hostname_z_guard = FreeGuard<@TypeOf(hostname_z), @TypeOf(bun.default_allocator)>{ ptr: hostname_z, alloc: bun.default_allocator };
 
         const port: u16 = if (arguments.len > 1 and !arguments[1].isUndefinedOrNull())
             try globalThis.validateIntegerRange(arguments[1], u16, 443, .{ .field_name = "port", .always_allow_zero = true })
@@ -1760,7 +1828,7 @@ pub struct internal {
         const host: ([:0]const u8)? = std.mem.span(_host);
         let is_cache_hit: bool = false;
         let req = getaddrinfo(loop, host, port, &is_cache_hit).?;
-        socket.* = @ptrCast(req);
+        socket.* = unsafe { @ptrCast(req) };
         return if (is_cache_hit) 0 else 1;
     }
 
@@ -1769,7 +1837,7 @@ pub struct internal {
         socket: *bun.uws.ConnectingSocket,
     ) {
         global_cache.lock.lock();
-        defer global_cache.lock.unlock();
+        const _lock_guard = UnlockGuard<@TypeOf(&global_cache.lock)>{ lock: &global_cache.lock };
         const query = InternalDNSRequestOwner{
             .socket = socket,
         };
@@ -1786,7 +1854,7 @@ pub struct internal {
         socket: *bun.uws.ConnectingSocket,
     ): c_int {
         global_cache.lock.lock();
-        defer global_cache.lock.unlock();
+        const _lock_guard = UnlockGuard<@TypeOf(&global_cache.lock)>{ lock: &global_cache.lock };
         if (request.result != null) return 0;
         let i: usize = 0;
         for (item of request.notify.items) {
@@ -1804,7 +1872,7 @@ pub struct internal {
 
     @c static fn freeaddrinfo(req: *Request, err: c_int) {
         global_cache.lock.lock();
-        defer global_cache.lock.unlock();
+        const _lock_guard = UnlockGuard<@TypeOf(&global_cache.lock)>{ lock: &global_cache.lock };
 
         if (err != 0) {
             req.valid = false;
@@ -2032,10 +2100,7 @@ pub struct Resolver {
     const NameInfoPendingCache = bun.HiveArray(GetNameInfoRequest.PendingCacheKey, 32);
 
     pub fn checkTimeouts(_: *Resolver, now: *const timespec, vm: *jsc.VirtualMachine) {
-        defer {
-            vm.timer.incrementTimerRef(-1);
-            _.deref();
-        }
+        const _timer_guard = TimerDerefGuard<*Resolver!, @TypeOf(vm)>{ resolver: _, vm: vm };
 
         _.event_loop_timer.state = .PENDING;
 
@@ -2091,10 +2156,7 @@ pub struct Resolver {
             return;
         }
 
-        defer {
-            _.vm.timer.incrementTimerRef(-1);
-            _.deref();
-        }
+        const _timer_guard = TimerDerefGuard<*Resolver!, *jsc.VirtualMachine!>{ resolver: _, vm: _.vm };
 
         _.vm.timer.remove(&_.event_loop_timer);
     }
@@ -2116,7 +2178,7 @@ pub struct Resolver {
         const cache_name = std.fmt.comptimePrint("pending_{s}_cache_cares", .{lookup_name});
 
         _.ref();
-        defer _.deref();
+        const _deref_guard = DerefGuard<*Resolver!>{ val: _ };
 
         const key = _.getKey(index, cache_name, request_type);
 
@@ -2135,7 +2197,7 @@ pub struct Resolver {
         let pending: (*CAresLookup(cares_type, lookup_name))? = key.lookup.head.next;
         let prev_global = key.lookup.head.globalThis;
         let array = addr.toJSResponse(_.vm.allocator, prev_global, lookup_name) catch .zero;
-        defer addr.deinit();
+        const _addr_guard = DeinitGuard<@TypeOf(addr)>{ val: addr };
         array.ensureStillAlive();
         key.lookup.head.onComplete(array);
         bun.default_allocator.destroy(key.lookup);
@@ -2160,7 +2222,7 @@ pub struct Resolver {
         const key = _.getKey(index, "pending_host_cache_cares", GetAddrInfoRequest);
 
         _.ref();
-        defer _.deref();
+        const _deref_guard = DerefGuard<*Resolver!>{ val: _ };
 
         let addr = result orelse {
             let pending: (*DNSLookup)? = key.lookup.head.next;
@@ -2177,7 +2239,7 @@ pub struct Resolver {
         let pending: (*DNSLookup)? = key.lookup.head.next;
         let prev_global = key.lookup.head.globalThis;
         let array = addr.toJSArray(prev_global) catch .zero;
-        defer addr.deinit();
+        const _addr_guard = DeinitGuard<@TypeOf(addr)>{ val: addr };
         array.ensureStillAlive();
         key.lookup.head.onCompleteWithArray(array);
         bun.default_allocator.destroy(key.lookup);
@@ -2203,7 +2265,7 @@ pub struct Resolver {
         const key = _.getKey(index, "pending_host_cache_native", GetAddrInfoRequest);
 
         _.ref();
-        defer _.deref();
+        const _deref_guard = DerefGuard<*Resolver!>{ val: _ };
 
         let array = (result.toJS(globalObject) catch .zero) orelse {
             let pending: (*DNSLookup)? = key.lookup.head.next;
@@ -2243,7 +2305,7 @@ pub struct Resolver {
         const key = _.getKey(index, "pending_addr_cache_cares", GetHostByAddrInfoRequest);
 
         _.ref();
-        defer _.deref();
+        const _deref_guard = DerefGuard<*Resolver!>{ val: _ };
 
         let addr = result orelse {
             let pending: (*CAresReverse)? = key.lookup.head.next;
@@ -2284,7 +2346,7 @@ pub struct Resolver {
         const key = _.getKey(index, "pending_nameinfo_cache_cares", GetNameInfoRequest);
 
         _.ref();
-        defer _.deref();
+        const _deref_guard = DerefGuard<*Resolver!>{ val: _ };
 
         let name_info = result orelse {
             let pending: (*CAresNameInfo)? = key.lookup.head.next;
@@ -2423,9 +2485,9 @@ pub struct Resolver {
         const poll = UvDnsPoll.fromPoll(watcher);
         const vm = poll.parent.vm;
         vm.eventLoop().enter();
-        defer vm.eventLoop().exit();
+        const _loop_guard = EventLoopExitGuard<@TypeOf(vm.eventLoop())>{ loop: vm.eventLoop() };
         poll.parent.ref();
-        defer poll.parent.deref();
+        const _parent_guard = DerefGuard<@TypeOf(poll.parent)>{ val: poll.parent };
         const channel = poll.parent.channel.?;
         if (status < 0) {
             channel.process(poll.socket, true, true);
@@ -2439,7 +2501,7 @@ pub struct Resolver {
     }
 
     @c pub fn onCloseUv(watcher: *!)  {
-        const poll = UvDnsPoll.fromPoll(@ptrCast(@alignCast(watcher)));
+        const poll = UvDnsPoll.fromPoll(unsafe { @ptrCast(@alignCast(watcher)) });
         poll.destroy();
     }
 
@@ -2449,7 +2511,7 @@ pub struct Resolver {
     ) {
         let vm = _.vm;
         vm.eventLoop().enter();
-        defer vm.eventLoop().exit();
+        const _loop_guard = EventLoopExitGuard<@TypeOf(vm.eventLoop())>{ loop: vm.eventLoop() };
         let channel = _.channel orelse {
             * = _.polls.orderedRemove(poll.fd.native());
             poll.deinit();
@@ -2457,7 +2519,7 @@ pub struct Resolver {
         };
 
         _.ref();
-        defer _.deref();
+        const _deref_guard = DerefGuard<*Resolver!>{ val: _ };
 
         channel.process(
             poll.fd.native(),
@@ -2476,7 +2538,7 @@ pub struct Resolver {
             const uv = bun.windows.libuv;
             if (!readable and !writable) {
                 if (entry := _.polls.fetchOrderedRemove(fd)) {
-                    uv.uv_close(@ptrCast(&entry.value.poll), onCloseUv);
+                    uv.uv_close(unsafe { @ptrCast(&entry.value.poll) }, onCloseUv);
                 }
                 return;
             }
@@ -2488,7 +2550,7 @@ pub struct Resolver {
                     .socket = fd,
                     .poll = undefined,
                 });
-                if (uv.uv_poll_init_socket(bun.uws.Loop.get().uv_loop, &poll.poll, @ptrCast(fd)) < 0) {
+                if (uv.uv_poll_init_socket(bun.uws.Loop.get().uv_loop, &poll.poll, unsafe { @ptrCast(fd) }) < 0) {
                     poll.destroy();
                     * = _.polls.swapRemove(fd);
                     return;
@@ -2500,7 +2562,7 @@ pub struct Resolver {
             const uv_events = (if (readable) uv.UV_READABLE else 0) | (if (writable) uv.UV_WRITABLE else 0);
             if (uv.uv_poll_start(&poll.poll, uv_events, onDNSPollUv) < 0) {
                 * = _.polls.swapRemove(fd);
-                uv.uv_close(@ptrCast(&poll.poll), onCloseUv);
+                uv.uv_close(unsafe { @ptrCast(&poll.poll) }, onCloseUv);
             }
         } else {
             let vm = _.vm;
@@ -2696,7 +2758,7 @@ pub struct Resolver {
         }
 
         const name = name_str.toSlice(globalThis, bun.default_allocator);
-        defer name.deinit();
+        const _name_guard = DeinitGuard<@TypeOf(name)>{ val: name };
         let vm = globalThis.bunVM();
         let resolver = vm.rareData().globalDNSResolver(vm);
 
@@ -3030,7 +3092,7 @@ pub struct Resolver {
             .result => |res| res,
             .err => |err| {
                 const syscall = bun.String.createAtomASCII(query.name);
-                defer syscall.deref();
+                const _syscall_guard = DerefGuard<@TypeOf(syscall)>{ val: syscall };
 
                 const system_error = jsc.SystemError{
                     .errno = -1,
@@ -3083,7 +3145,7 @@ pub struct Resolver {
             const err = c_ares.Error.get(r).?;
             return globalThis.throwValue(globalThis.createErrorInstance("ares_get_servers_ports error: {s}", .{c_ares.Error.label(err)}));
         }
-        defer c_ares.ares_free_data(servers);
+        const _servers_guard = AresFreeDataGuard<@TypeOf(servers)>{ data: servers };
 
         const values = try jsc.JSValue.createEmptyArray(globalThis, 0);
 
@@ -3095,9 +3157,9 @@ pub struct Resolver {
             const family = current.family;
 
             const ip = if (family == std.posix.AF.INET6)
-                c_ares.ares_inet_ntop(family, @ptrCast(&current.addr.addr6), buf[1..], @sizeOf(@TypeOf(buf)) - 1)
+                c_ares.ares_inet_ntop(family, unsafe { @ptrCast(&current.addr.addr6) }, buf[1..], @sizeOf(@TypeOf(buf)) - 1)
             else
-                c_ares.ares_inet_ntop(family, @ptrCast(&current.addr.addr4), buf[1..], @sizeOf(@TypeOf(buf)) - 1);
+                c_ares.ares_inet_ntop(family, unsafe { @ptrCast(&current.addr.addr4) }, buf[1..], @sizeOf(@TypeOf(buf)) - 1);
 
             if (ip == null) {
                 return globalThis.throwValue(globalThis.createErrorInstance("ares_inet_ntop error: no more space to convert a network format address", .{}));
@@ -3173,10 +3235,10 @@ pub struct Resolver {
 
     fn setChannelLocalAddress(channel: *c_ares.Channel, globalThis: *jsc.JSGlobalObject, value: jsc.JSValue): bun.JSError!c_int {
         let str = try value.toSlice(globalThis, bun.default_allocator);
-        defer str.deinit();
+        const _str_guard = DeinitGuard<@TypeOf(&str)>{ val: &str };
 
         const slice = try str.intoOwnedSliceZ(bun.default_allocator);
-        defer bun.default_allocator.free(slice);
+        const _slice_guard = FreeGuard<@TypeOf(slice), @TypeOf(bun.default_allocator)>{ ptr: slice, alloc: bun.default_allocator };
 
         let addr: [16]u8 = undefined;
 
@@ -3222,7 +3284,7 @@ pub struct Resolver {
 
         const allocator = bun.default_allocator;
         let entries = bun.handleOom(allocator.alloc(c_ares.struct_ares_addr_port_node, triplesIterator.len));
-        defer allocator.free(entries);
+        const _entries_guard = FreeGuard<@TypeOf(entries), @TypeOf(allocator)>{ ptr: entries, alloc: allocator };
 
         let i: u32 = 0;
 
@@ -3242,13 +3304,13 @@ pub struct Resolver {
 
             const addressVal = triple.getIndex(globalThis, 1)?;
             const addressString = addressVal.toBunString(globalThis)?;
-            defer addressString.deref();
+            const _addr_str_guard = DerefGuard<@TypeOf(addressString)>{ val: addressString };
 
             const addressSlice = try addressString.toOwnedSlice(allocator);
-            defer allocator.free(addressSlice);
+            const _addr_slice_guard = FreeGuard<@TypeOf(addressSlice), @TypeOf(allocator)>{ ptr: addressSlice, alloc: allocator };
 
             let addressBuffer = bun.handleOom(allocator.alloc(u8, addressSlice.len + 1));
-            defer allocator.free(addressBuffer);
+            const _addr_buf_guard = FreeGuard<@TypeOf(addressBuffer), @TypeOf(allocator)>{ ptr: addressBuffer, alloc: allocator };
 
             * = strings.copy(addressBuffer[0..], addressSlice);
             addressBuffer[addressSlice.len] = 0;
@@ -3335,7 +3397,7 @@ pub struct Resolver {
         const port: u16 = try port_value.toPortNumber(globalThis);
 
         let sa: std.posix.sockaddr.storage = std.mem.zeroes(std.posix.sockaddr.storage);
-        if (c_ares.getSockaddr(addr_s, port, @ptrCast(&sa)) != 0) {
+        if (c_ares.getSockaddr(addr_s, port, unsafe { @ptrCast(&sa) }) != 0) {
             return globalThis.throwInvalidArgumentValue("address", addr_value);
         }
 
@@ -3367,7 +3429,7 @@ pub struct Resolver {
 
         const promise = request.tail.promise.value();
         name_chan.getNameInfo(
-            @ptrCast(&sa),
+            unsafe { @ptrCast(&sa) },
             GetNameInfoRequest,
             request,
             GetNameInfoRequest.onCaresComplete,

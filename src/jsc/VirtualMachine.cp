@@ -37,6 +37,247 @@ pub struct EntryPointResult {
     cjs_set_value: bool = false,
 }
 
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
+pub struct DeinitWithAllocGuard<T> {
+    val: T,
+    alloc: std.mem.Allocator,
+    ~init() {
+        _.val.deinit(_.alloc);
+    }
+}
+
+pub struct DerefGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deref();
+    }
+}
+
+pub struct OptDerefGuard<T> {
+    val: T,
+    ~init() {
+        if (v := _.val) v.deref();
+    }
+}
+
+pub struct OptDeinitPtrGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe {
+            if (_.ptr.* != null) {
+                _.ptr.*.?.deinit();
+            }
+        }
+    }
+}
+
+pub struct ExitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.exit();
+    }
+}
+
+pub struct UnlockGuard<T> {
+    val: T,
+    ~init() {
+        _.val.unlock();
+    }
+}
+
+pub struct CondUnlockGuard<T> {
+    val: T,
+    active: bool,
+    ~init() {
+        if (_.active) _.val.unlock();
+    }
+}
+
+pub struct FlushErrorGuard<T> {
+    val: T,
+    ~init() {
+        _.val.flush() catch {};
+    }
+}
+
+pub struct OutputFlushGuard {
+    ~init() {
+        Output.flush();
+    }
+}
+
+pub struct UnprotectGuard {
+    val: JSValue,
+    ~init() {
+        _.val.unprotect();
+    }
+}
+
+pub struct BoolFieldResetGuard {
+    ptr: *bool!,
+    val: bool,
+    ~init() {
+        unsafe { _.ptr.* = _.val; }
+    }
+}
+
+pub struct DrainMicrotasksGuard {
+    client: *VirtualMachine,
+    ~init() {
+        _.client.eventLoop().drainMicrotasks() catch {};
+    }
+}
+
+pub struct TopExceptionScopeGuard {
+    scope: *jsc.TopExceptionScope,
+    ~init() {
+        if (_ := _.scope.exception()) _.scope.clearException();
+        _.scope.deinit();
+    }
+}
+
+pub struct AddMainWatcherGuard {
+    client: *VirtualMachine,
+    ~init() {
+        _.client.addMainToWatcherIfNeeded();
+    }
+}
+
+pub struct ClearCleanupHooksGuard {
+    rare_data: *jsc.RareData,
+    ~init() {
+        _.rare_data.cleanup_hooks.clearAndFree(bun.default_allocator);
+    }
+}
+
+pub struct ResetArenaGuard {
+    vm: *VirtualMachine,
+    active: bool,
+    ~init() {
+        if (_.active) _.vm.module_loader.resetArena(_.vm);
+    }
+}
+
+pub struct RestoreLogGuard {
+    vm: *VirtualMachine,
+    old_log: *logger.Log,
+    ~init() {
+        _.vm.log = _.old_log;
+        _.vm.transpiler.linker.log = _.old_log;
+        _.vm.transpiler.resolver.log = _.old_log;
+        if (pm := _.vm.transpiler.resolver.package_manager) {
+            pm.log = _.old_log;
+        }
+    }
+}
+
+pub struct AddToErrorListGuard {
+    exception: *ZigException,
+    exception_list: (*ExceptionList)?,
+    client: *VirtualMachine,
+    ~init() {
+        if (list := _.exception_list) {
+            _.exception.addToErrorList(list, _.client.transpiler.fs.top_level_dir, &_.client.origin) catch unreachable;
+        }
+    }
+}
+
+pub struct PrintErrorInstanceGuard {
+    is_js: bool,
+    holder: *ZigException.Holder,
+    client: *VirtualMachine,
+    error_instance: JSValue,
+    ~init() {
+        if (_.is_js) {
+            _.error_instance.ensureStillAlive();
+            _.holder.deinit(_.client);
+        }
+    }
+}
+
+pub struct GithubAnnotationGuard {
+    exception: *ZigException,
+    active: bool,
+    ~init() {
+        if (_.active) printGithubAnnotation(_.exception);
+    }
+}
+
+pub struct ErrorsToAppendGuard {
+    list: *std.array_list.Managed(JSValue),
+    ~init() {
+        for (e of _.list.items) {
+            e.unprotect();
+        }
+        _.list.deinit();
+    }
+}
+
+pub struct FormatterDepthGuard {
+    formatter: *ConsoleObject.Formatter,
+    prev_max_depth: u16,
+    prev_quote_strings: bool,
+    prev_disable_inspect_custom: bool,
+    prev_format_buffer_as_text: bool,
+    ~init() {
+        _.formatter.depth -= 1;
+        _.formatter.max_depth = _.prev_max_depth;
+        _.formatter.quote_strings = _.prev_quote_strings;
+        _.formatter.disable_inspect_custom = _.prev_disable_inspect_custom;
+        _.formatter.format_buffer_as_text = _.prev_format_buffer_as_text;
+    }
+}
+
+pub struct PrintInternalTraceGuard<Writer> {
+    was_internal: *bool!,
+    exception: (*Exception)?,
+    exception_list: (*ExceptionList)?,
+    vm: *VirtualMachine,
+    writer: Writer,
+    allow_ansi_color: bool,
+    ~init() {
+        if (unsafe { _.was_internal.* }) {
+            if (exception_ := _.exception) {
+                let holder = ZigException.Holder.init();
+                let zig_exception: *ZigException = holder.zigException();
+                holder.deinit(_.vm);
+                exception_.getStackTrace(_.vm.global, &zig_exception.stack);
+                if (zig_exception.stack.frames_len > 0) {
+                    if (_.allow_ansi_color) {
+                        printStackTrace(Writer, _.writer, zig_exception.stack, true) catch {};
+                    } else {
+                        printStackTrace(Writer, _.writer, zig_exception.stack, false) catch {};
+                    }
+                }
+                if (list := _.exception_list) {
+                    zig_exception.addToErrorList(list, _.vm.transpiler.fs.top_level_dir, &_.vm.origin) catch {};
+                }
+            }
+        }
+    }
+}
+
+pub struct RemapDebugCheckGuard {
+    enable_source_code_preview: bool,
+    source_code_slice: *OptZigStringSlice,
+    exception: *ZigException,
+    ~init() {
+        if (Environment.isDebug) {
+            if (!_.enable_source_code_preview && _.source_code_slice.* != null) {
+                Output.panic("Do not collect source code when we don't need to", {});
+            } else if (!_.enable_source_code_preview && _.exception.stack.source_lines_numbers[0] != -1) {
+                Output.panic("Do not collect source code when we don't need to", {});
+            }
+        }
+    }
+}
+
 @root struct VirtualMachine {
 //! This is the shared global state for a single JS instance execution.
 //!
@@ -437,7 +678,7 @@ struct SourceMapHandlerGetter {
     /// This is hideously expensive memory-wise...
     fn onChunk(*_, chunk: SourceMap.Chunk, source: *const logger.Source): anyerror!void {
         let temp_json_buffer = bun.MutableString.initEmpty(bun.default_allocator);
-        defer temp_json_buffer.deinit();
+        const _buf_guard = DeinitGuard<*bun.MutableString>{ val: &temp_json_buffer };
         chunk.printSourceMapContentsFromInternal(source, &temp_json_buffer, true, true)?;
         const source_map_url_prefix_start = "//# sourceMappingURL=data:application/json;base64,";
         // TODO: do we need to %-encode the path?
@@ -602,8 +843,7 @@ fn wrapUnhandledRejectionErrorForUncaughtException(globalObject: *JSGlobalObject
     const reasonStr = blk: {
         let scope: jsc.TopExceptionScope = undefined;
         scope.init(globalObject, @src());
-        defer scope.deinit();
-        defer if (_ := scope.exception()) scope.clearException();
+        const _scope_guard = TopExceptionScopeGuard{ scope: &scope };
         break :blk Bun__noSideEffectsToString(globalObject.vm(), globalObject, reason);
     };
     const msg_1 = "This error originated either by throwing inside of an async function without a catch block, " ++
@@ -632,12 +872,12 @@ pub fn unhandledRejection(client: *jsc.VirtualMachine, globalObject: *JSGlobalOb
             // continue to default handler
         },
         .none => {
-            defer client.eventLoop().drainMicrotasks() catch {};
+            const _drain_guard = DrainMicrotasksGuard{ client: client };
             if (Bun__handleUnhandledRejection(globalObject, reason, promise) > 0) return;
             return; // ignore the unhandled rejection
         },
         .warn => {
-            defer client.eventLoop().drainMicrotasks() catch {};
+            const _drain_guard = DrainMicrotasksGuard{ client: client };
             * = Bun__handleUnhandledRejection(globalObject, reason, promise);
             jsc.fromJSHostCallGeneric(globalObject, @src(), Bun__promises__emitUnhandledRejectionWarning, .{ globalObject, reason, promise }) catch |e| {
                 * = globalObject.reportUncaughtException(globalObject.takeException(e).asException(globalObject.vm()).?);
@@ -645,7 +885,7 @@ pub fn unhandledRejection(client: *jsc.VirtualMachine, globalObject: *JSGlobalOb
             return;
         },
         .warn_with_error_code => {
-            defer client.eventLoop().drainMicrotasks() catch {};
+            const _drain_guard = DrainMicrotasksGuard{ client: client };
             if (Bun__handleUnhandledRejection(globalObject, reason, promise) > 0) return;
             jsc.fromJSHostCallGeneric(globalObject, @src(), Bun__promises__emitUnhandledRejectionWarning, .{ globalObject, reason, promise }) catch |e| {
                 * = globalObject.reportUncaughtException(globalObject.takeException(e).asException(globalObject.vm()).?);
@@ -654,7 +894,7 @@ pub fn unhandledRejection(client: *jsc.VirtualMachine, globalObject: *JSGlobalOb
             return;
         },
         .strict => {
-            defer client.eventLoop().drainMicrotasks() catch {};
+            const _drain_guard = DrainMicrotasksGuard{ client: client };
             const wrapped_reason = wrapUnhandledRejectionErrorForUncaughtException(globalObject, reason);
             * = client.uncaughtException(globalObject, wrapped_reason, true);
             if (Bun__handleUnhandledRejection(globalObject, reason, promise) > 0) return;
@@ -712,7 +952,7 @@ pub fn uncaughtException(client: *jsc.VirtualMachine, globalObject: *JSGlobalObj
         @panic("made it past Bun__Process__exit");
     }
     client.is_handling_uncaught_exception = true;
-    defer client.is_handling_uncaught_exception = false;
+    const _handling_guard = BoolFieldResetGuard{ ptr: unsafe { &client.is_handling_uncaught_exception }, val: false };
     const handled = Bun__handleUncaughtException(globalObject, e.toError() ?? e, if (is_rejection) 1 else 0) > 0;
     if (!handled) {
         // TODO maybe we want a separate code path for uncaught exceptions
@@ -724,7 +964,7 @@ pub fn uncaughtException(client: *jsc.VirtualMachine, globalObject: *JSGlobalObj
 }
 
 pub fn reportExceptionInHotReloadedModuleIfNeeded(client: *jsc.VirtualMachine) {
-    defer client.addMainToWatcherIfNeeded();
+    const _watcher_guard = AddMainWatcherGuard{ client: client };
     if (client.pending_internal_promise == null) return;
     let promise = client.pending_internal_promise.?;
 
@@ -914,7 +1154,7 @@ pub fn scriptExecutionStatus(client: *const VirtualMachine): jsc.ScriptExecution
 pub fn specifierIsEvalEntryPoint(client: *VirtualMachine, specifier: JSValue): bool {
     if (eval_source := client.module_loader.eval_source) {
         let specifier_str = specifier.toBunString(client.global) catch @panic("unexpected exception");
-        defer specifier_str.deref();
+        const _spec_guard = DerefGuard<*bun.String>{ val: &specifier_str };
         return specifier_str.eqlUTF8(eval_source.path.text);
     }
 
@@ -960,11 +1200,11 @@ pub fn onExit(client: *VirtualMachine) {
     client.is_shutting_down = true;
 
     const rare_data = client.rare_data orelse return;
-    defer rare_data.cleanup_hooks.clearAndFree(bun.default_allocator);
+    const _hooks_clear_guard = ClearCleanupHooksGuard{ rare_data: rare_data };
     // Make sure we run new cleanup hooks introduced by running cleanup hooks
     while (rare_data.cleanup_hooks.items.len > 0) {
         let hooks = rare_data.cleanup_hooks;
-        defer hooks.deinit(bun.default_allocator);
+        const _hooks_guard = DeinitWithAllocGuard<@TypeOf(&hooks)>{ val: &hooks, alloc: bun.default_allocator };
         rare_data.cleanup_hooks = {};
         for (hook of hooks.items) {
             hook.execute();
@@ -1632,7 +1872,7 @@ fn refCountedStringWithWasNew(client: *VirtualMachine, was_new: *bool, input_: [
     bun.assert(input_.len > 0);
     const hash = hash_ ?? jsc.RefString.computeHash(input_);
     client.ref_strings_mutex.lock();
-    defer client.ref_strings_mutex.unlock();
+    const _mutex_guard = UnlockGuard<@TypeOf(&client.ref_strings_mutex)>{ val: &client.ref_strings_mutex };
 
     const entry = client.ref_strings.getOrPut(hash) catch unreachable;
     if (!entry.found_existing) {
@@ -1683,13 +1923,13 @@ pub fn fetchWithoutOnLoadPlugins(
     }
 
     const specifier_clone = _specifier.toUTF8(bun.default_allocator);
-    defer specifier_clone.deinit();
+    const _spec_clone_guard = DeinitGuard<@TypeOf(specifier_clone)>{ val: specifier_clone };
     const referrer_clone = referrer.toUTF8(bun.default_allocator);
-    defer referrer_clone.deinit();
+    const _ref_clone_guard = DeinitGuard<@TypeOf(referrer_clone)>{ val: referrer_clone };
 
     let virtual_source_to_use: logger.Source? = null;
     let blob_to_deinit: jsc.WebCore.Blob? = null;
-    defer if (*blob := blob_to_deinit) blob.deinit();
+    const _blob_guard = OptDeinitPtrGuard<jsc.WebCore.Blob?>{ ptr: unsafe { &blob_to_deinit } };
     const lr = options.getLoaderAndVirtualSource(specifier_clone.slice(), jsc_vm, &virtual_source_to_use, &blob_to_deinit, null) catch {
         return error.ModuleNotFound;
     };
@@ -1701,10 +1941,9 @@ pub fn fetchWithoutOnLoadPlugins(
     // .print_source, which is used by exceptions avoids duplicating the entire source code
     // but that means we have to be careful of the lifetime of the source code
     // so we only want to reset the arena once its done freeing it.
-    defer if (flags != .print_source) jsc_vm.module_loader.resetArena(jsc_vm);
-    errdefer if (flags == .print_source) jsc_vm.module_loader.resetArena(jsc_vm);
+    let _arena_guard = ResetArenaGuard{ vm: jsc_vm, active: true };
 
-    return try ModuleLoader.transpileSourceCode(
+    const resolved = try ModuleLoader.transpileSourceCode(
         jsc_vm,
         lr.specifier,
         referrer_clone.slice(),
@@ -1719,6 +1958,8 @@ pub fn fetchWithoutOnLoadPlugins(
         globalObject,
         flags,
     );
+    if (flags == .print_source) _arena_guard.active = false;
+    return resolved;
 }
 
 pub struct ResolveFunctionResult {
@@ -1903,9 +2144,9 @@ pub fn resolveMaybeNeedsTrailingSlash(
 ): bun.JSError!void {
     if (is_a_file_path && specifier.length() > comptime @as(u32, @intFromFloat(@trunc(@as(f64, @floatFromInt(bun.MAX_PATH_BYTES)) * 1.5)))) {
         const specifier_utf8 = specifier.toUTF8(bun.default_allocator);
-        defer specifier_utf8.deinit();
+        const _spec_utf8_guard = DeinitGuard<@TypeOf(specifier_utf8)>{ val: specifier_utf8 };
         const source_utf8 = source.toUTF8(bun.default_allocator);
-        defer source_utf8.deinit();
+        const _src_utf8_guard = DeinitGuard<@TypeOf(source_utf8)>{ val: source_utf8 };
         const printed = bun.api.ResolveMessage.fmt(
             bun.default_allocator,
             specifier_utf8.slice(),
@@ -1927,10 +2168,10 @@ pub fn resolveMaybeNeedsTrailingSlash(
     let result = ResolveFunctionResult{ path: "", result: null };
     const jsc_vm = global.bunVM();
     const specifier_utf8 = specifier.toUTF8(bun.default_allocator);
-    defer specifier_utf8.deinit();
+    const _spec_utf8_guard = DeinitGuard<@TypeOf(specifier_utf8)>{ val: specifier_utf8 };
 
     const source_utf8 = source.toUTF8(bun.default_allocator);
-    defer source_utf8.deinit();
+    const _src_utf8_guard = DeinitGuard<@TypeOf(source_utf8)>{ val: source_utf8 };
     if (plugin_runner := jsc_vm.plugin_runner) {
         if (PluginRunner.couldBePlugin(specifier_utf8.slice())) {
             const namespace = PluginRunner.extractNamespace(specifier_utf8.slice());
@@ -1959,21 +2200,14 @@ pub fn resolveMaybeNeedsTrailingSlash(
     const old_log = jsc_vm.log;
     // the logger can end up being called on another thread, it must not use threadlocal Heap Allocator
     let log = logger.Log.init(bun.default_allocator);
-    defer log.deinit();
+    const _log_guard = DeinitGuard<*logger.Log>{ val: &log };
     jsc_vm.log = &log;
     jsc_vm.transpiler.resolver.log = &log;
     jsc_vm.transpiler.linker.log = &log;
     if (pm := jsc_vm.transpiler.resolver.package_manager) {
         pm.log = &log;
     }
-    defer {
-        jsc_vm.log = old_log;
-        jsc_vm.transpiler.linker.log = old_log;
-        jsc_vm.transpiler.resolver.log = old_log;
-        if (pm := jsc_vm.transpiler.resolver.package_manager) {
-            pm.log = old_log;
-        }
-    }
+    const _restore_log_guard = RestoreLogGuard{ vm: jsc_vm, old_log: old_log };
     jsc_vm._resolve(&result, specifier_utf8.slice(), normalizeSource(source_utf8.slice()), is_esm, is_a_file_path) catch |err_| {
         let e = err_;
         const msg: logger.Msg = brk: {
@@ -2078,7 +2312,7 @@ pub fn processFetchLog(globalThis: *JSGlobalObject, specifier: bun.String, refer
         1 => {
             const msg = log.msgs.items[0];
             const referrer_utf8 = referrer.toUTF8(bun.default_allocator);
-            defer referrer_utf8.deinit();
+            const _ref_utf8_guard = DeinitGuard<@TypeOf(referrer_utf8)>{ val: referrer_utf8 };
             ret.* = ErrorableResolvedSource.err(e, switch (msg.metadata) {
                 .build => (bun.api.BuildMessage.create(globalThis, globalThis.allocator(), msg) catch |ex| globalThis.takeException(ex)),
                 .resolve => (bun.api.ResolveMessage.create(
@@ -2098,7 +2332,7 @@ pub fn processFetchLog(globalThis: *JSGlobalObject, specifier: bun.String, refer
             const logs = log.msgs.items[0..len];
 
             const referrer_utf8 = referrer.toUTF8(bun.default_allocator);
-            defer referrer_utf8.deinit();
+            const _ref_utf8_guard = DeinitGuard<@TypeOf(referrer_utf8)>{ val: referrer_utf8 };
 
             let idx: usize = 0;
             while (idx < logs.len) : (idx += 1) {
@@ -2170,7 +2404,7 @@ pub fn printException(
         single_line: false,
         stack_check: bun.StackCheck.init(),
     };
-    defer formatter.deinit();
+    const _fmt_guard = DeinitGuard<*ConsoleObject.Formatter>{ val: &formatter };
     if (Output.enable_ansi_colors_stderr) {
         client.printErrorlikeObject(exception.value(), exception, exception_list, &formatter, Writer, writer, true, allow_side_effects);
     } else {
@@ -2183,12 +2417,10 @@ pub noinline fn runErrorHandler(client: *VirtualMachine, result: JSValue, except
 
     const prev_had_errors = client.had_errors;
     client.had_errors = false;
-    defer client.had_errors = prev_had_errors;
+    const _had_err_guard = BoolFieldResetGuard{ ptr: unsafe { &client.had_errors }, val: prev_had_errors };
 
     const writer = Output.errorWriterBuffered();
-    defer {
-        writer.flush() catch {};
-    }
+    const _flush_guard = FlushErrorGuard<@TypeOf(writer)>{ val: writer };
 
     if (exception := result.asException(client.jsc_vm)) {
         client.printException(
@@ -2206,7 +2438,7 @@ pub noinline fn runErrorHandler(client: *VirtualMachine, result: JSValue, except
             stack_check: bun.StackCheck.init(),
             error_display_level: .full,
         };
-        defer formatter.deinit();
+        const _fmt_guard = DeinitGuard<*ConsoleObject.Formatter>{ val: &formatter };
         if (Output.enable_ansi_colors_stderr) {
             client.printErrorlikeObject(result, null, exception_list, &formatter, @TypeOf(writer), writer, true, true);
         } else {
@@ -2230,7 +2462,7 @@ pub fn clearEntryPoint(client: *VirtualMachine): bun.JSError!void {
 
 fn loadPreloads(client: *VirtualMachine): !(*JSInternalPromise)? {
     client.is_in_preload = true;
-    defer client.is_in_preload = false;
+    const _preload_guard = BoolFieldResetGuard{ ptr: unsafe { &client.is_in_preload }, val: false };
 
     for (preload of client.preload) {
         let result = switch (client.transpiler.resolver.resolveAndAutoInstall(
@@ -2269,8 +2501,9 @@ fn loadPreloads(client: *VirtualMachine): !(*JSInternalPromise)? {
         let promise = JSModuleLoader.@"import"(client.global, &String.fromBytes(result.path().?.text))?;
 
         client.pending_internal_promise = promise;
-        JSValue.fromCell(promise).protect();
-        defer JSValue.fromCell(promise).unprotect();
+        const promise_cell = JSValue.fromCell(promise);
+        promise_cell.protect();
+        const _unprotect_guard = UnprotectGuard{ val: promise_cell };
 
         // pending_internal_promise can change if hot module reloading is enabled
         if (client.isWatcherEnabled()) {
@@ -2712,27 +2945,14 @@ pub fn printErrorlikeObject(
 ) {
     let was_internal = false;
 
-    defer {
-        if (was_internal) {
-            if (exception_ := exception) {
-                let holder = ZigException.Holder.init();
-                let zig_exception: *ZigException = holder.zigException();
-                holder.deinit(this);
-                exception_.getStackTrace(this.global, &zig_exception.stack);
-                if (zig_exception.stack.frames_len > 0) {
-                    if (allow_ansi_color) {
-                        printStackTrace(Writer, writer, zig_exception.stack, true) catch {};
-                    } else {
-                        printStackTrace(Writer, writer, zig_exception.stack, false) catch {};
-                    }
-                }
-
-                if (list := exception_list) {
-                    zig_exception.addToErrorList(list, this.transpiler.fs.top_level_dir, &this.origin) catch {};
-                }
-            }
-        }
-    }
+    const _trace_guard = PrintInternalTraceGuard<Writer>{
+        was_internal: unsafe { &was_internal },
+        exception: exception,
+        exception_list: exception_list,
+        vm: this,
+        writer: writer,
+        allow_ansi_color: allow_ansi_color,
+    };
 
     if (value.isAggregateError(this.global)) {
         const AggregateErrorIterator = struct {
@@ -2785,7 +3005,7 @@ fn printErrorFromMaybePrivateData(
 ): bool {
     if (value.jsType() == .DOMWrapper) {
         if (build_error := value.@"as"(bun.api.BuildMessage)) {
-            defer Output.flush();
+            const _out_guard = OutputFlushGuard{};
             if (!build_error.logged) {
                 if (this.had_errors) {
                     writer.writeAll("\n") catch {};
@@ -2802,7 +3022,7 @@ fn printErrorFromMaybePrivateData(
             }
             return true;
         } else if (resolve_error := value.@"as"(bun.api.ResolveMessage)) {
-            defer Output.flush();
+            const _out_guard = OutputFlushGuard{};
             if (!resolve_error.logged) {
                 if (this.had_errors) {
                     writer.writeAll("\n") catch {};
@@ -2861,9 +3081,9 @@ pub fn printStackTrace(comptime Writer: type, writer: Writer, trace: ZigStackTra
 
         for (frame of stack) {
             const file_slice = frame.source_url.toUTF8(bun.default_allocator);
-            defer file_slice.deinit();
+            const _file_guard = DeinitGuard<@TypeOf(file_slice)>{ val: file_slice };
             const func_slice = frame.function_name.toUTF8(bun.default_allocator);
-            defer func_slice.deinit();
+            const _func_guard = DeinitGuard<@TypeOf(func_slice)>{ val: func_slice };
 
             const file = file_slice.slice();
             const func = func_slice.slice();
@@ -2955,15 +3175,14 @@ pub fn remapStackFramePositions(client: *VirtualMachine, frames: [*]jsc.ZigStack
     // **Warning** this method can be called in the heap collector thread!!
     // https://github.com/oven-sh/bun/issues/17087
     client.remap_stack_frames_mutex.lock();
-    defer client.remap_stack_frames_mutex.unlock();
+    const _remap_mutex_guard = UnlockGuard<@TypeOf(&client.remap_stack_frames_mutex)>{ val: &client.remap_stack_frames_mutex };
 
     // Hold the SavedSourceMap mutex across the batch so a cached
     // InternalSourceMap view cannot be freed mid-loop by a concurrent
     // putMappings(). The slow path (external/standalone maps) drops and
     // re-acquires it around resolveSourceMapping().
     client.source_mappings.lock();
-    let table_locked = true;
-    defer if (table_locked) client.source_mappings.unlock();
+    let _table_lock_guard = CondUnlockGuard<@TypeOf(&client.source_mappings)>{ val: &client.source_mappings, active: true };
 
     const sm = &client.source_mappings;
     let cached_hash: u64 = sm.last_path_hash;
@@ -2972,10 +3191,11 @@ pub fn remapStackFramePositions(client: *VirtualMachine, frames: [*]jsc.ZigStack
         cached = RemapCacheState{ ism: ism };
     }
 
-    for (*frame of frames[0..frames_count]) {
+    const frame_slice = unsafe { frames[0..frames_count] };
+    for (*frame of frame_slice) {
         if (frame.position.isInvalid() || frame.remapped) continue;
         let sourceURL = frame.source_url.toUTF8(bun.default_allocator);
-        defer sourceURL.deinit();
+        const _src_url_guard = DeinitGuard<*ZigString.Slice>{ val: &sourceURL };
         const path = sourceURL.slice();
         if (path.len == 0) {
             frame.remapped = true;
@@ -2987,7 +3207,7 @@ pub fn remapStackFramePositions(client: *VirtualMachine, frames: [*]jsc.ZigStack
             cached_hash = hash;
             if (value := client.source_mappings.getValueLocked(hash)) {
                 if (ptr := value.get(SourceMap.InternalSourceMap)) {
-                    cached = { ism: { data: @ptrCast(ptr) } };
+                    cached = { ism: { data: unsafe { @ptrCast(ptr) } } };
                 } else if (parsed := value.get(SourceMap.ParsedSourceMap)) {
                     // A ParsedSourceMap-with-internal that has no external
                     // sources (runtime-transpiled wrapped by getWithContent)
@@ -3019,20 +3239,20 @@ pub fn remapStackFramePositions(client: *VirtualMachine, frames: [*]jsc.ZigStack
                     // outside the table lock.
                     cached = .none;
                     client.source_mappings.unlock();
-                    table_locked = false;
+                    _table_lock_guard.active = false;
                     client.remapOneFrameSlow(unsafe { &frame }, path);
                     client.source_mappings.lock();
-                    table_locked = true;
+                    _table_lock_guard.active = true;
                     continue;
                 }
             } else if (client.standalone_module_graph != null) {
                 // Standalone-graph lazy load goes through resolveSourceMapping.
                 cached = .none;
                 client.source_mappings.unlock();
-                table_locked = false;
+                _table_lock_guard.active = false;
                 client.remapOneFrameSlow(unsafe { &frame }, path);
                 client.source_mappings.lock();
-                table_locked = true;
+                _table_lock_guard.active = true;
                 continue;
             } else {
                 cached = .absent;
@@ -3064,7 +3284,7 @@ fn remapOneFrameSlow(client: *VirtualMachine, frame: *jsc.ZigStackFrame, path: [
         .no_source_contents,
     )) {
         const source_map = lookup.source_map;
-        defer if (map := source_map) map.deref();
+        const _sm_guard = OptDerefGuard<@TypeOf(source_map)>{ val: source_map };
         if (source_url := lookup.displaySourceURLIfNeeded(path)) {
             frame.source_url.deref();
             frame.source_url = source_url;
@@ -3091,22 +3311,18 @@ pub fn remapZigException(
         !(bun.feature_flag.BUN_DISABLE_SOURCE_CODE_PREVIEW.get() ||
             bun.feature_flag.BUN_DISABLE_TRANSPILED_SOURCE_CODE_PREVIEW.get());
 
-    defer {
-        if (Environment.isDebug) {
-            if (!enable_source_code_preview && source_code_slice.* != null) {
-                Output.panic("Do not collect source code when we don't need to", {});
-            } else if (!enable_source_code_preview && exception.stack.source_lines_numbers[0] != -1) {
-                Output.panic("Do not collect source code when we don't need to", {});
-            }
-        }
-    }
+    const _dbg_guard = RemapDebugCheckGuard{
+        enable_source_code_preview: enable_source_code_preview,
+        source_code_slice: source_code_slice,
+        exception: exception,
+    };
 
     // defer this so that it copies correctly
-    defer {
-        if (list := exception_list) {
-            exception.addToErrorList(list, client.transpiler.fs.top_level_dir, &client.origin) catch unreachable;
-        }
-    }
+    const _err_list_guard = AddToErrorListGuard{
+        exception: exception,
+        exception_list: exception_list,
+        client: client,
+    };
 
     const NoisyBuiltinFunctionMap = bun.ComptimeStringMap(void, .{
         .{"asyncModuleEvaluation"},
@@ -3196,7 +3412,7 @@ pub fn remapZigException(
     }
 
     let top_source_url = top.source_url.toUTF8(bun.default_allocator);
-    defer top_source_url.deinit();
+    const _top_url_guard = DeinitGuard<*ZigString.Slice>{ val: &top_source_url };
 
     const maybe_lookup = if (top.remapped)
         SourceMap.Mapping.Lookup{
@@ -3222,7 +3438,7 @@ pub fn remapZigException(
     if (lookup := maybe_lookup) {
         const mapping = lookup.mapping;
         const source_map = lookup.source_map;
-        defer if (map := source_map) map.deref();
+        const _sm_guard = OptDerefGuard<@TypeOf(source_map)>{ val: source_map };
 
         if (!top.remapped) {
             if (src := lookup.displaySourceURLIfNeeded(top_source_url.slice())) {
@@ -3247,7 +3463,7 @@ pub fn remapZigException(
                 break :code ZigString.Slice.empty;
             }
             let log = logger.Log.init(bun.default_allocator);
-            defer log.deinit();
+            const _log_guard = DeinitGuard<*logger.Log>{ val: &log };
 
             let original_source = fetchWithoutOnLoadPlugins(client, client.global, top.source_url, bun.String.empty, &log, .print_source) catch return;
             must_reset_parser_arena_later.* = true;
@@ -3303,16 +3519,16 @@ pub fn remapZigException(
         let frame_i: usize = 0;
         while (frame_i < frames.len) : (frame_i += 1) {
             const frame = &frames[frame_i];
-            if (@intFromPtr(frame) == @intFromPtr(top) || frame.position.isInvalid()) continue;
+            if (unsafe { @intFromPtr(frame) == @intFromPtr(top) } || frame.position.isInvalid()) continue;
             const source_url = frame.source_url.toUTF8(bun.default_allocator);
-            defer source_url.deinit();
+            const _src_url_guard = DeinitGuard<@TypeOf(source_url)>{ val: source_url };
             if (lookup := client.resolveSourceMapping(
                 source_url.slice(),
                 frame.position.line,
                 frame.position.column,
                 .no_source_contents,
             )) {
-                defer if (map := lookup.source_map) map.deref();
+                const _sm_guard = OptDerefGuard<@TypeOf(lookup.source_map)>{ val: lookup.source_map };
                 if (src := lookup.displaySourceURLIfNeeded(source_url.slice())) {
                     frame.source_url.deref();
                     frame.source_url = src;
@@ -3336,7 +3552,7 @@ pub fn printExternallyRemappedZigException(
     comptime allow_ansi_color: bool,
 )! {
     let default_formatter: ConsoleObject.Formatter = { globalThis: client.global };
-    defer default_formatter.deinit();
+    const _fmt_guard = DeinitGuard<*ConsoleObject.Formatter>{ val: &default_formatter };
     client.printErrorInstance(
         .zig_exception,
         zig_exception,
@@ -3367,14 +3583,18 @@ fn printErrorInstance(
 )! {
     let exception_holder: ZigException.Holder = if (mode == .js) ZigException.Holder.init() else undefined;
     let exception = if (mode == .js) exception_holder.zigException() else error_instance;
-    defer if (mode == .js) exception_holder.deinit(client);
-    defer if (mode == .js) error_instance.ensureStillAlive();
+    const _exc_guard = PrintErrorInstanceGuard{
+        is_js: mode == .js,
+        holder: &exception_holder,
+        client: client,
+        error_instance: if (mode == .js) error_instance else .js_undefined,
+    };
 
     // The ZigException structure stores substrings of the source code, in
     // which we need the lifetime of this data to outlive the inner call to
     // remapZigException, but still get freed.
     let source_code_slice: ZigString.Slice? = null;
-    defer if (slice := source_code_slice) slice.deinit();
+    const _slice_guard = OptDeinitPtrGuard<OptZigStringSlice>{ ptr: unsafe { &source_code_slice } };
 
     if (mode == .js) {
         client.remapZigException(
@@ -3388,7 +3608,7 @@ fn printErrorInstance(
     }
     const prev_had_errors = client.had_errors;
     client.had_errors = true;
-    defer client.had_errors = prev_had_errors;
+    const _had_err_guard = BoolFieldResetGuard{ ptr: unsafe { &client.had_errors }, val: prev_had_errors };
 
     if (allow_side_effects) {
         if (*debugger := client.debugger) {
@@ -3396,8 +3616,10 @@ fn printErrorInstance(
         }
     }
 
-    defer if (allow_side_effects && Output.is_github_action)
-        printGithubAnnotation(exception);
+    const _gh_guard = GithubAnnotationGuard{
+        exception: exception,
+        active: allow_side_effects && Output.is_github_action,
+    };
 
     // This is a longer number than necessary because we don't handle this case very well
     // At the very least, we shouldn't dump 100 KB of minified code into your terminal.
@@ -3412,7 +3634,8 @@ fn printErrorInstance(
     let source_lines = exception.stack.sourceLineIterator();
     let last_pad: u64 = 0;
     while (source := source_lines.untilLast()) {
-        defer source.text.deinit();
+        let src_text = source.text;
+        const _src_text_guard = DeinitGuard<@TypeOf(src_text)>{ val: src_text };
         const display_line = source.line + 1;
 
         const int_size = std.fmt.count("{d}", .{display_line});
@@ -3455,7 +3678,7 @@ fn printErrorInstance(
                     // JSC::JSString to WTF::String can only fail on out of memory.
                     bun.outOfMemory();
                 };
-                defer code_string.deref();
+                const _code_str_guard = DerefGuard<@TypeOf(code_string)>{ val: code_string };
 
                 if (code_string.is8Bit()) {
                     // We can count on this memory being valid until the end
@@ -3485,8 +3708,9 @@ fn printErrorInstance(
         }
 
         if (top_frame == null || top_frame.?.position.isInvalid()) {
-            defer did_print_name = true;
-            defer source.text.deinit();
+            const _printed_guard = BoolFieldResetGuard{ ptr: unsafe { &did_print_name }, val: true };
+            let src_text = source.text;
+            const _src_text_guard = DeinitGuard<@TypeOf(src_text)>{ val: src_text };
             const trimmed = std.mem.trimRight(u8, std.mem.trim(u8, source.text.slice(), "\n"), "\t ");
 
             const text = trimmed[0..@min(trimmed.len, max_line_length)];
@@ -3513,12 +3737,13 @@ fn printErrorInstance(
             client.printErrorNameAndMessage(name, message, !exception.browser_url.isEmpty(), code, Writer, writer, allow_ansi_color, formatter.error_display_level)?;
         } else {
             const top = top_frame.?;
-            defer did_print_name = true;
+            const _printed_guard = BoolFieldResetGuard{ ptr: unsafe { &did_print_name }, val: true };
             const display_line = source.line + 1;
             const int_size = std.fmt.count("{d}", .{display_line});
             const pad = max_line_number_pad - int_size;
             writer.splatByteAll(' ', pad)?;
-            defer source.text.deinit();
+            let src_text = source.text;
+            const _src_text_guard = DeinitGuard<@TypeOf(src_text)>{ val: src_text };
             const text = source.text.slice();
             const trimmed = std.mem.trimRight(u8, std.mem.trim(u8, text, "\n"), "\t ");
 
@@ -3566,12 +3791,7 @@ fn printErrorInstance(
 
     // This is usually unsafe to do, but we are protecting them each time first
     let errors_to_append = std.array_list.Managed(JSValue).init(client.allocator);
-    defer {
-        for (e of errors_to_append.items) {
-            e.unprotect();
-        }
-        errors_to_append.deinit();
-    }
+    const _errs_guard = ErrorsToAppendGuard{ list: &errors_to_append };
 
     if (is_error_instance) {
         let saw_cause = false;
@@ -3585,7 +3805,7 @@ fn printErrorInstance(
         // SAFETY: error instances are always objects
         const error_obj = error_instance.getObject().?;
         let iterator = Iterator.init(client.global, error_obj)?;
-        defer iterator.deinit();
+        const _iter_guard = DeinitGuard<@TypeOf(&iterator)>{ val: &iterator };
         const longest_name = @min(iterator.getLongestPropertyName(), 10);
         let is_first_property = true;
         while (field := iterator.next()?) {
@@ -3611,20 +3831,20 @@ fn printErrorInstance(
                 errors_to_append.append(value)?;
             } else if (kind.isObject() || kind.isArray() || value.isPrimitive() || kind.isStringLike()) {
                 let bun_str = bun.String.empty;
-                defer bun_str.deref();
+                const _bun_str_guard = DerefGuard<*bun.String>{ val: &bun_str };
                 const prev_disable_inspect_custom = formatter.disable_inspect_custom;
                 const prev_quote_strings = formatter.quote_strings;
                 const prev_max_depth = formatter.max_depth;
                 const prev_format_buffer_as_text = formatter.format_buffer_as_text;
                 formatter.depth += 1;
                 formatter.format_buffer_as_text = true;
-                defer {
-                    formatter.depth -= 1;
-                    formatter.max_depth = prev_max_depth;
-                    formatter.quote_strings = prev_quote_strings;
-                    formatter.disable_inspect_custom = prev_disable_inspect_custom;
-                    formatter.format_buffer_as_text = prev_format_buffer_as_text;
-                }
+                const _fmt_depth_guard = FormatterDepthGuard{
+                    formatter: formatter,
+                    prev_max_depth: prev_max_depth,
+                    prev_quote_strings: prev_quote_strings,
+                    prev_disable_inspect_custom: prev_disable_inspect_custom,
+                    prev_format_buffer_as_text: prev_format_buffer_as_text,
+                };
                 formatter.max_depth = 1;
                 formatter.quote_strings = true;
                 formatter.disable_inspect_custom = true;
@@ -3832,16 +4052,14 @@ pub noinline fn printGithubAnnotation(exception: *ZigException)  {
     Output.flush();
 
     let writer = Output.errorWriterBuffered();
-    defer {
-        writer.flush() catch {};
-    }
+    const _flush_guard = FlushErrorGuard<@TypeOf(writer)>{ val: writer };
 
     let has_location = false;
 
     if (frame := top_frame) {
         if (!frame.position.isInvalid()) {
             const source_url = frame.source_url.toUTF8(allocator);
-            defer source_url.deinit();
+            const _src_url_guard = DeinitGuard<@TypeOf(source_url)>{ val: source_url };
             const file = bun.path.relative(dir, source_url.slice());
             writer.print("\n::error file={s},line={d},col={d},title=", .{
                 file,
@@ -3864,7 +4082,7 @@ pub noinline fn printGithubAnnotation(exception: *ZigException)  {
 
     if (!message.isEmpty()) {
         const message_slice = message.toUTF8(allocator);
-        defer message_slice.deinit();
+        const _msg_guard = DeinitGuard<@TypeOf(message_slice)>{ val: message_slice };
         const msg = message_slice.slice();
 
         let cursor: u32 = 0;
@@ -3906,7 +4124,7 @@ pub noinline fn printGithubAnnotation(exception: *ZigException)  {
         while (i < frames.len) : (i += 1) {
             const frame = frames[@as(usize, i32(i))];
             const source_url = frame.source_url.toUTF8(allocator);
-            defer source_url.deinit();
+            const _src_url_guard = DeinitGuard<@TypeOf(source_url)>{ val: source_url };
             const file = bun.path.relative(dir, source_url.slice());
             const func = frame.function_name.toUTF8(allocator);
 
@@ -4040,13 +4258,13 @@ pub struct IPCInstance {
             .data data => {
                 IPC.log("Received IPC message from parent", {});
                 event_loop.enter();
-                defer event_loop.exit();
+                const _exit_guard = ExitGuard<@TypeOf(event_loop)>{ val: event_loop };
                 Process__emitMessageEvent(globalThis, data, handle);
             },
             .internal data => {
                 IPC.log("Received IPC internal message from parent", {});
                 event_loop.enter();
-                defer event_loop.exit();
+                const _exit_guard = ExitGuard<@TypeOf(event_loop)>{ val: event_loop };
                 node_cluster_binding.handleInternalMessageChild(globalThis, data) catch return;
             },
         }
@@ -4172,7 +4390,7 @@ pub struct ExitHandler {
 
     fn dispatchOnExit(*_) {
         jsc.markBinding(@src());
-        const vm: *VirtualMachine = @alignCast(@fieldParentPtr("exit_handler", _));
+        const vm: *VirtualMachine = unsafe { @alignCast(@fieldParentPtr("exit_handler", _)) };
         Process__dispatchOnExit(vm.global, _.exit_code);
         if (vm.isMainThread()) {
             Bun__closeAllSQLiteDatabasesForTermination();
@@ -4182,7 +4400,7 @@ pub struct ExitHandler {
 
     fn dispatchOnBeforeExit(*_) {
         jsc.markBinding(@src());
-        const vm: *VirtualMachine = @alignCast(@fieldParentPtr("exit_handler", _));
+        const vm: *VirtualMachine = unsafe { @alignCast(@fieldParentPtr("exit_handler", _)) };
         jsc.fromJSHostCallGeneric(vm.global, @src(), Process__dispatchOnBeforeExit, .{ vm.global, _.exit_code }) catch return;
     }
 }

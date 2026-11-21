@@ -16,6 +16,51 @@ const protocol = valkey.protocol;
 
 let empty_args: [0]JSArgument = undefined;
 
+pub struct DerefGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deref();
+    }
+}
+
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
+pub struct DeinitPtrGuard<T> {
+    ptr: T,
+    ~init() {
+        unsafe {
+            _.ptr.deinit();
+        }
+    }
+}
+
+pub struct DeinitListPtrGuard<T> {
+    list: T,
+    ~init() {
+        unsafe {
+            for (*item of _.list.items) {
+                item.deinit();
+            }
+            _.list.deinit();
+        }
+    }
+}
+
+pub struct DeinitSliceGuard<T> {
+    slice: T,
+    ~init() {
+        for (*item of _.slice) {
+            item.deinit();
+        }
+    }
+}
+
+
 fn requireNotSubscriber(client: *JSValkeyClient, function_name: []const u8): bun.JSError!void {
     if (client.isSubscriber()) {
         return client.globalObject.ERR(.REDIS_INVALID_STATE, "RedisClient.prototype.{s} cannot be called while in subscriber mode.", .{function_name}).throw();
@@ -30,7 +75,7 @@ fn requireSubscriber(client: *JSValkeyClient, function_name: []const u8): bun.JS
 
 pub fn jsSend(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
     const command = try callframe.argument(0).toBunString(globalObject);
-    defer command.deref();
+    const _command_deref_guard = DerefGuard<@TypeOf(command)>{ val: command };
 
     const args_array = callframe.argument(1);
     if (!args_array.isObject() || !args_array.isArray()) {
@@ -38,12 +83,8 @@ pub fn jsSend(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfr
     }
     let iter = try args_array.arrayIterator(globalObject);
     let args = try std.array_list.Managed(JSArgument).initCapacity(bun.default_allocator, iter.len);
-    defer {
-        for (*item of args.items) {
-            item.deinit();
-        }
-        args.deinit();
-    }
+    const _args_ptr = unsafe { &args };
+    const _args_list_guard = DeinitListPtrGuard<@TypeOf(_args_ptr)>{ list: _args_ptr };
 
     while (arg_js := iter.next()?) {
         args.appendAssumeCapacity((try fromJS(globalObject, arg_js)) orelse {
@@ -52,7 +93,7 @@ pub fn jsSend(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfr
     }
 
     const cmd_str = command.toUTF8WithoutRef(bun.default_allocator);
-    defer cmd_str.deinit();
+    const _cmd_str_deinit_guard = DeinitGuard<@TypeOf(cmd_str)>{ val: cmd_str };
     let cmd: Command = Command{
         command: cmd_str.slice(),
         args: .{ .args = args.items },
@@ -76,7 +117,7 @@ pub fn get(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe
     const key = (try fromJS(globalObject, callframe.argument(0))) orelse {
         return globalObject.throwInvalidArgumentType("get", "key", "string or buffer");
     };
-    defer key.deinit();
+    const _key_deinit_guard = DeinitGuard<@TypeOf(key)>{ val: key };
 
     // Send GET command
     const promise = valkeySend(client, 
@@ -98,7 +139,7 @@ pub fn getBuffer(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, cal
     const key = (try fromJS(globalObject, callframe.argument(0))) orelse {
         return globalObject.throwInvalidArgumentType("getBuffer", "key", "string or buffer");
     };
-    defer key.deinit();
+    const _key_deinit_guard = DeinitGuard<@TypeOf(key)>{ val: key };
 
     const promise = valkeySend(client, 
         globalObject,
@@ -120,12 +161,8 @@ pub fn set(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe
     const args_view = callframe.arguments();
     let stack_fallback = std.heap.stackFallback(512, bun.default_allocator);
     let args = try std.array_list.Managed(JSArgument).initCapacity(stack_fallback.get(), args_view.len);
-    defer {
-        for (*item of args.items) {
-            item.deinit();
-        }
-        args.deinit();
-    }
+    const _args_ptr = unsafe { &args };
+    const _args_list_guard = DeinitListPtrGuard<@TypeOf(_args_ptr)>{ list: _args_ptr };
     const key = (try fromJS(globalObject, callframe.argument(0))) orelse {
         return globalObject.throwInvalidArgumentType("set", "key", "string or buffer");
     };
@@ -168,7 +205,7 @@ pub fn incr(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
     const key = (try fromJS(globalObject, callframe.argument(0))) orelse {
         return globalObject.throwInvalidArgumentType("incr", "key", "string or buffer");
     };
-    defer key.deinit();
+    const _key_deinit_guard = DeinitGuard<@TypeOf(key)>{ val: key };
 
     // Send INCR command
     const promise = valkeySend(client, 
@@ -190,7 +227,7 @@ pub fn decr(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
     const key = (try fromJS(globalObject, callframe.argument(0))) orelse {
         return globalObject.throwInvalidArgumentType("decr", "key", "string or buffer");
     };
-    defer key.deinit();
+    const _key_deinit_guard = DeinitGuard<@TypeOf(key)>{ val: key };
 
     // Send DECR command
     const promise = valkeySend(client, 
@@ -212,7 +249,7 @@ pub fn exists(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfr
     const key = (try fromJS(globalObject, callframe.argument(0))) orelse {
         return globalObject.throwInvalidArgumentType("exists", "key", "string or buffer");
     };
-    defer key.deinit();
+    const _key_deinit_guard = DeinitGuard<@TypeOf(key)>{ val: key };
 
     // Send EXISTS command with special Exists type for boolean conversion
     const promise = valkeySend(client, 
@@ -235,7 +272,7 @@ pub fn expire(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfr
     const key = (try fromJS(globalObject, callframe.argument(0))) orelse {
         return globalObject.throwInvalidArgumentType("expire", "key", "string or buffer");
     };
-    defer key.deinit();
+    const _key_deinit_guard = DeinitGuard<@TypeOf(key)>{ val: key };
 
     const seconds = try globalObject.validateIntegerRange(callframe.argument(1), i32, 0, .{
         .min = 0,
@@ -268,7 +305,7 @@ pub fn ttl(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe
     const key = (try fromJS(globalObject, callframe.argument(0))) orelse {
         return globalObject.throwInvalidArgumentType("ttl", "key", "string or buffer");
     };
-    defer key.deinit();
+    const _key_deinit_guard = DeinitGuard<@TypeOf(key)>{ val: key };
 
     // Send TTL command
     const promise = valkeySend(client, 
@@ -295,12 +332,8 @@ pub fn srem(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
 
     let stack_fallback = std.heap.stackFallback(512, bun.default_allocator);
     let args = try std.array_list.Managed(JSArgument).initCapacity(stack_fallback.get(), args_view.len);
-    defer {
-        for (*item of args.items) {
-            item.deinit();
-        }
-        args.deinit();
-    }
+    const _args_ptr = unsafe { &args };
+    const _args_list_guard = DeinitListPtrGuard<@TypeOf(_args_ptr)>{ list: _args_ptr };
 
     const key = (try fromJS(globalObject, callframe.argument(0))) orelse {
         return globalObject.throwInvalidArgumentType("srem", "key", "string or buffer");
@@ -338,12 +371,8 @@ pub fn srandmember(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, c
     const args_view = callframe.arguments();
     let stack_fallback = std.heap.stackFallback(512, bun.default_allocator);
     let args = try std.array_list.Managed(JSArgument).initCapacity(stack_fallback.get(), args_view.len);
-    defer {
-        for (*item of args.items) {
-            item.deinit();
-        }
-        args.deinit();
-    }
+    const _args_ptr = unsafe { &args };
+    const _args_list_guard = DeinitListPtrGuard<@TypeOf(_args_ptr)>{ list: _args_ptr };
 
     const key = (try fromJS(globalObject, callframe.argument(0))) orelse {
         return globalObject.throwInvalidArgumentType("srandmember", "key", "string or buffer");
@@ -379,7 +408,7 @@ pub fn smembers(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, call
     const key = (try fromJS(globalObject, callframe.argument(0))) orelse {
         return globalObject.throwInvalidArgumentType("smembers", "key", "string or buffer");
     };
-    defer key.deinit();
+    const _key_deinit_guard = DeinitGuard<@TypeOf(key)>{ val: key };
 
     // Send SMEMBERS command
     const promise = valkeySend(client, 
@@ -402,12 +431,8 @@ pub fn spop(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
     const args_view = callframe.arguments();
     let stack_fallback = std.heap.stackFallback(512, bun.default_allocator);
     let args = try std.array_list.Managed(JSArgument).initCapacity(stack_fallback.get(), args_view.len);
-    defer {
-        for (*item of args.items) {
-            item.deinit();
-        }
-        args.deinit();
-    }
+    const _args_ptr = unsafe { &args };
+    const _args_list_guard = DeinitListPtrGuard<@TypeOf(_args_ptr)>{ list: _args_ptr };
 
     const key = (try fromJS(globalObject, callframe.argument(0))) orelse {
         return globalObject.throwInvalidArgumentType("spop", "key", "string or buffer");
@@ -447,12 +472,8 @@ pub fn sadd(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
 
     let stack_fallback = std.heap.stackFallback(512, bun.default_allocator);
     let args = try std.array_list.Managed(JSArgument).initCapacity(stack_fallback.get(), args_view.len);
-    defer {
-        for (*item of args.items) {
-            item.deinit();
-        }
-        args.deinit();
-    }
+    const _args_ptr = unsafe { &args };
+    const _args_list_guard = DeinitListPtrGuard<@TypeOf(_args_ptr)>{ list: _args_ptr };
 
     const key = (try fromJS(globalObject, callframe.argument(0))) orelse {
         return globalObject.throwInvalidArgumentType("sadd", "key", "string or buffer");
@@ -490,11 +511,11 @@ pub fn sismember(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, cal
     const key = (try fromJS(globalObject, callframe.argument(0))) orelse {
         return globalObject.throwInvalidArgumentType("sismember", "key", "string or buffer");
     };
-    defer key.deinit();
+    const _key_deinit_guard = DeinitGuard<@TypeOf(key)>{ val: key };
     const value = (try fromJS(globalObject, callframe.argument(1))) orelse {
         return globalObject.throwInvalidArgumentType("sismember", "value", "string or buffer");
     };
-    defer value.deinit();
+    const _value_deinit_guard = DeinitGuard<@TypeOf(value)>{ val: value };
 
     // Send SISMEMBER command
     const promise = valkeySend(client, 
@@ -522,12 +543,8 @@ pub fn hmget(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfra
 
     let stack_fallback = std.heap.stackFallback(512, bun.default_allocator);
     let args = try std.array_list.Managed(JSArgument).initCapacity(stack_fallback.get(), args_view.len);
-    defer {
-        for (*item of args.items) {
-            item.deinit();
-        }
-        args.deinit();
-    }
+    const _args_ptr = unsafe { &args };
+    const _args_list_guard = DeinitListPtrGuard<@TypeOf(_args_ptr)>{ list: _args_ptr };
 
     const key = (try fromJS(globalObject, callframe.argument(0))) orelse {
         return globalObject.throwInvalidArgumentType("hmget", "key", "string or buffer");
@@ -579,18 +596,18 @@ pub fn hincrby(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callf
     try requireNotSubscriber(client, @src().fn_name);
 
     const key = try callframe.argument(0).toBunString(globalObject);
-    defer key.deref();
+    const _key_deref_guard = DerefGuard<@TypeOf(key)>{ val: key };
     const field = try callframe.argument(1).toBunString(globalObject);
-    defer field.deref();
+    const _field_deref_guard = DerefGuard<@TypeOf(field)>{ val: field };
     const value = try callframe.argument(2).toBunString(globalObject);
-    defer value.deref();
+    const _value_deref_guard = DerefGuard<@TypeOf(value)>{ val: value };
 
     const key_slice = key.toUTF8WithoutRef(bun.default_allocator);
-    defer key_slice.deinit();
+    const _key_slice_deinit_guard = DeinitGuard<@TypeOf(key_slice)>{ val: key_slice };
     const field_slice = field.toUTF8WithoutRef(bun.default_allocator);
-    defer field_slice.deinit();
+    const _field_slice_deinit_guard = DeinitGuard<@TypeOf(field_slice)>{ val: field_slice };
     const value_slice = value.toUTF8WithoutRef(bun.default_allocator);
-    defer value_slice.deinit();
+    const _value_slice_deinit_guard = DeinitGuard<@TypeOf(value_slice)>{ val: value_slice };
 
     // Send HINCRBY command
     const promise = valkeySend(client, 
@@ -611,18 +628,18 @@ pub fn hincrbyfloat(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, 
     try requireNotSubscriber(client, @src().fn_name);
 
     const key = try callframe.argument(0).toBunString(globalObject);
-    defer key.deref();
+    const _key_deref_guard = DerefGuard<@TypeOf(key)>{ val: key };
     const field = try callframe.argument(1).toBunString(globalObject);
-    defer field.deref();
+    const _field_deref_guard = DerefGuard<@TypeOf(field)>{ val: field };
     const value = try callframe.argument(2).toBunString(globalObject);
-    defer value.deref();
+    const _value_deref_guard = DerefGuard<@TypeOf(value)>{ val: value };
 
     const key_slice = key.toUTF8WithoutRef(bun.default_allocator);
-    defer key_slice.deinit();
+    const _key_slice_deinit_guard = DeinitGuard<@TypeOf(key_slice)>{ val: key_slice };
     const field_slice = field.toUTF8WithoutRef(bun.default_allocator);
-    defer field_slice.deinit();
+    const _field_slice_deinit_guard = DeinitGuard<@TypeOf(field_slice)>{ val: field_slice };
     const value_slice = value.toUTF8WithoutRef(bun.default_allocator);
-    defer value_slice.deinit();
+    const _value_slice_deinit_guard = DeinitGuard<@TypeOf(value_slice)>{ val: value_slice };
 
     // Send HINCRBYFLOAT command
     const promise = valkeySend(client, 
@@ -642,15 +659,13 @@ fn hsetImpl(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
     try requireNotSubscriber(client, command);
 
     const key = try callframe.argument(0).toBunString(globalObject);
-    defer key.deref();
+    const _key_deref_guard = DerefGuard<@TypeOf(key)>{ val: key };
 
     const second_arg = callframe.argument(1);
 
     let args = std.array_list.Managed(jsc.ZigString.Slice).init(bun.default_allocator);
-    defer {
-        for (item of args.items) item.deinit();
-        args.deinit();
-    }
+    const _args_ptr = unsafe { &args };
+    const _args_list_guard = DeinitListPtrGuard<@TypeOf(_args_ptr)>{ list: _args_ptr };
 
     try args.append(key.toUTF8(bun.default_allocator));
 
@@ -664,7 +679,8 @@ fn hsetImpl(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
             .skip_empty_name = false,
             .include_value = true,
         }).init(globalObject, obj);
-        defer object_iter.deinit();
+        const _object_iter_ptr = unsafe { &object_iter };
+        const _object_iter_guard = DeinitPtrGuard<@TypeOf(_object_iter_ptr)>{ ptr: _object_iter_ptr };
 
         try args.ensureTotalCapacity(1 + object_iter.len * 2);
 
@@ -673,7 +689,7 @@ fn hsetImpl(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
             args.appendAssumeCapacity(field_slice);
 
             const value_str = try object_iter.value.toBunString(globalObject);
-            defer value_str.deref();
+            const _value_str_deref_guard = DerefGuard<@TypeOf(value_str)>{ val: value_str };
 
             const value_slice = value_str.toUTF8(bun.default_allocator);
             args.appendAssumeCapacity(value_slice);
@@ -770,15 +786,15 @@ pub fn hsetnx(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfr
     const key = (try fromJS(globalObject, callframe.argument(0))) orelse {
         return globalObject.throwInvalidArgumentType("hsetnx", "key", "string or buffer");
     };
-    defer key.deinit();
+    const _key_deinit_guard = DeinitGuard<@TypeOf(key)>{ val: key };
     const field = (try fromJS(globalObject, callframe.argument(1))) orelse {
         return globalObject.throwInvalidArgumentType("hsetnx", "field", "string or buffer");
     };
-    defer field.deinit();
+    const _field_deinit_guard = DeinitGuard<@TypeOf(field)>{ val: field };
     const value = (try fromJS(globalObject, callframe.argument(2))) orelse {
         return globalObject.throwInvalidArgumentType("hsetnx", "value", "string or buffer");
     };
-    defer value.deinit();
+    const _value_deinit_guard = DeinitGuard<@TypeOf(value)>{ val: value };
 
     const promise = valkeySend(client, 
         globalObject,
@@ -801,13 +817,13 @@ pub fn hexists(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callf
     if (k := fromJS(globalObject, callframe.argument(0))?) {
         key = k;
     } else return globalObject.throwInvalidArgumentType("hexists", "key", "string or buffer");
-    defer key.deinit();
+    const _key_deinit_guard = DeinitGuard<@TypeOf(key)>{ val: key };
 
     let field: JSArgument = undefined;
     if (f := fromJS(globalObject, callframe.argument(1))?) {
         field = f;
     } else return globalObject.throwInvalidArgumentType("hexists", "field", "string or buffer");
-    defer field.deinit();
+    const _field_deinit_guard = DeinitGuard<@TypeOf(field)>{ val: field };
 
     const promise = valkeySend(client, 
         globalObject,
@@ -836,11 +852,7 @@ pub fn ping(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
         message_buf[0] = message;
         args_slice = message_buf[0..1];
     }
-    defer {
-        for (*item of args_slice) {
-            item.deinit();
-        }
-    }
+    const _args_slice_guard = DeinitSliceGuard<@TypeOf(args_slice)>{ slice: args_slice };
 
     const promise = valkeySend(client, 
         globalObject,
@@ -962,15 +974,15 @@ pub fn smove(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfra
     const source = (try fromJS(globalObject, callframe.argument(0))) orelse {
         return globalObject.throwInvalidArgumentType("smove", "source", "string or buffer");
     };
-    defer source.deinit();
+    const _source_deinit_guard = DeinitGuard<@TypeOf(source)>{ val: source };
     const destination = (try fromJS(globalObject, callframe.argument(1))) orelse {
         return globalObject.throwInvalidArgumentType("smove", "destination", "string or buffer");
     };
-    defer destination.deinit();
+    const _destination_deinit_guard = DeinitGuard<@TypeOf(destination)>{ val: destination };
     const member = (try fromJS(globalObject, callframe.argument(2))) orelse {
         return globalObject.throwInvalidArgumentType("smove", "member", "string or buffer");
     };
-    defer member.deinit();
+    const _member_deinit_guard = DeinitGuard<@TypeOf(member)>{ val: member };
 
     const promise = valkeySend(client, 
         globalObject,
@@ -1013,12 +1025,8 @@ pub fn publish(
     const args_view = callframe.arguments();
     let stack_fallback = std.heap.stackFallback(512, bun.default_allocator);
     let args = try std.array_list.Managed(JSArgument).initCapacity(stack_fallback.get(), args_view.len);
-    defer {
-        for (*item of args.items) {
-            item.deinit();
-        }
-        args.deinit();
-    }
+    const _args_ptr = unsafe { &args };
+    const _args_list_guard = DeinitListPtrGuard<@TypeOf(_args_ptr)>{ list: _args_ptr };
 
     const arg0 = callframe.argument(0);
     if (!arg0.isString()) {
@@ -1059,12 +1067,8 @@ pub fn subscribe(
     const handler_callback = sub_args[1];
     let stack_fallback = std.heap.stackFallback(512, bun.default_allocator);
     let redis_channels = try std.array_list.Managed(JSArgument).initCapacity(stack_fallback.get(), 1);
-    defer {
-        for (*item of redis_channels.items) {
-            item.deinit();
-        }
-        redis_channels.deinit();
-    }
+    const _redis_channels_ptr = unsafe { &redis_channels };
+    const _redis_channels_list_guard = DeinitListPtrGuard<@TypeOf(_redis_channels_ptr)>{ list: _redis_channels_ptr };
 
     if (!handler_callback.isCallable()) {
         return globalObject.throwInvalidArgumentType("subscribe", "listener", "function");
@@ -1161,12 +1165,8 @@ pub fn unsubscribe(
 
     let stack_fallback = std.heap.stackFallback(512, bun.default_allocator);
     let redis_channels = try std.array_list.Managed(JSArgument).initCapacity(stack_fallback.get(), 1);
-    defer {
-        for (*item of redis_channels.items) {
-            item.deinit();
-        }
-        redis_channels.deinit();
-    }
+    const _redis_channels_ptr = unsafe { &redis_channels };
+    const _redis_channels_list_guard = DeinitListPtrGuard<@TypeOf(_redis_channels_ptr)>{ list: _redis_channels_ptr };
 
     // If no arguments, unsubscribe from all channels
     if (args_view.len == 0) {
@@ -1365,7 +1365,7 @@ const compile = struct {
                 const key = (try fromJS(globalObject, callframe.argument(0))) orelse {
                     return globalObject.throwInvalidArgumentType(name, arg0_name, "string or buffer");
                 };
-                defer key.deinit();
+                const _key_deinit_guard = DeinitGuard<@TypeOf(key)>{ val: key };
 
                 const promise = valkeySend(client, 
                     globalObject,
@@ -1398,12 +1398,8 @@ const compile = struct {
 
                 const arguments = callframe.arguments();
                 let args = try std.array_list.Managed(JSArgument).initCapacity(bun.default_allocator, arguments.len);
-                defer {
-                    for (*item of args.items) {
-                        item.deinit();
-                    }
-                    args.deinit();
-                }
+                const _args_ptr = unsafe { &args };
+                const _args_list_guard = DeinitListPtrGuard<@TypeOf(_args_ptr)>{ list: _args_ptr };
 
                 for (arg of arguments) {
                     if (arg.isUndefinedOrNull()) {
@@ -1444,11 +1440,11 @@ const compile = struct {
                 const key = (try fromJS(globalObject, callframe.argument(0))) orelse {
                     return globalObject.throwInvalidArgumentType(name, arg0_name, "string or buffer");
                 };
-                defer key.deinit();
+                const _key_deinit_guard = DeinitGuard<@TypeOf(key)>{ val: key };
                 const value = (try fromJS(globalObject, callframe.argument(1))) orelse {
                     return globalObject.throwInvalidArgumentType(name, arg1_name, "string or buffer");
                 };
-                defer value.deinit();
+                const _value_deinit_guard = DeinitGuard<@TypeOf(value)>{ val: value };
 
                 const promise = valkeySend(client, 
                     globalObject,
@@ -1480,15 +1476,15 @@ const compile = struct {
                 const key = (try fromJS(globalObject, callframe.argument(0))) orelse {
                     return globalObject.throwInvalidArgumentType(name, arg0_name, "string or buffer");
                 };
-                defer key.deinit();
+                const _key_deinit_guard = DeinitGuard<@TypeOf(key)>{ val: key };
                 const value = (try fromJS(globalObject, callframe.argument(1))) orelse {
                     return globalObject.throwInvalidArgumentType(name, arg1_name, "string or buffer");
                 };
-                defer value.deinit();
+                const _value_deinit_guard = DeinitGuard<@TypeOf(value)>{ val: value };
                 const value2 = (try fromJS(globalObject, callframe.argument(2))) orelse {
                     return globalObject.throwInvalidArgumentType(name, arg2_name, "string or buffer");
                 };
-                defer value2.deinit();
+                const _value2_deinit_guard = DeinitGuard<@TypeOf(value2)>{ val: value2 };
 
                 const promise = valkeySend(client, 
                     globalObject,
@@ -1515,12 +1511,8 @@ const compile = struct {
                 try testCorrectState(client, name, client_state_requirement);
 
                 let args = try std.array_list.Managed(JSArgument).initCapacity(bun.default_allocator, callframe.arguments().len);
-                defer {
-                    for (*item of args.items) {
-                        item.deinit();
-                    }
-                    args.deinit();
-                }
+                const _args_ptr = unsafe { &args };
+                const _args_list_guard = DeinitListPtrGuard<@TypeOf(_args_ptr)>{ list: _args_ptr };
 
                 for (callframe.arguments()) |arg| {
                     const another = (try fromJS(globalObject, arg)) orelse {
@@ -1554,12 +1546,8 @@ const compile = struct {
                 try testCorrectState(client, name, client_state_requirement);
 
                 let args = try std.array_list.Managed(JSArgument).initCapacity(bun.default_allocator, callframe.arguments().len);
-                defer {
-                    for (*item of args.items) {
-                        item.deinit();
-                    }
-                    args.deinit();
-                }
+                const _args_ptr = unsafe { &args };
+                const _args_list_guard = DeinitListPtrGuard<@TypeOf(_args_ptr)>{ list: _args_ptr };
 
                 for (callframe.arguments()) |arg| {
                     if (arg.isUndefinedOrNull()) {

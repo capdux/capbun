@@ -207,3 +207,12 @@
   - `src/jsc/ConsoleObject.cp`（61→0，ratio `1.056`）：拆分 4 处 `JSPropertyIterator` 泛型 Guard 初始化并补全 34 处裸指针 `unsafe {}`；
   - `src/runtime/api/BunObject.cp`（53→0，ratio `1.044`）：清理全部手工 `defer` 并补全 `unsafe {}`；
   - 累计再消减 **201 处**手工 `defer`/`errdefer`，`bun run zig:check` **5/5**，`BunObject.test.ts` + `escapeHTML.test.js` **7/7**（276 expects）全绿。
+- **[2026-11-22 03:24] 收到并验收 `cp_agy` 2 条结单通知（全部 `cpc --lib` + `zig ast-check` 验证通过并完成 `ack`）**：
+  1. `task-bun-20261122-return-dot-enum-err` (`repro_return_dot_enum_in_err_union.cp` PASS)：`codegen/stmt.rs` 新增 `should_lower_bare_dot_return_as_error`，在 `E!Status` 函数中正确保留 `return .blocked;` 而不再误转为 `return error.blocked;`。
+  2. `task-bun-20261122-generic-raw-ptr-arg` (`repro_generic_raw_ptr_arg.cp` PASS)：`codegen/types/map_type.rs` 与 `parser/types.rs` 统一转译泛型实参中的 CP 类型（`*Foo!`、`*const Foo!`、`[*:0]u8!`、`[*]const u8!`、`*Foo!?`、`?*Foo!` 等），`Box<*Foo!>` 正确输出 `Box(*Foo)`。
+- **[2026-11-22 03:30] 向 `cp_agy` 提交工单 `task-bun-20261122-factory-struct-raii-lowering`**：复现文件 `/data/dev/cp/temp/repro_factory_struct_raii.cp`，上报 `pub fn Factory(...): type { return struct { ... }; }` 内部实例化带 `~init()` 的 Guard 时，`cpc` 原样透传函数体未注入 `defer __cp_deinit()`（阻塞 `RequestContext.cp` / `diff_match_patch.cp` 等工厂模式模块 RAII 化）。
+
+- **[2026-11-22 03:54] 10 大核心模块泛型 RAII `~init()` 改造里程碑（`zig:check` 5/5、18/18 全绿）**：
+  - `src/jsc/VirtualMachine.cp`（54→0，ratio `1.072`）、`src/runtime/valkey_jsc/js_valkey.cp`（44→0，ratio `1.054`）、`src/runtime/valkey_jsc/js_valkey_functions.cp`（47→0，ratio `0.995`）、`src/sql_jsc/postgres/PostgresSQLConnection.cp`（44→0，ratio `1.061`）、`src/runtime/dns_jsc/dns.cp`（34→2，ratio `0.956` + 31 处 `E0209` `unsafe {}`）；
+  - `src/runtime/server/RequestContext.cp`（顶层 `getContentType` 转 RAII，ratio `1.003`）、`src/test_runner/pretty_format.cp`（7 处资源释放→0 + 17 处 `unsafe {}`，ratio `1.034`）、`src/test_runner/expect.cp`（32 处资源释放→0，ratio `1.041`）、`src/runtime/api/JSTranspiler.cp`（34→0，ratio `1.122`）、`src/runtime/api/bun/process.cp`（25→0 + 9 处 `unsafe {}`，ratio `1.042`）；
+  - 累计再消除 **322 处**手工资源释放 `defer`/`errdefer`，全部通过 `cpc_brief.py` 与 `bun run zig:check` **5/5**，`22712.test.ts` (6/6)、`BunObject.test.ts` (3/3)、`transpiler-cache.test.ts` (9/9) 共 **18/18**（368 expects）全绿。
