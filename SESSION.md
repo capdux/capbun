@@ -92,3 +92,7 @@
 - **[2026-11-21 15:36] `SSLConfig.cp` RAII 修复 (`bun-write.test.js` 0 崩溃)**：将 `SSLConfig.release()` 合并入 `deinit()`，消除 `us_ssl_ctx_build_raw` 读取已释放证书指针的 `use-after-poison`；`bun bd test test/js/bun/io/bun-write.test.js` 跑出 **28 pass, 4 fail (1,317 expect() calls)**，0 崩溃。
 - **[2026-11-21 16:02] 全仓 393 个旧版 `cp_iter_slice` 模块批量重编与 `zig:check` 0 错误收敛**：从 `md/line_analysis.cp` `strncasecmp` SEGV 溯源出全仓 395 个 `.zig` 仍使用旧版悬垂 `cp_iter_slice`，用新版 `cpc` 批量重编 393 个对应 `.cp` 模块，并修复 `options.cp`、`tracy.cp`、`fs_events.cp`、`immutable.cp` 及 5 个模块的 `export` 声明；`bun run zig:check` **5/5 steps succeeded** 全绿通过。
 - **[2026-11-21 16:47] `extract_tarball.cp` 修复与 Batch 2/3/4a 推进**：修复 `extract_tarball.cp:159` `nameAndBasename` 值接收者悬垂栈切片，消除 `makeOpenPath` `posix.toPosixPath` 断言崩溃；Batch 2 已跑出 **1,385 pass / 78 fail**，Batch 3 已跑出 **230 pass / 32 fail**。
+- **[2026-11-21 17:15] `resolution.cp` 与 `js_printer.cp` 修复（Batch 3 零 ASan 崩溃收官）**：
+  - 修复 `resolution.cp` 中 `fmt`/`fmtURL` 值接收者悬垂指针，消除 `Resolution.Formatter.format` `stack-buffer-overflow`；
+  - 修复 `js_printer.cp:484` `RequireOrImportMetaCallback.init` 的 `@ptrCast(&callback)` 二级指针 Wild Jump SEGV；
+  - Batch 3 重跑至 `napi` 完成且 0 ASan 崩溃（**346 pass**，仅 `v8` 下游 `node-gyp` 子进程中止）。

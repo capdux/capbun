@@ -297,9 +297,9 @@ pub @c struct ResolutionType<SemverIntType> {
             };
         }
 
-        pub fn fmt(string_bytes: []const u8, path_sep: bun.fmt.PathFormatOptions.Sep): Formatter {
+        pub fn fmt(_: *const This, string_bytes: []const u8, path_sep: bun.fmt.PathFormatOptions.Sep): Formatter {
             return Formatter{
-                resolution: &_,
+                resolution: _,
                 buf: string_bytes,
                 path_sep: path_sep,
             };
@@ -336,8 +336,8 @@ pub @c struct ResolutionType<SemverIntType> {
             };
         }
 
-        pub fn fmtURL(string_bytes: []const u8): URLFormatter {
-            return URLFormatter{ resolution: unsafe { &_ }, buf: string_bytes };
+        pub fn fmtURL(_: *const This, string_bytes: []const u8): URLFormatter {
+            return URLFormatter{ resolution: _, buf: string_bytes };
         }
 
         pub static fn fmtForDebug(this_ptr: *const This, string_bytes: []const u8): DebugFormatter {

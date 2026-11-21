@@ -481,7 +481,7 @@ pub struct RequireOrImportMetaCallback {
     ): RequireOrImportMetaCallback {
         return RequireOrImportMetaCallback{
             ctx: bun.cast(OpaquePtr, ctx),
-            callback: unsafe { @as(RequireOrImportMetaCallbackFn, @ptrCast(&callback)) },
+            callback: unsafe { @as(RequireOrImportMetaCallbackFn, @ptrCast(callback)) },
         };
     }
 }

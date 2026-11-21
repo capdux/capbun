@@ -331,7 +331,7 @@ pub fn call(self: RequireOrImportMetaCallback, id: u32, was_unwrapped_require: b
 
 pub fn init(comptime Type: type, comptime callback: *const fn (*Type, u32, bool) RequireOrImportMeta, ctx: *Type) RequireOrImportMetaCallback {
             return RequireOrImportMetaCallback{ .ctx = bun.cast(OpaquePtr, ctx), .callback = (blk: {
-            break :blk @as(RequireOrImportMetaCallbackFn, @ptrCast((&callback)));
+            break :blk @as(RequireOrImportMetaCallbackFn, @ptrCast(callback));
 
 }) };
     }

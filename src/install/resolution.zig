@@ -326,19 +326,16 @@ else => std.debug.panic("Internal error: unexpected resolution tag: {}", .{ self
 });
         }
 
-pub fn fmt(self: @This(), string_bytes: []const u8, path_sep: bun.fmt.PathFormatOptions.Sep) Formatter {
-                return Formatter{ .resolution = (&self), .buf = string_bytes, .path_sep = path_sep };
+pub fn fmt(self: *const @This(), string_bytes: []const u8, path_sep: bun.fmt.PathFormatOptions.Sep) Formatter {
+                return Formatter{ .resolution = self, .buf = string_bytes, .path_sep = path_sep };
         }
 
 pub fn fmtStorePath(self: @This(), string_buf: []const u8) StorePathFormatter {
                 return .{ .res = self, .string_buf = string_buf };
         }
 
-pub fn fmtURL(self: @This(), string_bytes: []const u8) URLFormatter {
-                return URLFormatter{ .resolution = (blk: {
-                break :blk (&self);
-
-}), .buf = string_bytes };
+pub fn fmtURL(self: *const @This(), string_bytes: []const u8) URLFormatter {
+                return URLFormatter{ .resolution = self, .buf = string_bytes };
         }
 
 pub fn fmtForDebug(this_ptr: *const This, string_bytes: []const u8) DebugFormatter {
