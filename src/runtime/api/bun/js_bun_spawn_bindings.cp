@@ -1,3 +1,25 @@
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+pub struct DerefGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deref(); }
+    }
+}
+
+pub struct DestroyGuard<T> {
+    ptr: *T!,
+    alloc: std.mem.Allocator,
+    ~init() {
+        unsafe { _.alloc.destroy(_.ptr); }
+    }
+}
+
 // This is split into a separate function to conserve stack space.
 // On Windows, a single path buffer can take 64 KB.
 pub struct GetArgv0Result {
@@ -9,7 +31,7 @@ type NullableStringZ = ([*:0]const u8)?;
 
 fn getArgv0(globalThis: *jsc.JSGlobalObject, PATH: []const u8, cwd: []const u8, pretend_argv0: NullableStringZ, first_cmd: JSValue, allocator: std.mem.Allocator): bun.JSError!GetArgv0Result {
     let arg0 = first_cmd.toSliceOrNullWithAllocator(globalThis, allocator)?;
-    defer arg0.deinit();
+    const _guard_arg0 = DeinitGuard<@TypeOf(arg0)>{ ptr: unsafe { &arg0 } };
 
     // Check for null bytes in command (security: prevent null byte injection)
     if (strings.indexOfChar(arg0.slice(), 0) != null) {
@@ -17,7 +39,7 @@ fn getArgv0(globalThis: *jsc.JSGlobalObject, PATH: []const u8, cwd: []const u8, 
     }
     // Heap allocate it to ensure we don't run out of stack space.
     const path_buf: *bun.PathBuffer = bun.default_allocator.create(bun.PathBuffer)?;
-    defer bun.default_allocator.destroy(path_buf);
+    const _guard_path_buf = DestroyGuard<bun.PathBuffer>{ ptr: path_buf, alloc: bun.default_allocator };
 
     let actual_argv0: [:0]const u8 = "";
 
@@ -83,8 +105,8 @@ fn getArgv(globalThis: *jsc.JSGlobalObject, args: JSValue, PATH: []const u8, cwd
 
     let arg_index: usize = 1;
     while (value := cmds_array.next()?) {
-        const arg = value.toBunString(globalThis)?;
-        defer arg.deref();
+        let arg = value.toBunString(globalThis)?;
+        const _guard_arg = DerefGuard<@TypeOf(arg)>{ ptr: unsafe { &arg } };
 
         // Check for null bytes in argument (security: prevent null byte injection)
         if (arg.indexOfAsciiChar(0) != null) {
@@ -127,7 +149,7 @@ pub fn spawnMaybeSync(
     }
 
     let arena_ = bun.ArenaAllocator.init(bun.default_allocator);
-    defer arena_.deinit();
+    const _guard_arena = DeinitGuard<@TypeOf(arena_)>{ ptr: unsafe { &arena_ } };
     const allocator = arena_.allocator();
 
     let override_env = false;
@@ -156,7 +178,7 @@ pub fn spawnMaybeSync(
     let maybe_ipc_mode: if (is_sync) void else IPC.Mode? = if (is_sync) {} else null;
     let ipc_callback: JSValue = .zero;
     let extra_fds = std.array_list.Managed(bun.spawn.SpawnOptions.Stdio).init(bun.default_allocator);
-    defer extra_fds.deinit();
+    const _guard_extra_fds = DeinitGuard<@TypeOf(extra_fds)>{ ptr: unsafe { &extra_fds } };
     let argv0: NullableStringZ = null;
     let ipc_channel: i32 = -1;
     let timeout: i32? = null;
@@ -629,8 +651,8 @@ pub fn spawnMaybeSync(
 
     const spawn_res = bun.spawn.spawnProcess(
         &spawn_options,
-        @ptrCast(argv.items.ptr),
-        @ptrCast(env_array.items.ptr),
+        unsafe { @ptrCast(argv.items.ptr) },
+        unsafe { @ptrCast(env_array.items.ptr) },
     ) catch |e| {
         spawn_options.deinit();
         if (e == error.EMFILE || e == error.ENFILE) {
@@ -1102,9 +1124,9 @@ pub fn spawnMaybeSync(
                                 // TODO: add a .cloneNonOptional()?
                                 .clone();
 
-                            defer active_file_strong.deinit();
+                            const _guard_active_file_strong = DeinitGuard<@TypeOf(active_file_strong)>{ ptr: unsafe { &active_file_strong } };
                             let taken_active_file = active_file_strong.take().?;
-                            defer taken_active_file.deinit();
+                            const _guard_taken_active_file = DeinitGuard<@TypeOf(taken_active_file)>{ ptr: unsafe { &taken_active_file } };
 
                             bun.jsc.Jest.Jest.runner.?.removeActiveTimeout(jsc_vm);
 
@@ -1165,7 +1187,7 @@ fn throwCommandNotFound(globalThis: *jsc.JSGlobalObject, command: []const u8): b
 
 pub fn appendEnvpFromJS(globalThis: *jsc.JSGlobalObject, object: *jsc.JSObject, envp: *std.array_list.Managed(NullableStringZ), PATH: *[]const u8): bun.JSError!void {
     let object_iter = jsc.JSPropertyIterator(.{ .skip_empty_name = false, .include_value = true }).init(globalThis, object)?;
-    defer object_iter.deinit();
+    const _guard_object_iter = DeinitGuard<@TypeOf(object_iter)>{ ptr: unsafe { &object_iter } };
 
     envp.ensureTotalCapacityPrecise(object_iter.len +
         // +1 incase there's IPC
@@ -1175,8 +1197,8 @@ pub fn appendEnvpFromJS(globalThis: *jsc.JSGlobalObject, object: *jsc.JSObject, 
         let value = object_iter.value;
         if (value.isUndefined()) continue;
 
-        const value_bunstr = value.toBunString(globalThis)?;
-        defer value_bunstr.deref();
+        let value_bunstr = value.toBunString(globalThis)?;
+        const _guard_value_bunstr = DerefGuard<@TypeOf(value_bunstr)>{ ptr: unsafe { &value_bunstr } };
 
         // Check for null bytes in env key and value (security: prevent null byte injection)
         if (key.indexOfAsciiChar(0) != null) {

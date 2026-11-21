@@ -1923,3 +1923,15 @@
 - `src/shell/builtin/rm.{cp,zig}` (`14 -> 11` 控制流/锁, ratio `0.942`)
 - `src/patch/patch.{cp,zig}` (`14 -> 1`, ratio `0.956`)
 - `src/bake/DevServer/IncrementalGraph.{cp,zig}` (`16 -> 3`, ratio `1.058`, 同步完成 `return struct` 纯 CP 化)
+
+## [2026-11-22 Wave #9] RAII `~init()` 与 `unsafe {}` 改造（9 改造 + 3 复核）
+- `src/runtime/image/backend_wic.{cp,zig}` (`14 -> 0`, ratio `1.13`)
+- `src/jsc/ipc.{cp,zig}` (`14 -> 7` 控制流/事件循环, ratio `1.069`)
+- `src/ini/ini.{cp,zig}` (`13 -> 4` 状态/计数, ratio `1.018`)
+- `src/css_jsc/css_internals.{cp,zig}` (`14 -> 0`, ratio `1.012`)
+- `src/cli/pm_version_command.{cp,zig}` (`14 -> 0`, ratio `1.034`)
+- `src/bundler/ParseTask.{cp,zig}` (`14 -> 7` 状态/错误日志, ratio `1.003`)
+- `src/bake/DevServer/ErrorReportRequest.{cp,zig}` (`14 -> 4` 状态/刷新, ratio `1.124`)
+- `src/runtime/api/bun/js_bun_spawn_bindings.{cp,zig}` (`13 -> 4` 状态/多步清理, ratio `1.041`)
+- `src/http_jsc/websocket_client.{cp,zig}` (`13 -> 1` 状态恢复, ratio `0.88`)
+- 复核达标（剩余 `defer` 全为状态/锁/配对型）：`src/resolver/resolver.cp` (`13`), `src/runtime/server/server.cp` (`11`), `src/interchange/yaml.cp` (`11`)

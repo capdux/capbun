@@ -62,13 +62,63 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 pub const codecs = @import("./codecs.zig");
 pub const WicError = error{
     BackendUnavailable,
     OutOfMemory,
+};
+
+pub fn ComGuard(comptime T: type) type {
+    return struct {
+        ptr: ?T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = release(self.ptr);
+        }
+    };
+}
+
+pub fn FreeSliceGuard(comptime T: type) type {
+    return struct {
+        slice: ?[]T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.slice) |s| {
+                    _ = &s;
+                    _ = bun.default_allocator.free(s);
+                }
+        }
+    };
+}
+
+pub const GlobalUnlockGuard = struct {
+    h: *anyopaque,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *GlobalUnlockGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = GlobalUnlock(self.h);
+    }
+};
+
+pub const CloseClipboardGuard = struct {
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *CloseClipboardGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = CloseClipboard();
+    }
 };
 
 const WICConvertBitmapSourceFn = *const fn (*const GUID, *IWICBitmapSource, *?*IWICBitmapSource) callconv(.c) HRESULT;
@@ -225,28 +275,34 @@ pub fn decode(bytes: []const u8, max_pixels: u64) BackendError!codecs.Decoded {
         if (((f.vt.CreateStream(f, (&stream)) < 0) or (stream == null))) {
             return error.BackendUnavailable;
         }
-        defer {
-        _ = release(stream);
-        }
+        var _guard_stream = ComGuard(*IWICStream){ .ptr = stream };
+        _ = &_guard_stream;
+        var ___guard_stream_moved = false; _ = &___guard_stream_moved;
+        defer if (!___guard_stream_moved) { ___guard_stream_moved = true; const __T = @TypeOf(_guard_stream); if (@typeInfo(__T) == .optional) { if (_guard_stream) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_stream.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_stream; _drop_val.__cp_deinit(); } };
         if ((stream.?.vt.InitializeFromMemory(stream.?, bytes.ptr, @intCast(bytes.len)) < 0)) {
             return error.DecodeFailed;
         }
         var decoder: ?*IWICBitmapDecoder = null;
         _ = &decoder;
-        if (((f.vt.CreateDecoderFromStream(f, @ptrCast(stream), null, 0, (&decoder)) < 0) or (decoder == null))) {
+        if (((f.vt.CreateDecoderFromStream(f, (blk: {
+        break :blk @ptrCast(stream);
+
+}), null, 0, (&decoder)) < 0) or (decoder == null))) {
             return error.DecodeFailed;
         }
-        defer {
-        _ = release(decoder);
-        }
+        var _guard_decoder = ComGuard(*IWICBitmapDecoder){ .ptr = decoder };
+        _ = &_guard_decoder;
+        var ___guard_decoder_moved = false; _ = &___guard_decoder_moved;
+        defer if (!___guard_decoder_moved) { ___guard_decoder_moved = true; const __T = @TypeOf(_guard_decoder); if (@typeInfo(__T) == .optional) { if (_guard_decoder) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_decoder.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_decoder; _drop_val.__cp_deinit(); } };
         var frame: ?*IWICBitmapSource = null;
         _ = &frame;
         if (((decoder.?.vt.GetFrame(decoder.?, 0, (&frame)) < 0) or (frame == null))) {
             return error.DecodeFailed;
         }
-        defer {
-        _ = release(frame);
-        }
+        var _guard_frame = ComGuard(*IWICBitmapSource){ .ptr = frame };
+        _ = &_guard_frame;
+        var ___guard_frame_moved = false; _ = &___guard_frame_moved;
+        defer if (!___guard_frame_moved) { ___guard_frame_moved = true; const __T = @TypeOf(_guard_frame); if (@typeInfo(__T) == .optional) { if (_guard_frame) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_frame.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_frame; _drop_val.__cp_deinit(); } };
         var w: u32 = 0;
         _ = &w;
         var h: u32 = 0;
@@ -266,21 +322,24 @@ pub fn decode(bytes: []const u8, max_pixels: u64) BackendError!codecs.Decoded {
         if (((convertFn(*const GUID_WICPixelFormat32bppRGBA, frame.?, (&conv)) < 0) or (conv == null))) {
             return error.DecodeFailed;
         }
-        defer {
-        _ = release(conv);
-        }
+        var _guard_conv = ComGuard(*IWICBitmapSource){ .ptr = conv };
+        _ = &_guard_conv;
+        var ___guard_conv_moved = false; _ = &___guard_conv_moved;
+        defer if (!___guard_conv_moved) { ___guard_conv_moved = true; const __T = @TypeOf(_guard_conv); if (@typeInfo(__T) == .optional) { if (_guard_conv) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_conv.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_conv; _drop_val.__cp_deinit(); } };
         const stride: u64 = ((if (comptime @typeInfo(@TypeOf(w)) == .@"enum") cp_cast_int(u64, @intFromEnum(w)) else cp_cast_int(u64, w)) * 4);
         const out_len: u64 = (stride * h);
         if ((out_len > std.math.maxInt(u32))) {
             return error.TooManyPixels;
         }
         const out = try bun.default_allocator.alloc(u8, @intCast(out_len));
-        errdefer {
-        _ = bun.default_allocator.free(out);
-        }
+        var _guard_out = FreeSliceGuard(u8){ .slice = out };
+        _ = &_guard_out;
+        var ___guard_out_moved = false; _ = &___guard_out_moved;
+        defer if (!___guard_out_moved) { ___guard_out_moved = true; const __T = @TypeOf(_guard_out); if (@typeInfo(__T) == .optional) { if (_guard_out) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_out.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_out; _drop_val.__cp_deinit(); } };
         if ((conv.?.vt.CopyPixels(conv.?, null, @intCast(stride), @intCast(out_len), out.ptr) < 0)) {
             return error.DecodeFailed;
         }
+        _guard_out.slice = null;
         return .{ .rgba = out, .width = w, .height = h };
 }
 
@@ -295,9 +354,10 @@ pub fn encode(rgba: []const u8, width: u32, height: u32, opts: codecs.EncodeOpti
         if (((CreateStreamOnHGlobal(null, 1, (&stream)) < 0) or (stream == null))) {
             return error.BackendUnavailable;
         }
-        defer {
-        _ = release(stream);
-        }
+        var _guard_stream = ComGuard(*IUnknown){ .ptr = stream };
+        _ = &_guard_stream;
+        var ___guard_stream_moved = false; _ = &___guard_stream_moved;
+        defer if (!___guard_stream_moved) { ___guard_stream_moved = true; const __T = @TypeOf(_guard_stream); if (@typeInfo(__T) == .optional) { if (_guard_stream) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_stream.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_stream; _drop_val.__cp_deinit(); } };
         var enc: ?*IWICBitmapEncoder = null;
         _ = &enc;
         const guid_opt = containerGuid(opts.format);
@@ -308,9 +368,10 @@ pub fn encode(rgba: []const u8, width: u32, height: u32, opts: codecs.EncodeOpti
         if (((f.vt.CreateEncoder(f, guid, null, (&enc)) < 0) or (enc == null))) {
             return error.BackendUnavailable;
         }
-        defer {
-        _ = release(enc);
-        }
+        var _guard_enc = ComGuard(*IWICBitmapEncoder){ .ptr = enc };
+        _ = &_guard_enc;
+        var ___guard_enc_moved = false; _ = &___guard_enc_moved;
+        defer if (!___guard_enc_moved) { ___guard_enc_moved = true; const __T = @TypeOf(_guard_enc); if (@typeInfo(__T) == .optional) { if (_guard_enc) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_enc.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_enc; _drop_val.__cp_deinit(); } };
         if ((enc.?.vt.Initialize(enc.?, stream.?, 2) < 0)) {
             return error.EncodeFailed;
         }
@@ -321,12 +382,14 @@ pub fn encode(rgba: []const u8, width: u32, height: u32, opts: codecs.EncodeOpti
         if (((enc.?.vt.CreateNewFrame(enc.?, (&frame), (&props)) < 0) or (frame == null))) {
             return error.EncodeFailed;
         }
-        defer {
-        _ = release(frame);
-        }
-        defer {
-        _ = release(props);
-        }
+        var _guard_frame = ComGuard(*IWICBitmapFrameEncode){ .ptr = frame };
+        _ = &_guard_frame;
+        var ___guard_frame_moved = false; _ = &___guard_frame_moved;
+        defer if (!___guard_frame_moved) { ___guard_frame_moved = true; const __T = @TypeOf(_guard_frame); if (@typeInfo(__T) == .optional) { if (_guard_frame) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_frame.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_frame; _drop_val.__cp_deinit(); } };
+        var _guard_props = ComGuard(*IUnknown){ .ptr = props };
+        _ = &_guard_props;
+        var ___guard_props_moved = false; _ = &___guard_props_moved;
+        defer if (!___guard_props_moved) { ___guard_props_moved = true; const __T = @TypeOf(_guard_props); if (@typeInfo(__T) == .optional) { if (_guard_props) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_props.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_props; _drop_val.__cp_deinit(); } };
         _ = bun_wic_propbag_write_f32(props, bun.strings.literal(u16, "ImageQuality"), (toF32(opts.quality) / 100.0));
         const method: u8 = (if ((opts.format == .avif)) WICHeifCompressionAV1 else WICHeifCompressionHEVC);
         if ((bun_wic_propbag_write_u8(props, bun.strings.literal(u16, "HeifCompressionMethod"), method) == 0)) {
@@ -354,9 +417,10 @@ pub fn encode(rgba: []const u8, width: u32, height: u32, opts: codecs.EncodeOpti
             if (((f.vt.CreateBitmapFromMemory(f, width, height, *const GUID_WICPixelFormat32bppRGBA, stride, @intCast(rgba.len), rgba.ptr, (&src)) < 0) or (src == null))) {
                 return error.EncodeFailed;
             }
-            defer {
-            _ = release(src);
-            }
+            var _guard_src = ComGuard(*IWICBitmapSource){ .ptr = src };
+            _ = &_guard_src;
+            var ___guard_src_moved = false; _ = &___guard_src_moved;
+            defer if (!___guard_src_moved) { ___guard_src_moved = true; const __T = @TypeOf(_guard_src); if (@typeInfo(__T) == .optional) { if (_guard_src) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_src.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_src; _drop_val.__cp_deinit(); } };
             if ((wicConvertBitmapSource == null)) {
                 return error.BackendUnavailable;
             }
@@ -366,9 +430,10 @@ pub fn encode(rgba: []const u8, width: u32, height: u32, opts: codecs.EncodeOpti
             if (((convertFn((&pf), src.?, (&conv)) < 0) or (conv == null))) {
                 return error.EncodeFailed;
             }
-            defer {
-            _ = release(conv);
-            }
+            var _guard_conv = ComGuard(*IWICBitmapSource){ .ptr = conv };
+            _ = &_guard_conv;
+            var ___guard_conv_moved = false; _ = &___guard_conv_moved;
+            defer if (!___guard_conv_moved) { ___guard_conv_moved = true; const __T = @TypeOf(_guard_conv); if (@typeInfo(__T) == .optional) { if (_guard_conv) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_conv.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_conv; _drop_val.__cp_deinit(); } };
             if ((frame.?.vt.WriteSource(frame.?, conv.?, null) < 0)) {
                 return error.EncodeFailed;
             }
@@ -379,7 +444,10 @@ pub fn encode(rgba: []const u8, width: u32, height: u32, opts: codecs.EncodeOpti
         if ((enc.?.vt.Commit(enc.?) < 0)) {
             return error.EncodeFailed;
         }
-        const istream: *IStream = @ptrCast(@alignCast(stream.?));
+        const istream: *IStream = (blk: {
+        break :blk @ptrCast(@alignCast(stream.?));
+
+});
         var pos: u64 = 0;
         _ = &pos;
         if ((istream.vt.Seek(istream, 0, STREAM_SEEK_CUR, (&pos)) < 0)) {
@@ -394,10 +462,14 @@ pub fn encode(rgba: []const u8, width: u32, height: u32, opts: codecs.EncodeOpti
         if ((lk == null)) {
             return error.EncodeFailed;
         }
-        const ptr: [*]const u8 = @ptrCast(lk.?);
-        defer {
-        _ = GlobalUnlock(hg.?);
-        }
+        const ptr: [*]const u8 = (blk: {
+        break :blk @ptrCast(lk.?);
+
+});
+        var _guard_hg = GlobalUnlockGuard{ .h = hg.? };
+        _ = &_guard_hg;
+        var ___guard_hg_moved = false; _ = &___guard_hg_moved;
+        defer if (!___guard_hg_moved) { ___guard_hg_moved = true; const __T = @TypeOf(_guard_hg); if (@typeInfo(__T) == .optional) { if (_guard_hg) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_hg.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_hg; _drop_val.__cp_deinit(); } };
         return try bun.default_allocator.dupe(u8, (blk: {
         break :blk ptr[0..@intCast(pos)];
 
@@ -411,7 +483,10 @@ extern "c" fn bun_wic_propbag_write_u8(props: ?*anyopaque, name: [*:0]const u16,
 pub inline fn release(p: anytype) void {
         if (p) |obj| {
             _ = &obj;
-            const unk: *IUnknown = @ptrCast(@alignCast(obj));
+            const unk: *IUnknown = (blk: {
+            break :blk @ptrCast(@alignCast(obj));
+
+});
             _ = unk.vt.Release(unk);
         }
 }
@@ -462,13 +537,19 @@ pub fn loadFactory() void {
         if ((sym == null)) {
             return;
         }
-        wicConvertBitmapSource = @ptrCast(@alignCast(sym.?));
+        wicConvertBitmapSource = (blk: {
+        break :blk @ptrCast(@alignCast(sym.?));
+
+});
         var out: ?*anyopaque = null;
         _ = &out;
         if ((CoCreateInstance(*const CLSID_WICImagingFactory, null, CLSCTX_INPROC_SERVER, *const IID_IWICImagingFactory, (&out)) < 0)) {
             return;
         }
-        factory_ptr = @ptrCast(@alignCast(out));
+        factory_ptr = (blk: {
+        break :blk @ptrCast(@alignCast(out));
+
+});
 }
 
 extern "c" fn OpenClipboard(hwnd: ?*anyopaque) callconv(.winapi) c_int;
@@ -507,9 +588,10 @@ pub fn clipboard() WicError!?[]u8 {
         if ((OpenClipboard(null) == 0)) {
             return error.BackendUnavailable;
         }
-        defer {
-        _ = CloseClipboard();
-        }
+        var _guard_cb = CloseClipboardGuard{  };
+        _ = &_guard_cb;
+        var ___guard_cb_moved = false; _ = &___guard_cb_moved;
+        defer if (!___guard_cb_moved) { ___guard_cb_moved = true; const __T = @TypeOf(_guard_cb); if (@typeInfo(__T) == .optional) { if (_guard_cb) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_cb.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_cb; _drop_val.__cp_deinit(); } };
         for (cp_iter_slice(named_formats)) |name| {
             _ = &name;
             const id = RegisterClipboardFormatA(name);
@@ -563,10 +645,14 @@ pub fn dupGlobal(h: *anyopaque, comptime prefix: usize) WicError!?[]u8 {
         if ((lk == null)) {
             return null;
         }
-        const ptr: [*]const u8 = @ptrCast(lk.?);
-        defer {
-        _ = GlobalUnlock(h);
-        }
+        const ptr: [*]const u8 = (blk: {
+        break :blk @ptrCast(lk.?);
+
+});
+        var _guard_h = GlobalUnlockGuard{ .h = h };
+        _ = &_guard_h;
+        var ___guard_h_moved = false; _ = &___guard_h_moved;
+        defer if (!___guard_h_moved) { ___guard_h_moved = true; const __T = @TypeOf(_guard_h); if (@typeInfo(__T) == .optional) { if (_guard_h) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_h.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_h; _drop_val.__cp_deinit(); } };
         const out = try bun.default_allocator.alloc(u8, (prefix + size));
         _ = @memcpy(out[prefix..], (blk: {
         break :blk ptr[0..size];

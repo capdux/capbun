@@ -1527,3 +1527,7 @@
 - `IncrementalGraph.cp` 的 `return struct { ... }` 此前因保留旧 Zig 语法回退透传；通过提升 `ClientFilePacked` 到顶层、全面净化 `|capture|`/`try`/方法接收者、修复 `current_chunk_source_maps` (`switch (side)`) 与 `SerializedFailure.ArrayHashAdapter` 具名变量传参，成功激活完整 CP lowering 与 `__cp_deinit`。
 - `valkey_protocol.cp` 中 `&key` / `&push_type` 在泛型指针 Guard 构造时易被误解引用，改用值持有 Guard `OptValDeinitWithAllocGuard<T>` 彻底消除悬垂风险。
 - `CryptoHasher.cp` 中 `hmac: (*HMAC)?` 括号优先级与单行 `if (h := _.hmac)` 避免与联合体 `.hmac` 字段重名，以及 `BoringSSL.ERR_get_error` 函数指针局部调用绕过 0 参省略括号问题。
+
+## [2026-11-22 Wave #9] RAII 改造与 `unsafe {}` 经验
+- `backend_wic.cp`：COM 接口 `release()`、`GlobalUnlock()`、`CloseClipboard()` 与堆分配切片 `FreeSliceGuard` 统一收口为 `~init()`，并用 `unsafe {}` 包裹全部 `@ptrCast`/`@alignCast`。
+- `websocket_client.cp`：`this.deref()`、`ws.unref()`、`allocator.free(buf)` 等 12 处资源清理收口至 `DerefGuard`/`UnrefGuard`/`AllocFreeGuard`/`DeinitGuard`（膨胀率仅 `0.88`）。

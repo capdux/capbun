@@ -251,3 +251,7 @@
 ### [2026-11-22 Wave #8] RAII `~init()` + `unsafe {}` 专项改造（17 模块，全仓 `zig:check` + `bun bd test` 60/60 PASS）
 - 完成 `JSGlobalObject`, `bun.lock`, `create_command`, `node_os`, `MetafileBuilder`, `valkey_protocol`, `DecodeBinaryValue`, `valkey`, `Response`, `CryptoHasher`, `napi`, `pm_pkg_command`, `ansi_renderer`, `production`, `rm`, `patch`, `IncrementalGraph` 共 17 个核心模块的 `~init()` RAII 析构与 `unsafe {}` (E0209) 合规化。
 - 验证：`cpc_brief.py` 17/17 四门禁全绿（膨胀率 `0.942 ~ 1.147 <= 1.2x`）；`bun run zig:check` 5/5 PASS；`bun bd test test/js/node/os/ test/js/bun/util/bun-file.test.ts test/regression/issue/29181.test.ts` 60 pass / 0 fail（1241 expects）。
+
+### [2026-11-22 Wave #9] RAII `~init()` + `unsafe {}` 专项改造（10 改造 + 2 复核，全仓 `zig:check` + `bun bd test` 8/8 PASS）
+- 完成 `backend_wic`, `ipc`, `ini`, `css_internals`, `pm_version_command`, `ParseTask`, `ErrorReportRequest`, `js_bun_spawn_bindings`, `websocket_client` 等 9 个改造模块（另有 `resolver`, `server`, `yaml` 3 个模块复核剩余 `defer` 均为状态/锁/生命周期配对型，无需再改）。
+- 验证：`cpc_brief.py` 四门禁全绿（膨胀率 `0.88 ~ 1.13 <= 1.2x`）；`bun run zig:check` 5/5 PASS；`bun bd test test/regression/issue/29181.test.ts test/js/bun/util/bun-file.test.ts` 8 pass / 0 fail（460 expects）。

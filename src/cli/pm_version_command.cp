@@ -12,6 +12,26 @@ const strings = bun.strings;
 const Command = bun.cli.Command;
 const PackageManager = bun.install.PackageManager;
 
+pub struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: []const T,
+    active: bool = true,
+    ~init() {
+        if (_.active) {
+            _.allocator.free(_.slice);
+        }
+    }
+}
+
+pub struct DeinitGuard<T> {
+    ptr: *T!? = null,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deinit(); }
+        }
+    }
+}
+
 pub enum PmVersionType {
     patch,
     minor,
@@ -65,7 +85,7 @@ pub struct PmVersionCommand {
             Output.errGeneric("Failed to read package.json: {s}", .{ @errorName(e) });
             Global.exit(1);
         };
-        defer ctx.allocator.free(package_json_contents);
+        const _pkg_contents_guard = FreeGuard<u8>{ allocator: ctx.allocator, slice: package_json_contents };
 
         const package_json_source = logger.Source.initPathString(package_json_path, package_json_contents);
         const json_result = bun.json.parsePackageJSONUTF8WithOpts(
@@ -129,7 +149,7 @@ pub struct PmVersionCommand {
         };
 
         const new_version_str = calculateNewVersion(ctx.allocator, current_version ?? "0.0.0", version_type, new_version, pm.options.preid, package_json_dir)?;
-        defer ctx.allocator.free(new_version_str);
+        const _new_ver_guard = FreeGuard<u8>{ allocator: ctx.allocator, slice: new_version_str };
 
         if (version := current_version) {
             if (!pm.options.allow_same_version && strings.eql(version, new_version_str)) {
@@ -298,13 +318,13 @@ pub struct PmVersionCommand {
         }
 
         const patch_version = calculateNewVersion(ctx.allocator, current_version, .patch, null, pm.options.preid, cwd)?;
+        const _patch_guard = FreeGuard<u8>{ allocator: ctx.allocator, slice: patch_version };
         const minor_version = calculateNewVersion(ctx.allocator, current_version, .minor, null, pm.options.preid, cwd)?;
+        const _minor_guard = FreeGuard<u8>{ allocator: ctx.allocator, slice: minor_version };
         const major_version = calculateNewVersion(ctx.allocator, current_version, .major, null, pm.options.preid, cwd)?;
+        const _major_guard = FreeGuard<u8>{ allocator: ctx.allocator, slice: major_version };
         const prerelease_version = calculateNewVersion(ctx.allocator, current_version, .prerelease, null, pm.options.preid, cwd)?;
-        defer ctx.allocator.free(patch_version);
-        defer ctx.allocator.free(minor_version);
-        defer ctx.allocator.free(major_version);
-        defer ctx.allocator.free(prerelease_version);
+        const _prerelease_guard = FreeGuard<u8>{ allocator: ctx.allocator, slice: prerelease_version };
 
         const increment_help_text = "\n<b>Increment<r>:\n  <cyan>patch<r>      <d>{s} → {s}<r>\n  <cyan>minor<r>      <d>{s} → {s}<r>\n  <cyan>major<r>      <d>{s} → {s}<r>\n  <cyan>prerelease<r> <d>{s} → {s}<r>\n";
         Output.pretty(increment_help_text, .{
@@ -316,11 +336,11 @@ pub struct PmVersionCommand {
 
         if (strings.indexOfChar(current_version, '-') != null || pm.options.preid.len > 0) {
             const prepatch_version = calculateNewVersion(ctx.allocator, current_version, .prepatch, null, pm.options.preid, cwd)?;
+            const _prepatch_guard = FreeGuard<u8>{ allocator: ctx.allocator, slice: prepatch_version };
             const preminor_version = calculateNewVersion(ctx.allocator, current_version, .preminor, null, pm.options.preid, cwd)?;
+            const _preminor_guard = FreeGuard<u8>{ allocator: ctx.allocator, slice: preminor_version };
             const premajor_version = calculateNewVersion(ctx.allocator, current_version, .premajor, null, pm.options.preid, cwd)?;
-            defer ctx.allocator.free(prepatch_version);
-            defer ctx.allocator.free(preminor_version);
-            defer ctx.allocator.free(premajor_version);
+            const _premajor_guard = FreeGuard<u8>{ allocator: ctx.allocator, slice: premajor_version };
 
             const prerelease_help_text = "  <cyan>prepatch<r>   <d>{s} → {s}<r>\n  <cyan>preminor<r>   <d>{s} → {s}<r>\n  <cyan>premajor<r>   <d>{s} → {s}<r>\n";
             Output.pretty(prerelease_help_text, .{
@@ -331,7 +351,7 @@ pub struct PmVersionCommand {
         }
 
         const beta_prerelease_version = calculateNewVersion(ctx.allocator, current_version, .prerelease, null, "beta", cwd)?;
-        defer ctx.allocator.free(beta_prerelease_version);
+        const _beta_guard = FreeGuard<u8>{ allocator: ctx.allocator, slice: beta_prerelease_version };
 
         const set_specific_version_help_text = "  <cyan>from-git<r>   <d>Use version from latest git tag<r>\n  <blue>1.2.3<r>      <d>Set specific version<r>\n\n<b>Options<r>:\n  <cyan>--no-git-tag-version<r> <d>Skip git operations<r>\n  <cyan>--allow-same-version<r> <d>Prevents throwing error if version is the same<r>\n  <cyan>--message<d>=\\<val\\><r>, <cyan>-m<r>  <d>Custom commit message, use %s for version substitution<r>\n  <cyan>--preid<d>=\\<val\\><r>        <d>Prerelease identifier (i.e beta → {s})<r>\n  <cyan>--force<r>, <cyan>-f<r>          <d>Bypass dirty git history check<r>\n\n<b>Examples<r>:\n  <d>$<r> <b><green>bun pm version<r> <cyan>patch<r>\n  <d>$<r> <b><green>bun pm version<r> <blue>1.2.3<r> <cyan>--no-git-tag-version<r>\n  <d>$<r> <b><green>bun pm version<r> <cyan>prerelease<r> <cyan>--preid<r> <blue>beta<r> <cyan>--message<r> <blue>\"Release beta: %s\"<r>\n\nMore info: <magenta>https://bun.com/docs/cli/pm#version<r>\n";
         Output.pretty(set_specific_version_help_text, .{ beta_prerelease_version });
@@ -373,7 +393,7 @@ pub struct PmVersionCommand {
                 }
             }
         };
-        defer allocator.free(prerelease_id);
+        const _preid_guard = FreeGuard<u8>{ allocator: allocator, slice: prerelease_id };
 
         return incrementVersion(allocator, current_str, current, version_type, prerelease_id)?;
     }
@@ -566,7 +586,7 @@ pub struct PmVersionCommand {
             if (custom := custom_message) {
                 if (strings.indexOf(custom, "%s") != null) {
                     let replaced = std.array_list.Managed(u8).init(allocator);
-                    defer replaced.deinit();
+                    const _replaced_guard = DeinitGuard<@TypeOf(replaced)>{ ptr: unsafe { &replaced } };
 
                     let index: usize = 0;
                     while (pos := std.mem.indexOfPos(u8, custom, index, "%s")) {
@@ -584,7 +604,7 @@ pub struct PmVersionCommand {
                 break :brk std.fmt.allocPrint(allocator, "v{s}", .{ version })?;
             }
         };
-        defer allocator.free(commit_message);
+        const _commit_msg_guard = FreeGuard<u8>{ allocator: allocator, slice: commit_message };
 
         const commit_proc = bun.spawnSync(&.{
             .argv = &[ git_path, "commit", "-m", commit_message ],
@@ -615,7 +635,7 @@ pub struct PmVersionCommand {
         }
 
         const tag_name = std.fmt.allocPrint(allocator, "v{s}", .{ version })?;
-        defer allocator.free(tag_name);
+        const _tag_guard = FreeGuard<u8>{ allocator: allocator, slice: tag_name };
 
         const tag_proc = bun.spawnSync(&.{
             .argv = &[ git_path, "tag", tag_name ],

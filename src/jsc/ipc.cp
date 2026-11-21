@@ -15,6 +15,39 @@ const JSValue = jsc.JSValue;
 
 type string = []const u8;
 
+pub struct DeinitGuard<T> {
+    ptr: (*T!)?,
+    ~init() {
+        if (p := _.ptr) p.deinit();
+    }
+}
+
+pub struct DerefGuard<T> {
+    ptr: (*T!)?,
+    ~init() {
+        if (p := _.ptr) p.deref();
+    }
+}
+
+pub struct DestroyGuard<T> {
+    ptr: (*T!)?,
+    ~init() {
+        if (p := _.ptr) p.destroy();
+    }
+}
+
+pub struct ExternalStringDerefGuard {
+    ptr: *bun.String!,
+    is_ascii: bool,
+    freed: *const bool!,
+    ~init() {
+        _.ptr.deref();
+        if (_.is_ascii && !unsafe { _.freed.* }) {
+            @panic("Expected ascii string to be freed by ExternalString, but it wasn't. This is a bug in Bun.");
+        }
+    }
+}
+
 pub const log = Output.scoped(.IPC, .visible);
 
 /// Union type that switches between simple ByteList (for advanced mode)
@@ -171,12 +204,12 @@ pub struct advanced {
     }
 
     pub static fn serialize(writer: *bun.io.StreamBuffer, global: *jsc.JSGlobalObject, value: JSValue, is_internal: IsInternal): !usize {
-        const serialized = (value.serialize(global, .{
+        let serialized = (value.serialize(global, .{
             // IPC sends across process.
             .forCrossProcessTransfer = true,
             .forStorage = false,
         }))?;
-        defer serialized.deinit();
+        const _g_ser = DeinitGuard<@TypeOf(serialized)>{ ptr: unsafe { &serialized } };
 
         const size: u32 = @as(u32, @intCast(serialized.data.len));
         const payload_length: usize = @sizeOf(IPCMessageType) + @sizeOf(u32) + size;
@@ -258,12 +291,7 @@ pub struct json {
             break :ascii s;
         } else bun.String.borrowUTF8(json_data);
 
-        defer {
-            str.deref();
-            if (is_ascii && !was_ascii_string_freed) {
-                @panic("Expected ascii string to be freed by ExternalString, but it wasn't. This is a bug in Bun.");
-            }
-        }
+        const _g_str = ExternalStringDerefGuard{ ptr: unsafe { &str }, is_ascii: is_ascii, freed: unsafe { &was_ascii_string_freed } };
 
         const parse_res = str.toJSByParseJSON(globalThis);
         const deserialized = parse_res catch |e| {
@@ -293,13 +321,13 @@ pub struct json {
         // Use jsonStringifyFast which passes undefined for the space parameter,
         // triggering JSC's SIMD-optimized FastStringifier code path.
         (value.jsonStringifyFast(global, &out))?;
-        defer out.deref();
+        const _g_out = DerefGuard<bun.String>{ ptr: unsafe { &out } };
 
         if (out.tag == .Dead) return IPCSerializationError.SerializationFailed;
 
         // TODO: it would be cool to have a 'toUTF8Into' which can write directly into 'ipc_data.outgoing.list'
-        const str = out.toUTF8(bun.default_allocator);
-        defer str.deinit();
+        let str = out.toUTF8(bun.default_allocator);
+        const _g_str = DeinitGuard<@TypeOf(str)>{ ptr: unsafe { &str } };
 
         const slice = str.slice();
 
@@ -457,7 +485,7 @@ pub struct SendHandle {
 
     /// Call the callback and deinit
     fn complete(*_, global: *jsc.JSGlobalObject) {
-        defer _.deinit();
+        const _g_self = DeinitGuard<SendHandle>{ ptr: unsafe { _ } };
         _.callbacks.callNextTick(global) catch {}; // TODO: properly propagate exception upwards
     }
 
@@ -962,9 +990,9 @@ pub const SendQueueOwner = IPCSendQueueOwner;
     static fn _windowsOnWriteComplete(write_req: *WindowsWrite, status: uv.ReturnCode) {
         log("SendQueue#_windowsOnWriteComplete", .{});
         const write_len = write_req.write_slice.len;
-        const q: *SendQueue = blk: {
-            defer write_req.destroy();
-            break :blk write_req.owner ?? return; // orelse case if disconnected before the write completes
+        const q: *SendQueue = write_blk: {
+            const _g_req = DestroyGuard<WindowsWrite>{ ptr: unsafe { write_req } };
+            break :write_blk write_req.owner ?? return; // orelse case if disconnected before the write completes
         };
 
         const vm = jsc.VirtualMachine.get();
@@ -1167,7 +1195,7 @@ pub union(enum) IPCCommand {
 fn handleIPCMessage(send_queue: *SendQueue, message: DecodedIPCMessage, globalThis: *jsc.JSGlobalObject) {
     if (comptime Environment.isDebug) {
         let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis };
-        defer formatter.deinit();
+        const _g_fmt = DeinitGuard<jsc.ConsoleObject.Formatter>{ ptr: unsafe { &formatter } };
         switch (message) {
             .version => |version| log("received ipc message: version: {}", .{ version }),
             .data => |jsvalue| log("received ipc message: {f}", .{ jsvalue.toFmt(&formatter) }),

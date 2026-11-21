@@ -76,6 +76,43 @@ pub struct Mask {
     }
 }
 
+pub struct DeinitGuard<T> {
+    ptr: (*T!)?,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deinit(); }
+        }
+    }
+}
+
+pub struct DerefGuard<T> {
+    ptr: (*T!)?,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deref(); }
+        }
+    }
+}
+
+pub struct UnrefGuard<T> {
+    ptr: (*T!)?,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.unref(); }
+        }
+    }
+}
+
+pub struct AllocFreeGuard {
+    allocator: std.mem.Allocator,
+    slice: ([]u8)?,
+    ~init() {
+        if (buf := _.slice) {
+            _.allocator.free(buf);
+        }
+    }
+}
+
 enum ReceiveState {
     need_header,
     need_mask,
@@ -290,7 +327,7 @@ fn NewInitialDataHandler(comptime WebSocket: type): type {
             this.adopted = null;
             this_socket.initial_data_handler = null;
             let ws = this.ws;
-            defer ws.unref();
+            const _ws_unref = UnrefGuard<CppWebSocket>{ ptr: unsafe { @as(*CppWebSocket!, ws) } };
 
             const is_connected = !this_socket.tcp.isClosed() || this_socket.proxy_tunnel != null;
             if (this_socket.outgoing_websocket != null && is_connected) {
@@ -412,7 +449,7 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
         @c pub fn cancel(*this) {
             log("cancel", {});
             this.ref();
-            defer this.deref();
+            const _deref_guard = DerefGuard<WebSocket>{ ptr: unsafe { @as(*WebSocket!, this) } };
 
             const had_tunnel = this.proxy_tunnel != null;
             this.clearData();
@@ -521,7 +558,7 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
             const deflate = this.deflate.?;
 
             let decompressed = deflate.rare_data.arrayList();
-            defer decompressed.deinit();
+            const _decompressed_guard = DeinitGuard<@TypeOf(decompressed)>{ ptr: unsafe { &decompressed } };
 
             deflate.decompress(data_, &decompressed) catch e => {
                 const error_code = switch (e) {
@@ -635,7 +672,7 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
         pub fn handleData(*this, socket: Socket, data_: []const u8) {
             if (this.close_received) return;
             this.ref();
-            defer this.deref();
+            const _deref_guard = DerefGuard<WebSocket>{ ptr: unsafe { @as(*WebSocket!, this) } };
 
             if (initial_handler := this.initial_data_handler) {
                 initial_handler.handleWithoutDeinit();
@@ -986,15 +1023,14 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
             const should_compress = this.deflate != null && (opcode == .Text || opcode == .Binary) && bytes != .raw;
 
             if (should_compress) {
-                let temp_buffer: ([]u8)? = null;
                 const allocator = this.deflate.?.rare_data.allocator();
-                defer if (buf := temp_buffer) allocator.free(buf);
+                let temp_guard = AllocFreeGuard{ allocator: allocator, slice: null };
                 const content_to_compress: []const u8 = switch (bytes) {
                     .utf16 utf16 => ({
                         const content_byte_len: usize = strings.elementLengthUTF16IntoUTF8(utf16);
-                        temp_buffer = allocator.alloc(u8, content_byte_len) catch return false;
-                        const encode_result = strings.copyUTF16IntoUTF8(temp_buffer.?, utf16);
-                        break temp_buffer.?[0..encode_result.written];
+                        temp_guard.slice = allocator.alloc(u8, content_byte_len) catch return false;
+                        const encode_result = strings.copyUTF16IntoUTF8(temp_guard.slice.?, utf16);
+                        break temp_guard.slice.?[0..encode_result.written];
                     }),
                     .latin1 latin1 => ({
                         const content_byte_len: usize = strings.elementLengthLatin1IntoUTF8(latin1);
@@ -1002,9 +1038,9 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
                             break latin1;
                         }
 
-                        temp_buffer = allocator.alloc(u8, content_byte_len) catch return false;
-                        const encode_result = strings.copyLatin1IntoUTF8(temp_buffer.?, latin1);
-                        break temp_buffer.?[0..encode_result.written];
+                        temp_guard.slice = allocator.alloc(u8, content_byte_len) catch return false;
+                        const encode_result = strings.copyLatin1IntoUTF8(temp_guard.slice.?, latin1);
+                        break temp_guard.slice.?[0..encode_result.written];
                     }),
                     .bytes b => b,
                     .raw => unreachable,
@@ -1016,7 +1052,7 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
 
                 {
                     let compressed = std.array_list.Managed(u8).init(allocator);
-                    defer compressed.deinit();
+                    const _compressed_guard = DeinitGuard<@TypeOf(compressed)>{ ptr: unsafe { &compressed } };
 
                     this.deflate.?.compress(content_to_compress, &compressed) catch {
                         return this.sendDataUncompressed(bytes, do_write, opcode);
@@ -1210,7 +1246,7 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
             op: u8,
         ) {
             this.ref();
-            defer this.deref();
+            const _deref_guard = DerefGuard<WebSocket>{ ptr: unsafe { @as(*WebSocket!, this) } };
 
             if (!this.hasTCP() || op > 0xF) {
                 this.dispatchAbruptClose(ErrorCode.ended);
@@ -1242,7 +1278,7 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
             op: u8,
         ) {
             this.ref();
-            defer this.deref();
+            const _deref_guard = DerefGuard<WebSocket>{ ptr: unsafe { @as(*WebSocket!, this) } };
 
             if (!this.hasTCP() || op > 0xF) {
                 this.dispatchAbruptClose(ErrorCode.ended);
@@ -1281,7 +1317,7 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
             op: u8,
         ) {
             this.ref();
-            defer this.deref();
+            const _deref_guard = DerefGuard<WebSocket>{ ptr: unsafe { @as(*WebSocket!, this) } };
 
             const str = unsafe { str_.* };
             if (!this.hasTCP()) {
@@ -1344,7 +1380,7 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
 
         @c pub fn close(*this, code: u16, reason: (*const jsc.ZigString)?) {
             this.ref();
-            defer this.deref();
+            const _deref_guard = DerefGuard<WebSocket>{ ptr: unsafe { @as(*WebSocket!, this) } };
 
             if (!this.hasTCP())
                 return;
@@ -1483,7 +1519,7 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
         pub fn handleTunnelWritable(*this) {
             if (this.close_received) return;
             this.ref();
-            defer this.deref();
+            const _deref_guard = DerefGuard<WebSocket>{ ptr: unsafe { @as(*WebSocket!, this) } };
 
             const send_buf = this.send_buffer.readableSlice(0);
             if (send_buf.len == 0) return;
@@ -1493,7 +1529,7 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
         @c pub fn finalize(*this) {
             log("finalize", {});
             this.ref();
-            defer this.deref();
+            const _deref_guard = DerefGuard<WebSocket>{ ptr: unsafe { @as(*WebSocket!, this) } };
 
             this.clearData();
 

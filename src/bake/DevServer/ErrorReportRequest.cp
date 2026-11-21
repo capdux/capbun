@@ -15,6 +15,38 @@
 ///   - `u32`: Length of function name (0 for unavailable)
 ///   - `[n]u8`: Function name
 
+struct DeinitGuard<T> {
+    ptr: (*T!)?,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deinit(); }
+        }
+    }
+}
+
+struct DeinitWithAllocGuard<T> {
+    ptr: *T!,
+    allocator: Allocator,
+    ~init() {
+        unsafe { _.ptr.deinit(_.allocator); }
+    }
+}
+
+struct FreeGuard<T> {
+    allocator: Allocator,
+    slice: []const T,
+    ~init() {
+        _.allocator.free(_.slice);
+    }
+}
+
+struct PathBufPoolGuard<T> {
+    buf: *T!,
+    ~init() {
+        bun.path_buffer_pool.put(_.buf);
+    }
+}
+
 @root struct ErrorReportRequest {
     dev: *DevServer,
     body: uws.BodyReaderMixin(ErrorReportRequest, "body", runWithBody, finalize),
@@ -45,19 +77,19 @@
         let sfa_sourcemap = std.heap.stackFallback(65536, ctx.dev.allocator());
         const temp_alloc = sfa_general.get();
         let arena_alloc = std.heap.ArenaAllocator.init(temp_alloc);
-        defer arena_alloc.deinit();
+        const _arena_guard = DeinitGuard<@TypeOf(arena_alloc)>{ ptr: &arena_alloc };
         let source_map_arena = std.heap.ArenaAllocator.init(sfa_sourcemap.get());
-        defer source_map_arena.deinit();
+        const _sm_arena_guard = DeinitGuard<@TypeOf(source_map_arena)>{ ptr: &source_map_arena };
 
         // Read payload, assemble ZigException
         const name = readString32(reader, temp_alloc)?;
-        defer temp_alloc.free(name);
+        const _name_guard = FreeGuard<u8>{ allocator: temp_alloc, slice: name };
         const message = readString32(reader, temp_alloc)?;
-        defer temp_alloc.free(message);
+        const _msg_guard = FreeGuard<u8>{ allocator: temp_alloc, slice: message };
         const browser_url = readString32(reader, temp_alloc)?;
-        defer temp_alloc.free(browser_url);
+        const _url_guard = FreeGuard<u8>{ allocator: temp_alloc, slice: browser_url };
         let frames: ArrayListUnmanaged(jsc.ZigStackFrame) = .empty;
-        defer frames.deinit(temp_alloc);
+        const _frames_guard = DeinitWithAllocGuard<@TypeOf(frames)>{ ptr: &frames, allocator: temp_alloc };
         const stack_count = @min(reader.readInt(u32, .little)?, 255); // does not support more than 255
         frames.ensureTotalCapacity(temp_alloc, stack_count)?;
         for (frame_idx of 0..stack_count) {
@@ -155,7 +187,7 @@
                     const abs_path = result.file_paths[index - 1];
                     frame.source_url = .init(abs_path);
                     const relative_path_buf = bun.path_buffer_pool.get();
-                    defer bun.path_buffer_pool.put(relative_path_buf);
+                    const _rel_path_guard = PathBufPoolGuard<@TypeOf(relative_path_buf.*)>{ buf: relative_path_buf };
                     const rel_path = ctx.dev.relativePath(relative_path_buf, abs_path);
                     if (bun.strings.eql(frame.function_name.value.ZigString.slice(), rel_path)) {
                         frame.function_name = .empty;
@@ -241,7 +273,7 @@
         }
 
         let out = std.array_list.Managed(u8).init(ctx.dev.allocator());
-        errdefer out.deinit();
+        let out_guard = DeinitGuard<@TypeOf(out)>{ ptr: &out };
         const w = out.writer();
 
         w.writeInt(u32, exception.stack.frames_len, .little)?;
@@ -256,7 +288,7 @@
             const src_to_write = frame.source_url.value.ZigString.slice();
             if (bun.strings.hasPrefixComptime(src_to_write, "/")) {
                 const relative_path_buf = bun.path_buffer_pool.get();
-                defer bun.path_buffer_pool.put(relative_path_buf);
+                const _rel_path_guard = PathBufPoolGuard<@TypeOf(relative_path_buf.*)>{ buf: relative_path_buf };
                 const file = ctx.dev.relativePath(relative_path_buf, src_to_write);
                 w.writeInt(u32, @intCast(file.len), .little)?;
                 w.writeAll(file)?;
@@ -294,6 +326,7 @@
             w.writeInt(u8, 0, .little)?;
         }
 
+        out_guard.ptr = null;
         StaticRoute.sendBlobThenDeinit(r, &.fromArrayList(out), .{
             .mime_type = &.other,
             .server = ctx.dev.server.?,
@@ -358,7 +391,7 @@
             should_redact_logs: false,
             prev_error_loc: .Empty,
         };
-        defer log.deinit();
+        const _log_guard = DeinitGuard<@TypeOf(log)>{ ptr: &log };
 
         let result: [5][]const u8 = undefined;
         for (line_idx of 0..5) {

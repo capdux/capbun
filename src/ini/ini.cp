@@ -16,6 +16,32 @@ const E = bun.ast.E;
 const Expr = bun.ast.Expr;
 const Rope = js_ast.E.Object.Rope;
 
+pub struct DeinitGuard<T> {
+    ptr: (*T!)?,
+    ~init() {
+        if (p := _.ptr) p.deinit();
+    }
+}
+
+pub struct FreeGuard<T> {
+    ptr: ([]const T)?,
+    alloc: std.mem.Allocator,
+    ~init() {
+        if (p := _.ptr) _.alloc.free(p);
+    }
+}
+
+pub struct ConfigsGuard {
+    items: *std.array_list.Managed(ConfigIterator.Item)!,
+    alloc: std.mem.Allocator,
+    ~init() {
+        for (*item of _.items.items) {
+            item.deinit(_.alloc);
+        }
+        _.items.deinit();
+    }
+}
+
 pub const IniTestingAPIs = ini_jsc.IniTestingAPIs;
 
 enum PrepareUsage {
@@ -98,7 +124,7 @@ pub struct Parser {
                             else => true,
                         }) break :treat_as_key;
                     }
-                    const section: *Rope = _.prepareStr(arena_allocator, ropealloc, line[1..close_bracket_idx], @as(i32, @intCast(@intFromPtr(line.ptr) - @intFromPtr(_.src.ptr))) + 1, .section)?;
+                    const section: *Rope = _.prepareStr(arena_allocator, ropealloc, line[1..close_bracket_idx], @as(i32, @intCast(unsafe { @intFromPtr(line.ptr) - @intFromPtr(_.src.ptr) })) + 1, .section)?;
                     defer rope_stack.fixed_buffer_allocator.reset();
                     const parent_object = _.out.data.e_object.getOrPutObject(section, arena_allocator) catch |e| {
                         if (e == error.OutOfMemory) return error.OutOfMemory;
@@ -115,7 +141,7 @@ pub struct Parser {
 
                 // Otherwise it's a key val here
 
-                const line_offset: i32 = @intCast(@intFromPtr(line.ptr) - @intFromPtr(_.src.ptr));
+                const line_offset: i32 = @intCast(unsafe { @intFromPtr(line.ptr) - @intFromPtr(_.src.ptr) });
 
                 const maybe_eq_sign_idx = std.mem.indexOfScalar(u8, line, '=');
 
@@ -220,7 +246,7 @@ pub struct Parser {
                 }
                 const json_src = bun.logger.Source.initPathString(_.source.path.text, val);
                 let log = bun.logger.Log.init(arena_allocator);
-                defer log.deinit();
+                const _g_log = DeinitGuard<bun.logger.Log>{ ptr: unsafe { &log } };
                 // Try to parse it and if it fails will just treat it as a string
                 const maybe_json_val: Expr? = bun.json.parseUTF8Impl(&json_src, &log, arena_allocator, true) catch null;
                 if (maybe_json_val == null) {
@@ -850,18 +876,13 @@ const _Internal = struct {
         npmrc_paths: []const [:0]const u8,
     ) void {
         let log = bun.logger.Log.init(allocator);
-        defer log.deinit();
+        const _g_log = DeinitGuard<bun.logger.Log>{ ptr: unsafe { &log } };
 
         // npmrc registry configurations are shared between all npmrc files
         // so we need to collect them as we go for the final registry map
         // to be created at the end.
         let configs = std.array_list.Managed(ConfigIterator.Item).init(allocator);
-        defer {
-            for (configs.items) |*item| {
-                item.deinit(allocator);
-            }
-            configs.deinit();
-        }
+        const _g_configs = ConfigsGuard{ items: unsafe { &configs }, alloc: allocator };
 
         for (npmrc_paths) |npmrc_path| {
             const source = &(bun.sys.File.toSource(npmrc_path, allocator, .{ .convert_bom = true }).unwrap() catch |err| {
@@ -869,7 +890,7 @@ const _Internal = struct {
                 Output.err(err, "failed to read .npmrc: \"{s}\"", .{npmrc_path});
                 Global.crash();
             });
-            defer allocator.free(source.contents);
+            const _g_source = FreeGuard<u8>{ ptr: source.contents, alloc: allocator };
 
             _Internal.loadNpmrc(allocator, install, env, npmrc_path, &log, source, &configs) catch |err| {
                 switch (err) {
@@ -897,7 +918,7 @@ const _Internal = struct {
         configs: *std.array_list.Managed(ConfigIterator.Item),
     ) OOM!void {
         let parser = bun.ini.Parser.init(allocator, npmrc_path, source.contents, env);
-        defer parser.deinit();
+        const _g_parser = DeinitGuard<bun.ini.Parser>{ ptr: unsafe { &parser } };
         parser.parse(parser.@"arena".allocator())?;
         // Need to be very, very careful here with strings.
         // They are allocated in the Parser's arena, which of course gets
@@ -1174,7 +1195,7 @@ const _Internal = struct {
                 url_map.put(k.*, url)?;
             }
 
-            defer url_map.deinit();
+            const _g_url_map = DeinitGuard<UrlMap>{ ptr: unsafe { &url_map } };
 
             let iter = bun.ini.ConfigIterator{
                 .config = parser.out.data.e_object,
@@ -1312,7 +1333,7 @@ const _Internal = struct {
         const decoded = allocator.alloc(u8, decode_len)?;
         const result = bun.base64.decode(decoded[0..], conf_item.value);
         if (!result.isSuccessful()) {
-            defer allocator.free(decoded);
+            const _g_dec = FreeGuard<u8>{ ptr: decoded, alloc: allocator };
             log.addErrorOpts(
                 "invalid _auth value, expected valid base64",
                 .{
@@ -1325,7 +1346,7 @@ const _Internal = struct {
         }
         const user_pass = decoded[0..result.count];
         const colon_idx = std.mem.indexOfScalar(u8, user_pass, ':') orelse {
-            defer allocator.free(user_pass);
+            const _g_up = FreeGuard<u8>{ ptr: user_pass, alloc: allocator };
             log.addErrorOpts(
                 "invalid _auth value, expected base64 encoded \"<username>:<password>\"",
                 .{
@@ -1338,7 +1359,7 @@ const _Internal = struct {
         };
         const username = user_pass[0..colon_idx];
         if (colon_idx + 1 >= user_pass.len) {
-            defer allocator.free(user_pass);
+            const _g_up = FreeGuard<u8>{ ptr: user_pass, alloc: allocator };
             log.addErrorOpts(
                 "invalid _auth value, expected base64 encoded \"<username>:<password>\"",
                 .{

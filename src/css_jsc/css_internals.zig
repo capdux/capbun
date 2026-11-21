@@ -38,7 +38,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -59,7 +59,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 pub const TestKind = enum {
@@ -80,6 +80,42 @@ pub const TestCategory = enum {
     pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
+
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T = null,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    {
+                        _ = p.deinit();
+                    }
+                }
+        }
+    };
+}
+
+pub fn DerefGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T = null,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    {
+                        _ = p.deref();
+                    }
+                }
+        }
+    };
+}
 
 const Allocator = std.mem.Allocator;
 const jsc = bun.jsc;
@@ -118,9 +154,13 @@ pub fn _test(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSE
 pub fn testingImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, comptime test_kind: TestKind, comptime test_category: TestCategory) bun.JSError!jsc.JSValue {
         var arena_alloc = bun.ArenaAllocator.init(bun.default_allocator);
         _ = &arena_alloc;
-        defer {
-        _ = arena_alloc.deinit();
-        }
+        var _arena_guard = DeinitGuard(bun.ArenaAllocator){ .ptr = (blk: {
+        break :blk (&arena_alloc);
+
+}) };
+        _ = &_arena_guard;
+        var ___arena_guard_moved = false; _ = &___arena_guard_moved;
+        defer if (!___arena_guard_moved) { ___arena_guard_moved = true; const __T = @TypeOf(_arena_guard); if (@typeInfo(__T) == .optional) { if (_arena_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _arena_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _arena_guard; _drop_val.__cp_deinit(); } };
         const alloc = arena_alloc.allocator();
         const arguments_ = callframe.arguments_old(3);
         var arguments = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments_.slice());
@@ -133,14 +173,24 @@ pub fn testingImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, c
         if ((!source_arg.isString())) {
             return globalThis.throw("minifyTestWithOptions: expected source to be a string", &.{});
         }
-        const source_bunstr = try source_arg.toBunString(globalThis);
-        defer {
-        _ = source_bunstr.deref();
-        }
-        const source = source_bunstr.toUTF8(bun.default_allocator);
-        defer {
-        _ = source.deinit();
-        }
+        var source_bunstr = try source_arg.toBunString(globalThis);
+        _ = &source_bunstr;
+        var _source_bunstr_guard = DerefGuard(bun.String){ .ptr = (blk: {
+        break :blk (&source_bunstr);
+
+}) };
+        _ = &_source_bunstr_guard;
+        var ___source_bunstr_guard_moved = false; _ = &___source_bunstr_guard_moved;
+        defer if (!___source_bunstr_guard_moved) { ___source_bunstr_guard_moved = true; const __T = @TypeOf(_source_bunstr_guard); if (@typeInfo(__T) == .optional) { if (_source_bunstr_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _source_bunstr_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _source_bunstr_guard; _drop_val.__cp_deinit(); } };
+        var source = source_bunstr.toUTF8(bun.default_allocator);
+        _ = &source;
+        var _source_guard = DeinitGuard(@TypeOf(source)){ .ptr = (blk: {
+        break :blk (&source);
+
+}) };
+        _ = &_source_guard;
+        var ___source_guard_moved = false; _ = &___source_guard_moved;
+        defer if (!___source_guard_moved) { ___source_guard_moved = true; const __T = @TypeOf(_source_guard); if (@typeInfo(__T) == .optional) { if (_source_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _source_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _source_guard; _drop_val.__cp_deinit(); } };
         const expected_arg_opt = arguments.nextEat();
         if ((expected_arg_opt == null)) {
             return globalThis.throw("minifyTestWithOptions: expected 2 arguments, got 1", &.{});
@@ -149,20 +199,34 @@ pub fn testingImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, c
         if ((!expected_arg.isString())) {
             return globalThis.throw("minifyTestWithOptions: expected `expected` arg to be a string", &.{});
         }
-        const expected_bunstr = try expected_arg.toBunString(globalThis);
-        defer {
-        _ = expected_bunstr.deref();
-        }
-        const expected = expected_bunstr.toUTF8(bun.default_allocator);
-        defer {
-        _ = expected.deinit();
-        }
+        var expected_bunstr = try expected_arg.toBunString(globalThis);
+        _ = &expected_bunstr;
+        var _expected_bunstr_guard = DerefGuard(bun.String){ .ptr = (blk: {
+        break :blk (&expected_bunstr);
+
+}) };
+        _ = &_expected_bunstr_guard;
+        var ___expected_bunstr_guard_moved = false; _ = &___expected_bunstr_guard_moved;
+        defer if (!___expected_bunstr_guard_moved) { ___expected_bunstr_guard_moved = true; const __T = @TypeOf(_expected_bunstr_guard); if (@typeInfo(__T) == .optional) { if (_expected_bunstr_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _expected_bunstr_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _expected_bunstr_guard; _drop_val.__cp_deinit(); } };
+        var expected = expected_bunstr.toUTF8(bun.default_allocator);
+        _ = &expected;
+        var _expected_guard = DeinitGuard(@TypeOf(expected)){ .ptr = (blk: {
+        break :blk (&expected);
+
+}) };
+        _ = &_expected_guard;
+        var ___expected_guard_moved = false; _ = &___expected_guard_moved;
+        defer if (!___expected_guard_moved) { ___expected_guard_moved = true; const __T = @TypeOf(_expected_guard); if (@typeInfo(__T) == .optional) { if (_expected_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _expected_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _expected_guard; _drop_val.__cp_deinit(); } };
         const browser_options_arg = arguments.nextEat();
         var log: bun.logger.Log = bun.logger.Log.init(alloc);
         _ = &log;
-        defer {
-        _ = log.deinit();
-        }
+        var _log_guard = DeinitGuard(bun.logger.Log){ .ptr = (blk: {
+        break :blk (&log);
+
+}) };
+        _ = &_log_guard;
+        var ___log_guard_moved = false; _ = &___log_guard_moved;
+        defer if (!___log_guard_moved) { ___log_guard_moved = true; const __T = @TypeOf(_log_guard); if (@typeInfo(__T) == .optional) { if (_log_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _log_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _log_guard; _drop_val.__cp_deinit(); } };
         var browsers: ?bun.css.targets.Browsers = null;
         _ = &browsers;
         const parser_options = parser_options: {
@@ -239,14 +303,24 @@ pub fn parserOptionsFromJS(globalThis: *jsc.JSGlobalObject, allocator: Allocator
                 var iter = try val.arrayIterator(globalThis);
                 _ = &iter;
                 while (try iter.next()) |item| {
-                    const bunstr = try item.toBunString(globalThis);
-                    defer {
-                    _ = bunstr.deref();
-                    }
-                    const str = bunstr.toUTF8(bun.default_allocator);
-                    defer {
-                    _ = str.deinit();
-                    }
+                    var bunstr = try item.toBunString(globalThis);
+                    _ = &bunstr;
+                    var _bunstr_guard = DerefGuard(bun.String){ .ptr = (blk: {
+                    break :blk (&bunstr);
+
+}) };
+                    _ = &_bunstr_guard;
+                    var ___bunstr_guard_moved = false; _ = &___bunstr_guard_moved;
+                    defer if (!___bunstr_guard_moved) { ___bunstr_guard_moved = true; const __T = @TypeOf(_bunstr_guard); if (@typeInfo(__T) == .optional) { if (_bunstr_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _bunstr_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _bunstr_guard; _drop_val.__cp_deinit(); } };
+                    var str = bunstr.toUTF8(bun.default_allocator);
+                    _ = &str;
+                    var _str_guard = DeinitGuard(@TypeOf(str)){ .ptr = (blk: {
+                    break :blk (&str);
+
+}) };
+                    _ = &_str_guard;
+                    var ___str_guard_moved = false; _ = &___str_guard_moved;
+                    defer if (!___str_guard_moved) { ___str_guard_moved = true; const __T = @TypeOf(_str_guard); if (@typeInfo(__T) == .optional) { if (_str_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _str_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _str_guard; _drop_val.__cp_deinit(); } };
                     if (std.mem.eql(u8, str.slice(), "DEEP_SELECTOR_COMBINATOR")) {
                         opts.flags.deep_selector_combinator = true;
                     } else {
@@ -349,9 +423,13 @@ pub fn targetsFromJS(globalThis: *jsc.JSGlobalObject, jsobj: JSValue) bun.JSErro
 pub fn attrTest(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
         var arena_alloc = bun.ArenaAllocator.init(bun.default_allocator);
         _ = &arena_alloc;
-        defer {
-        _ = arena_alloc.deinit();
-        }
+        var _arena_guard = DeinitGuard(bun.ArenaAllocator){ .ptr = (blk: {
+        break :blk (&arena_alloc);
+
+}) };
+        _ = &_arena_guard;
+        var ___arena_guard_moved = false; _ = &___arena_guard_moved;
+        defer if (!___arena_guard_moved) { ___arena_guard_moved = true; const __T = @TypeOf(_arena_guard); if (@typeInfo(__T) == .optional) { if (_arena_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _arena_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _arena_guard; _drop_val.__cp_deinit(); } };
         const alloc = arena_alloc.allocator();
         const arguments_ = callframe.arguments_old(4);
         var arguments = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments_.slice());
@@ -364,14 +442,24 @@ pub fn attrTest(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.
         if ((!source_arg.isString())) {
             return globalThis.throw("attrTest: expected source to be a string", &.{});
         }
-        const source_bunstr = try source_arg.toBunString(globalThis);
-        defer {
-        _ = source_bunstr.deref();
-        }
-        const source = source_bunstr.toUTF8(bun.default_allocator);
-        defer {
-        _ = source.deinit();
-        }
+        var source_bunstr = try source_arg.toBunString(globalThis);
+        _ = &source_bunstr;
+        var _source_bunstr_guard = DerefGuard(bun.String){ .ptr = (blk: {
+        break :blk (&source_bunstr);
+
+}) };
+        _ = &_source_bunstr_guard;
+        var ___source_bunstr_guard_moved = false; _ = &___source_bunstr_guard_moved;
+        defer if (!___source_bunstr_guard_moved) { ___source_bunstr_guard_moved = true; const __T = @TypeOf(_source_bunstr_guard); if (@typeInfo(__T) == .optional) { if (_source_bunstr_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _source_bunstr_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _source_bunstr_guard; _drop_val.__cp_deinit(); } };
+        var source = source_bunstr.toUTF8(bun.default_allocator);
+        _ = &source;
+        var _source_guard = DeinitGuard(@TypeOf(source)){ .ptr = (blk: {
+        break :blk (&source);
+
+}) };
+        _ = &_source_guard;
+        var ___source_guard_moved = false; _ = &___source_guard_moved;
+        defer if (!___source_guard_moved) { ___source_guard_moved = true; const __T = @TypeOf(_source_guard); if (@typeInfo(__T) == .optional) { if (_source_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _source_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _source_guard; _drop_val.__cp_deinit(); } };
         const expected_arg_opt = arguments.nextEat();
         if ((expected_arg_opt == null)) {
             return globalThis.throw("attrTest: expected 3 arguments, got 1", &.{});
@@ -380,14 +468,24 @@ pub fn attrTest(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.
         if ((!expected_arg.isString())) {
             return globalThis.throw("attrTest: expected `expected` arg to be a string", &.{});
         }
-        const expected_bunstr = try expected_arg.toBunString(globalThis);
-        defer {
-        _ = expected_bunstr.deref();
-        }
-        const expected = expected_bunstr.toUTF8(bun.default_allocator);
-        defer {
-        _ = expected.deinit();
-        }
+        var expected_bunstr = try expected_arg.toBunString(globalThis);
+        _ = &expected_bunstr;
+        var _expected_bunstr_guard = DerefGuard(bun.String){ .ptr = (blk: {
+        break :blk (&expected_bunstr);
+
+}) };
+        _ = &_expected_bunstr_guard;
+        var ___expected_bunstr_guard_moved = false; _ = &___expected_bunstr_guard_moved;
+        defer if (!___expected_bunstr_guard_moved) { ___expected_bunstr_guard_moved = true; const __T = @TypeOf(_expected_bunstr_guard); if (@typeInfo(__T) == .optional) { if (_expected_bunstr_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _expected_bunstr_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _expected_bunstr_guard; _drop_val.__cp_deinit(); } };
+        var expected = expected_bunstr.toUTF8(bun.default_allocator);
+        _ = &expected;
+        var _expected_guard = DeinitGuard(@TypeOf(expected)){ .ptr = (blk: {
+        break :blk (&expected);
+
+}) };
+        _ = &_expected_guard;
+        var ___expected_guard_moved = false; _ = &___expected_guard_moved;
+        defer if (!___expected_guard_moved) { ___expected_guard_moved = true; const __T = @TypeOf(_expected_guard); if (@typeInfo(__T) == .optional) { if (_expected_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _expected_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _expected_guard; _drop_val.__cp_deinit(); } };
         const minify_arg_opt = arguments.nextEat();
         if ((minify_arg_opt == null)) {
             return globalThis.throw("attrTest: expected 3 arguments, got 2", &.{});
@@ -404,9 +502,13 @@ pub fn attrTest(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.
         }
         var log: bun.logger.Log = bun.logger.Log.init(alloc);
         _ = &log;
-        defer {
-        _ = log.deinit();
-        }
+        var _log_guard = DeinitGuard(bun.logger.Log){ .ptr = (blk: {
+        break :blk (&log);
+
+}) };
+        _ = &_log_guard;
+        var ___log_guard_moved = false; _ = &___log_guard_moved;
+        defer if (!___log_guard_moved) { ___log_guard_moved = true; const __T = @TypeOf(_log_guard); if (@typeInfo(__T) == .optional) { if (_log_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _log_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _log_guard; _drop_val.__cp_deinit(); } };
         const parser_options = bun.css.ParserOptions.default(alloc, (&log));
         var import_records = ImportRecordList{  };
         _ = &import_records;

@@ -58,6 +58,20 @@ pub const DeferredBatchTask = bun.bundle_v2.DeferredBatchTask;
 pub const ThreadPool = bun.bundle_v2.ThreadPool;
 type string = []const u8;
 
+struct EndGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.end(); }
+    }
+}
+
+struct UngetGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.unget(); }
+    }
+}
+
 const debug = Output.scoped(.ParseTask, .hidden);
 
 pub const ContentsOrFd = union(enum) {
@@ -400,7 +414,7 @@ fn getAST(
     switch (loader) {
         .jsx, .tsx, .js, .ts => {
             let trace = bun.perf.trace("Bundler.ParseJS");
-            defer trace.end();
+            const _trace_guard = EndGuard<@TypeOf(trace)>{ ptr: &trace };
             if (res := resolver.caches.js.parse(
                 transpiler.allocator,
                 opts,
@@ -419,13 +433,13 @@ fn getAST(
         },
         .json, .jsonc => {
             let trace = bun.perf.trace("Bundler.ParseJSON");
-            defer trace.end();
+            const _trace_guard = EndGuard<@TypeOf(trace)>{ ptr: &trace };
             const root = (resolver.caches.json.parseJSON(log, source, allocator, if (loader == .jsonc) .jsonc else .json, true)?) ?? Expr.init(E.Object, std.mem.zeroInit(E.Object, {}), Logger.Loc.Empty);
             return JSAst.init((js_parser.newLazyExportAST(allocator, transpiler.options.define, opts, log, root, source, "")?).?);
         },
         .toml => {
             let trace = bun.perf.trace("Bundler.ParseTOML");
-            defer trace.end();
+            const _trace_guard = EndGuard<@TypeOf(trace)>{ ptr: &trace };
             let temp_log = bun.logger.Log.init(allocator);
             defer {
                 bun.handleOom(temp_log.cloneToWithRecycled(log, true));
@@ -436,7 +450,7 @@ fn getAST(
         },
         .yaml => {
             let trace = bun.perf.trace("Bundler.ParseYAML");
-            defer trace.end();
+            const _trace_guard = EndGuard<@TypeOf(trace)>{ ptr: &trace };
             let temp_log = bun.logger.Log.init(allocator);
             defer {
                 bun.handleOom(temp_log.cloneToWithRecycled(log, true));
@@ -447,7 +461,7 @@ fn getAST(
         },
         .json5 => {
             let trace = bun.perf.trace("Bundler.ParseJSON5");
-            defer trace.end();
+            const _trace_guard = EndGuard<@TypeOf(trace)>{ ptr: &trace };
             let temp_log = bun.logger.Log.init(allocator);
             defer {
                 bun.handleOom(temp_log.cloneToWithRecycled(log, true));
@@ -750,7 +764,7 @@ fn getCodeForParseTaskWithoutPlugins(
     return switch (task.contents_or_fd) {
         .fd contents => brk: {
             let trace = bun.perf.trace("Bundler.readFile");
-            defer trace.end();
+            const _trace_guard = EndGuard<@TypeOf(trace)>{ ptr: &trace };
 
             // Check FileMap for in-memory files first
             if (file_map := task.ctx.file_map) {
@@ -1371,8 +1385,9 @@ fn runWithSourceCode(
 
 fn ParseTask_runFromThreadPool(client: *ParseTask) {
     let worker = ThreadPool.Worker.get(client.ctx);
-    defer worker.unget();
-    debug("ParseTask(0x{x}, {s}) callback", .{ @intFromPtr(client), client.path.text });
+    const _worker_guard = UngetGuard<ThreadPool.Worker>{ ptr: worker };
+    const client_ptr = unsafe { @intFromPtr(client) };
+    debug("ParseTask(0x{x}, {s}) callback", .{ client_ptr, client.path.text });
 
     let step: ResultErrorStep = .pending;
     let log = Logger.Log.init(worker.allocator);

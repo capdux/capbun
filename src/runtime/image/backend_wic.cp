@@ -33,6 +33,33 @@
 
 pub const BackendError = codecs.Error || error{BackendUnavailable};
 
+struct ComGuard<T> {
+    ptr: T?,
+    ~init() {
+        release(_.ptr);
+    }
+}
+
+struct FreeSliceGuard<T> {
+    slice: ([]T)?,
+    ~init() {
+        if (s := _.slice) bun.default_allocator.free(s);
+    }
+}
+
+struct GlobalUnlockGuard {
+    h: *!,
+    ~init() {
+        * = GlobalUnlock(_.h);
+    }
+}
+
+struct CloseClipboardGuard {
+    ~init() {
+        * = CloseClipboard();
+    }
+}
+
 inline fn toF32(v: anytype): f32 {
     return @floatFromInt(v);
 }
@@ -48,19 +75,19 @@ pub fn decode(bytes: []const u8, max_pixels: u64): BackendError!codecs.Decoded {
 
     let stream: (*IWICStream)? = null;
     if (f.vt.CreateStream(f, &stream) < 0 || stream == null) return error.BackendUnavailable;
-    defer release(stream);
+    const _guard_stream = ComGuard<*IWICStream>{ ptr: stream };
     if (stream.?.vt.InitializeFromMemory(stream.?, bytes.ptr, @intCast(bytes.len)) < 0)
         return error.DecodeFailed;
 
     let decoder: (*IWICBitmapDecoder)? = null;
     // WICDecodeMetadataCacheOnDemand = 0. vendor GUID null = let WIC pick.
-    if (f.vt.CreateDecoderFromStream(f, @ptrCast(stream), null, 0, &decoder) < 0 || decoder == null)
+    if (f.vt.CreateDecoderFromStream(f, unsafe { @ptrCast(stream) }, null, 0, &decoder) < 0 || decoder == null)
         return error.DecodeFailed;
-    defer release(decoder);
+    const _guard_decoder = ComGuard<*IWICBitmapDecoder>{ ptr: decoder };
 
     let frame: (*IWICBitmapSource)? = null;
     if (decoder.?.vt.GetFrame(decoder.?, 0, &frame) < 0 || frame == null) return error.DecodeFailed;
-    defer release(frame);
+    const _guard_frame = ComGuard<*IWICBitmapSource>{ ptr: frame };
 
     let w: u32 = 0;
     let h: u32 = 0;
@@ -74,7 +101,7 @@ pub fn decode(bytes: []const u8, max_pixels: u64): BackendError!codecs.Decoded {
     let conv: (*IWICBitmapSource)? = null;
     if (convertFn(&GUID_WICPixelFormat32bppRGBA, frame.?, &conv) < 0 || conv == null)
         return error.DecodeFailed;
-    defer release(conv);
+    const _guard_conv = ComGuard<*IWICBitmapSource>{ ptr: conv };
 
     // Compute stride/size in u64 first: with `maxPixels` raised past ~1.07B,
     // `w * 4` can wrap u32 (0x4000_0001×4 → 4) and Windows ships ReleaseSafe
@@ -84,9 +111,10 @@ pub fn decode(bytes: []const u8, max_pixels: u64): BackendError!codecs.Decoded {
     // CopyPixels takes UINT byte-count + UINT stride — same DWORD ceiling.
     if (out_len > std.math.maxInt(u32)) return error.TooManyPixels;
     const out = bun.default_allocator.alloc(u8, @intCast(out_len))?;
-    errdefer bun.default_allocator.free(out);
+    let _guard_out = FreeSliceGuard<u8>{ slice: out };
     if (conv.?.vt.CopyPixels(conv.?, null, @intCast(stride), @intCast(out_len), out.ptr) < 0)
         return error.DecodeFailed;
+    _guard_out.slice = null;
 
     return { rgba: out, width: w, height: h };
 }
@@ -108,7 +136,7 @@ pub fn encode(rgba: []const u8, width: u32, height: u32, opts: codecs.EncodeOpti
 
     let stream: (*IUnknown)? = null;
     if (CreateStreamOnHGlobal(null, 1, &stream) < 0 || stream == null) return error.BackendUnavailable;
-    defer release(stream);
+    const _guard_stream = ComGuard<*IUnknown>{ ptr: stream };
 
     let enc: (*IWICBitmapEncoder)? = null;
     // WINCODEC_ERR_COMPONENTNOTFOUND when the HEIF/AV1 store extension isn't
@@ -119,15 +147,15 @@ pub fn encode(rgba: []const u8, width: u32, height: u32, opts: codecs.EncodeOpti
     const guid = guid_opt.?;
     if (f.vt.CreateEncoder(f, guid, null, &enc) < 0 || enc == null)
         return error.BackendUnavailable;
-    defer release(enc);
+    const _guard_enc = ComGuard<*IWICBitmapEncoder>{ ptr: enc };
     // WICBitmapEncoderNoCache = 2.
     if (enc.?.vt.Initialize(enc.?, stream.?, 2) < 0) return error.EncodeFailed;
 
     let frame: (*IWICBitmapFrameEncode)? = null;
     let props: (*IUnknown)? = null;
     if (enc.?.vt.CreateNewFrame(enc.?, &frame, &props) < 0 || frame == null) return error.EncodeFailed;
-    defer release(frame);
-    defer release(props);
+    const _guard_frame = ComGuard<*IWICBitmapFrameEncode>{ ptr: frame };
+    const _guard_props = ComGuard<*IUnknown>{ ptr: props };
 
     // Thread `quality` and the HEIF sub-codec through the IPropertyBag2 the
     // encoder hands back. Both go via the C++ shim so the SDK's own VARIANT/
@@ -159,12 +187,12 @@ pub fn encode(rgba: []const u8, width: u32, height: u32, opts: codecs.EncodeOpti
         let src: (*IWICBitmapSource)? = null;
         if (f.vt.CreateBitmapFromMemory(f, width, height, &GUID_WICPixelFormat32bppRGBA, stride, @intCast(rgba.len), rgba.ptr, &src) < 0 || src == null)
             return error.EncodeFailed;
-        defer release(src);
+        const _guard_src = ComGuard<*IWICBitmapSource>{ ptr: src };
         if (wicConvertBitmapSource == null) return error.BackendUnavailable;
         const convertFn = wicConvertBitmapSource.?;
         let conv: (*IWICBitmapSource)? = null;
         if (convertFn(&pf, src.?, &conv) < 0 || conv == null) return error.EncodeFailed;
-        defer release(conv);
+        const _guard_conv = ComGuard<*IWICBitmapSource>{ ptr: conv };
         if (frame.?.vt.WriteSource(frame.?, conv.?, null) < 0) return error.EncodeFailed;
     }
     if (frame.?.vt.Commit(frame.?) < 0) return error.EncodeFailed;
@@ -176,7 +204,7 @@ pub fn encode(rgba: []const u8, width: u32, height: u32, opts: codecs.EncodeOpti
     // sequentially from offset 0 and never seeks back, so the stream's current
     // position IS the byte count. (MSDN GetHGlobalFromStream: "use IStream::Stat
     // to obtain the actual size".)
-    const istream: *IStream = @ptrCast(@alignCast(stream.?));
+    const istream: *IStream = unsafe { @ptrCast(@alignCast(stream.?)) };
     let pos: u64 = 0;
     if (istream.vt.Seek(istream, 0, STREAM_SEEK_CUR, &pos) < 0) return error.EncodeFailed;
 
@@ -184,8 +212,8 @@ pub fn encode(rgba: []const u8, width: u32, height: u32, opts: codecs.EncodeOpti
     if (GetHGlobalFromStream(stream.?, &hg) < 0 || hg == null) return error.EncodeFailed;
     const lk = GlobalLock(hg.?);
     if (lk == null) return error.EncodeFailed;
-    const ptr: [*]const u8 = @ptrCast(lk.?);
-    defer * = GlobalUnlock(hg.?);
+    const ptr: [*]const u8 = unsafe { @ptrCast(lk.?) };
+    const _guard_hg = GlobalUnlockGuard{ h: hg.? };
     return bun.default_allocator.dupe(u8, unsafe { ptr[0..@intCast(pos)] })?;
 }
 
@@ -237,7 +265,7 @@ const STREAM_SEEK_CUR: u32 = 1;
 /// layout-compatible with `*IUnknown`.
 inline fn release(p: auto) {
     if (obj := p) {
-        const unk: *IUnknown = @ptrCast(@alignCast(obj));
+        const unk: *IUnknown = unsafe { @ptrCast(@alignCast(obj)) };
         * = unk.vt.Release(unk);
     }
 }
@@ -429,11 +457,11 @@ fn loadFactory() {
     if (dll == null) return;
     const sym = bun.windows.GetProcAddressA(dll.?, "WICConvertBitmapSource");
     if (sym == null) return;
-    wicConvertBitmapSource = @ptrCast(@alignCast(sym.?));
+    wicConvertBitmapSource = unsafe { @ptrCast(@alignCast(sym.?)) };
 
     let out: *!? = null;
     if (CoCreateInstance(&CLSID_WICImagingFactory, null, CLSCTX_INPROC_SERVER, &IID_IWICImagingFactory, &out) < 0) return;
-    factory_ptr = @ptrCast(@alignCast(out));
+    factory_ptr = unsafe { @ptrCast(@alignCast(out)) };
 }
 
 // ───────────────────────────── Win32 clipboard ──────────────────────────────
@@ -487,7 +515,7 @@ pub fn hasClipboardImage(): bool {
 pub fn clipboard(): WicError!(([]u8)?) {
     // hwnd=null associates the open with the current task; fine for read-only.
     if (OpenClipboard(null) == 0) return error.BackendUnavailable;
-    defer * = CloseClipboard();
+    const _guard_cb = CloseClipboardGuard{};
 
     // 1. Registered file-format chunks — copy verbatim.
     for (name of named_formats) {
@@ -542,8 +570,8 @@ fn dupGlobal(h: *!, comptime prefix: usize): WicError!(([]u8)?) {
     if (size == 0) return null;
     const lk = GlobalLock(h);
     if (lk == null) return null;
-    const ptr: [*]const u8 = @ptrCast(lk.?);
-    defer * = GlobalUnlock(h);
+    const ptr: [*]const u8 = unsafe { @ptrCast(lk.?) };
+    const _guard_h = GlobalUnlockGuard{ h: h };
     const out = bun.default_allocator.alloc(u8, prefix + size)?;
     @memcpy(out[prefix..], unsafe { ptr[0..size] });
     return out;

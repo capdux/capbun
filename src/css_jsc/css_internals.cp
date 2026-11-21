@@ -7,6 +7,24 @@ const JSGlobalObject = bun.jsc.JSGlobalObject;
 const JSValue = bun.jsc.JSValue;
 const ImportRecordList = bun.BabyList(bun.ImportRecord);
 
+pub struct DeinitGuard<T> {
+    ptr: *T!? = null,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deinit(); }
+        }
+    }
+}
+
+pub struct DerefGuard<T> {
+    ptr: *T!? = null,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deref(); }
+        }
+    }
+}
+
 enum TestKind {
     normal,
     minify,
@@ -48,7 +66,7 @@ pub fn _test(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): jsc.JS
 
 pub fn testingImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, @comptime test_kind: TestKind, @comptime test_category: TestCategory): jsc.JSValue ! bun.JSError {
     let arena_alloc = bun.ArenaAllocator.init(bun.default_allocator);
-    defer arena_alloc.deinit();
+    const _arena_guard = DeinitGuard<bun.ArenaAllocator>{ ptr: unsafe { &arena_alloc } };
     const alloc = arena_alloc.allocator();
 
     const arguments_ = callframe.arguments_old(3);
@@ -59,10 +77,10 @@ pub fn testingImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, @
     if (!source_arg.isString()) {
         return globalThis.throw("minifyTestWithOptions: expected source to be a string", []);
     }
-    const source_bunstr = source_arg.toBunString(globalThis)?;
-    defer source_bunstr.deref();
-    const source = source_bunstr.toUTF8(bun.default_allocator);
-    defer source.deinit();
+    let source_bunstr = source_arg.toBunString(globalThis)?;
+    const _source_bunstr_guard = DerefGuard<bun.String>{ ptr: unsafe { &source_bunstr } };
+    let source = source_bunstr.toUTF8(bun.default_allocator);
+    const _source_guard = DeinitGuard<@TypeOf(source)>{ ptr: unsafe { &source } };
 
     const expected_arg_opt = arguments.nextEat();
     if (expected_arg_opt == null) return globalThis.throw("minifyTestWithOptions: expected 2 arguments, got 1", []);
@@ -70,15 +88,15 @@ pub fn testingImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, @
     if (!expected_arg.isString()) {
         return globalThis.throw("minifyTestWithOptions: expected `expected` arg to be a string", []);
     }
-    const expected_bunstr = expected_arg.toBunString(globalThis)?;
-    defer expected_bunstr.deref();
-    const expected = expected_bunstr.toUTF8(bun.default_allocator);
-    defer expected.deinit();
+    let expected_bunstr = expected_arg.toBunString(globalThis)?;
+    const _expected_bunstr_guard = DerefGuard<bun.String>{ ptr: unsafe { &expected_bunstr } };
+    let expected = expected_bunstr.toUTF8(bun.default_allocator);
+    const _expected_guard = DeinitGuard<@TypeOf(expected)>{ ptr: unsafe { &expected } };
 
     const browser_options_arg = arguments.nextEat();
 
     let log: bun.logger.Log = bun.logger.Log.init(alloc);
-    defer log.deinit();
+    const _log_guard = DeinitGuard<bun.logger.Log>{ ptr: unsafe { &log } };
 
     let browsers: bun.css.targets.Browsers? = null;
     const parser_options = parser_options: {
@@ -163,10 +181,10 @@ fn parserOptionsFromJS(globalThis: *jsc.JSGlobalObject, allocator: Allocator, op
         if (val.isArray()) {
             let iter = val.arrayIterator(globalThis)?;
             while (item := iter.next()?) {
-                const bunstr = item.toBunString(globalThis)?;
-                defer bunstr.deref();
-                const str = bunstr.toUTF8(bun.default_allocator);
-                defer str.deinit();
+                let bunstr = item.toBunString(globalThis)?;
+                const _bunstr_guard = DerefGuard<bun.String>{ ptr: unsafe { &bunstr } };
+                let str = bunstr.toUTF8(bun.default_allocator);
+                const _str_guard = DeinitGuard<@TypeOf(str)>{ ptr: unsafe { &str } };
                 if (std.mem.eql(u8, str.slice(), "DEEP_SELECTOR_COMBINATOR")) {
                     opts.flags.deep_selector_combinator = true;
                 } else {
@@ -251,7 +269,7 @@ fn targetsFromJS(globalThis: *jsc.JSGlobalObject, jsobj: JSValue): bun.css.targe
 
 pub fn attrTest(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): jsc.JSValue ! bun.JSError {
     let arena_alloc = bun.ArenaAllocator.init(bun.default_allocator);
-    defer arena_alloc.deinit();
+    const _arena_guard = DeinitGuard<bun.ArenaAllocator>{ ptr: unsafe { &arena_alloc } };
     const alloc = arena_alloc.allocator();
 
     const arguments_ = callframe.arguments_old(4);
@@ -262,10 +280,10 @@ pub fn attrTest(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): jsc
     if (!source_arg.isString()) {
         return globalThis.throw("attrTest: expected source to be a string", []);
     }
-    const source_bunstr = source_arg.toBunString(globalThis)?;
-    defer source_bunstr.deref();
-    const source = source_bunstr.toUTF8(bun.default_allocator);
-    defer source.deinit();
+    let source_bunstr = source_arg.toBunString(globalThis)?;
+    const _source_bunstr_guard = DerefGuard<bun.String>{ ptr: unsafe { &source_bunstr } };
+    let source = source_bunstr.toUTF8(bun.default_allocator);
+    const _source_guard = DeinitGuard<@TypeOf(source)>{ ptr: unsafe { &source } };
 
     const expected_arg_opt = arguments.nextEat();
     if (expected_arg_opt == null) return globalThis.throw("attrTest: expected 3 arguments, got 1", []);
@@ -273,10 +291,10 @@ pub fn attrTest(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): jsc
     if (!expected_arg.isString()) {
         return globalThis.throw("attrTest: expected `expected` arg to be a string", []);
     }
-    const expected_bunstr = expected_arg.toBunString(globalThis)?;
-    defer expected_bunstr.deref();
-    const expected = expected_bunstr.toUTF8(bun.default_allocator);
-    defer expected.deinit();
+    let expected_bunstr = expected_arg.toBunString(globalThis)?;
+    const _expected_bunstr_guard = DerefGuard<bun.String>{ ptr: unsafe { &expected_bunstr } };
+    let expected = expected_bunstr.toUTF8(bun.default_allocator);
+    const _expected_guard = DeinitGuard<@TypeOf(expected)>{ ptr: unsafe { &expected } };
 
     const minify_arg_opt = arguments.nextEat();
     if (minify_arg_opt == null) return globalThis.throw("attrTest: expected 3 arguments, got 2", []);
@@ -291,7 +309,7 @@ pub fn attrTest(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): jsc
     }
 
     let log: bun.logger.Log = bun.logger.Log.init(alloc);
-    defer log.deinit();
+    const _log_guard = DeinitGuard<bun.logger.Log>{ ptr: unsafe { &log } };
 
     const parser_options = bun.css.ParserOptions.default(alloc, &log);
 
