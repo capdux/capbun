@@ -150,3 +150,8 @@
   - 修复 `src/runtime/socket/udp_socket.cp:337-364` `this_ptr.socket = Socket.create(...) orelse` 吞右值及 `src/uws_sys/udp.cp` `*T?` 指针优先级问题，`28083.test.ts` (`dgram`) **6/6 全绿**；
   - 同步清理全仓剩余 2 处 `secure = ... orelse { ... }` 吞右值（`PostgresSQLConnection.cp:866`、`JSMySQLConnection.cp:387`）；
   - `test/regression/issue/` 第 3~5 批累计已测出 **533+ pass / 0 新崩溃**。
+- **[2026-11-22 00:32] `http` / `css/rules/property` 修复与全仓遗留隐式 `release()` 清零里程碑（三大回归 100% 全绿、`zig:check` 5/5）**：
+  - 修复 `src/http/http.cp:1074` 误加 `add_transfer_encoding = false;` 导致流式请求丢弃显式 `Content-Length` 问题，`27061.test.ts` **6/6 全绿**；
+  - 修复 `src/css/rules/property.cp:182-188` `else return` 表达式被吞问题，`27117.test.ts`（`:root` + `@property`）**1/1 全绿**；
+  - 用新版 `cpc` 全量重编全仓仍残留旧版隐式 `defer ... release()` 的 **24 个 `.cp` 模块**（含 `HTTPThread`、`Router`、`url`、`resolver`、`napi`、`Headers`、`SocketGroup`、`write_file` 等）并修正 `s3/client.cp` 与 `blob/copy_file.cp` 历史 `export const` -> `pub const`，全仓隐式 `release()` **归零 (0)**，`bun run zig:check` **5/5**，`27358.test.ts`（mTLS keepalive）**2/2 全绿**；
+  - 完成 `test/regression/issue/` 全目录 353 文件及 `test/integration/` 扫描（均 0 崩溃）。

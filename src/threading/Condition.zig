@@ -39,7 +39,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -118,7 +118,7 @@ pub fn release(self: *Condition) void {
 }
 
 pub fn deinit(self: *Condition) void {
-        _ = (if (comptime @typeInfo(@TypeOf(self)) == .pointer) (self) else &(self)).release();
+        _ = self.release();
 }
 pub const WindowsImpl = struct {
     condition: os.windows.CONDITION_VARIABLE = .{},
@@ -146,8 +146,6 @@ pub fn wait(self: *WindowsImpl, mutex: *BunMutex, timeout: ?u64) !void {
                 _ = mutex.impl.locking_thread.store(0, .unordered);
             }
             const rc = os.windows.kernel32.SleepConditionVariableSRW((&self.condition), (if (comptime (builtin.mode == .Debug)) (&mutex.impl.impl.srwlock) else (&mutex.impl.srwlock)), timeout_ms, 0);
-            var __rc_moved = false; _ = &__rc_moved;
-            defer if (!__rc_moved) { const __T = @TypeOf(rc); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = rc.release() catch {}; } else { rc.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = rc; _drop_val.release(); } };
             if ((builtin.mode == .Debug)) {
                 _ = mutex.impl.locking_thread.store(std.Thread.getCurrentId(), .unordered);
             }
@@ -177,11 +175,9 @@ pub const FutexImpl = struct {
 
 pub fn wait(self: *FutexImpl, mutex: *BunMutex, timeout: ?u64) !void {
             var epoch = self.epoch.load(.acquire);
-            var __epoch_moved = false; _ = &__epoch_moved;
-            defer if (!__epoch_moved) { const __T = @TypeOf(epoch); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = epoch.release() catch {}; } else { epoch.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = epoch; _drop_val.release(); } };
+            _ = &epoch;
             var state = self.state.fetchAdd(one_waiter, .monotonic);
-            var __state_moved = false; _ = &__state_moved;
-            defer if (!__state_moved) { const __T = @TypeOf(state); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = state.release() catch {}; } else { state.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = state; _drop_val.release(); } };
+            _ = &state;
             _ = assert(((state & waiter_mask) != waiter_mask));
             state = (state + one_waiter);
             _ = mutex.unlock();
@@ -189,15 +185,12 @@ pub fn wait(self: *FutexImpl, mutex: *BunMutex, timeout: ?u64) !void {
             _ = mutex.lock();
             }
             var futex_deadline = Futex.Deadline.init(timeout);
-            var __futex_deadline_moved = false; _ = &__futex_deadline_moved;
-            defer if (!__futex_deadline_moved) { const __T = @TypeOf(futex_deadline); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = futex_deadline.release() catch {}; } else { futex_deadline.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = futex_deadline; _drop_val.release(); } };
+            _ = &futex_deadline;
             while (true) {
                 _ = (blk_catch_1: { break :blk_catch_1 ((futex_deadline.wait((&self.epoch), epoch)) catch |__ce_1| { _ = &__ce_1; while (true) {
                     while (((state & signal_mask) != 0)) {
                         const new_state = ((state - one_waiter) - one_signal);
                         const res = self.state.cmpxchgWeak(state, new_state, .acquire, .monotonic);
-                        var __res_moved = false; _ = &__res_moved;
-                        defer if (!__res_moved) { const __T = @TypeOf(res); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = res.release() catch {}; } else { res.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = res; _drop_val.release(); } };
                         if ((res == null)) {
                             return;
                         }
@@ -205,8 +198,6 @@ pub fn wait(self: *FutexImpl, mutex: *BunMutex, timeout: ?u64) !void {
                     }
                     const new_state = (state - one_waiter);
                     const res = self.state.cmpxchgWeak(state, new_state, .monotonic, .monotonic);
-                    var __res_moved = false; _ = &__res_moved;
-                    defer if (!__res_moved) { const __T = @TypeOf(res); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = res.release() catch {}; } else { res.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = res; _drop_val.release(); } };
                     if ((res == null)) {
                         return error.Timeout;
                     }
@@ -217,8 +208,6 @@ pub fn wait(self: *FutexImpl, mutex: *BunMutex, timeout: ?u64) !void {
                 while (((state & signal_mask) != 0)) {
                     const new_state = ((state - one_waiter) - one_signal);
                     const res = self.state.cmpxchgWeak(state, new_state, .acquire, .monotonic);
-                    var __res_moved = false; _ = &__res_moved;
-                    defer if (!__res_moved) { const __T = @TypeOf(res); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = res.release() catch {}; } else { res.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = res; _drop_val.release(); } };
                     if ((res == null)) {
                         return;
                     }
@@ -229,8 +218,7 @@ pub fn wait(self: *FutexImpl, mutex: *BunMutex, timeout: ?u64) !void {
 
 pub fn wake(self: *FutexImpl, comptime notify: Notify) void {
             var state = self.state.load(.monotonic);
-            var __state_moved = false; _ = &__state_moved;
-            defer if (!__state_moved) { const __T = @TypeOf(state); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = state.release() catch {}; } else { state.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = state; _drop_val.release(); } };
+            _ = &state;
             while (true) {
                 const waiters = ((state & waiter_mask) / one_waiter);
                 const signals = ((state & signal_mask) / one_signal);
@@ -244,8 +232,6 @@ pub fn wake(self: *FutexImpl, comptime notify: Notify) void {
 });
                 const new_state = (state + (one_signal * to_wake));
                 const res = self.state.cmpxchgWeak(state, new_state, .release, .monotonic);
-                var __res_moved = false; _ = &__res_moved;
-                defer if (!__res_moved) { const __T = @TypeOf(res); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = res.release() catch {}; } else { res.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = res; _drop_val.release(); } };
                 if (res) |s| {
                     _ = &s;
                     state = s;

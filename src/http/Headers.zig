@@ -39,7 +39,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -73,14 +73,8 @@ pub fn clone(self: *Headers) !Headers {
 
 pub fn get(self: Headers, name: []const u8) ?[]const u8 {
         const entries = self.entries.slice();
-        var __entries_moved = false; _ = &__entries_moved;
-        defer if (!__entries_moved) { const __T = @TypeOf(entries); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = entries.release() catch {}; } else { entries.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = entries; _drop_val.release(); } };
         const names = entries.items(.name);
-        var __names_moved = false; _ = &__names_moved;
-        defer if (!__names_moved) { const __T = @TypeOf(names); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = names.release() catch {}; } else { names.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = names; _drop_val.release(); } };
         const values = entries.items(.value);
-        var __values_moved = false; _ = &__values_moved;
-        defer if (!__values_moved) { const __T = @TypeOf(values); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = values.release() catch {}; } else { values.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = values; _drop_val.release(); } };
         var i: usize = 0;
         _ = &i;
         while ((i < names.len)) {
@@ -110,7 +104,7 @@ pub fn release(self: *Headers) void {
 }
 
 pub fn deinit(self: *Headers) void {
-        _ = (if (comptime @typeInfo(@TypeOf(self)) == .pointer) (self) else &(self)).release();
+        _ = self.release();
 }
 
 pub fn getContentDisposition(self: Headers) ?[]const u8 {
@@ -136,8 +130,7 @@ pub fn asStr(self: Headers, ptr: bun.schema.api.StringPointer) []const u8 {
 pub fn fromPicoHttpHeaders(headers: []bun.picohttp.Header, allocator: std.mem.Allocator) !Headers {
         const header_count = headers.len;
         var result: Headers = .{ .entries = .{}, .buf = .{}, .allocator = allocator };
-        var __result_moved = false; _ = &__result_moved;
-        defer if (!__result_moved) { const __T = @TypeOf(result); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = result.release() catch {}; } else { result.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = result; _drop_val.release(); } };
+        _ = &result;
         var buf_len: usize = 0;
         _ = &buf_len;
         var j: usize = 0;
@@ -165,7 +158,6 @@ pub fn fromPicoHttpHeaders(headers: []bun.picohttp.Header, allocator: std.mem.Al
             _ = result.entries.set(i, .{ .name = .{ .offset = name_offset, .length = (if (comptime @typeInfo(@TypeOf((if (@typeInfo(@TypeOf(header)) == .@"enum" or @typeInfo(@TypeOf(header)) == .@"union") @tagName(header) else header.name).len)) == .@"enum") cp_cast_int(u32, @intFromEnum((if (@typeInfo(@TypeOf(header)) == .@"enum" or @typeInfo(@TypeOf(header)) == .@"union") @tagName(header) else header.name).len)) else cp_cast_int(u32, (if (@typeInfo(@TypeOf(header)) == .@"enum" or @typeInfo(@TypeOf(header)) == .@"union") @tagName(header) else header.name).len)) }, .value = .{ .offset = value_offset, .length = (if (comptime @typeInfo(@TypeOf((if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value).len)) == .@"enum") cp_cast_int(u32, @intFromEnum((if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value).len)) else cp_cast_int(u32, (if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value).len)) } });
             i = (i + 1);
         }
-        __result_moved = true;
         return result;
 }
 
@@ -179,8 +171,7 @@ pub fn from(fetch_headers_ref: ?*bun.webcore.FetchHeaders, allocator: std.mem.Al
             _ = headers_ref.count((&header_count), (&buf_len));
         }
         var headers: Headers = .{ .entries = .{}, .buf = .{}, .allocator = allocator };
-        var __headers_moved = false; _ = &__headers_moved;
-        defer if (!__headers_moved) { const __T = @TypeOf(headers); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = headers.release() catch {}; } else { headers.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = headers; _drop_val.release(); } };
+        _ = &headers;
         const buf_len_before_content_type = buf_len;
         var needs_content_type = false;
         _ = &needs_content_type;
@@ -204,14 +195,11 @@ pub fn from(fetch_headers_ref: ?*bun.webcore.FetchHeaders, allocator: std.mem.Al
         _ = bun.handleOom(headers.buf.ensureTotalCapacityPrecise(allocator, buf_len));
         headers.buf.items.len = buf_len;
         var sliced = headers.entries.slice();
-        var __sliced_moved = false; _ = &__sliced_moved;
-        defer if (!__sliced_moved) { const __T = @TypeOf(sliced); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = sliced.release() catch {}; } else { sliced.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = sliced; _drop_val.release(); } };
+        _ = &sliced;
         var names = sliced.items(.name);
-        var __names_moved = false; _ = &__names_moved;
-        defer if (!__names_moved) { const __T = @TypeOf(names); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = names.release() catch {}; } else { names.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = names; _drop_val.release(); } };
+        _ = &names;
         var values = sliced.items(.value);
-        var __values_moved = false; _ = &__values_moved;
-        defer if (!__values_moved) { const __T = @TypeOf(values); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = values.release() catch {}; } else { values.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = values; _drop_val.release(); } };
+        _ = &values;
         if (fetch_headers_ref) |headers_ref| {
             _ = &headers_ref;
             _ = headers_ref.copyTo(names.ptr, values.ptr, headers.buf.items.ptr);
@@ -226,7 +214,6 @@ pub fn from(fetch_headers_ref: ?*bun.webcore.FetchHeaders, allocator: std.mem.Al
                 values[cp_cast_int(usize, (header_count - 1))] = .{ .offset = (buf_len_before_content_type + (if (comptime @typeInfo(@TypeOf("Content-Type".len)) == .@"enum") cp_cast_int(u32, @intFromEnum("Content-Type".len)) else cp_cast_int(u32, "Content-Type".len))), .length = (if (comptime @typeInfo(@TypeOf(req_body2.contentType().len)) == .@"enum") cp_cast_int(u32, @intFromEnum(req_body2.contentType().len)) else cp_cast_int(u32, req_body2.contentType().len)) };
             }
         }
-        __headers_moved = true;
         return headers;
 }
 const bun = @import("bun");

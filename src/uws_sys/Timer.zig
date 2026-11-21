@@ -31,23 +31,17 @@ pub fn release(self: *@This(), fallthrough: bool) void {
 
 pub fn create(loop: *Loop, ptr: anytype) *Timer {
             const Type = @TypeOf(ptr);
-            var __Type_moved = false; _ = &__Type_moved;
-            defer if (!__Type_moved) { const __T = @TypeOf(Type); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = Type.release() catch {}; } else { Type.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = Type; _drop_val.release(); } };
             return ((c.us_create_timer(loop, 0, @sizeOf(Type))) orelse (bun.Output.panic("us_create_timer: returned null: {d}", .{ (std.c._errno()).* })));
     }
 
 pub fn createFallthrough(loop: *Loop, ptr: anytype) *Timer {
             const Type = @TypeOf(ptr);
-            var __Type_moved = false; _ = &__Type_moved;
-            defer if (!__Type_moved) { const __T = @TypeOf(Type); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = Type.release() catch {}; } else { Type.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = Type; _drop_val.release(); } };
             return ((c.us_create_timer(loop, 1, @sizeOf(Type))) orelse (bun.Output.panic("us_create_timer: returned null: {d}", .{ (std.c._errno()).* })));
     }
 
 pub fn set(self: *@This(), ptr: anytype, cb: ?TimerCallback, ms: i32, repeat_ms: i32) void {
             _ = c.us_timer_set(self, cb, ms, repeat_ms);
             const value_ptr = c.us_timer_ext(self);
-            var __value_ptr_moved = false; _ = &__value_ptr_moved;
-            defer if (!__value_ptr_moved) { const __T = @TypeOf(value_ptr); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = value_ptr.release() catch {}; } else { value_ptr.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = value_ptr; _drop_val.release(); } };
             _ = @setRuntimeSafety(false);
             const typed: *@TypeOf(ptr) = @ptrCast(@alignCast(value_ptr));
             typed.* = ptr;
@@ -55,8 +49,6 @@ pub fn set(self: *@This(), ptr: anytype, cb: ?TimerCallback, ms: i32, repeat_ms:
 
 pub fn deinit(self: *@This(), comptime fallthrough: bool) void {
             const release_fn = Timer.release;
-            var __release_fn_moved = false; _ = &__release_fn_moved;
-            defer if (!__release_fn_moved) { const __T = @TypeOf(release_fn); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = release_fn.release() catch {}; } else { release_fn.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = release_fn; _drop_val.release(); } };
             _ = release_fn(self, fallthrough);
     }
 
@@ -68,8 +60,7 @@ pub fn ext(self: *@This(), comptime Type: type) ?*Type {
 pub fn as(self: *@This(), comptime Type: type) Type {
             _ = @setRuntimeSafety(false);
             const OptType = @Type(.{ .optional = .{ .child = Type } });
-            var __OptType_moved = false; _ = &__OptType_moved;
-            defer if (!__OptType_moved) { const __T = @TypeOf(OptType); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = OptType.release() catch {}; } else { OptType.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = OptType; _drop_val.release(); } };
+            _ = &OptType;
             const ptr: *OptType = @ptrCast(@alignCast(c.us_timer_ext(self)));
             return ptr.*.?;
     }

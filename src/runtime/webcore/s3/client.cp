@@ -31,27 +31,27 @@ const allocPrint = std.fmt.allocPrint;
 const JSTerminatedError = bun.JSTerminated;
 const log = Output.scoped(.S3UploadStream, .visible);
 
-export const ACL = S3Acl.ACL;
-export const S3HttpDownloadStreamingTask = DownloadStream.S3HttpDownloadStreamingTask;
-export const MultiPartUploadOptions = MultiPartOptions.MultiPartUploadOptions;
-export const MultiPartUpload = MultiPart.MultiPartUpload;
-export const StorageClass = S3StorageClass.StorageClass;
+pub const ACL = S3Acl.ACL;
+pub const S3HttpDownloadStreamingTask = DownloadStream.S3HttpDownloadStreamingTask;
+pub const MultiPartUploadOptions = MultiPartOptions.MultiPartUploadOptions;
+pub const MultiPartUpload = MultiPart.MultiPartUpload;
+pub const StorageClass = S3StorageClass.StorageClass;
 
-export const throwSignError = Error.throwSignError;
-export const getJSSignError = Error.getJSSignError;
-export const S3Error = Error.S3Error;
+pub const throwSignError = Error.throwSignError;
+pub const getJSSignError = Error.getJSSignError;
+pub const S3Error = Error.S3Error;
 
-export const S3Credentials = Credentials.S3Credentials;
-export const S3CredentialsWithOptions = Credentials.S3CredentialsWithOptions;
+pub const S3Credentials = Credentials.S3Credentials;
+pub const S3CredentialsWithOptions = Credentials.S3CredentialsWithOptions;
 
-export const S3HttpSimpleTask = S3SimpleRequest.S3HttpSimpleTask;
-export const S3UploadResult = S3SimpleRequest.S3UploadResult;
-export const S3StatResult = S3SimpleRequest.S3StatResult;
-export const S3DownloadResult = S3SimpleRequest.S3DownloadResult;
-export const S3DeleteResult = S3SimpleRequest.S3DeleteResult;
-export const S3ListObjectsResult = S3SimpleRequest.S3ListObjectsResult;
-export const S3ListObjectsOptions = S3ListObjects.S3ListObjectsOptions;
-export const getListObjectsOptionsFromJS = S3ListObjects.getListObjectsOptionsFromJS;
+pub const S3HttpSimpleTask = S3SimpleRequest.S3HttpSimpleTask;
+pub const S3UploadResult = S3SimpleRequest.S3UploadResult;
+pub const S3StatResult = S3SimpleRequest.S3StatResult;
+pub const S3DownloadResult = S3SimpleRequest.S3DownloadResult;
+pub const S3DeleteResult = S3SimpleRequest.S3DeleteResult;
+pub const S3ListObjectsResult = S3SimpleRequest.S3ListObjectsResult;
+pub const S3ListObjectsOptions = S3ListObjects.S3ListObjectsOptions;
+pub const getListObjectsOptionsFromJS = S3ListObjects.getListObjectsOptionsFromJS;
 
 pub fn stat(
     *_: *S3Credentials,

@@ -133,8 +133,6 @@ pub fn hostWithPath(self: *const URL) []const u8 {
                 if ((((self.path.len > 1) and bun.isSliceInBuffer(self.path, self.href)) and bun.isSliceInBuffer(self.host, self.href))) {
                     const end = (@intFromPtr(self.path.ptr) + self.path.len);
                     const start = @intFromPtr(self.host.ptr);
-                    var __start_moved = false; _ = &__start_moved;
-                    defer if (!__start_moved) { const __T = @TypeOf(start); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = start.release() catch {}; } else { start.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = start; _drop_val.release(); } };
                     var discount: usize = 0;
                     _ = &discount;
                     if (bun.strings.endsWithComptime(self.path, "/")) {
@@ -156,8 +154,7 @@ pub fn isBlob(self: *const URL) bool {
 
 pub fn fromString(allocator: std.mem.Allocator, input: bun.String) !URL {
             var parsed_href = jsc.URL.hrefFromString(input);
-            var __parsed_href_moved = false; _ = &__parsed_href_moved;
-            defer if (!__parsed_href_moved) { const __T = @TypeOf(parsed_href); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = parsed_href.release() catch {}; } else { parsed_href.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = parsed_href; _drop_val.release(); } };
+            _ = &parsed_href;
             if ((parsed_href.tag == .Dead)) {
                 return error.InvalidURL;
             }
@@ -328,8 +325,7 @@ pub fn parse(base: []const u8) URL {
                 return URL{  };
             }
             var url = URL{  };
-            var __url_moved = false; _ = &__url_moved;
-            defer if (!__url_moved) { const __T = @TypeOf(url); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = url.release() catch {}; } else { url.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = url; _drop_val.release(); } };
+            _ = &url;
             url.href = base;
             var offset: u31 = 0;
             _ = &offset;
@@ -366,7 +362,6 @@ else => {
             var hash_offset: u32 = std.math.maxInt(u32);
             _ = &hash_offset;
             if ((offset > base.len)) {
-                __url_moved = true;
                 return url;
             }
             const path_offset = offset;
@@ -407,8 +402,6 @@ else => {
             }
             if ((url.path.len > 1)) {
                 const trimmed = std.mem.trim(u8, url.path, "/");
-                var __trimmed_moved = false; _ = &__trimmed_moved;
-                defer if (!__trimmed_moved) { const __T = @TypeOf(trimmed); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = trimmed.release() catch {}; } else { trimmed.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = trimmed; _drop_val.release(); } };
                 if ((trimmed.len > 1)) {
                     url.path = url.path[@min((@max((@intFromPtr(trimmed.ptr) - @intFromPtr(url.path.ptr)), 1) - 1), hash_offset)..];
                 } else {
@@ -424,7 +417,6 @@ else => {
                 url.pathname = url.pathname[1..];
             }
             url.origin = std.mem.trim(u8, url.origin, "/ ?#");
-            __url_moved = true;
             return url;
     }
 
@@ -574,12 +566,12 @@ else => {
 pub fn release(self: *URL) void {
             if (self.searchParams) |*sp| {
                 _ = &sp;
-                _ = (if (comptime @typeInfo(@TypeOf((sp.*))) == .pointer) ((sp.*)) else &((sp.*))).release();
+                _ = (sp.*).release();
             }
     }
 
 pub fn deinit(self: *URL) void {
-            _ = (if (comptime @typeInfo(@TypeOf(self)) == .pointer) (self) else &(self)).release();
+            _ = self.release();
     }
     const log = Output.scoped(.URL, .visible);
     pub const fromJS = @import("../url_jsc/url_jsc.zig").urlFromJS;
@@ -602,8 +594,7 @@ pub fn next(self: *QueryStringMapIterator, target: [][]const u8) ?Result {
                 return null;
             }
             var slice = self.map.list.slice();
-            var __slice_moved = false; _ = &__slice_moved;
-            defer if (!__slice_moved) { const __T = @TypeOf(slice); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = slice.release() catch {}; } else { slice.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = slice; _drop_val.release(); } };
+            _ = &slice;
             const hash = slice.items(.name_hash)[@as(usize, @intCast(self.i))];
             const name_slice = slice.items(.name)[@as(usize, @intCast(self.i))];
             _ = bun.assert((name_slice.length > 0));
@@ -666,21 +657,13 @@ pub fn str(self: *const QueryStringMap, ptr: api.StringPointer) []const u8 {
 
 pub fn getIndex(self: *const QueryStringMap, input: []const u8) ?usize {
             const hash = bun.hash(input);
-            var __hash_moved = false; _ = &__hash_moved;
-            defer if (!__hash_moved) { const __T = @TypeOf(hash); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = hash.release() catch {}; } else { hash.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = hash; _drop_val.release(); } };
             return std.mem.indexOfScalar(u64, self.list.items(.name_hash), hash);
     }
 
 pub fn get(self: *const QueryStringMap, input: []const u8) ?[]const u8 {
             const hash = bun.hash(input);
-            var __hash_moved = false; _ = &__hash_moved;
-            defer if (!__hash_moved) { const __T = @TypeOf(hash); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = hash.release() catch {}; } else { hash.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = hash; _drop_val.release(); } };
             const _slice = self.list.slice();
-            var ___slice_moved = false; _ = &___slice_moved;
-            defer if (!___slice_moved) { const __T = @TypeOf(_slice); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = _slice.release() catch {}; } else { _slice.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = _slice; _drop_val.release(); } };
             const i = ((std.mem.indexOfScalar(u64, _slice.items(.name_hash), hash)) orelse { return null; });
-            var __i_moved = false; _ = &__i_moved;
-            defer if (!__i_moved) { const __T = @TypeOf(i); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = i.release() catch {}; } else { i.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = i; _drop_val.release(); } };
             return self.str(_slice.items(.value)[@as(usize, @intCast(i))]);
     }
 
@@ -690,11 +673,7 @@ pub fn has(self: *const QueryStringMap, input: []const u8) bool {
 
 pub fn getAll(self: *const QueryStringMap, input: []const u8, target: [][]const u8) usize {
             const hash = bun.hash(input);
-            var __hash_moved = false; _ = &__hash_moved;
-            defer if (!__hash_moved) { const __T = @TypeOf(hash); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = hash.release() catch {}; } else { hash.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = hash; _drop_val.release(); } };
             const _slice = self.list.slice();
-            var ___slice_moved = false; _ = &___slice_moved;
-            defer if (!___slice_moved) { const __T = @TypeOf(_slice); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = _slice.release() catch {}; } else { _slice.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = _slice; _drop_val.release(); } };
             return self.getAllWithHashFromOffset(target, hash, 0, _slice);
     }
 
@@ -707,8 +686,6 @@ pub fn getAllWithHashFromOffset(self: *const QueryStringMap, target: [][]const u
             _ = &target_i;
             while (((remainder_hashes.len > 0) and (target_i < target.len))) {
                 const i = ((std.mem.indexOfScalar(u64, remainder_hashes, hash)) orelse break);
-                var __i_moved = false; _ = &__i_moved;
-                defer if (!__i_moved) { const __T = @TypeOf(i); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = i.release() catch {}; } else { i.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = i; _drop_val.release(); } };
                 target[cp_cast_int(usize, target_i)] = self.str(remainder_values[@as(usize, @intCast(i))]);
                 remainder_values = remainder_values[(i + 1)..];
                 remainder_hashes = remainder_hashes[(i + 1)..];
@@ -751,26 +728,18 @@ pub fn initWithScanner(allocator: std.mem.Allocator, _scanner: CombinedScanner) 
             _ = try list.ensureTotalCapacity(allocator, count);
             _ = scanner.reset();
             var buf = try std.array_list.Managed(u8).initCapacity(allocator, estimated_str_len);
-            var __buf_moved = false; _ = &__buf_moved;
-            defer if (!__buf_moved) { const __T = @TypeOf(buf); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = buf.release() catch {}; } else { buf.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = buf; _drop_val.release(); } };
+            _ = &buf;
             var writer = buf.writer();
-            var __writer_moved = false; _ = &__writer_moved;
-            defer if (!__writer_moved) { const __T = @TypeOf(writer); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = writer.release() catch {}; } else { writer.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = writer; _drop_val.release(); } };
+            _ = &writer;
             var buf_writer_pos: u32 = 0;
             _ = &buf_writer_pos;
             const Writer = @TypeOf(writer);
-            var __Writer_moved = false; _ = &__Writer_moved;
-            defer if (!__Writer_moved) { const __T = @TypeOf(Writer); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = Writer.release() catch {}; } else { Writer.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = Writer; _drop_val.release(); } };
             while (scanner.pathname.next()) |result| {
                 var name = (if (@typeInfo(@TypeOf(result)) == .@"enum" or @typeInfo(@TypeOf(result)) == .@"union") @tagName(result) else result.name);
-                var __name_moved = false; _ = &__name_moved;
-                defer if (!__name_moved) { const __T = @TypeOf(name); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = name.release() catch {}; } else { name.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = name; _drop_val.release(); } };
+                _ = &name;
                 var value = (if (@typeInfo(@TypeOf(result)) == .@"enum") @intFromEnum(result) else result.value);
-                var __value_moved = false; _ = &__value_moved;
-                defer if (!__value_moved) { const __T = @TypeOf(value); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = value.release() catch {}; } else { value.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = value; _drop_val.release(); } };
+                _ = &value;
                 const name_slice = result.rawName(scanner.pathname.routename);
-                var __name_slice_moved = false; _ = &__name_slice_moved;
-                defer if (!__name_slice_moved) { const __T = @TypeOf(name_slice); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = name_slice.release() catch {}; } else { name_slice.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = name_slice; _drop_val.release(); } };
                 name.length = @as(u32, @truncate(name_slice.len));
                 name.offset = buf_writer_pos;
                 _ = try writer.writeAll(name_slice);
@@ -784,14 +753,11 @@ pub fn initWithScanner(allocator: std.mem.Allocator, _scanner: CombinedScanner) 
             const route_parameter_begin = list.len;
             while (scanner.query.next()) |result| {
                 var list_slice = list.slice();
-                var __list_slice_moved = false; _ = &__list_slice_moved;
-                defer if (!__list_slice_moved) { const __T = @TypeOf(list_slice); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = list_slice.release() catch {}; } else { list_slice.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = list_slice; _drop_val.release(); } };
+                _ = &list_slice;
                 var name = (if (@typeInfo(@TypeOf(result)) == .@"enum" or @typeInfo(@TypeOf(result)) == .@"union") @tagName(result) else result.name);
-                var __name_moved = false; _ = &__name_moved;
-                defer if (!__name_moved) { const __T = @TypeOf(name); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = name.release() catch {}; } else { name.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = name; _drop_val.release(); } };
+                _ = &name;
                 var value = (if (@typeInfo(@TypeOf(result)) == .@"enum") @intFromEnum(result) else result.value);
-                var __value_moved = false; _ = &__value_moved;
-                defer if (!__value_moved) { const __T = @TypeOf(value); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = value.release() catch {}; } else { value.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = value; _drop_val.release(); } };
+                _ = &value;
                 var name_hash: u64 = 0;
                 _ = &name_hash;
                 if (result.name_needs_decoding) {
@@ -855,37 +821,25 @@ pub fn init(allocator: std.mem.Allocator, query_string: []const u8) bun.OOM!?Que
                         _ = bun.assert((!result.value_needs_decoding));
                     }
                     const name = (if (@typeInfo(@TypeOf(result)) == .@"enum" or @typeInfo(@TypeOf(result)) == .@"union") @tagName(result) else result.name);
-                    var __name_moved = false; _ = &__name_moved;
-                    defer if (!__name_moved) { const __T = @TypeOf(name); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = name.release() catch {}; } else { name.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = name; _drop_val.release(); } };
                     const value = (if (@typeInfo(@TypeOf(result)) == .@"enum") @intFromEnum(result) else result.value);
-                    var __value_moved = false; _ = &__value_moved;
-                    defer if (!__value_moved) { const __T = @TypeOf(value); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = value.release() catch {}; } else { value.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = value; _drop_val.release(); } };
                     const name_hash: u64 = bun.hash(result.rawName(query_string));
                     _ = list.appendAssumeCapacity(Param{ .name = name, .value = value, .name_hash = name_hash });
                 }
                 return QueryStringMap{ .list = list, .buffer = &.{}, .slice = query_string, .allocator = allocator };
             }
             var buf = try std.array_list.Managed(u8).initCapacity(allocator, estimated_str_len);
-            var __buf_moved = false; _ = &__buf_moved;
-            defer if (!__buf_moved) { const __T = @TypeOf(buf); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = buf.release() catch {}; } else { buf.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = buf; _drop_val.release(); } };
+            _ = &buf;
             const writer = buf.writer();
-            var __writer_moved = false; _ = &__writer_moved;
-            defer if (!__writer_moved) { const __T = @TypeOf(writer); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = writer.release() catch {}; } else { writer.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = writer; _drop_val.release(); } };
             var buf_writer_pos: u32 = 0;
             _ = &buf_writer_pos;
             var list_slice = list.slice();
-            var __list_slice_moved = false; _ = &__list_slice_moved;
-            defer if (!__list_slice_moved) { const __T = @TypeOf(list_slice); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = list_slice.release() catch {}; } else { list_slice.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = list_slice; _drop_val.release(); } };
+            _ = &list_slice;
             const Writer = @TypeOf(writer);
-            var __Writer_moved = false; _ = &__Writer_moved;
-            defer if (!__Writer_moved) { const __T = @TypeOf(Writer); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = Writer.release() catch {}; } else { Writer.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = Writer; _drop_val.release(); } };
             while (scanner.next()) |result| {
                 var name = (if (@typeInfo(@TypeOf(result)) == .@"enum" or @typeInfo(@TypeOf(result)) == .@"union") @tagName(result) else result.name);
-                var __name_moved = false; _ = &__name_moved;
-                defer if (!__name_moved) { const __T = @TypeOf(name); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = name.release() catch {}; } else { name.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = name; _drop_val.release(); } };
+                _ = &name;
                 var value = (if (@typeInfo(@TypeOf(result)) == .@"enum") @intFromEnum(result) else result.value);
-                var __value_moved = false; _ = &__value_moved;
-                defer if (!__value_moved) { const __T = @TypeOf(value); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = value.release() catch {}; } else { value.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = value; _drop_val.release(); } };
+                _ = &value;
                 var name_hash: u64 = 0;
                 _ = &name_hash;
                 if (result.name_needs_decoding) {
@@ -923,7 +877,7 @@ pub fn release(self: *QueryStringMap) void {
     }
 
 pub fn deinit(self: *QueryStringMap) void {
-            _ = (if (comptime @typeInfo(@TypeOf(self)) == .pointer) (self) else &(self)).release();
+            _ = self.release();
     }
     pub const Iterator = QueryStringMapIterator;
     pub const Param = struct {
@@ -944,17 +898,12 @@ pub fn decode(comptime Writer: type, writer: Writer, input: []const u8) !u32 {
 
 pub fn decodeAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
             const buf = try allocator.alloc(u8, input.len);
-            var __buf_moved = false; _ = &__buf_moved;
-            defer if (!__buf_moved) { const __T = @TypeOf(buf); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = buf.release() catch {}; } else { buf.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = buf; _drop_val.release(); } };
             errdefer {
             _ = allocator.free(buf);
             }
             var stream = std.io.fixedBufferStream(buf);
-            var __stream_moved = false; _ = &__stream_moved;
-            defer if (!__stream_moved) { const __T = @TypeOf(stream); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = stream.release() catch {}; } else { stream.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = stream; _drop_val.release(); } };
+            _ = &stream;
             const writer = stream.writer();
-            var __writer_moved = false; _ = &__writer_moved;
-            defer if (!__writer_moved) { const __T = @TypeOf(writer); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = writer.release() catch {}; } else { writer.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = writer; _drop_val.release(); } };
             const len = try decode(@TypeOf(writer), writer, input);
             return buf[0..len];
     }
@@ -1045,8 +994,6 @@ pub fn next(self: *PathnameScanner) ?Scanner.Result {
             self.i = (self.i + 1);
             }
             const param = self.params.get(self.i);
-            var __param_moved = false; _ = &__param_moved;
-            defer if (!__param_moved) { const __T = @TypeOf(param); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = param.release() catch {}; } else { param.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = param; _drop_val.release(); } };
             return Scanner.Result{ .name = stringPointerFromStrings(self.routename, (if (@typeInfo(@TypeOf(param)) == .@"enum" or @typeInfo(@TypeOf(param)) == .@"union") @tagName(param) else param.name)), .name_needs_decoding = false, .value = stringPointerFromStrings(self.pathname, (if (@typeInfo(@TypeOf(param)) == .@"enum") @intFromEnum(param) else param.value)), .value_needs_decoding = strings.containsChar((if (@typeInfo(@TypeOf(param)) == .@"enum") @intFromEnum(param) else param.value), 37) };
     }
 };

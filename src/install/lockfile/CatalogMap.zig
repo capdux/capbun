@@ -179,8 +179,6 @@ pub fn parseAppend(self: *CatalogMap, pm: *PackageManager, lockfile: *Lockfile, 
         if (expr.get("catalog")) |default_catalog| {
             _ = &default_catalog;
             const group = try self.getOrPutGroup(lockfile, .empty);
-            var __group_moved = false; _ = &__group_moved;
-            defer if (!__group_moved) { const __T = @TypeOf(group); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = group.release() catch {}; } else { group.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = group; _drop_val.release(); } };
             found_any = true;
             switch (default_catalog.data) {
 .e_object => |obj| {
@@ -227,8 +225,6 @@ for (cp_iter_slice(catalog_names.properties.slice())) |catalog| {
                 const catalog_name_str = (catalog.key.?.asString(lockfile.allocator)).?;
                 const catalog_name = builder.append(String, catalog_name_str);
                 const group = try self.getOrPutGroup(lockfile, catalog_name);
-                var __group_moved = false; _ = &__group_moved;
-                defer if (!__group_moved) { const __T = @TypeOf(group); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = group.release() catch {}; } else { group.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = group; _drop_val.release(); } };
                 switch ((if (@typeInfo(@TypeOf(catalog)) == .@"enum") @intFromEnum(catalog) else catalog.value).?.data) {
 .e_object => |obj| {
 for (cp_iter_slice(obj.properties.slice())) |item| {
@@ -366,8 +362,9 @@ pub fn clone(self: CatalogMap, pm: *PackageManager, old_lockfile: *Lockfile, new
             const catalog_name = group.key_ptr;
             const deps = group.value_ptr;
             var new_group: Map = .{};
+            _ = &new_group;
             var __new_group_moved = false; _ = &__new_group_moved;
-            defer if (!__new_group_moved) { const __T = @TypeOf(new_group); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = new_group.release() catch {}; } else { new_group.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = new_group; _drop_val.release(); } };
+            defer if (!__new_group_moved) { __new_group_moved = true; const __T = @TypeOf(new_group); if (@typeInfo(__T) == .optional) { if (new_group) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { new_group.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = new_group; _drop_val.__cp_deinit(); } };
             _ = try new_group.ensureTotalCapacity(new_lockfile.allocator, deps.count());
             deps_iter = deps.iterator();
             while (deps_iter.next()) |entry| {

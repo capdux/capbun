@@ -1502,3 +1502,6 @@
   - `fetch.cp` 补全 `bodyValue.* == .Locked` 的 `isDisturbed` 校验与 `.ReadableStream` 构造。
 - **[2026-11-22] `.new` 关键字、`for` 字段同名遮蔽与 `orelse` 吞右值清零**：
   - `dns.cp` 未转义 `.new` 导致 `if (cache == .new)` 被 `cpc` 丢弃引发空指针 `SEGV`；`css/context.cp` 循环变量名 `ltr`/`rtl`/`dark` 与 struct 字段同名导致误将 `ltr.deinit` 降级为 `self.ltr.deinit` 引发 `0xaa` 崩溃；`udp_socket.cp` / `PostgresSQLConnection.cp` / `JSMySQLConnection.cp` 为全仓最后 3 处 `orelse` 赋值吞右值；连同 `uws_sys/udp.cp` `*PacketBuffer?` 优先级修完后，`22712`/`25785`/`28083` 全部 100% 通关。
+- **[2026-11-22] 全仓遗留隐式 `release()` 清零、`http.cp` `Content-Length` 与 `@property` 修复**：
+  - 使用新版 `cpc`（`syntax-raii-20261121-v2`）全量重编仍含 `__CpChild, "release"` 的 24 个模块，彻底根除 `HTTPThread.connect` 对 `SSLConfig` 的 `tls.get()` 借用误析构（`27358.test.ts` mTLS keepalive 复用全绿）；
+  - 删除 `http.cp:1075` 多余 `add_transfer_encoding = false;` 修复流式 `Content-Length`；`property.cp` 展开 `else return` 表达式修复 `@property` 解析；`s3/client.cp` 与 `copy_file.cp` 清理 `export const`。

@@ -36,19 +36,14 @@ pub const DebugImpl = struct {
 
 pub inline fn tryLock(self: *DebugImpl) bool {
             const locking = (if (comptime @typeInfo(@TypeOf(self.impl)) == .pointer) (self.impl) else &(self.impl)).tryLock();
-            var __locking_moved = false; _ = &__locking_moved;
-            defer if (!__locking_moved) { const __T = @TypeOf(locking); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = locking.release() catch {}; } else { locking.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = locking; _drop_val.release(); } };
             if (locking) {
                 _ = self.locking_thread.store(Thread.getCurrentId(), .unordered);
             }
-            __locking_moved = true;
             return locking;
     }
 
 pub inline fn lock(self: *DebugImpl) void {
             const current_id = Thread.getCurrentId();
-            var __current_id_moved = false; _ = &__current_id_moved;
-            defer if (!__current_id_moved) { const __T = @TypeOf(current_id); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = current_id.release() catch {}; } else { current_id.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = current_id; _drop_val.release(); } };
             if (((self.locking_thread.load(.unordered) == current_id) and (current_id != 0))) {
                 _ = @panic("Deadlock detected");
             }
@@ -109,8 +104,6 @@ pub fn lock(self: *FutexImpl) void {
 pub fn tryLock(self: *FutexImpl) bool {
             if (comptime builtin.target.cpu.arch.isX86()) {
                 const locked_bit = @ctz(locked);
-                var __locked_bit_moved = false; _ = &__locked_bit_moved;
-                defer if (!__locked_bit_moved) { const __T = @TypeOf(locked_bit); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = locked_bit.release() catch {}; } else { locked_bit.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = locked_bit; _drop_val.release(); } };
                 return (self.state.bitSet(locked_bit, .acquire) == 0);
             }
             return (self.state.cmpxchgWeak(unlocked, locked, .acquire, .monotonic) == null);
@@ -128,8 +121,6 @@ pub fn lockSlow(self: *FutexImpl) void {
 
 pub fn unlock(self: *FutexImpl) void {
             const state = self.state.swap(unlocked, .release);
-            var __state_moved = false; _ = &__state_moved;
-            defer if (!__state_moved) { const __T = @TypeOf(state); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = state.release() catch {}; } else { state.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = state; _drop_val.release(); } };
             _ = assert((state != unlocked));
             if ((state == contended)) {
                 _ = Futex.wake((&self.state), 1);

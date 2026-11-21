@@ -621,7 +621,6 @@ pub fn buildRequest(self: *HTTPClient, body_len: usize) picohttp.Request {
             const hash = hashHeaderName(name);
             const will_append = (header_count < max_user_headers);
             if ((hash == content_length_header_hash)) {
-                add_transfer_encoding = false;
                 original_content_length = self.headerStr(header_values[@as(usize, @intCast(i))]);
                 continue;
             } else {
@@ -922,23 +921,23 @@ pub fn writeToStream(self: *HTTPClient, comptime is_ssl: bool, socket: NewHTTPCo
         const buffer = stream_buffer.acquire();
         const wasEmpty = (buffer.isEmpty() and (data.len == 0));
         if ((wasEmpty and self.state.original_request_body.stream.ended)) {
-            _ = (if (comptime @typeInfo(@TypeOf(stream_buffer)) == .pointer) (stream_buffer) else &(stream_buffer)).release();
+            _ = stream_buffer.release();
             _ = self.state.original_request_body.stream.detach();
             if ((self.flags.upgrade_state == .upgraded)) {
                 _ = socket.shutdown();
             }
             return;
         }
-        const has_backpressure = (blk_catch_4: { break :blk_catch_4 ((self.writeToStreamUsingBuffer(is_ssl, socket, buffer, data)) catch |e| { _ = &e; _ = (if (comptime @typeInfo(@TypeOf(stream_buffer)) == .pointer) (stream_buffer) else &(stream_buffer)).release();
+        const has_backpressure = (blk_catch_4: { break :blk_catch_4 ((self.writeToStreamUsingBuffer(is_ssl, socket, buffer, data)) catch |e| { _ = &e; _ = stream_buffer.release();
         _ = self.state.original_request_body.stream.detach();
         _ = self.closeAndFail(e, is_ssl, socket);
         return; }); });
         if (has_backpressure) {
-            _ = (if (comptime @typeInfo(@TypeOf(stream_buffer)) == .pointer) (stream_buffer) else &(stream_buffer)).release();
+            _ = stream_buffer.release();
         } else {
             if (self.state.original_request_body.stream.ended) {
                 self.state.request_stage = .done;
-                _ = (if (comptime @typeInfo(@TypeOf(stream_buffer)) == .pointer) (stream_buffer) else &(stream_buffer)).release();
+                _ = stream_buffer.release();
                 _ = self.state.original_request_body.stream.detach();
                 if ((self.flags.upgrade_state == .upgraded)) {
                     _ = socket.shutdown();
@@ -947,7 +946,7 @@ pub fn writeToStream(self: *HTTPClient, comptime is_ssl: bool, socket: NewHTTPCo
                 if ((!wasEmpty)) {
                     _ = stream_buffer.reportDrain();
                 }
-                _ = (if (comptime @typeInfo(@TypeOf(stream_buffer)) == .pointer) (stream_buffer) else &(stream_buffer)).release();
+                _ = stream_buffer.release();
             }
         }
 }

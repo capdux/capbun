@@ -21,7 +21,7 @@ const Blob = WebCore.Blob;
 const SizeType = Blob.SizeType;
 const Store = Blob.Store;
 
-export const IOWhich = enum {
+pub const IOWhich = enum {
     source,
     destination,
     both,
@@ -825,4 +825,4 @@ const unsupported_non_regular_file_error = SystemError {
     syscall = BunString.static("fstat"),
 };
 
-export const CopyFilePromiseTask = ConcurrentPromiseTask(CopyFile);
+pub const CopyFilePromiseTask = ConcurrentPromiseTask(CopyFile);

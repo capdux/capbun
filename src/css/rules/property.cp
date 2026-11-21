@@ -179,12 +179,14 @@ pub struct PropertyRuleDeclarationParser {
                     .result => |vv| vv,
                     .err => |e| return { err: e },
                 };
-                const inherits = if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("true", ident))
-                    true
-                else if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("false", ident))
-                    false
-                else
+                let inherits: bool = false;
+                if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("true", ident)) {
+                    inherits = true;
+                } else if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("false", ident)) {
+                    inherits = false;
+                } else {
                     return { err: location.newUnexpectedTokenError({ ident: ident }) };
+                }
                 p.inherits = inherits;
             } else if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("initial-value", name)) {
                 // Buffer the value into a string. We will parse it later.

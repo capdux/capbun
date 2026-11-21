@@ -111,6 +111,7 @@ fn LockGuard(comptime __T: type) type {
         const Self = @This();
         mutex: *CpMutex(__T),
         data: *__T,
+        pub fn __cp_deinit(self: Self) void { self.release(); }
         pub fn release(self: Self) void { self.mutex.raw.unlock(); }
         pub fn unlock(self: Self) void { self.release(); }
     };
@@ -121,6 +122,7 @@ fn ReadGuard(comptime __T: type) type {
         const Self = @This();
         rwlock: *CpRwLock(__T),
         data: *const __T,
+        pub fn __cp_deinit(self: Self) void { self.release(); }
         pub fn release(self: Self) void { self.rwlock.raw.unlockShared(); }
         pub fn unlock(self: Self) void { self.release(); }
     };
@@ -131,6 +133,7 @@ fn WriteGuard(comptime __T: type) type {
         const Self = @This();
         rwlock: *CpRwLock(__T),
         data: *__T,
+        pub fn __cp_deinit(self: Self) void { self.release(); }
         pub fn release(self: Self) void { self.rwlock.raw.unlockExclusive(); }
         pub fn unlock(self: Self) void { self.release(); }
     };
@@ -511,7 +514,7 @@ pub fn init(allocator: std.mem.Allocator) !DebugLogs {
 
 pub fn deinit(self: *DebugLogs) void {
         var __self_moved = false; _ = &__self_moved;
-        defer if (!__self_moved) { const __T = @TypeOf(self); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = self.release() catch {}; } else { self.release(); } } } };
+        defer if (!__self_moved) { __self_moved = true; const __T = @TypeOf(self); if (@typeInfo(__T) == .optional) { if (self) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { self.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = self; _drop_val.__cp_deinit(); } };
             _ = self.notes.deinit();
     }
 

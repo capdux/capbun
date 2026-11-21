@@ -38,7 +38,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -69,8 +69,7 @@ pub const IOThreadPool = struct {
 
 pub fn acquire() *ThreadPoolLib {
             var count = io_ref_count.load(.acquire);
-            var __count_moved = false; _ = &__count_moved;
-            defer if (!__count_moved) { const __T = @TypeOf(count); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = count.release() catch {}; } else { count.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = count; _drop_val.release(); } };
+            _ = &count;
             while (true) {
                 if ((count == 0)) {
                     break;
@@ -96,8 +95,6 @@ pub fn acquire() *ThreadPoolLib {
 
 pub fn release() void {
             const old = io_ref_count.fetchSub(1, .release);
-            var __old_moved = false; _ = &__old_moved;
-            defer if (!__old_moved) { const __T = @TypeOf(old); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = old.release() catch {}; } else { old.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = old; _drop_val.release(); } };
             _ = bun.assertf((old > 1), "IOThreadPool: too many calls to release()", .{});
     }
 
@@ -129,11 +126,7 @@ pub const ThreadPool = struct {
 pub fn init(v2: *BundleV2, worker_pool: ?*ThreadPoolLib) !ThreadPool {
             const pool = ((worker_pool) orelse (blk: {
             const cpu_count = bun.getThreadCount();
-            var __cpu_count_moved = false; _ = &__cpu_count_moved;
-            defer if (!__cpu_count_moved) { const __T = @TypeOf(cpu_count); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = cpu_count.release() catch {}; } else { cpu_count.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = cpu_count; _drop_val.release(); } };
             const pool = try v2.allocator().create(ThreadPoolLib);
-            var __pool_moved = false; _ = &__pool_moved;
-            defer if (!__pool_moved) { const __T = @TypeOf(pool); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = pool.release() catch {}; } else { pool.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = pool; _drop_val.release(); } };
             pool.* = .init(.{ .max_threads = cpu_count });
             _ = debug("{d} workers", .{ cpu_count });
             break :blk pool;
@@ -154,7 +147,7 @@ pub fn deinit(self: *ThreadPool) void {
                 _ = self.v2.allocator().destroy(self.worker_pool);
             }
             if (ThreadPool.usesIOPool()) {
-                _ = (if (comptime @typeInfo(@TypeOf(IOThreadPool)) == .pointer) (IOThreadPool) else &(IOThreadPool)).release();
+                _ = IOThreadPool.release();
             }
     }
 
@@ -187,8 +180,6 @@ pub fn scheduleWithOptions(self: *ThreadPool, parse_task: *ParseTask, is_inside_
                 parse_task.stage = .{ .needs_parse = .{ .contents = parse_task.contents_or_fd.contents, .fd = bun.invalid_fd } };
             }
             const scheduleFn = (if (is_inside_thread_pool) (&ThreadPoolLib.scheduleInsideThreadPool) else (&ThreadPoolLib.schedule));
-            var __scheduleFn_moved = false; _ = &__scheduleFn_moved;
-            defer if (!__scheduleFn_moved) { const __T = @TypeOf(scheduleFn); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = scheduleFn.release() catch {}; } else { scheduleFn.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = scheduleFn; _drop_val.release(); } };
             if (ThreadPool.usesIOPool()) {
                 switch (parse_task.stage) {
 .needs_parse => {
@@ -217,14 +208,10 @@ pub fn getWorker(self: *ThreadPool, id: std.Thread.Id) *Worker {
             _ = self.workers_assignments_lock.unlock();
             }
             const entry = ((self.workers_assignments.getOrPut(id)) catch unreachable);
-            var __entry_moved = false; _ = &__entry_moved;
-            defer if (!__entry_moved) { const __T = @TypeOf(entry); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = entry.release() catch {}; } else { entry.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = entry; _drop_val.release(); } };
             if (entry.found_existing) {
                 return entry.value_ptr.*;
             }
             const worker = ((bun.default_allocator.create(Worker)) catch unreachable);
-            var __worker_moved = false; _ = &__worker_moved;
-            defer if (!__worker_moved) { const __T = @TypeOf(worker); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = worker.release() catch {}; } else { worker.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = worker; _drop_val.release(); } };
             worker.* = .{ .ctx = self.v2, .heap = undefined, .allocator = undefined, .thread = ThreadPoolLib.Thread.current };
             _ = worker.init(self.v2);
             entry.value_ptr.* = worker;
@@ -267,8 +254,7 @@ pub fn getWorker(self: *ThreadPool, id: std.Thread.Id) *Worker {
     
     pub fn get(ctx: *BundleV2) *Worker {
                 var worker = ctx.graph.pool.getWorker(std.Thread.getCurrentId());
-                var __worker_moved = false; _ = &__worker_moved;
-                defer if (!__worker_moved) { const __T = @TypeOf(worker); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = worker.release() catch {}; } else { worker.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = worker; _drop_val.release(); } };
+                _ = &worker;
                 if ((!worker.has_created)) {
                     _ = worker.create(ctx);
                 }
@@ -276,7 +262,6 @@ pub fn getWorker(self: *ThreadPool, id: std.Thread.Id) *Worker {
                 if (comptime FeatureFlags.help_catch_memory_issues) {
                     _ = worker.heap.helpCatchMemoryIssues();
                 }
-                __worker_moved = true;
                 return worker;
         }
     
@@ -293,8 +278,7 @@ pub fn getWorker(self: *ThreadPool, id: std.Thread.Id) *Worker {
     
     pub fn create(self: *@This(), ctx: *BundleV2) void {
                 var trace = bun.perf.trace("Bundler.Worker.create");
-                var __trace_moved = false; _ = &__trace_moved;
-                defer if (!__trace_moved) { const __T = @TypeOf(trace); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = trace.release() catch {}; } else { trace.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = trace; _drop_val.release(); } };
+                _ = &trace;
                 defer {
                 _ = trace.end();
                 }
@@ -327,15 +311,11 @@ pub fn getWorker(self: *ThreadPool, id: std.Thread.Id) *Worker {
                 if (((target == .browser) and (self.data.transpiler.options.target != target))) {
                     if ((self.data.other_transpiler != null)) {
                         const other_ptr = (&self.data.other_transpiler.?);
-                        var __other_ptr_moved = false; _ = &__other_ptr_moved;
-                        defer if (!__other_ptr_moved) { const __T = @TypeOf(other_ptr); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = other_ptr.release() catch {}; } else { other_ptr.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = other_ptr; _drop_val.release(); } };
                         _ = bun.debugAssert((other_ptr.options.target == target));
                         return other_ptr;
                     }
                     self.data.other_transpiler = undefined;
                     const other = (&self.data.other_transpiler.?);
-                    var __other_moved = false; _ = &__other_moved;
-                    defer if (!__other_moved) { const __T = @TypeOf(other); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = other.release() catch {}; } else { other.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = other; _drop_val.release(); } };
                     _ = self.initializeTranspiler(other, self.ctx.client_transpiler.?, self.allocator);
                     _ = bun.debugAssert((other.options.target == target));
                     return other;

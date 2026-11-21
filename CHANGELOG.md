@@ -1895,3 +1895,4 @@
 - **[2026-11-21] `build_command.cp` `define` 丢失修复 (`zig:check` 5/5)**：更新 `src/cli/build_command.{cp,zig}`。
 - **[2026-11-21] 全仓 `migrate_cp_syntax.py` 迁移、28 模块 `release()` 还原与 `fetch.cp` 修复 (`zig:check` 5/5)**：更新 `src/runtime/webcore/fetch.{cp,zig}`、还原 `release()` 的 28 个 `.cp/.zig` 模块，以及全仓 96 个 `migrate_cp_syntax.py` 迁移的 `.cp/.zig` 文件。
 - **[2026-11-22] `dns` / `css/context` / `udp_socket` / `uws_sys/udp` / `Postgres` / `MySQL` 修复（全绿）**：更新 `src/runtime/dns_jsc/dns.{cp,zig}`、`src/css/context.{cp,zig}`、`src/runtime/socket/udp_socket.{cp,zig}`、`src/uws_sys/udp.{cp,zig}`、`src/sql_jsc/postgres/PostgresSQLConnection.{cp,zig}`、`src/sql_jsc/mysql/JSMySQLConnection.{cp,zig}`。
+- **[2026-11-22] `http` / `css/rules/property` 修复与 24 个遗留隐式 `release()` 模块重编清零 (`zig:check` 5/5)**：更新 `src/http/http.{cp,zig}`、`src/css/rules/property.{cp,zig}`、`src/runtime/webcore/{s3/client,blob/copy_file}.{cp,zig}` 及全仓 22 个重编 `.zig` 文件。

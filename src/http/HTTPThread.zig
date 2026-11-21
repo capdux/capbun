@@ -104,7 +104,7 @@ _ = heap.put();
     }
 
 pub fn deinit(self: *RequestBodyBuffer) void {
-            _ = (if (comptime @typeInfo(@TypeOf(self)) == .pointer) (self) else &(self)).release();
+            _ = self.release();
     }
 
 pub fn allocatedSlice(self: *RequestBodyBuffer) []u8 {
@@ -129,10 +129,8 @@ pub fn allocator(self: *RequestBodyBuffer) std.mem.Allocator {
 
 pub fn toArrayList(self: *RequestBodyBuffer) std.array_list.Managed(u8) {
             var list = std.array_list.Managed(u8).fromOwnedSlice(self.allocator(), self.allocatedSlice());
-            var __list_moved = false; _ = &__list_moved;
-            defer if (!__list_moved) { const __T = @TypeOf(list); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = list.release() catch {}; } else { list.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = list; _drop_val.release(); } };
+            _ = &list;
             list.items.len = 0;
-            __list_moved = true;
             return list;
     }
 };
@@ -156,10 +154,8 @@ pub const HeapRequestBodyBuffer = struct {
 
 pub fn init() *HeapRequestBodyBuffer {
             var this_ptr = HeapRequestBodyBuffer.new(.{ .fixed_buffer_allocator = undefined });
-            var __this_ptr_moved = false; _ = &__this_ptr_moved;
-            defer if (!__this_ptr_moved) { const __T = @TypeOf(this_ptr); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = this_ptr.release() catch {}; } else { this_ptr.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = this_ptr; _drop_val.release(); } };
+            _ = &this_ptr;
             this_ptr.fixed_buffer_allocator = std.heap.FixedBufferAllocator.init((&this_ptr.buffer));
-            __this_ptr_moved = true;
             return this_ptr;
     }
 
@@ -185,7 +181,7 @@ pub fn release(self: *LibdeflateState) void {
     }
 
 pub fn deinit(self: *LibdeflateState) void {
-            _ = (if (comptime @typeInfo(@TypeOf(self)) == .pointer) (self) else &(self)).release();
+            _ = self.release();
     }
     pub const new = bun.TrivialNew(@This());
 };
@@ -253,8 +249,6 @@ pub fn initOnce(opts: *const InitOpts) void {
         bun.http.http_thread = .{ .loop = undefined, .http_context = .{ .ref_count = .init(), .pending_sockets = HTTPContextTCP.PooledSocketHiveAllocator.empty }, .https_context = .{ .ref_count = .init(), .pending_sockets = HTTPContextTLS.PooledSocketHiveAllocator.empty }, .timer = (blk_catch_0: { break :blk_catch_0 ((std.time.Timer.start()) catch |__ce_0| { _ = &__ce_0; @panic("Failed to start timer"); }); }) };
         _ = bun.libdeflate.load();
         const thread = (blk_catch_1: { break :blk_catch_1 ((std.Thread.spawn(.{ .stack_size = bun.default_thread_stack_size }, onStart, .{ opts.* })) catch |e| { _ = &e; break :blk_catch_1 bun.Output.panic("Failed to start HTTP Client thread: {s}", .{ bun.asByteSlice(@errorName(e)) }); }); });
-        var __thread_moved = false; _ = &__thread_moved;
-        defer if (!__thread_moved) { const __T = @TypeOf(thread); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = thread.release() catch {}; } else { thread.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = thread; _drop_val.release(); } };
         _ = thread.detach();
 }
 
@@ -274,12 +268,8 @@ pub fn onStart(opts: InitOpts) void {
         }
         bun.http.idle_timeout_seconds = @intCast(timeout_val);
         const loop = bun.jsc.MiniEventLoop.initGlobal(null, null);
-        var __loop_moved = false; _ = &__loop_moved;
-        defer if (!__loop_moved) { const __T = @TypeOf(loop); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = loop.release() catch {}; } else { loop.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = loop; _drop_val.release(); } };
         if (bun.Environment.isWindows) {
             const env_val = std.process.getenvW(bun.strings.w("SystemRoot"));
-            var __env_val_moved = false; _ = &__env_val_moved;
-            defer if (!__env_val_moved) { const __T = @TypeOf(env_val); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = env_val.release() catch {}; } else { env_val.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = env_val; _drop_val.release(); } };
             if ((env_val == null)) {
                 _ = bun.Output.errGeneric("The %SystemRoot% environment variable is not set. Bun needs this set in order for network requests to work.", &.{});
                 _ = bun.Global.crash();
@@ -311,8 +301,6 @@ pub fn connect(self: *HTTPThread, comptime is_ssl: bool, client: *bun.http.HTTPC
                 _ = &tls;
                 if (tls.get().requires_custom_request_ctx) {
                     const requested_config = tls.get();
-                    var __requested_config_moved = false; _ = &__requested_config_moved;
-                    defer if (!__requested_config_moved) { const __T = @TypeOf(requested_config); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = requested_config.release() catch {}; } else { requested_config.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = requested_config; _drop_val.release(); } };
                     _ = self.evictStaleSslContexts();
                     if (custom_ssl_context_map.getPtr(requested_config)) |entry| {
                         _ = &entry;
@@ -326,14 +314,11 @@ pub fn connect(self: *HTTPThread, comptime is_ssl: bool, client: *bun.http.HTTPC
                         }
                     }
                     var custom_context = try bun.default_allocator.create(HTTPContextTLS);
-                    var __custom_context_moved = false; _ = &__custom_context_moved;
-                    defer if (!__custom_context_moved) { const __T = @TypeOf(custom_context); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = custom_context.release() catch {}; } else { custom_context.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = custom_context; _drop_val.release(); } };
+                    _ = &custom_context;
                     custom_context.* = .{ .ref_count = .init(), .pending_sockets = HTTPContextTLS.PooledSocketHiveAllocator.empty };
                     _ = (blk_catch_3: { break :blk_catch_3 ((custom_context.initWithClientConfig(client)) catch |__ce_3| { _ = &__ce_3; _ = bun.default_allocator.destroy(custom_context);
                     return error.FailedToOpenSocket; }); });
                     const now = self.timer.read();
-                    var __now_moved = false; _ = &__now_moved;
-                    defer if (!__now_moved) { const __T = @TypeOf(now); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = now.release() catch {}; } else { now.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = now; _drop_val.release(); } };
                     _ = bun.handleOom(custom_ssl_context_map.put(requested_config, .{ .ctx = custom_context, .last_used_ns = now, .config_ref = tls.clone() }));
                     if ((custom_ssl_context_map.count() > ssl_context_cache_max_size)) {
                         _ = HTTPThread.evictOldestSslContext();
@@ -364,8 +349,6 @@ pub fn connect(self: *HTTPThread, comptime is_ssl: bool, client: *bun.http.HTTPC
 
 pub fn evictStaleSslContexts(self: *HTTPThread) void {
         const now = self.timer.read();
-        var __now_moved = false; _ = &__now_moved;
-        defer if (!__now_moved) { const __T = @TypeOf(now); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = now.release() catch {}; } else { now.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = now; _drop_val.release(); } };
         var i: usize = 0;
         _ = &i;
         while ((i < custom_ssl_context_map.count())) {
@@ -437,8 +420,6 @@ pub fn drainQueuedShutdowns(self: *HTTPThread) void {
 .SocketTLS => |socket| {
 const is_tls = true;
                     const tagged = HTTPContextTLS.getTaggedFromSocket(socket);
-                    var __tagged_moved = false; _ = &__tagged_moved;
-                    defer if (!__tagged_moved) { const __T = @TypeOf(tagged); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = tagged.release() catch {}; } else { tagged.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = tagged; _drop_val.release(); } };
                     if (tagged.get(bun.http)) |client| {
                         _ = &client;
                         _ = client.closeAndAbort(is_tls, socket);
@@ -454,8 +435,6 @@ const is_tls = true;
 .SocketTCP => |socket| {
 const is_tls = false;
                     const tagged = HTTPContextTCP.getTaggedFromSocket(socket);
-                    var __tagged_moved = false; _ = &__tagged_moved;
-                    defer if (!__tagged_moved) { const __T = @TypeOf(tagged); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = tagged.release() catch {}; } else { tagged.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = tagged; _drop_val.release(); } };
                     if (tagged.get(bun.http)) |client| {
                         _ = &client;
                         _ = client.closeAndAbort(is_tls, socket);
@@ -507,8 +486,6 @@ const is_tls = true;
                         continue;
                     }
                     const tagged = HTTPContextTLS.getTaggedFromSocket(socket);
-                    var __tagged_moved = false; _ = &__tagged_moved;
-                    defer if (!__tagged_moved) { const __T = @TypeOf(tagged); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = tagged.release() catch {}; } else { tagged.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = tagged; _drop_val.release(); } };
                     if (tagged.get(bun.http)) |client| {
                         _ = &client;
                         if ((client.state.original_request_body == .stream)) {
@@ -527,8 +504,6 @@ const is_tls = false;
                         continue;
                     }
                     const tagged = HTTPContextTCP.getTaggedFromSocket(socket);
-                    var __tagged_moved = false; _ = &__tagged_moved;
-                    defer if (!__tagged_moved) { const __T = @TypeOf(tagged); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = tagged.release() catch {}; } else { tagged.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = tagged; _drop_val.release(); } };
                     if (tagged.get(bun.http)) |client| {
                         _ = &client;
                         if ((client.state.original_request_body == .stream)) {
@@ -570,8 +545,6 @@ pub fn drainQueuedHTTPResponseBodyDrains(self: *HTTPThread) void {
 .SocketTLS => |socket| {
 const is_tls = true;
                     const tagged = HTTPContextTLS.getTaggedFromSocket(socket);
-                    var __tagged_moved = false; _ = &__tagged_moved;
-                    defer if (!__tagged_moved) { const __T = @TypeOf(tagged); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = tagged.release() catch {}; } else { tagged.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = tagged; _drop_val.release(); } };
                     if (tagged.get(bun.http)) |client| {
                         _ = &client;
                         _ = client.drainResponseBody(is_tls, socket);
@@ -584,8 +557,6 @@ const is_tls = true;
 .SocketTCP => |socket| {
 const is_tls = false;
                     const tagged = HTTPContextTCP.getTaggedFromSocket(socket);
-                    var __tagged_moved = false; _ = &__tagged_moved;
-                    defer if (!__tagged_moved) { const __T = @TypeOf(tagged); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = tagged.release() catch {}; } else { tagged.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = tagged; _drop_val.release(); } };
                     if (tagged.get(bun.http)) |client| {
                         _ = &client;
                         _ = client.drainResponseBody(is_tls, socket);
@@ -615,11 +586,8 @@ pub fn drainEvents(self: *HTTPThread) void {
         }
         _ = self.queued_threadlocal_proxy_derefs.clearRetainingCapacity();
         var active = bun.http.AsyncHTTP.active_requests_count.load(.monotonic);
-        var __active_moved = false; _ = &__active_moved;
-        defer if (!__active_moved) { const __T = @TypeOf(active); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = active.release() catch {}; } else { active.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = active; _drop_val.release(); } };
+        _ = &active;
         const max = bun.http.AsyncHTTP.max_simultaneous_requests.load(.monotonic);
-        var __max_moved = false; _ = &__max_moved;
-        defer if (!__max_moved) { const __T = @TypeOf(max); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = max.release() catch {}; } else { max.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = max; _drop_val.release(); } };
         if (((active >= max) and (!self.has_pending_queued_abort))) {
             return;
         }
@@ -653,8 +621,7 @@ pub fn drainEvents(self: *HTTPThread) void {
 
 pub fn startQueuedTask(http: *AsyncHTTP) void {
         var cloned = bun.http.ThreadlocalAsyncHTTP.new(.{ .async_http = http.* });
-        var __cloned_moved = false; _ = &__cloned_moved;
-        defer if (!__cloned_moved) { const __T = @TypeOf(cloned); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = cloned.release() catch {}; } else { cloned.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = cloned; _drop_val.release(); } };
+        _ = &cloned;
         cloned.async_http.real = http;
         cloned.async_http.next = null;
         cloned.async_http.task.node.next = null;
@@ -731,7 +698,7 @@ pub fn wakeup(self: *HTTPThread) void {
 
 pub fn schedule(self: *HTTPThread, batch: bun.ThreadPool.Batch) void {
     var __batch_moved = false; _ = &__batch_moved;
-    defer if (!__batch_moved) { const __T = @TypeOf(batch); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = batch.release() catch {}; } else { batch.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = batch; _drop_val.release(); } };
+    defer if (!__batch_moved) { __batch_moved = true; const __T = @TypeOf(batch); if (@typeInfo(__T) == .optional) { if (batch) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { batch.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = batch; _drop_val.__cp_deinit(); } };
         var b = batch;
         _ = &b;
         if ((b.len == 0)) {

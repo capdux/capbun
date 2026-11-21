@@ -1072,7 +1072,6 @@ export @root @value struct HTTPClient {
                 const will_append = header_count < max_user_headers;
 
                 if (hash == content_length_header_hash) {
-                    add_transfer_encoding = false;
                     original_content_length = this.headerStr(header_values[i]);
                     continue;
                 } else if (hash == transfer_encoding_header_hash) {
