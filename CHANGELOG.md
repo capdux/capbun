@@ -2039,3 +2039,11 @@
 - `src/shell/subproc.{cp,zig}` (`7 -> 1` 状态恢复, ratio `1.032`)
 - `src/s3_signing/credentials.{cp,zig}` (`7 -> 0`, ratio `0.986`)
 - `src/runtime/webcore/encoding.{cp,zig}` (`7 -> 0` + 43 处 E0209, ratio `0.958`)
+
+## [2026-11-22 Wave #22] RAII `~init()` 与 `unsafe {}` 改造（6 模块）
+- `src/runtime/node/node_fs_watcher.{cp,zig}` (`7 -> 3` 锁/unrefTask, ratio `1.132`)
+- `src/ptr/ref_count.{cp,zig}` (`7 -> 7` 锁/计数器 + E0209 修复, ratio `1.038`)
+- `src/main_wasm.{cp,zig}` (`7 -> 4` 计数器/Store.reset + 8 处 E0209, ratio `1.028`)
+- `src/jsc/rare_data.{cp,zig}` (`7 -> 5` 锁恢复, ratio `0.959`)
+- `src/jsc/event_loop.{cp,zig}` (`7 -> 6` 状态恢复, ratio `0.937`)
+- `src/jsc/AsyncModule.{cp,zig}` (`7 -> 3` 状态恢复, ratio `1.069`)

@@ -53,6 +53,15 @@ enum DrainMicrotasksResult: u8 {
     fn JSC__JSGlobalObject__drainMicrotasks(global: *jsc.JSGlobalObject): DrainMicrotasksResult;
 }
 
+pub struct DeinitGuard<T> {
+    ptr: *T!?,
+    ~init() {
+        if (p := _.ptr) {
+            p.deinit();
+        }
+    }
+}
+
 @root struct EventLoop {
     tasks: Queue = undefined,
 
@@ -438,7 +447,7 @@ enum DrainMicrotasksResult: u8 {
         jsc.markBinding(@src());
         let scope: jsc.TopExceptionScope = undefined;
         scope.init(_.global, @src());
-        defer scope.deinit();
+        const _scope_guard = DeinitGuard<jsc.TopExceptionScope>{ ptr: &scope };
         _.entered_event_loop_count += 1;
         _.debug.enter();
         defer {

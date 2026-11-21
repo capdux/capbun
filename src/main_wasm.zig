@@ -73,7 +73,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const Define = @import("./bundler/defines.zig");
 pub const Options = @import("./bundler/options.zig");
@@ -84,18 +84,40 @@ pub const os = struct {
     pub const system = Main.system;
 };
 
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T = null,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    _ = p.deinit();
+                }
+        }
+    };
+}
+
 pub const Uint8Array = extern struct {
     ptr: ?[*]const u8 = null,
     len: usize = 0,
 
 pub fn fromSlice(slice: []const u8) u64 {
-            const pair: [2]u32 = .{ @as(u32, @intCast(@intFromPtr(slice.ptr))), @as(u32, @intCast(slice.len)) };
+            const pair: [2]u32 = .{ @as(u32, @intCast((blk: {
+            break :blk @intFromPtr(slice.ptr);
+
+}))), @as(u32, @intCast(slice.len)) };
             return @as(u64, @bitCast(pair));
     }
 
 pub fn fromJS(data: u64) []u8 {
             const ptrs = @as([2]u32, @bitCast(data));
-            const ptr: [*]u8 = @ptrFromInt(ptrs[0]);
+            const ptr: [*]u8 = (blk: {
+            break :blk @ptrFromInt(ptrs[0]);
+
+});
             return (blk: {
             break :blk ptr[0..ptrs[1]];
 
@@ -515,7 +537,10 @@ extern "c" fn cycleStart() callconv(.c) void;
 extern "c" fn cycleEnd() callconv(.c) void;
 
 pub export fn bun_malloc(size: usize) callconv(.c) u64 {
-        const pair: [2]u32 = .{ @as(u32, @intCast(@intFromPtr(((default_allocator.alloc(u8, size)) catch unreachable).ptr))), @as(u32, @intCast(size)) };
+        const pair: [2]u32 = .{ @as(u32, @intCast((blk: {
+        break :blk @intFromPtr(((default_allocator.alloc(u8, size)) catch unreachable).ptr);
+
+}))), @as(u32, @intCast(size)) };
         return @as(u64, @bitCast(pair));
 }
 
@@ -551,9 +576,10 @@ pub export fn getTests(opts_array: u64) callconv(.c) u64 {
         _ = &arena_;
         var allocator = arena_.allocator();
         _ = &allocator;
-        defer {
-        _ = arena_.deinit();
-        }
+        var _arena_guard = DeinitGuard(Arena){ .ptr = (&arena_) };
+        _ = &_arena_guard;
+        var ___arena_guard_moved = false; _ = &___arena_guard_moved;
+        defer if (!___arena_guard_moved) { ___arena_guard_moved = true; const __T = @TypeOf(_arena_guard); if (@typeInfo(__T) == .optional) { if (_arena_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _arena_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _arena_guard; _drop_val.__cp_deinit(); } };
         var log_ = Logger.Log.init(allocator);
         _ = &log_;
         var reader = ApiReader.init(Uint8Array.fromJS(opts_array), allocator);
@@ -576,7 +602,10 @@ pub export fn getTests(opts_array: u64) callconv(.c) u64 {
         parser.options.features.inject_jest_globals = true;
         parser.options.features.commonjs_at_runtime = true;
         parser.options.features.top_level_await = true;
-        _ = (blk_catch_4: { break :blk_catch_4 ((parser.analyze((&anaylzer), @ptrCast((&TestAnalyzer.visitParts)))) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
+        _ = (blk_catch_4: { break :blk_catch_4 ((parser.analyze((&anaylzer), (blk: {
+        break :blk @ptrCast((&TestAnalyzer.visitParts));
+
+}))) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
         _ = Output.print("Error: {s}\n", .{ @errorName(e) });
         _ = ((log_.print(Output.writer())) catch unreachable);
         return 0; }); });
@@ -590,7 +619,10 @@ pub export fn getTests(opts_array: u64) callconv(.c) u64 {
         var response = api.GetTestsResponse{ .tests = anaylzer.items.items, .contents = anaylzer.string_buffer.items };
         _ = &response;
         _ = (blk_catch_6: { break :blk_catch_6 ((response.encode((&encoder))) catch |__ce_6| { _ = &__ce_6; return 0; }); });
-        const pair: [2]u32 = .{ @as(u32, @intCast(@intFromPtr(output.items.ptr))), @as(u32, @intCast(output.items.len)) };
+        const pair: [2]u32 = .{ @as(u32, @intCast((blk: {
+        break :blk @intFromPtr(output.items.ptr);
+
+}))), @as(u32, @intCast(output.items.len)) };
         return @as(u64, @bitCast(pair));
 }
 
@@ -599,9 +631,10 @@ pub export fn transform(opts_array: u64) callconv(.c) u64 {
         _ = &arena_;
         var allocator = arena_.allocator();
         _ = &allocator;
-        defer {
-        _ = arena_.deinit();
-        }
+        var _arena_guard = DeinitGuard(Arena){ .ptr = (&arena_) };
+        _ = &_arena_guard;
+        var ___arena_guard_moved = false; _ = &___arena_guard_moved;
+        defer if (!___arena_guard_moved) { ___arena_guard_moved = true; const __T = @TypeOf(_arena_guard); if (@typeInfo(__T) == .optional) { if (_arena_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _arena_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _arena_guard; _drop_val.__cp_deinit(); } };
         log = Logger.Log.init(allocator);
         var reader = ApiReader.init(Uint8Array.fromJS(opts_array), allocator);
         _ = &reader;
@@ -654,7 +687,10 @@ else => .file,
         var encoder = Encoder.init(output_writer);
         _ = &encoder;
         _ = (blk_catch_12: { break :blk_catch_12 ((transform_response.encode((&encoder))) catch |__ce_12| { _ = &__ce_12;  }); });
-        const pair: [2]u32 = .{ @as(u32, @intCast(@intFromPtr(output.items.ptr))), @as(u32, @intCast(output.items.len)) };
+        const pair: [2]u32 = .{ @as(u32, @intCast((blk: {
+        break :blk @intFromPtr(output.items.ptr);
+
+}))), @as(u32, @intCast(output.items.len)) };
         return @as(u64, @bitCast(pair));
 }
 
@@ -663,9 +699,10 @@ pub export fn scan(opts_array: u64) callconv(.c) u64 {
         _ = &arena_;
         var allocator = arena_.allocator();
         _ = &allocator;
-        defer {
-        _ = arena_.deinit();
-        }
+        var _arena_guard = DeinitGuard(Arena){ .ptr = (&arena_) };
+        _ = &_arena_guard;
+        var ___arena_guard_moved = false; _ = &___arena_guard_moved;
+        defer if (!___arena_guard_moved) { ___arena_guard_moved = true; const __T = @TypeOf(_arena_guard); if (@typeInfo(__T) == .optional) { if (_arena_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _arena_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _arena_guard; _drop_val.__cp_deinit(); } };
         log = Logger.Log.init(allocator);
         var reader = ApiReader.init(Uint8Array.fromJS(opts_array), allocator);
         _ = &reader;
@@ -721,7 +758,10 @@ else => .file,
             var encoder = Encoder.init(output_writer);
             _ = &encoder;
             _ = ((scan_result.encode((&encoder))) catch unreachable);
-            const pair: [2]u32 = .{ @as(u32, @intCast(@intFromPtr(output.items.ptr))), @as(u32, @intCast(output.items.len)) };
+            const pair: [2]u32 = .{ @as(u32, @intCast((blk: {
+            break :blk @intFromPtr(output.items.ptr);
+
+}))), @as(u32, @intCast(output.items.len)) };
             return @as(u64, @bitCast(pair));
         } else {
             var output = std.array_list.Managed(u8).init(default_allocator);
@@ -734,7 +774,10 @@ else => .file,
             var encoder = Encoder.init(output_writer);
             _ = &encoder;
             _ = ((scan_result.encode((&encoder))) catch unreachable);
-            const pair: [2]u32 = .{ @as(u32, @intCast(@intFromPtr(output.items.ptr))), @as(u32, @intCast(output.items.len)) };
+            const pair: [2]u32 = .{ @as(u32, @intCast((blk: {
+            break :blk @intFromPtr(output.items.ptr);
+
+}))), @as(u32, @intCast(output.items.len)) };
             return @as(u64, @bitCast(pair));
         }
 }

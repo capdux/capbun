@@ -614,7 +614,7 @@ fn genericDump(
     bun.Output.prettyError("<blue>{s}{s}{x} has ", [
         type_name ?? "",
         if (type_name != null) "@" else "",
-        @intFromPtr(ptr),
+        unsafe { @intFromPtr(ptr) },
     ]);
     if (tracked_refs > 0) {
         bun.Output.prettyError("{d} tracked{s}", [tracked_refs, if (untracked_refs > 0) ", " else ""]);

@@ -21,6 +21,33 @@ type string = []const u8;
 const log = Output.scoped(.@"fs.watch", .hidden);
 const PathWatcher = if (Environment.isWindows) WinWatcher else PosixWatcher;
 
+pub struct DeinitGuard<T> {
+    ptr: (*T!)?,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deinit(); }
+        }
+    }
+}
+
+pub struct CloseGuard<T> {
+    ptr: (*T!)?,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.close(); }
+        }
+    }
+}
+
+pub struct PathBufferGuard<T> {
+    buf: T?,
+    ~init() {
+        if (b := _.buf) {
+            bun.path_buffer_pool.put(b);
+        }
+    }
+}
+
 pub enum _EventType: u8 {
     rename = 0,
     change = 1,
@@ -277,9 +304,8 @@ pub struct _Arguments {
         if (path_opt == null) {
             return ctx.throwInvalidArguments("filename must be a string or TypedArray", .{});
         }
-        const path = path_opt.?;
-        let should_deinit_path = true;
-        defer if (should_deinit_path) path.deinit();
+        let path = path_opt.?;
+        let path_guard = DeinitGuard<PathLike>{ ptr: &path };
 
         let listener: jsc.JSValue = .zero;
         let signal: (*webcore.AbortSignal)? = null;
@@ -345,7 +371,7 @@ pub struct _Arguments {
             return ctx.throwInvalidArguments("Expected \"listener\" callback", .{});
         }
 
-        should_deinit_path = false;
+        path_guard.ptr = null;
 
         return .{
             .path = path,
@@ -527,7 +553,7 @@ pub struct FSWatcher {
     fn emitAbort(*_, e: jsc.JSValue) {
         if (_.closed) return;
         * = _.pending_activity_count.fetchAdd(1, .monotonic);
-        defer _.close();
+        const close_guard = CloseGuard<FSWatcher>{ ptr: _ };
         defer _.unrefTask();
 
         e.ensureStillAlive();
@@ -550,7 +576,7 @@ pub struct FSWatcher {
 
     fn emitError(*_, e: bun.sys.Error) {
         if (_.closed) return;
-        defer _.close();
+        const close_guard = CloseGuard<FSWatcher>{ ptr: _ };
 
         if (_.js_this != .zero) {
             const js_this = _.js_this;
@@ -713,7 +739,7 @@ pub struct FSWatcher {
 
     static fn init(args: _Arguments): bun.sys.Maybe(*FSWatcher) {
         const joined_buf = bun.path_buffer_pool.get();
-        defer bun.path_buffer_pool.put(joined_buf);
+        const buf_guard = PathBufferGuard<@TypeOf(joined_buf)>{ buf: joined_buf };
         const file_path: [:0]const u8 = brk: {
             let slice = args.path.slice();
             if (bun.strings.startsWith(slice, "file://")) {

@@ -1579,3 +1579,7 @@
 ## [2026-11-22 Wave #21] RAII 改造与 `unsafe {}` 经验
 - `credentials.cp`：将 `signRequest` 逻辑提取至顶层纯 CP 函数 `s3CredentialsSignRequest` 以确保 `cpc` 完整注入 `defer __cp_deinit()`，所有权移交前显式置空切片 Guard。
 - `encoding.cp`：集中将 43 处裸指针切片与 `@alignCast`/`@intFromPtr` 收窄入 `unsafe {}`。
+
+## [2026-11-22 Wave #22] RAII 改造与 `unsafe {}` 经验
+- `node_fs_watcher.cp` / `AsyncModule.cp`：拆出复合 `defer { ... }` 内的资源释放动作至独立 Guard，确保异常路径不泄漏。
+- `main_wasm.cp` / `ref_count.cp`：补齐 `@intFromPtr`/`@ptrFromInt`/`@ptrCast` 的 `unsafe {}` 包裹。

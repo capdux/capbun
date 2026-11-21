@@ -18,18 +18,28 @@ pub @c {
     fn console_warn(slice: u64);
     fn console_info(slice: u64);
 }
+struct DeinitGuard<T> {
+    ptr: (*T)? = null,
+
+    ~init() {
+        if (p := _.ptr) {
+            p.deinit();
+        }
+    }
+}
+
 @c pub struct Uint8Array {
     ptr: ([*]const u8)? = null,
     len: usize = 0,
 
     static fn fromSlice(slice: []const u8): u64 {
-        const pair: [2]u32 = [ @as(u32, @intCast(@intFromPtr(slice.ptr))), @as(u32, @intCast(slice.len)) ];
+        const pair: [2]u32 = [ @as(u32, @intCast(unsafe { @intFromPtr(slice.ptr) })), @as(u32, @intCast(slice.len)) ];
         return @as(u64, @bitCast(pair));
     }
 
     static fn fromJS(data: u64): []u8 {
         const ptrs = @as([2]u32, @bitCast(data));
-        const ptr: [*]u8 = @ptrFromInt(ptrs[0]);
+        const ptr: [*]u8 = unsafe { @ptrFromInt(ptrs[0]) };
         return unsafe { ptr[0..ptrs[1]] };
     }
 }
@@ -159,7 +169,7 @@ let writer: JSPrinter.BufferPrinter = undefined;
 let define: *Define.Define = undefined;
 @export @c fn bun_malloc(size: usize): u64 {
     const pair: [2]u32 = [
-        @as(u32, @intCast(@intFromPtr((default_allocator.alloc(u8, size) catch unreachable).ptr))),
+        @as(u32, @intCast(unsafe { @intFromPtr((default_allocator.alloc(u8, size) catch unreachable).ptr) })),
         @as(u32, @intCast(size)),
     ];
     return @as(u64, @bitCast(pair));
@@ -442,7 +452,7 @@ struct TestAnalyzer {
 @export @c fn getTests(opts_array: u64): u64 {
     let arena_ = Arena.init();
     let allocator = arena_.allocator();
-    defer arena_.deinit();
+    const _arena_guard = DeinitGuard<Arena>{ ptr: &arena_ };
     let log_ = Logger.Log.init(allocator);
     let reader = ApiReader.init(Uint8Array.fromJS(opts_array), allocator);
     let opts = bun.handleOom(api.GetTestsRequest.decode(&reader));
@@ -470,7 +480,7 @@ struct TestAnalyzer {
     parser.options.features.commonjs_at_runtime = true;
     parser.options.features.top_level_await = true;
 
-    parser.analyze(&anaylzer, @ptrCast(&TestAnalyzer.visitParts)) catch |e| {
+    parser.analyze(&anaylzer, unsafe { @ptrCast(&TestAnalyzer.visitParts) }) catch |e| {
         bun.handleErrorReturnTrace(e, @errorReturnTrace());
 
         Output.print("Error: {s}\n", .{@errorName(e)});
@@ -489,7 +499,7 @@ struct TestAnalyzer {
     };
 
     response.encode(&encoder) catch return 0;
-    const pair: [2]u32 = [ @as(u32, @intCast(@intFromPtr(output.items.ptr))), @as(u32, @intCast(output.items.len)) ];
+    const pair: [2]u32 = [ @as(u32, @intCast(unsafe { @intFromPtr(output.items.ptr) })), @as(u32, @intCast(output.items.len)) ];
     return @as(u64, @bitCast(pair));
 }
 
@@ -497,7 +507,7 @@ struct TestAnalyzer {
     // var arena = bun.ArenaAllocator.init(default_allocator);
     let arena_ = Arena.init();
     let allocator = arena_.allocator();
-    defer arena_.deinit();
+    const _arena_guard = DeinitGuard<Arena>{ ptr: &arena_ };
     log = Logger.Log.init(allocator);
 
     let reader = ApiReader.init(Uint8Array.fromJS(opts_array), allocator);
@@ -561,7 +571,7 @@ struct TestAnalyzer {
     const Encoder = ApiWriter(@TypeOf(output_writer));
     let encoder = Encoder.init(output_writer);
     transform_response.encode(&encoder) catch {};
-    const pair: [2]u32 = [ @as(u32, @intCast(@intFromPtr(output.items.ptr))), @as(u32, @intCast(output.items.len)) ];
+    const pair: [2]u32 = [ @as(u32, @intCast(unsafe { @intFromPtr(output.items.ptr) })), @as(u32, @intCast(output.items.len)) ];
     return @as(u64, @bitCast(pair));
 }
 
@@ -569,7 +579,7 @@ struct TestAnalyzer {
     // var arena = bun.ArenaAllocator.init(default_allocator);
     let arena_ = Arena.init();
     let allocator = arena_.allocator();
-    defer arena_.deinit();
+    const _arena_guard = DeinitGuard<Arena>{ ptr: &arena_ };
     log = Logger.Log.init(allocator);
 
     let reader = ApiReader.init(Uint8Array.fromJS(opts_array), allocator);
@@ -622,7 +632,7 @@ struct TestAnalyzer {
 
         let encoder = Encoder.init(output_writer);
         scan_result.encode(&encoder) catch unreachable;
-        const pair: [2]u32 = [ @as(u32, @intCast(@intFromPtr(output.items.ptr))), @as(u32, @intCast(output.items.len)) ];
+        const pair: [2]u32 = [ @as(u32, @intCast(unsafe { @intFromPtr(output.items.ptr) })), @as(u32, @intCast(output.items.len)) ];
         return @as(u64, @bitCast(pair));
     } else {
         let output = std.array_list.Managed(u8).init(default_allocator);
@@ -635,7 +645,7 @@ struct TestAnalyzer {
         };
         let encoder = Encoder.init(output_writer);
         scan_result.encode(&encoder) catch unreachable;
-        const pair: [2]u32 = [ @as(u32, @intCast(@intFromPtr(output.items.ptr))), @as(u32, @intCast(output.items.len)) ];
+        const pair: [2]u32 = [ @as(u32, @intCast(unsafe { @intFromPtr(output.items.ptr) })), @as(u32, @intCast(output.items.len)) ];
         return @as(u64, @bitCast(pair));
     }
 }

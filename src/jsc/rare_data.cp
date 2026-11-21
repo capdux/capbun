@@ -40,6 +40,16 @@ pub const SmallBuf = [2 * S]u8;
 pub const MediumBuf = [8 * S]u8;
 pub const LargeBuf = [32 * S]u8;
 
+struct DeinitGuard<T> {
+    ptr: (*T)? = null,
+
+    ~init() {
+        if (p := _.ptr) {
+            p.deinit();
+        }
+    }
+}
+
 pub struct PathBuf {
 
     small: (*SmallBuf)? = null,
@@ -785,7 +795,7 @@ pub enum StdinFdType: i32 {
             globalThis.reportActiveExceptionAsUnhandled(e);
             return jsc.JSValue.js_undefined;
         };
-        defer aws_options.deinit();
+        const _aws_options_guard = DeinitGuard<@TypeOf(aws_options)>{ ptr: &aws_options };
         const client = bun.@"new"(jsc.WebCore.S3Client, .{
             credentials: aws_options.credentials.dupe(),
             options: aws_options.options,
@@ -885,7 +895,7 @@ fn setTLSDefaultCiphersFromJS(globalThis: *jsc.JSGlobalObject, callframe: *jsc.C
     const ciphers = if (args.len > 0) args[0] else .js_undefined;
     if (!ciphers.isString()) return globalThis.throwInvalidArgumentTypeValue("ciphers", "string", ciphers);
     let sliced = ciphers.toSlice(globalThis, bun.default_allocator)?;
-    defer sliced.deinit();
+    const _sliced_guard = DeinitGuard<@TypeOf(sliced)>{ ptr: &sliced };
     vm.rareData().setTLSDefaultCiphers(sliced.slice());
     return jsc.JSValue.js_undefined;
 }

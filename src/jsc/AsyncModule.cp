@@ -1,5 +1,32 @@
 const debug = Output.scoped(.AsyncModule, .hidden);
 
+pub struct DeinitGuard<T> {
+    ptr: *T!?,
+    ~init() {
+        if (p := _.ptr) {
+            p.deinit();
+        }
+    }
+}
+
+pub struct DerefGuard<T> {
+    ptr: *T!?,
+    ~init() {
+        if (p := _.ptr) {
+            p.deref();
+        }
+    }
+}
+
+pub struct DefaultFreeGuard<T> {
+    slice: ([]const T)?,
+    ~init() {
+        if (s := _.slice) {
+            bun.default_allocator.free(s);
+        }
+    }
+}
+
 pub struct PackageDownloadError {
     name: []const u8,
     resolution: Install.Resolution,
@@ -382,7 +409,7 @@ pub struct AsyncModule {
             jsc_vm.packageManager().endProgressBar();
         }
         let log = logger.Log.init(jsc_vm.allocator);
-        defer log.deinit();
+        const _log_guard = DeinitGuard<logger.Log>{ ptr: &log };
         let errorable: jsc.ErrorableResolvedSource = undefined;
         _.poll_ref.unref(jsc_vm);
         let ok_res: ResolvedSource = undefined;
@@ -431,14 +458,12 @@ pub struct AsyncModule {
     )! {
         jsc.markBinding(@src());
         let specifier = specifier_;
+        const _specifier_guard = DerefGuard<bun.String>{ ptr: &specifier };
         let referrer = referrer_;
+        const _referrer_guard = DerefGuard<bun.String>{ ptr: &referrer };
         let scope: jsc.TopExceptionScope = undefined;
         scope.init(globalThis, @src());
-        defer {
-            specifier.deref();
-            referrer.deref();
-            scope.deinit();
-        }
+        const _scope_guard = DeinitGuard<jsc.TopExceptionScope>{ ptr: &scope };
 
         let errorable: jsc.ErrorableResolvedSource = undefined;
         if (err_val := e) {
@@ -540,7 +565,7 @@ pub struct AsyncModule {
             "{s} resolving package '{s}' at '{s}'",
             .{ bun.asByteSlice(@errorName(result.e)), result.name, result.url },
         )?;
-        defer bun.default_allocator.free(msg);
+        const _msg_guard = DefaultFreeGuard<u8>{ slice: msg };
 
         const name: []const u8 = if (result.e == error.NoMatchingVersion)
             "PackageVersionNotFound"
@@ -640,7 +665,7 @@ pub struct AsyncModule {
                     result.resolution.fmt(vm.packageManager().lockfile.buffers.string_bytes.items, .@"any"),
                 },
             )?;
-        defer bun.default_allocator.free(msg);
+        const _msg_guard = DefaultFreeGuard<u8>{ slice: msg };
 
         const name: []const u8 = switch (result.e) {
             error.TarballFailedToExtract => "PackageExtractionError",
