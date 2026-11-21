@@ -1563,3 +1563,7 @@
 ## [2026-11-22 Wave #17] RAII 改造与 `unsafe {}` 经验
 - `ChromeProcess.cp` / `snapshot.cp` / `Watcher.cp`：所有权移交前显式置空 Guard（`fd0_guard.val = null`、`_file_guard.file = null`、`watcher_guard.ptr = null`），并通过 `fd1_guard.~init()` 显式控制子端 fd 提前关闭时机。
 - `Cmd.cp` / `multipart.cp` / `ObjectURLRegistry.cp`：集中补齐 `@intFromPtr`/`@ptrCast`/`@alignCast`/`@constCast`/`@export` 的 `unsafe {}` 包裹。
+
+## [2026-11-22 Wave #18] RAII 改造与 `unsafe {}` 经验
+- `bun_alloc.cp`：新增带 `static fn acquire` 的 `MutexGuard`，将 9 处 `mutex.lock(); defer mutex.unlock();` 收口为单行 RAII 作用域守卫。
+- `s3/client.cp`：`DeinitPtrGuard<T>` 通过 `active` 标志位精准复刻条件 `if (!has_more) self.deinit()` 语义，并补齐 19 处 E0209 `unsafe {}`。

@@ -59,15 +59,15 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-const Message = anyopaque;
+const Message = struct { __cp_no_message_sentinel: void = {} };
 fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
-pub fn CpUnpackElemType(comptime __T: type, comptime idx: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") return ti.@"struct".field_types[idx]; return @FieldType(__T, std.fmt.comptimePrint("{d}", .{idx})); }
-pub fn cp_unpack_elem(v: anytype, comptime idx: usize) CpUnpackElemType(@TypeOf(v), idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and idx < m.array.len) { return cp_msg_to_val(m.array[idx]); } } return ""; } else if (comptime __T == Message) { if (v == .array and idx < v.array.len) { return cp_msg_to_val(v.array[idx]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .array)) { return v[idx]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") return @field(v, ti.@"struct".field_names[idx]); return @field(v, std.fmt.comptimePrint("{d}", .{idx})); } }
-pub fn CpUnpackTailType(comptime __T: type, comptime offset_from_end: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return ti.@"struct".field_types[n - offset_from_end]; } return @FieldType(__T, std.fmt.comptimePrint("{d}", .{1})); }
-pub fn cp_unpack_tail(v: anytype, comptime offset_from_end: usize) CpUnpackTailType(@TypeOf(v), offset_from_end) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= offset_from_end) { return cp_msg_to_val(m.array[m.array.len - offset_from_end]); } } return ""; } else if (comptime __T == Message) { if (v == .array and v.array.len >= offset_from_end) { return cp_msg_to_val(v.array[v.array.len - offset_from_end]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[v.*.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .array)) { return v[v.len - offset_from_end]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return @field(v, ti.@"struct".field_names[n - offset_from_end]); } return @field(v, std.fmt.comptimePrint("{d}", .{0})); } }
-pub fn CpUnpackSliceType(comptime __T: type, comptime start_idx: usize) type { if (__T == ?Message or __T == Message) return []const Message; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return __T; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return []const @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const types = ti.@"struct".field_types; if (types.len == 0) return []const i32; const Elem = if (start_idx < types.len) types[start_idx] else types[0]; return []const CpValType(Elem); } return []const i32; }
-pub fn cp_unpack_slice(v: anytype, comptime start_idx: usize, comptime suffix_len: usize) CpUnpackSliceType(@TypeOf(v), start_idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= start_idx + suffix_len) { return m.array[start_idx .. m.array.len - suffix_len]; } } return &[_]Message{}; } else if (comptime __T == Message) { if (v == .array and v.array.len >= start_idx + suffix_len) { return v.array[start_idx .. v.array.len - suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[start_idx .. v.*.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .array)) { return v[start_idx .. v.len - suffix_len]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const names = ti.@"struct".field_names; const types = ti.@"struct".field_types; const end = names.len - suffix_len; const count = if (end > start_idx) end - start_idx else 0; const Elem = if (start_idx < types.len) CpValType(types[start_idx]) else i32; const buf = std.heap.page_allocator.alloc(Elem, count) catch unreachable; inline for (start_idx..end, 0..) |f_idx, out_idx| { buf[out_idx] = cp_val(@field(v, names[f_idx])); } return buf; } return &[_]i32{}; } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const S3Acl = @import("../../../s3_signing/acl.zig");
 pub const DownloadStream = @import("./download_stream.zig");
@@ -79,6 +79,58 @@ pub const Credentials = @import("../../../s3_signing/credentials.zig");
 pub const S3SimpleRequest = @import("./simple_request.zig");
 pub const S3ListObjects = @import("./list_objects.zig");
 pub const bun = @import("bun");
+pub fn FreeGuard(comptime T: type) type {
+    return struct {
+        slice: []T,
+        alloc: std.mem.Allocator,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if ((self.slice.len > 0)) {
+                    _ = self.alloc.free(self.slice);
+                }
+        }
+    };
+}
+
+pub fn DerefGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T = null,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    {
+                        _ = p.deref();
+                    }
+                }
+        }
+    };
+}
+
+pub fn DeinitPtrGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T = null,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    {
+                        _ = p.deinit();
+                    }
+                }
+        }
+    };
+}
+
 pub const NetworkSinkCallbackWrapper = struct {
     
 pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; return self_ptr; }
@@ -157,7 +209,10 @@ pub fn detachSink(self: *S3UploadStreamWrapper) void {
 
 pub fn onWritable(task: *MultiPartUpload, self_any: *anyopaque, flushed: u64) callconv(.c) void {
             _ = &flushed;
-            var wrapper: *S3UploadStreamWrapper = @ptrCast(@alignCast(self_any));
+            var wrapper: *S3UploadStreamWrapper = (blk: {
+            break :blk @ptrCast(@alignCast(self_any));
+
+});
             _ = &wrapper;
             _ = log("onWritable {} {}", .{ (wrapper.sink != null), task.ended });
             if (task.ended) {
@@ -177,9 +232,10 @@ pub fn writeRequestData(self: *S3UploadStreamWrapper, data: []const u8) WebCore.
 pub fn writeEndRequest(self: *S3UploadStreamWrapper, err_val: ?JSValue) void {
             _ = log("writeEndRequest {}", .{ (err_val != null) });
             _ = self.detachSink();
-            defer {
-            _ = self.deref();
-            }
+            var _self_guard = DerefGuard(S3UploadStreamWrapper){ .ptr = self };
+            _ = &_self_guard;
+            var ___self_guard_moved = false; _ = &___self_guard_moved;
+            defer if (!___self_guard_moved) { ___self_guard_moved = true; const __T = @TypeOf(_self_guard); if (@typeInfo(__T) == .optional) { if (_self_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _self_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _self_guard; _drop_val.__cp_deinit(); } };
             if (err_val) |js_err| {
                 _ = &js_err;
                 if ((self.endPromise.hasValue() and (!js_err.isEmptyOrUndefinedOrNull()))) {
@@ -195,12 +251,16 @@ pub fn writeEndRequest(self: *S3UploadStreamWrapper, err_val: ?JSValue) void {
     }
 
 pub fn resolve(result: S3UploadResult, self_any: *anyopaque) JSTerminatedError!void {
-            var self: *S3UploadStreamWrapper = @ptrCast(@alignCast(self_any));
+            var self: *S3UploadStreamWrapper = (blk: {
+            break :blk @ptrCast(@alignCast(self_any));
+
+});
             _ = &self;
             _ = log("resolve {any}", .{ result });
-            defer {
-            _ = self.deref();
-            }
+            var _self_guard = DerefGuard(S3UploadStreamWrapper){ .ptr = self };
+            _ = &_self_guard;
+            var ___self_guard_moved = false; _ = &___self_guard_moved;
+            defer if (!___self_guard_moved) { ___self_guard_moved = true; const __T = @TypeOf(_self_guard); if (@typeInfo(__T) == .optional) { if (_self_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _self_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _self_guard; _drop_val.__cp_deinit(); } };
             switch (result) {
 .success => {
 if (self.endPromise.hasValue()) {
@@ -257,13 +317,10 @@ pub fn init(self: *S3DownloadStreamWrapper, readable_stream_ref: WebCore.Readabl
     }
 
 pub fn callback(chunk: MutableString, has_more: bool, request_err: ?S3Error, self: *S3DownloadStreamWrapper) JSTerminatedError!void {
-            defer {
-            {
-                if ((!has_more)) {
-                    _ = self.deinit();
-                }
-            }
-            }
+            var _self_guard = DeinitPtrGuard(S3DownloadStreamWrapper){ .ptr = (if ((!has_more)) self else null) };
+            _ = &_self_guard;
+            var ___self_guard_moved = false; _ = &___self_guard_moved;
+            defer if (!___self_guard_moved) { ___self_guard_moved = true; const __T = @TypeOf(_self_guard); if (@typeInfo(__T) == .optional) { if (_self_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _self_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _self_guard; _drop_val.__cp_deinit(); } };
             if (self.readable_stream_ref.get(self.global)) |readable| {
                 _ = &readable;
                 if ((readable.ptr == .Bytes)) {
@@ -304,14 +361,20 @@ pub fn deinit(self: *S3DownloadStreamWrapper) void {
 pub fn onStreamCancelled(ctx: ?*anyopaque) callconv(.c) void {
             if (ctx) |c| {
                 _ = &c;
-                var self: *S3DownloadStreamWrapper = @ptrCast(@alignCast(c));
+                var self: *S3DownloadStreamWrapper = (blk: {
+                break :blk @ptrCast(@alignCast(c));
+
+});
                 _ = &self;
                 _ = self.readable_stream_ref.deinit();
             }
     }
 
 pub fn opaqueCallback(chunk: MutableString, has_more: bool, s3_err: ?S3Error, opaque_self: *anyopaque) void {
-            var self: *S3DownloadStreamWrapper = @ptrCast(@alignCast(opaque_self));
+            var self: *S3DownloadStreamWrapper = (blk: {
+            break :blk @ptrCast(@alignCast(opaque_self));
+
+});
             _ = &self;
             _ = (blk_catch_2: { break :blk_catch_2 ((S3DownloadStreamWrapper.callback(chunk, has_more, s3_err, self)) catch |__ce_2| { _ = &__ce_2;  }); });
     }
@@ -404,9 +467,10 @@ pub fn listObjects(self: *S3Credentials, listOptions: S3ListObjectsOptions, call
             _ = &continuation_token;
             var buff = handleOom(default_allocator.alloc(u8, (continuation_token.len * 3)));
             _ = &buff;
-            defer {
-            _ = default_allocator.free(buff);
-            }
+            var _buff_guard = FreeGuard(u8){ .slice = buff, .alloc = default_allocator };
+            _ = &_buff_guard;
+            var ___buff_guard_moved = false; _ = &___buff_guard_moved;
+            defer if (!___buff_guard_moved) { ___buff_guard_moved = true; const __T = @TypeOf(_buff_guard); if (@typeInfo(__T) == .optional) { if (_buff_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _buff_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _buff_guard; _drop_val.__cp_deinit(); } };
             var encoded = ((S3Credentials.encodeURIComponent(continuation_token, buff, true)) catch unreachable);
             _ = &encoded;
             _ = handleOom(search_params.appendFmt(default_allocator, "continuation-token={s}", .{ encoded }));
@@ -415,9 +479,10 @@ pub fn listObjects(self: *S3Credentials, listOptions: S3ListObjectsOptions, call
             _ = &delimiter;
             var buff = handleOom(default_allocator.alloc(u8, (delimiter.len * 3)));
             _ = &buff;
-            defer {
-            _ = default_allocator.free(buff);
-            }
+            var _buff_guard = FreeGuard(u8){ .slice = buff, .alloc = default_allocator };
+            _ = &_buff_guard;
+            var ___buff_guard_moved = false; _ = &___buff_guard_moved;
+            defer if (!___buff_guard_moved) { ___buff_guard_moved = true; const __T = @TypeOf(_buff_guard); if (@typeInfo(__T) == .optional) { if (_buff_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _buff_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _buff_guard; _drop_val.__cp_deinit(); } };
             var encoded = ((S3Credentials.encodeURIComponent(delimiter, buff, true)) catch unreachable);
             _ = &encoded;
             if ((listOptions.continuation_token != null)) {
@@ -454,9 +519,10 @@ pub fn listObjects(self: *S3Credentials, listOptions: S3ListObjectsOptions, call
             _ = &prefix;
             var buff = handleOom(default_allocator.alloc(u8, (prefix.len * 3)));
             _ = &buff;
-            defer {
-            _ = default_allocator.free(buff);
-            }
+            var _buff_guard = FreeGuard(u8){ .slice = buff, .alloc = default_allocator };
+            _ = &_buff_guard;
+            var ___buff_guard_moved = false; _ = &___buff_guard_moved;
+            defer if (!___buff_guard_moved) { ___buff_guard_moved = true; const __T = @TypeOf(_buff_guard); if (@typeInfo(__T) == .optional) { if (_buff_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _buff_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _buff_guard; _drop_val.__cp_deinit(); } };
             var encoded = ((S3Credentials.encodeURIComponent(prefix, buff, true)) catch unreachable);
             _ = &encoded;
             _ = handleOom(search_params.appendFmt(default_allocator, "&prefix={s}", .{ encoded }));
@@ -465,9 +531,10 @@ pub fn listObjects(self: *S3Credentials, listOptions: S3ListObjectsOptions, call
             _ = &start_after;
             var buff = handleOom(default_allocator.alloc(u8, (start_after.len * 3)));
             _ = &buff;
-            defer {
-            _ = default_allocator.free(buff);
-            }
+            var _buff_guard = FreeGuard(u8){ .slice = buff, .alloc = default_allocator };
+            _ = &_buff_guard;
+            var ___buff_guard_moved = false; _ = &___buff_guard_moved;
+            defer if (!___buff_guard_moved) { ___buff_guard_moved = true; const __T = @TypeOf(_buff_guard); if (@typeInfo(__T) == .optional) { if (_buff_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _buff_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _buff_guard; _drop_val.__cp_deinit(); } };
             var encoded = ((S3Credentials.encodeURIComponent(start_after, buff, true)) catch unreachable);
             _ = &encoded;
             _ = handleOom(search_params.appendFmt(default_allocator, "&start-after={s}", .{ encoded }));
@@ -479,7 +546,10 @@ pub fn listObjects(self: *S3Credentials, listOptions: S3ListObjectsOptions, call
         return; }); });
         _ = &result;
         _ = search_params.deinit(default_allocator);
-        var headers = handleOom(bun.http.Headers.fromPicoHttpHeaders(@constCast(result.headers()), default_allocator));
+        var headers = handleOom(bun.http.Headers.fromPicoHttpHeaders((blk: {
+        break :blk @constCast(result.headers());
+
+}), default_allocator));
         _ = &headers;
         var task = S3HttpSimpleTask.new(.{ .http = undefined, .range = null, .sign_result = result, .callback_context = callback_context, .callback = .{ .listObjects = callback }, .headers = headers, .vm = VirtualMachine.get() });
         _ = &task;
@@ -513,13 +583,22 @@ pub fn writableStream(self: *S3Credentials, path: []const u8, globalThis: *JSGlo
         _ = &cd_dup;
         var ce_dup = (if ((content_encoding != null)) handleOom(default_allocator.dupe(u8, content_encoding.?)) else null);
         _ = &ce_dup;
-        var task = bun.new(MultiPartUpload, .{ .ref_count = .initExactRefs(2), .credentials = self, .path = handleOom(default_allocator.dupe(u8, path)), .proxy = (if ((proxy_url.len > 0)) handleOom(default_allocator.dupe(u8, proxy_url)) else ""), .content_type = ct_dup, .content_disposition = cd_dup, .content_encoding = ce_dup, .storage_class = storage_class, .request_payer = request_payer, .callback = @ptrCast((&NetworkSinkCallbackWrapper.callback)), .callback_context = undefined, .globalThis = globalThis, .options = options, .vm = VirtualMachine.get() });
+        var task = bun.new(MultiPartUpload, .{ .ref_count = .initExactRefs(2), .credentials = self, .path = handleOom(default_allocator.dupe(u8, path)), .proxy = (if ((proxy_url.len > 0)) handleOom(default_allocator.dupe(u8, proxy_url)) else ""), .content_type = ct_dup, .content_disposition = cd_dup, .content_encoding = ce_dup, .storage_class = storage_class, .request_payer = request_payer, .callback = (blk: {
+        break :blk @ptrCast((&NetworkSinkCallbackWrapper.callback));
+
+}), .callback_context = undefined, .globalThis = globalThis, .options = options, .vm = VirtualMachine.get() });
         _ = &task;
         _ = task.poll_ref.ref(task.vm);
         var response_stream = WebCore.NetworkSink.new(.{ .task = task, .globalThis = globalThis, .highWaterMark = @truncate(options.partSize) }).toSink();
         _ = &response_stream;
-        task.callback_context = @ptrCast(response_stream);
-        task.onWritable = @ptrCast((&WebCore.NetworkSink.onWritable));
+        task.callback_context = (blk: {
+        break :blk @ptrCast(response_stream);
+
+});
+        task.onWritable = (blk: {
+        break :blk @ptrCast((&WebCore.NetworkSink.onWritable));
+
+});
         var signal = (&response_stream.sink.signal);
         _ = &signal;
         signal.* = WebCore.NetworkSink.JSSink.SinkSignal.init(.zero);
@@ -577,14 +656,23 @@ else => {
         _ = &cd_dup;
         var ce_dup = (if ((content_encoding != null)) handleOom(default_allocator.dupe(u8, content_encoding.?)) else null);
         _ = &ce_dup;
-        var task = bun.new(MultiPartUpload, .{ .ref_count = .initExactRefs(2), .credentials = self, .path = handleOom(default_allocator.dupe(u8, path)), .proxy = (if ((proxy_url.len > 0)) handleOom(default_allocator.dupe(u8, proxy_url)) else ""), .content_type = ct_dup, .content_disposition = cd_dup, .content_encoding = ce_dup, .callback = @ptrCast((&S3UploadStreamWrapper.resolve)), .callback_context = undefined, .globalThis = globalThis, .state = .wait_stream_check, .options = options, .acl = acl, .storage_class = storage_class, .request_payer = request_payer, .vm = VirtualMachine.get() });
+        var task = bun.new(MultiPartUpload, .{ .ref_count = .initExactRefs(2), .credentials = self, .path = handleOom(default_allocator.dupe(u8, path)), .proxy = (if ((proxy_url.len > 0)) handleOom(default_allocator.dupe(u8, proxy_url)) else ""), .content_type = ct_dup, .content_disposition = cd_dup, .content_encoding = ce_dup, .callback = (blk: {
+        break :blk @ptrCast((&S3UploadStreamWrapper.resolve));
+
+}), .callback_context = undefined, .globalThis = globalThis, .state = .wait_stream_check, .options = options, .acl = acl, .storage_class = storage_class, .request_payer = request_payer, .vm = VirtualMachine.get() });
         _ = &task;
         _ = task.poll_ref.ref(task.vm);
         var ctx = bun.new(S3UploadStreamWrapper, .{ .ref_count = .initExactRefs(2), .sink = null, .callback = callback, .callback_context = callback_context, .path = task.path, .task = task, .endPromise = JSPromise.Strong.init(globalThis), .global = globalThis });
         _ = &ctx;
         ctx.sink = S3UploadStreamWrapper.ResumableSink.initExactRefs(globalThis, readable_stream, ctx, 2);
-        task.callback_context = @ptrCast(ctx);
-        task.onWritable = @ptrCast((&S3UploadStreamWrapper.onWritable));
+        task.callback_context = (blk: {
+        break :blk @ptrCast(ctx);
+
+});
+        task.onWritable = (blk: {
+        break :blk @ptrCast((&S3UploadStreamWrapper.onWritable));
+
+});
         _ = task.continueStream();
         return ctx.endPromise.value();
 }
@@ -620,9 +708,15 @@ pub fn downloadStream(self: *S3Credentials, path: []const u8, offset: usize, siz
         if (range) |range_| {
             _ = &range_;
             const _headers = result.mixWithHeader((&header_buffer), .{ .name = "range", .value = range_ });
-            break :brk handleOom(bun.http.Headers.fromPicoHttpHeaders(@constCast(_headers), default_allocator));
+            break :brk handleOom(bun.http.Headers.fromPicoHttpHeaders((blk: {
+            break :blk @constCast(_headers);
+
+}), default_allocator));
         } else {
-            break :brk handleOom(bun.http.Headers.fromPicoHttpHeaders(@constCast(result.headers()), default_allocator));
+            break :brk handleOom(bun.http.Headers.fromPicoHttpHeaders((blk: {
+            break :blk @constCast(result.headers());
+
+}), default_allocator));
         }
 };
         _ = &headers;
@@ -653,8 +747,14 @@ pub fn readableStream(self: *S3Credentials, path: []const u8, offset: usize, siz
         _ = &readable_value;
         var wrapper = S3DownloadStreamWrapper.new(.{ .readable_stream_ref = WebCore.ReadableStream.Strong.init(.{ .ptr = .{ .Bytes = (&reader.context) }, .value = readable_value }, globalThis), .path = handleOom(default_allocator.dupe(u8, path)), .global = globalThis });
         _ = &wrapper;
-        reader.cancel_handler = @ptrCast((&S3DownloadStreamWrapper.onStreamCancelled));
-        reader.cancel_ctx = @ptrCast(wrapper);
+        reader.cancel_handler = (blk: {
+        break :blk @ptrCast((&S3DownloadStreamWrapper.onStreamCancelled));
+
+});
+        reader.cancel_ctx = (blk: {
+        break :blk @ptrCast(wrapper);
+
+});
         _ = downloadStream(self, path, offset, size, proxy_url, request_payer, S3DownloadStreamWrapper.opaqueCallback, wrapper);
         return readable_value;
 }

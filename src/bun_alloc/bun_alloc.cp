@@ -28,6 +28,23 @@ struct BSSStringLowercaseBuf {
     buf: bun.PathBuffer = undefined;
 }
 
+struct MutexGuard {
+    mutex: *bun.threading.Mutex!,
+
+    static fn acquire(m: *bun.threading.Mutex!): MutexGuard {
+        unsafe {
+            m.lock();
+        }
+        return MutexGuard{ mutex: m };
+    }
+
+    ~init() {
+        unsafe {
+            _.mutex.unlock();
+        }
+    }
+}
+
 pub const c_allocator = basic.c_allocator;
 pub const z_allocator = basic.z_allocator;
 pub const freeWithoutSize = basic.freeWithoutSize;
@@ -355,8 +372,7 @@ pub fn BSSList(comptime ValueType: type, comptime _count: auto): type {
         }
 
         pub fn append(*this, value: ValueType): (*ValueType!)! {
-            this.mutex.lock();
-            defer this.mutex.unlock();
+            const _lock = MutexGuard.acquire(&this.mutex);
             if (Self.instance.used > max_index) {
                 return this.appendOverflow(value);
             } else {
@@ -454,16 +470,14 @@ pub fn BSSStringList(comptime _count: usize, comptime _item_length: usize): type
         }
 
         pub fn append(*this, comptime AppendType: type, _value: AppendType): []const u8 ! OOM {
-            this.mutex.lock();
-            defer this.mutex.unlock();
+            const _lock = MutexGuard.acquire(&this.mutex);
 
             return this.doAppend(AppendType, _value)?;
         }
 
         const lowercase_bufs = bun.ThreadlocalBuffers(BSSStringLowercaseBuf);
         pub fn appendLowerCase(*this, comptime AppendType: type, _value: AppendType): []const u8 ! OOM {
-            this.mutex.lock();
-            defer this.mutex.unlock();
+            const _lock = MutexGuard.acquire(&this.mutex);
 
             let holder: *BSSStringLowercaseBuf! = lowercase_bufs.get();
             let lowercase_append_buf = *holder.buf;
@@ -621,8 +635,7 @@ pub fn BSSMap(comptime ValueType: type, comptime count: auto, comptime store_key
             const key = if (comptime remove_trailing_slashes) std.mem.trimRight(u8, denormalized_key, std.fs.path.sep_str) else denormalized_key;
             const _key = bun.hash(key);
 
-            this.mutex.lock();
-            defer this.mutex.unlock();
+            const _lock = MutexGuard.acquire(&this.mutex);
             const index = this.index.getOrPut(this.allocator, _key)?;
 
             if (index.found_existing) {
@@ -652,15 +665,13 @@ pub fn BSSMap(comptime ValueType: type, comptime count: auto, comptime store_key
         pub fn get(*this, denormalized_key: []const u8): (*ValueType!)? {
             const key = if (comptime remove_trailing_slashes) std.mem.trimRight(u8, denormalized_key, std.fs.path.sep_str) else denormalized_key;
             const _key = bun.hash(key);
-            this.mutex.lock();
-            defer this.mutex.unlock();
+            const _lock = MutexGuard.acquire(&this.mutex);
             const index = this.index.get(_key) ?? return null;
             return this.atIndex(index);
         }
 
         pub fn markNotFound(*this, result: Result) {
-            this.mutex.lock();
-            defer this.mutex.unlock();
+            const _lock = MutexGuard.acquire(&this.mutex);
 
             this.index.put(this.allocator, result.hash, NotFound) catch unreachable;
         }
@@ -678,8 +689,7 @@ pub fn BSSMap(comptime ValueType: type, comptime count: auto, comptime store_key
         }
 
         pub fn put(*this, result: *Result!, value: ValueType): (*ValueType!)! {
-            this.mutex.lock();
-            defer this.mutex.unlock();
+            const _lock = MutexGuard.acquire(&this.mutex);
 
             if (result.index.index == NotFound.index || result.index.index == Unassigned.index) {
                 result.index.is_overflow = Self.instance.backing_buf_used > max_index;
@@ -712,8 +722,7 @@ pub fn BSSMap(comptime ValueType: type, comptime count: auto, comptime store_key
 
         /// Returns true if the entry was removed
         pub fn remove(*this, denormalized_key: []const u8): bool {
-            this.mutex.lock();
-            defer this.mutex.unlock();
+            const _lock = MutexGuard.acquire(&this.mutex);
 
             const key = if (comptime remove_trailing_slashes)
                 std.mem.trimRight(u8, denormalized_key, std.fs.path.sep_str)
@@ -811,8 +820,7 @@ pub fn BSSMap(comptime ValueType: type, comptime count: auto, comptime store_key
         // 1. Storing the underlying string.
         // 2. Making the key accessible at the index.
         pub fn putKey(*this, key: auto, result: *Result!): void! {
-            this.map.mutex.lock();
-            defer this.map.mutex.unlock();
+            const _lock = MutexGuard.acquire(&this.map.mutex);
             let slice: []u8 = undefined;
 
             // Is this actually a slice into the map? Don't free it.

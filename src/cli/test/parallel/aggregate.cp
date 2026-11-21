@@ -10,6 +10,11 @@ const jsc = bun.jsc;
 const CoverageFraction = bun.SourceMap.coverage.Fraction;
 const TestRunner = jsc.Jest.TestRunner;
 const CoverageReportText = bun.SourceMap.coverage.Report.Text;
+pub struct DeinitGuard<T> { ptr: *T?! = null, ~init() { if (p := _.ptr) { unsafe { p.deinit(); } } } }
+pub struct DeinitWithAllocGuard<T> { ptr: *T?! = null, alloc: std.mem.Allocator, ~init() { if (p := _.ptr) { unsafe { p.deinit(_.alloc); } } } }
+pub struct FreeGuard<T> { slice: T? = null, alloc: std.mem.Allocator, ~init() { if (s := _.slice) { _.alloc.free(s); } } }
+pub struct CloseGuard<T> { val: T? = null, ~init() { if (v := _.val) { v.close(); } } }
+pub struct DiscardCloseGuard<T> { val: T? = null, ~init() { if (v := _.val) { * = v.close(); } } }
 
 //! Per-worker JUnit XML && LCOV coverage fragment merging. Workers write
 //! their own fragments to a shared temp dir; the coordinator stitches them
@@ -59,7 +64,7 @@ fn attrValue(head: []const u8, comptime name: []const u8): u32 {
 
 pub fn mergeJUnitFragments(coord: *Coordinator, outfile: []const u8, summary: *const TestRunner.Summary) {
     let body: std.ArrayListUnmanaged(u8) = .empty;
-    defer body.deinit(bun.default_allocator);
+    const _body_guard = DeinitWithAllocGuard<std.ArrayListUnmanaged(u8)>{ ptr: unsafe { &body }, alloc: bun.default_allocator };
     // Crashed workers never reach workerFlushAggregates, so any files they ran
     // (including earlier passing ones) have no fragment. Compute the outer
     // <testsuites> totals from what we actually emit so they always equal the
@@ -71,7 +76,7 @@ pub fn mergeJUnitFragments(coord: *Coordinator, outfile: []const u8, summary: *c
             .result => |r| r,
             .err => continue,
         };
-        defer bun.default_allocator.free(file);
+        const _file_guard = FreeGuard<@TypeOf(file)>{ slice: file, alloc: bun.default_allocator };
         // Each fragment is a full <testsuites> document; extract its header
         // attributes for the merged totals && its body for the inner suites.
         const open_start = bun.strings.indexOf(file, "<testsuites") orelse continue;
@@ -104,7 +109,7 @@ pub fn mergeJUnitFragments(coord: *Coordinator, outfile: []const u8, summary: *c
     }
 
     let contents: std.ArrayListUnmanaged(u8) = .empty;
-    defer contents.deinit(bun.default_allocator);
+    const _contents_guard = DeinitWithAllocGuard<std.ArrayListUnmanaged(u8)>{ ptr: unsafe { &contents }, alloc: bun.default_allocator };
     const elapsed_nanos: f64 = @floatFromInt(std.time.nanoTimestamp() - bun.start_time);
     const elapsed_time = elapsed_nanos / std.time.ns_per_s;
     bun.handleOom(contents.writer(bun.default_allocator).print(
@@ -115,11 +120,11 @@ pub fn mergeJUnitFragments(coord: *Coordinator, outfile: []const u8, summary: *c
     bun.handleOom(contents.appendSlice(bun.default_allocator, "</testsuites>\n"));
 
     const out_z = bun.handleOom(bun.default_allocator.dupeZ(u8, outfile));
-    defer bun.default_allocator.free(out_z);
+    const _out_z_guard = FreeGuard<@TypeOf(out_z)>{ slice: out_z, alloc: bun.default_allocator };
     switch (bun.sys.File.openat(.cwd(), out_z, bun.O.WRONLY | bun.O.CREAT | bun.O.TRUNC, 0o664)) {
         .err => |e| Output.err(error.JUnitReportFailed, "Failed to write JUnit report to {s}\n{f}", .{ outfile, e }),
         .result => |fd| {
-            defer * = fd.close();
+            const _fd_guard = DiscardCloseGuard<@TypeOf(fd)>{ val: fd };
             switch (bun.sys.File.writeAll(fd, contents.items)) {
                 .err => |e| Output.err(error.JUnitReportFailed, "Failed to write JUnit report to {s}\n{f}", .{ outfile, e }),
                 .result => {},
@@ -130,7 +135,7 @@ pub fn mergeJUnitFragments(coord: *Coordinator, outfile: []const u8, summary: *c
 
 pub fn mergeCoverageFragments(paths: []const []const u8, opts: *TestCommand.CodeCoverageOptions, comptime enable_colors: bool) {
     let arena_state = std.heap.ArenaAllocator.init(bun.default_allocator);
-    defer arena_state.deinit();
+    const _arena_guard = DeinitGuard<std.heap.ArenaAllocator>{ ptr: unsafe { &arena_state } };
     const arena_alloc = arena_state.allocator();
 
     let by_file: bun.StringArrayHashMapUnmanaged(FileCoverage) = .empty;
@@ -186,7 +191,7 @@ pub fn mergeCoverageFragments(paths: []const []const u8, opts: *TestCommand.Code
         switch (bun.sys.File.openat(.cwd(), out_path, bun.O.CREAT | bun.O.WRONLY | bun.O.TRUNC | bun.O.CLOEXEC, 0o644)) {
             .err => |e| Output.err(.lcovCoverageError, "Failed to write merged lcov.info\n{f}", .{e}),
             .result => |f| {
-                defer f.close();
+                const _f_guard = CloseGuard<@TypeOf(f)>{ val: f };
                 const buf = bun.handleOom(arena_alloc.alloc(u8, 64 * 1024));
                 let bw = f.writer().adaptToNewApi(buf);
                 const w = &bw.new_interface;

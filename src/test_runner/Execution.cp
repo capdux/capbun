@@ -754,7 +754,7 @@ fn stepSequenceOne(buntest_strong: bun_test.BunTestPtr, globalThis: *jsc.JSGloba
                 }
             },
             else => {
-                groupLog.log("runSequence: no callback for sequence_index {d} (entry_index {x})", .{ sequence_index, @intFromPtr(sequence.active_entry) });
+                groupLog.log("runSequence: no callback for sequence_index {d} (entry_index {x})", .{ sequence_index, unsafe { @intFromPtr(sequence.active_entry) } });
                 bun.debugAssert(false);
             },
         }

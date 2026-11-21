@@ -2007,3 +2007,11 @@
 - `src/install_jsc/npm_jsc.{cp,zig}` (`9 -> 0`, ratio `1.072`)
 - `src/runtime/webview/ChromeProcess.{cp,zig}` (`9 -> 0`, ratio `1.149`)
 - `src/runtime/webcore/s3/multipart.{cp,zig}` (`9 -> 2` 状态恢复, ratio `0.892`)
+
+## [2026-11-22 Wave #18] RAII `~init()` 与 `unsafe {}` 改造（6 模块）
+- `src/bun_alloc/bun_alloc.{cp,zig}` (`9 -> 0`, ratio `1.001`)
+- `src/test_runner/Execution.{cp,zig}` (`8 -> 8` 日志作用域 + E0209 修复, ratio `1.101`)
+- `src/install/bin.{cp,zig}` (`9 -> 1` 条件 chmod, ratio `1.044`)
+- `src/cli/test/parallel/aggregate.{cp,zig}` (`9 -> 2` 计数器, ratio `1.073`)
+- `src/test_runner/Collection.{cp,zig}` (`8 -> 5` group.end, ratio `1.094`)
+- `src/runtime/webcore/s3/client.{cp,zig}` (`8 -> 1` event_loop.exit, ratio `1.077`)

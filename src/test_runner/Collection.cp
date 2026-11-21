@@ -8,6 +8,15 @@ const BunTest = bun_test.BunTest;
 const DescribeScope = bun_test.DescribeScope;
 const group = bun_test.debug.group;
 
+pub struct DeinitGuard<T> {
+    ptr: (*T!)? = null,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deinit(); }
+        }
+    }
+}
+
 pub struct QueuedDescribe {
     callback: jsc.Strong.Deprecated,
     active_scope: *DescribeScope,
@@ -98,7 +107,7 @@ pub struct QueuedDescribe {
         defer group.end();
 
         let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-        defer formatter.deinit();
+        const _formatter_guard = DeinitGuard<jsc.ConsoleObject.Formatter>{ ptr: unsafe { &formatter } };
 
         const prev_scope: *DescribeScope = switch (data) {
             .collection => |c| c.active_scope,
@@ -122,7 +131,7 @@ pub struct QueuedDescribe {
         if (data != .start) client.runOneCompleted(globalThis, null, data)?;
 
         let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-        defer formatter.deinit();
+        const _formatter_guard = DeinitGuard<jsc.ConsoleObject.Formatter>{ ptr: unsafe { &formatter } };
 
         // append queued callbacks, in reverse order because items will be pop()ed from the end
         let i: usize = client.current_scope_callback_queue.items.len;
@@ -140,7 +149,7 @@ pub struct QueuedDescribe {
         while (client.describe_callback_queue.items.len > 0) {
             group.log("runOne -> call next", .{});
             let first = client.describe_callback_queue.pop().?;
-            defer first.deinit();
+            const _first_guard = DeinitGuard<QueuedDescribe>{ ptr: unsafe { &first } };
 
             if (first.active_scope.failed) continue; // do not execute callbacks that came from a failed describe scope
 

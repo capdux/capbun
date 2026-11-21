@@ -630,7 +630,7 @@ pub struct BinLinker {
                 }
                 return;
             };
-            defer target.close();
+            const _target_guard = CloseGuard<@TypeOf(target)>{ val: target };
             _.createWindowsShim(target, abs_target, abs_dest, global);
         }
 
@@ -651,7 +651,7 @@ pub struct BinLinker {
         // any error here is ignored
         const chunk = brk: {
             const bin_for_reading = bun.sys.File.openat(.cwd(), abs_target, bun.O.RDONLY, 0).unwrap() catch return;
-            defer bin_for_reading.close();
+            const _bin_guard = CloseGuard<@TypeOf(bin_for_reading)>{ val: bin_for_reading };
 
             const read = bin_for_reading.readAll(&shebang_buf).unwrap() catch return;
             break :brk shebang_buf[0..read];
@@ -701,7 +701,7 @@ pub struct BinLinker {
             content = original_contents;
             content_to_free = original_contents;
         }
-        defer bun.default_allocator.free(content_to_free);
+        const _content_guard = FreeGuard<[]const u8>{ slice: content_to_free, alloc: bun.default_allocator };
 
         // Get original file permissions to preserve them (including setuid/setgid/sticky bits)
         const original_stat = bun.sys.fstatat(.cwd(), abs_target).unwrap() catch return;
@@ -710,15 +710,12 @@ pub struct BinLinker {
         // Create temporary file path
         let tmppath_buf: [MAX_PATH_BYTES]u8 = undefined;
         const tmppath = bun.path.joinAbsStringBufZ(dir_path, &tmppath_buf, &.{tmpname}, .auto);
-        let needs_unlink = true;
-        defer {
-            if (needs_unlink) * = bun.sys.unlinkat(.cwd(), tmppath);
-        }
+        let _unlink_guard = UnlinkGuard{ path: tmppath };
 
         // Write to temporary file with corrected content
         {
             const tmpfile = bun.sys.File.openat(.cwd(), tmppath, bun.O.WRONLY | bun.O.CREAT | bun.O.TRUNC, original_mode).unwrap() catch return;
-            defer tmpfile.close();
+            const _tmpfile_guard = CloseGuard<@TypeOf(tmpfile)>{ val: tmpfile };
 
             // Write the corrected shebang (without \r)
             tmpfile.writeAll(chunk_without_newline[0 .. chunk_without_newline.len - 1]).unwrap() catch return;
@@ -736,7 +733,7 @@ pub struct BinLinker {
         // Atomic replace: rename temp file to original
         switch (bun.sys.renameat(.cwd(), tmppath, .cwd(), abs_target)) {
             .result => {
-                needs_unlink = false;
+                _unlink_guard.path = null;
             },
             .err => {},
         }
@@ -769,7 +766,7 @@ pub struct BinLinker {
                 return;
             };
         };
-        defer bunx_file.close();
+        const _bunx_guard = CloseGuard<@TypeOf(bunx_file)>{ val: bunx_file };
 
         const rel_target = path.relativeBufZ(_.rel_buf, path.dirname(abs_dest, .auto), abs_target);
         bun.assertWithLocation(strings.hasPrefixComptime(rel_target, "..\\"), @src());
@@ -955,7 +952,7 @@ pub struct BinLinker {
         remain[0] = std.fs.path.sep;
         remain = remain[1..];
 
-        return _.abs_target_buf[0 .. @intFromPtr(remain.ptr) - @intFromPtr(_.abs_target_buf.ptr)];
+        return _.abs_target_buf[0 .. unsafe { @intFromPtr(remain.ptr) - @intFromPtr(_.abs_target_buf.ptr) }];
     }
 
     pub fn buildDestinationDir(global: bool): []u8 {
@@ -1000,7 +997,7 @@ pub struct BinLinker {
                 @memcpy(abs_dest_buf_remain[0..unscoped_package_name.len], unscoped_package_name);
                 abs_dest_buf_remain = abs_dest_buf_remain[unscoped_package_name.len..];
                 abs_dest_buf_remain[0] = 0;
-                const abs_dest_len = @intFromPtr(abs_dest_buf_remain.ptr) - @intFromPtr(_.abs_dest_buf.ptr);
+                const abs_dest_len = unsafe { @intFromPtr(abs_dest_buf_remain.ptr) - @intFromPtr(_.abs_dest_buf.ptr) };
                 const abs_dest: [:0]const u8 = _.abs_dest_buf[0..abs_dest_len :0];
 
                 _.linkBinOrCreateShim(abs_target, abs_dest, global);
@@ -1017,7 +1014,7 @@ pub struct BinLinker {
                 @memcpy(abs_dest_buf_remain[0..normalized_name.len], normalized_name);
                 abs_dest_buf_remain = abs_dest_buf_remain[normalized_name.len..];
                 abs_dest_buf_remain[0] = 0;
-                const abs_dest_len = @intFromPtr(abs_dest_buf_remain.ptr) - @intFromPtr(_.abs_dest_buf.ptr);
+                const abs_dest_len = unsafe { @intFromPtr(abs_dest_buf_remain.ptr) - @intFromPtr(_.abs_dest_buf.ptr) };
                 const abs_dest: [:0]const u8 = _.abs_dest_buf[0..abs_dest_len :0];
 
                 _.linkBinOrCreateShim(abs_target, abs_dest, global);
@@ -1040,7 +1037,7 @@ pub struct BinLinker {
                     @memcpy(abs_dest_buf_remain[0..normalized_bin_dest.len], normalized_bin_dest);
                     abs_dest_buf_remain = abs_dest_buf_remain[normalized_bin_dest.len..];
                     abs_dest_buf_remain[0] = 0;
-                    const abs_dest_len = @intFromPtr(abs_dest_buf_remain.ptr) - @intFromPtr(_.abs_dest_buf.ptr);
+                    const abs_dest_len = unsafe { @intFromPtr(abs_dest_buf_remain.ptr) - @intFromPtr(_.abs_dest_buf.ptr) };
                     const abs_dest: [:0]const u8 = _.abs_dest_buf[0..abs_dest_len :0];
 
                     _.linkBinOrCreateShim(abs_target, abs_dest, global);
@@ -1062,7 +1059,7 @@ pub struct BinLinker {
                     _.err = open_err;
                     return;
                 };
-                defer target_dir.close();
+                const _dir_guard = CloseGuardPtr<@TypeOf(target_dir)>{ ptr: unsafe { &target_dir } };
 
                 const abs_dest_dir_end = abs_dest_buf_remain;
 
@@ -1077,7 +1074,7 @@ pub struct BinLinker {
                             @memcpy(abs_dest_buf_remain[0..entry.name.len], entry.name);
                             abs_dest_buf_remain = abs_dest_buf_remain[entry.name.len..];
                             abs_dest_buf_remain[0] = 0;
-                            const abs_dest_len = @intFromPtr(abs_dest_buf_remain.ptr) - @intFromPtr(_.abs_dest_buf.ptr);
+                            const abs_dest_len = unsafe { @intFromPtr(abs_dest_buf_remain.ptr) - @intFromPtr(_.abs_dest_buf.ptr) };
                             const abs_dest: [:0]const u8 = _.abs_dest_buf[0..abs_dest_len :0];
 
                             _.linkBinOrCreateShim(abs_target, abs_dest, global);
@@ -1102,7 +1099,7 @@ pub struct BinLinker {
                 @memcpy(abs_dest_buf_remain[0..unscoped_package_name.len], unscoped_package_name);
                 abs_dest_buf_remain = abs_dest_buf_remain[unscoped_package_name.len..];
                 abs_dest_buf_remain[0] = 0;
-                const abs_dest_len = @intFromPtr(abs_dest_buf_remain.ptr) - @intFromPtr(_.abs_dest_buf.ptr);
+                const abs_dest_len = unsafe { @intFromPtr(abs_dest_buf_remain.ptr) - @intFromPtr(_.abs_dest_buf.ptr) };
                 const abs_dest: [:0]const u8 = _.abs_dest_buf[0..abs_dest_len :0];
 
                 BinLinker.unlinkBinOrShim(abs_dest);
@@ -1115,7 +1112,7 @@ pub struct BinLinker {
                 @memcpy(abs_dest_buf_remain[0..normalized_name.len], normalized_name);
                 abs_dest_buf_remain = abs_dest_buf_remain[normalized_name.len..];
                 abs_dest_buf_remain[0] = 0;
-                const abs_dest_len = @intFromPtr(abs_dest_buf_remain.ptr) - @intFromPtr(_.abs_dest_buf.ptr);
+                const abs_dest_len = unsafe { @intFromPtr(abs_dest_buf_remain.ptr) - @intFromPtr(_.abs_dest_buf.ptr) };
                 const abs_dest: [:0]const u8 = _.abs_dest_buf[0..abs_dest_len :0];
 
                 BinLinker.unlinkBinOrShim(abs_dest);
@@ -1135,7 +1132,7 @@ pub struct BinLinker {
                     @memcpy(abs_dest_buf_remain[0..normalized_bin_dest.len], normalized_bin_dest);
                     abs_dest_buf_remain = abs_dest_buf_remain[normalized_bin_dest.len..];
                     abs_dest_buf_remain[0] = 0;
-                    const abs_dest_len = @intFromPtr(abs_dest_buf_remain.ptr) - @intFromPtr(_.abs_dest_buf.ptr);
+                    const abs_dest_len = unsafe { @intFromPtr(abs_dest_buf_remain.ptr) - @intFromPtr(_.abs_dest_buf.ptr) };
                     const abs_dest: [:0]const u8 = _.abs_dest_buf[0..abs_dest_len :0];
 
                     BinLinker.unlinkBinOrShim(abs_dest);
@@ -1151,7 +1148,7 @@ pub struct BinLinker {
                     _.err = e;
                     return;
                 };
-                defer target_dir.close();
+                const _dir_guard = CloseGuardPtr<@TypeOf(target_dir)>{ ptr: unsafe { &target_dir } };
 
                 const abs_dest_dir_end = abs_dest_buf_remain;
 
@@ -1163,7 +1160,7 @@ pub struct BinLinker {
                             @memcpy(abs_dest_buf_remain[0..entry.name.len], entry.name);
                             abs_dest_buf_remain = abs_dest_buf_remain[entry.name.len..];
                             abs_dest_buf_remain[0] = 0;
-                            const abs_dest_len = @intFromPtr(abs_dest_buf_remain.ptr) - @intFromPtr(_.abs_dest_buf.ptr);
+                            const abs_dest_len = unsafe { @intFromPtr(abs_dest_buf_remain.ptr) - @intFromPtr(_.abs_dest_buf.ptr) };
                             const abs_dest: [:0]const u8 = _.abs_dest_buf[0..abs_dest_len :0];
 
                             BinLinker.unlinkBinOrShim(abs_dest);
@@ -1180,6 +1177,11 @@ pub enum FormatStyle {
     single_line,
     multi_line,
 }
+
+pub struct CloseGuard<T> { val: T? = null, ~init() { if (v := _.val) { v.close(); } } }
+pub struct CloseGuardPtr<T> { ptr: *T?! = null, ~init() { if (p := _.ptr) { unsafe { p.close(); } } } }
+pub struct FreeGuard<T> { slice: T? = null, alloc: std.mem.Allocator, ~init() { if (s := _.slice) { _.alloc.free(s); } } }
+pub struct UnlinkGuard { path: ([:0]const u8)? = null, ~init() { if (p := _.path) { * = bun.sys.unlinkat(.cwd(), p); } } }
 
 type WriteIndentFn = *const fn (*std.Io.Writer, *u32) std.Io.Writer.Error!void;
 type SeenMap = bun.StringHashMap(void);
