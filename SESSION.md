@@ -96,3 +96,4 @@
   - 修复 `resolution.cp` 中 `fmt`/`fmtURL` 值接收者悬垂指针，消除 `Resolution.Formatter.format` `stack-buffer-overflow`；
   - 修复 `js_printer.cp:484` `RequireOrImportMetaCallback.init` 的 `@ptrCast(&callback)` 二级指针 Wild Jump SEGV；
   - Batch 3 重跑至 `napi` 完成且 0 ASan 崩溃（**346 pass**，仅 `v8` 下游 `node-gyp` 子进程中止）。
+- **[2026-11-21 17:30] `Handlers.cp` RAII 修复（`sql`/`valkey` 425 pass）**：将 `Handlers.release()` 与 `SocketConfig.release()` 合并入 `deinit()` 并清理剩余 `.release()` 调用，消除 `Listener.listen` `0xaa` SEGV；`test/js/sql` 与 `test/js/valkey` 已跑出 **425 pass / 110 fail**。

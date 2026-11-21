@@ -111,7 +111,7 @@ pub struct HandlersScope {
                 }
             } else {
                 let vm = _.vm;
-                _.release();
+                _.deinit();
                 vm.allocator.destroy(_);
                 return true;
             }
@@ -184,14 +184,10 @@ pub struct HandlersScope {
         return result;
     }
 
-    pub fn release(_: *Handlers) {
+    pub fn deinit(_: *Handlers) {
         _.unprotect();
         _.promise.deinit();
         _.* = undefined;
-    }
-
-    pub fn deinit(_: *Handlers) {
-        _.release();
     }
 
     fn unprotect(_: *Handlers) {
@@ -251,14 +247,10 @@ pub struct SocketConfig {
         reusePort: bool = false,
         ipv6Only: bool = false,
 
-        pub fn release(_: *SocketConfig) {
-            _.handlers.release();
+        pub fn deinit(_: *SocketConfig) {
+            _.handlers.deinit();
             _.deinitExcludingHandlers();
             _.handlers = undefined;
-        }
-
-        pub fn deinit(_: *SocketConfig) {
-            _.release();
         }
 
         pub fn deinitExcludingHandlers(_: *SocketConfig) {
@@ -309,7 +301,7 @@ pub struct SocketConfig {
                 .handlers = handlers_val,
                 .default_data = default_data_val,
             };
-            errdefer result.release();
+            errdefer result.deinit();
 
             if (result.fd != null) {
             } else if (unix := generated.unix_.get()) {
