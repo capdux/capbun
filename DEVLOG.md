@@ -1522,3 +1522,8 @@
 - **2026-11-22**: 解封 `diff_match_patch.cp`（85 -> 0）与 `server.cp`（57 -> 11）等编译期工厂 `return struct` 模块的完整 `~init()` RAII 改造；同步总结 `void{}` 实参被拆为 `void, .{}` 需用 `@as(void, undefined)`、静态 `pub var` 在工厂方法内需显式用 `PackageInstall.supported_method`、`globalThis.throw` 返回纯错误集需 `switch (...) { else => {} }` 替代 `catch {}`。
 - **2026-11-22**: `@root struct` 内部 C 导出函数需显式 `callconv(.c)` 并配合 `comptime { @export(...); }` 导出；`NodeHTTPResponse.cp` 改用 `if (raw_response == .SSL)` 显式分发 `uws.AnyResponse.upgrade` 避免触发 `cp_unpack_slice` prelude，同时推动上游修复 `task-bun-20261122-root-struct-callconv-c` 与 `task-bun-20261122-unpack-prelude-shadow-end`。
 - **2026-11-22**: `JSValue.cp` 统一使用 `void!Err` 明确空载荷错误联合；`Listener.cp` `UnixOrHost.deinit` 保持只读值语义兼容 `socket.zig` 调用点。
+
+## [2026-11-22 Wave #8] RAII 改造与 `cpc` 踩坑经验
+- `IncrementalGraph.cp` 的 `return struct { ... }` 此前因保留旧 Zig 语法回退透传；通过提升 `ClientFilePacked` 到顶层、全面净化 `|capture|`/`try`/方法接收者、修复 `current_chunk_source_maps` (`switch (side)`) 与 `SerializedFailure.ArrayHashAdapter` 具名变量传参，成功激活完整 CP lowering 与 `__cp_deinit`。
+- `valkey_protocol.cp` 中 `&key` / `&push_type` 在泛型指针 Guard 构造时易被误解引用，改用值持有 Guard `OptValDeinitWithAllocGuard<T>` 彻底消除悬垂风险。
+- `CryptoHasher.cp` 中 `hmac: (*HMAC)?` 括号优先级与单行 `if (h := _.hmac)` 避免与联合体 `.hmac` 字段重名，以及 `BoringSSL.ERR_get_error` 函数指针局部调用绕过 0 参省略括号问题。

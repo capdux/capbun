@@ -32,6 +32,7 @@ pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
@@ -59,13 +60,98 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const ValkeyContext = @import("./ValkeyContext.zig");
 pub const Command = @import("./ValkeyCommand.zig");
 pub const ValkeyCommand = @import("./ValkeyCommand.zig");
 pub const protocol = @import("../../valkey/valkey_protocol.zig");
 pub const bun = @import("bun");
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    _ = p.deinit();
+                }
+        }
+    };
+}
+
+pub fn DeinitWithAllocGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T,
+        allocator: std.mem.Allocator,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    _ = p.deinit(self.allocator);
+                }
+        }
+    };
+}
+
+pub fn FreeGuard(comptime T: type) type {
+    return struct {
+        allocator: std.mem.Allocator,
+        slice: ?[]const T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.slice) |s| {
+                    _ = &s;
+                    _ = self.allocator.free(s);
+                }
+        }
+    };
+}
+
+pub fn DerefGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    _ = p.deref();
+                }
+        }
+    };
+}
+
+pub fn DeferredFailureGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    _ = bun.default_allocator.free(p.message);
+                    _ = bun.destroy(p);
+                }
+        }
+    };
+}
+
 pub const ConnectionFlags = struct {
     is_authenticated: bool = false,
     is_manually_closed: bool = false,
@@ -161,1089 +247,879 @@ pub const Address = union(enum) {
         port: u16,
     },
 
-    pub fn hostname(this: *const Address) []const u8 {
-        return switch (this.*) {
-            .unix => |unix_addr| unix_addr,
-            .host => |h| h.host,
-        };
+pub fn hostname(self: *const @This()) []const u8 {
+            return (switch (self.*) {
+.unix => |unix_addr| unix_addr,
+.host => |h| h.host,
+});
     }
 
-    pub fn connect(
-        this: *const Address,
-        client: *ValkeyClient,
-        group: *uws.SocketGroup,
-        ssl_ctx: ?*uws.SslCtx,
-        is_tls: bool,
-    ) !uws.AnySocket {
-        switch (is_tls) {
-            inline else => |tls| {
-                const SocketType = if (tls) uws.SocketTLS else uws.SocketTCP;
-                const union_field = if (tls) "SocketTLS" else "SocketTCP";
-                const kind: uws.SocketKind = if (tls) .valkey_tls else .valkey;
-                return @unionInit(uws.AnySocket, union_field, switch (this.*) {
-                    .unix => |path| try SocketType.connectUnixGroup(group, kind, ssl_ctx, path, client, false),
-                    .host => |h| try SocketType.connectGroup(group, kind, ssl_ctx, h.host, h.port, client, false),
-                });
-            },
-        }
+pub fn connect(self: *const @This(), client: *ValkeyClient, group: *uws.SocketGroup, ssl_ctx: ?*uws.SslCtx, is_tls: bool) !uws.AnySocket {
+            switch (is_tls) {
+inline else => |tls| {
+const SocketType = (if (tls) uws.SocketTLS else uws.SocketTCP);
+            const union_field = (if (tls) "SocketTLS" else "SocketTCP");
+            const kind: uws.SocketKind = (if (tls) .valkey_tls else .valkey);
+            return @unionInit(uws.AnySocket, union_field, (switch (self.*) {
+.unix => |path| try SocketType.connectUnixGroup(group, kind, ssl_ctx, path, client, false),
+.host => |h| try SocketType.connectGroup(group, kind, ssl_ctx, h.host, h.port, client, false),
+}));
+},
+}
     }
 };
 pub const ValkeyClient = struct {
     socket: uws.AnySocket,
     status: Status = Status.connecting,
-
-    // Buffer management
     write_buffer: bun.OffsetByteList = .{},
     read_buffer: bun.OffsetByteList = .{},
-
-    /// In-flight commands, after the data has been written to the network socket
     in_flight: Command.PromisePair.Queue,
-
-    /// Commands that are waiting to be sent to the server. When pipelining is implemented, this usually will be empty.
     queue: Command.Entry.Queue,
-
-    // Connection parameters
     password: []const u8 = "",
     username: []const u8 = "",
     database: u32 = 0,
     address: Address,
     protocol: Protocol,
-
     connection_strings: []u8 = empty_connection_strings[0..0],
-
-    // TLS support
     tls: TLS = .none,
-
-    // Timeout and reconnection management
     idle_timeout_interval_ms: u32 = 0,
     connection_timeout_ms: u32 = 0,
     retry_attempts: u32 = 0,
-    max_retries: u32 = 20, // Maximum retry attempts
-
-    flags: ConnectionFlags = ConnectionFlags{},
+    max_retries: u32 = 20,
+    flags: ConnectionFlags = ConnectionFlags{  },
     allocator: std.mem.Allocator,
-
-    // Auto-pipelining
-    auto_flusher: AutoFlusher = AutoFlusher{},
-
+    auto_flusher: AutoFlusher = AutoFlusher{  },
     vm: *jsc.VirtualMachine,
 
-    /// Clean up resources used by the Valkey client
-    pub fn deinit(this: *@This(), globalObjectOrFinalizing: ?*jsc.JSGlobalObject) void {
-        var pending = this.in_flight;
-        this.in_flight = .init(this.allocator);
-        defer pending.deinit();
-        var commands = this.queue;
-        this.queue = .init(this.allocator);
-        defer commands.deinit();
-
-        if (globalObjectOrFinalizing) |globalThis| {
-            const object = protocol.valkeyErrorToJS(globalThis, "Connection closed", protocol.RedisError.ConnectionClosed);
-            for (pending.readableSlice(0)) |pair| {
-                var pair_ = pair;
-                pair_.rejectCommand(globalThis, object) catch {}; // TODO: properly propagate exception upwards
+pub fn deinit(self: *@This(), globalObjectOrFinalizing: ?*jsc.JSGlobalObject) void {
+            var pending = self.in_flight;
+            _ = &pending;
+            self.in_flight = .init(self.allocator);
+            var pending_guard = DeinitGuard(Command.PromisePair.Queue){ .ptr = (&pending) };
+            _ = &pending_guard;
+            var __pending_guard_moved = false; _ = &__pending_guard_moved;
+            defer if (!__pending_guard_moved) { __pending_guard_moved = true; const __T = @TypeOf(pending_guard); if (@typeInfo(__T) == .optional) { if (pending_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { pending_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = pending_guard; _drop_val.__cp_deinit(); } };
+            _ = (&pending_guard);
+            var commands = self.queue;
+            _ = &commands;
+            self.queue = .init(self.allocator);
+            var commands_guard = DeinitGuard(Command.Entry.Queue){ .ptr = (&commands) };
+            _ = &commands_guard;
+            var __commands_guard_moved = false; _ = &__commands_guard_moved;
+            defer if (!__commands_guard_moved) { __commands_guard_moved = true; const __T = @TypeOf(commands_guard); if (@typeInfo(__T) == .optional) { if (commands_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { commands_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = commands_guard; _drop_val.__cp_deinit(); } };
+            _ = (&commands_guard);
+            if (globalObjectOrFinalizing) |globalThis| {
+                _ = &globalThis;
+                const object = protocol.valkeyErrorToJS(globalThis, "Connection closed", protocol.RedisError.ConnectionClosed);
+                for (pending.readableSlice(0)) |pair| {
+                    _ = &pair;
+                    var pair_ = pair;
+                    _ = &pair_;
+                    _ = (blk_catch_0: { break :blk_catch_0 ((pair_.rejectCommand(globalThis, object)) catch |__ce_0| { _ = &__ce_0;  }); });
+                }
+                for (commands.readableSlice(0)) |cmd| {
+                    _ = &cmd;
+                    var offline_cmd = cmd;
+                    _ = &offline_cmd;
+                    _ = (blk_catch_1: { break :blk_catch_1 ((offline_cmd.promise.reject(globalThis, object)) catch |__ce_1| { _ = &__ce_1;  }); });
+                    _ = offline_cmd.deinit(self.allocator);
+                }
+            } else {
+                for (pending.readableSlice(0)) |pair| {
+                    _ = &pair;
+                    var pair_ = pair;
+                    _ = &pair_;
+                    _ = pair_.promise.deinit();
+                }
+                for (commands.readableSlice(0)) |cmd| {
+                    _ = &cmd;
+                    var offline_cmd = cmd;
+                    _ = &offline_cmd;
+                    _ = offline_cmd.promise.deinit();
+                    _ = offline_cmd.deinit(self.allocator);
+                }
             }
-
-            for (commands.readableSlice(0)) |cmd| {
-                var offline_cmd = cmd;
-                offline_cmd.promise.reject(globalThis, object) catch {}; // TODO: properly propagate exception upwards
-                offline_cmd.deinit(this.allocator);
-            }
-        } else {
-            // finalizing. we can't call into JS.
-            for (pending.readableSlice(0)) |pair| {
-                var pair_ = pair;
-                pair_.promise.deinit();
-            }
-
-            for (commands.readableSlice(0)) |cmd| {
-                var offline_cmd = cmd;
-                offline_cmd.promise.deinit();
-                offline_cmd.deinit(this.allocator);
-            }
-        }
-
-        this.allocator.free(this.connection_strings);
-        // Note there is no need to deallocate username, password and hostname since they are
-        // within the this.connection_strings buffer.
-        this.write_buffer.deinit(this.allocator);
-        this.read_buffer.deinit(this.allocator);
-        this.tls.deinit();
-        this.unregisterAutoFlusher();
+            _ = self.allocator.free(self.connection_strings);
+            _ = self.write_buffer.deinit(self.allocator);
+            _ = self.read_buffer.deinit(self.allocator);
+            _ = self.tls.deinit();
+            _ = self.unregisterAutoFlusher();
     }
 
-    // ** Auto-pipelining **
-    fn registerAutoFlusher(this: *ValkeyClient, vm: *jsc.VirtualMachine) void {
-        if (!this.auto_flusher.registered) {
-            AutoFlusher.registerDeferredMicrotaskWithTypeUnchecked(@This(), this, vm);
-            this.auto_flusher.registered = true;
-        }
+pub fn registerAutoFlusher(self: *@This(), vm: *jsc.VirtualMachine) void {
+            if ((!self.auto_flusher.registered)) {
+                _ = AutoFlusher.registerDeferredMicrotaskWithTypeUnchecked(@This(), self, vm);
+                self.auto_flusher.registered = true;
+            }
     }
 
-    fn unregisterAutoFlusher(this: *ValkeyClient) void {
-        if (this.auto_flusher.registered) {
-            AutoFlusher.unregisterDeferredMicrotaskWithType(@This(), this, this.vm);
-            this.auto_flusher.registered = false;
-        }
+pub fn unregisterAutoFlusher(self: *@This()) void {
+            if (self.auto_flusher.registered) {
+                _ = AutoFlusher.unregisterDeferredMicrotaskWithType(@This(), self, self.vm);
+                self.auto_flusher.registered = false;
+            }
     }
 
-    // Drain auto-pipelined commands
-    pub fn onAutoFlush(this: *@This()) bool {
-        // Don't process if not connected or already processing
-        if (this.status != .connected) {
-            this.auto_flusher.registered = false;
-            return false;
-        }
+pub fn onAutoFlush(self: *@This()) bool {
+            if ((self.status != .connected)) {
+                self.auto_flusher.registered = false;
+                return false;
+            }
+            _ = self.ref();
+            var deref_guard = DerefGuard(ValkeyClient){ .ptr = self };
+            _ = &deref_guard;
+            var __deref_guard_moved = false; _ = &__deref_guard_moved;
+            defer if (!__deref_guard_moved) { __deref_guard_moved = true; const __T = @TypeOf(deref_guard); if (@typeInfo(__T) == .optional) { if (deref_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { deref_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = deref_guard; _drop_val.__cp_deinit(); } };
+            _ = (&deref_guard);
+            var have_more = false;
+            _ = &have_more;
+            var total_bytelength: usize = 0;
+            _ = &total_bytelength;
+            const pipelineable_commands: []Command.Entry = brk: {
+            var to_process = (blk: {
+            break :blk @constCast(self.queue.readableSlice(0));
 
-        this.ref();
-        defer this.deref();
-
-        // Start draining the command queue
-        var have_more = false;
-        var total_bytelength: usize = 0;
-
-        const pipelineable_commands: []Command.Entry = brk: {
-            var to_process = @constCast(this.queue.readableSlice(0));
+});
+            _ = &to_process;
             var total: usize = 0;
+            _ = &total;
             for (to_process) |*command| {
-                if (!command.meta.supports_auto_pipelining) {
+                _ = &command;
+                if ((!command.meta.supports_auto_pipelining)) {
                     break;
                 }
-
-                this.in_flight.writeItem(.{
-                    .meta = command.meta,
-                    .promise = command.promise,
-                }) catch |e| bun.handleOom(e);
-
-                total += 1;
-                total_bytelength += command.serialized_data.len;
+                _ = (blk_catch_2: { break :blk_catch_2 ((self.in_flight.writeItem(.{ .meta = command.meta, .promise = command.promise })) catch |e| { _ = &e; break :blk_catch_2 bun.handleOom(e); }); });
+                total = (total + 1);
+                total_bytelength = (total_bytelength + command.serialized_data.len);
             }
             break :brk to_process[0..total];
-        };
-
-        bun.handleOom(this.write_buffer.byte_list.ensureUnusedCapacity(this.allocator, total_bytelength));
-        for (pipelineable_commands) |*command| {
-            bun.handleOom(this.write_buffer.write(this.allocator, command.serialized_data));
-            // Free the serialized data since we've copied it to the write buffer
-            this.allocator.free(command.serialized_data);
-        }
-
-        this.queue.discard(pipelineable_commands.len);
-
-        _ = this.flushData();
-
-        have_more = this.queue.readableLength() > 0;
-        this.auto_flusher.registered = have_more;
-
-        // Return true if we should schedule another flush
-        return have_more;
-    }
-    // ** End of auto-pipelining **
-
-    /// Get the appropriate timeout interval based on connection state
-    pub fn getTimeoutInterval(this: *const ValkeyClient) u32 {
-        if (this.flags.failed) return 0;
-        return switch (this.status) {
-            .connected => this.idle_timeout_interval_ms,
-            else => this.connection_timeout_ms,
-        };
+};
+            _ = bun.handleOom(self.write_buffer.byte_list.ensureUnusedCapacity(self.allocator, total_bytelength));
+            for (pipelineable_commands) |*command| {
+                _ = &command;
+                _ = bun.handleOom(self.write_buffer.write(self.allocator, command.serialized_data));
+                _ = self.allocator.free(command.serialized_data);
+            }
+            _ = self.queue.discard(pipelineable_commands.len);
+            _ = self.flushData();
+            have_more = (self.queue.readableLength() > 0);
+            self.auto_flusher.registered = have_more;
+            return have_more;
     }
 
-    pub fn hasAnyPendingCommands(this: *const ValkeyClient) bool {
-        return this.in_flight.readableLength() > 0 or
-            this.queue.readableLength() > 0 or
-            this.write_buffer.len() > 0 or
-            this.read_buffer.len() > 0;
+pub fn getTimeoutInterval(self: *const @This()) u32 {
+            if (self.flags.failed) {
+                return 0;
+            }
+            return (switch (self.status) {
+.connected => self.idle_timeout_interval_ms,
+else => self.connection_timeout_ms,
+});
     }
 
-    /// Calculate reconnect delay with exponential backoff
-    pub fn getReconnectDelay(this: *const ValkeyClient) u32 {
-        const base_delay: u32 = 50; // Base delay in ms
-        const max_delay: u32 = 2000; // Max delay in ms
-
-        // Fixed backoff calculation to avoid integer overflow
-        if (this.retry_attempts == 0) return base_delay;
-
-        // Cap at 10 attempts for backoff calculation to avoid overflow
-        const attempt = @min(this.retry_attempts, 10);
-
-        // Use a safer exponential backoff calculation
-        var delay: u32 = base_delay;
-        var i: u32 = 1;
-        while (i < attempt) : (i += 1) {
-            // Double the delay up to max_delay
-            delay = @min(delay * 2, max_delay);
-        }
-
-        return delay;
+pub fn hasAnyPendingCommands(self: *const @This()) bool {
+            return ((((self.in_flight.readableLength() > 0) or (self.queue.readableLength() > 0)) or (self.write_buffer.len() > 0)) or (self.read_buffer.len() > 0));
     }
 
-    /// Reject all pending commands with an error
-    fn rejectAllPendingCommands(pending_ptr: *Command.PromisePair.Queue, entries_ptr: *Command.Entry.Queue, globalThis: *jsc.JSGlobalObject, allocator: std.mem.Allocator, jsvalue: jsc.JSValue) bun.JSTerminated!void {
-        var pending = pending_ptr.*;
-        var entries = entries_ptr.*;
-        defer pending.deinit();
-        defer entries.deinit();
-        pending_ptr.* = .init(allocator);
-        entries_ptr.* = .init(allocator);
-
-        // Reject commands in the command queue
-        for (pending.readableSlice(0)) |item| {
-            var command_pair = item;
-            try command_pair.rejectCommand(globalThis, jsvalue);
-        }
-
-        // Reject commands in the offline queue
-        for (entries.readableSlice(0)) |item| {
-            var cmd = item;
-            defer cmd.deinit(allocator);
-            try cmd.promise.reject(globalThis, jsvalue);
-        }
+pub fn getReconnectDelay(self: *const @This()) u32 {
+            const base_delay: u32 = 50;
+            const max_delay: u32 = 2000;
+            if ((self.retry_attempts == 0)) {
+                return base_delay;
+            }
+            const attempt = @min(self.retry_attempts, 10);
+            var delay: u32 = base_delay;
+            _ = &delay;
+            var i: u32 = 1;
+            _ = &i;
+            while ((i < attempt)) : (i = (i + 1)) {
+                delay = @min((delay * 2), max_delay);
+            }
+            return delay;
     }
 
-    /// Flush pending data to the socket
-    pub fn flushData(this: *ValkeyClient) bool {
-        const chunk = this.write_buffer.remaining();
-        if (chunk.len == 0) return false;
-        const wrote = this.socket.write(chunk);
-        if (wrote > 0) {
-            this.write_buffer.consume(@intCast(wrote));
-        }
-        const has_remaining = this.write_buffer.len() > 0;
-        return has_remaining;
+pub fn rejectAllPendingCommands(pending_ptr: *Command.PromisePair.Queue, entries_ptr: *Command.Entry.Queue, globalThis: *jsc.JSGlobalObject, allocator: std.mem.Allocator, jsvalue: jsc.JSValue) bun.JSTerminated!void {
+            var pending = pending_ptr.*;
+            _ = &pending;
+            var entries = entries_ptr.*;
+            _ = &entries;
+            var pending_guard = DeinitGuard(Command.PromisePair.Queue){ .ptr = (&pending) };
+            _ = &pending_guard;
+            var __pending_guard_moved = false; _ = &__pending_guard_moved;
+            defer if (!__pending_guard_moved) { __pending_guard_moved = true; const __T = @TypeOf(pending_guard); if (@typeInfo(__T) == .optional) { if (pending_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { pending_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = pending_guard; _drop_val.__cp_deinit(); } };
+            _ = (&pending_guard);
+            var entries_guard = DeinitGuard(Command.Entry.Queue){ .ptr = (&entries) };
+            _ = &entries_guard;
+            var __entries_guard_moved = false; _ = &__entries_guard_moved;
+            defer if (!__entries_guard_moved) { __entries_guard_moved = true; const __T = @TypeOf(entries_guard); if (@typeInfo(__T) == .optional) { if (entries_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { entries_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = entries_guard; _drop_val.__cp_deinit(); } };
+            _ = (&entries_guard);
+            pending_ptr.* = .init(allocator);
+            entries_ptr.* = .init(allocator);
+            for (pending.readableSlice(0)) |item| {
+                _ = &item;
+                var command_pair = item;
+                _ = &command_pair;
+                _ = try command_pair.rejectCommand(globalThis, jsvalue);
+            }
+            for (entries.readableSlice(0)) |item| {
+                _ = &item;
+                var cmd = item;
+                _ = &cmd;
+                var cmd_guard = DeinitWithAllocGuard(Command.Entry){ .ptr = (&cmd), .allocator = allocator };
+                _ = &cmd_guard;
+                var __cmd_guard_moved = false; _ = &__cmd_guard_moved;
+                defer if (!__cmd_guard_moved) { __cmd_guard_moved = true; const __T = @TypeOf(cmd_guard); if (@typeInfo(__T) == .optional) { if (cmd_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { cmd_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = cmd_guard; _drop_val.__cp_deinit(); } };
+                _ = (&cmd_guard);
+                _ = try cmd.promise.reject(globalThis, jsvalue);
+            }
     }
 
+pub fn flushData(self: *@This()) bool {
+            const chunk = self.write_buffer.remaining();
+            if ((chunk.len == 0)) {
+                return false;
+            }
+            const wrote = self.socket.write(chunk);
+            if ((wrote > 0)) {
+                _ = self.write_buffer.consume(@intCast(wrote));
+            }
+            const has_remaining = (self.write_buffer.len() > 0);
+            return has_remaining;
+    }
+
+pub fn fail(self: *@This(), message: []const u8, err: protocol.RedisError) bun.JSTerminated!void {
+            _ = debug("failed: {s}: {}", .{ message, err });
+            if (self.flags.failed) {
+                return;
+            }
+            if (self.flags.finalized) {
+                if (((self.queue.count + self.in_flight.count) > 0)) {
+                    const vm = self.vm;
+                    const deferred_failure = bun.new(DeferredFailure, .{ .message = bun.handleOom(bun.default_allocator.dupe(u8, message)), .err = err, .globalThis = vm.global, .in_flight = self.in_flight, .queue = self.queue });
+                    self.in_flight = .init(self.allocator);
+                    self.queue = .init(self.allocator);
+                    _ = deferred_failure.enqueue();
+                }
+                return;
+            }
+            const globalThis = self.globalObject();
+            _ = try self.failWithJSValue(globalThis, protocol.valkeyErrorToJS(globalThis, message, err));
+    }
+
+pub fn failWithJSValue(self: *@This(), globalThis: *jsc.JSGlobalObject, jsvalue: jsc.JSValue) bun.JSTerminated!void {
+            if (self.flags.failed) {
+                return;
+            }
+            self.flags.failed = true;
+            const val = rejectAllPendingCommands((&self.in_flight), (&self.queue), globalThis, self.allocator, jsvalue);
+            if ((!self.connectionReady())) {
+                self.flags.is_manually_closed = true;
+                _ = self.close();
+            }
+            return val;
+    }
+
+pub fn close(self: *@This()) void {
+            const socket = self.socket;
+            self.socket = .{ .SocketTCP = .detached };
+            _ = socket.close();
+    }
+
+pub fn onClose(self: *@This()) bun.JSTerminated!void {
+            _ = self.unregisterAutoFlusher();
+            _ = self.write_buffer.clearAndFree(self.allocator);
+            if (self.flags.is_manually_closed) {
+                _ = debug("skip reconnecting since the connection is manually closed", .{});
+                _ = try self.fail("Connection closed", protocol.RedisError.ConnectionClosed);
+                _ = try self.onValkeyClose();
+                return;
+            }
+            if ((!self.flags.enable_auto_reconnect)) {
+                _ = debug("skip reconnecting since auto reconnect is disabled", .{});
+                _ = try self.fail("Connection closed", protocol.RedisError.ConnectionClosed);
+                _ = try self.onValkeyClose();
+                return;
+            }
+            self.retry_attempts = (self.retry_attempts + 1);
+            const delay_ms = self.getReconnectDelay();
+            if (((delay_ms == 0) or (self.retry_attempts > self.max_retries))) {
+                _ = debug("Max retries reached or retry strategy returned 0, giving up reconnection", .{});
+                _ = try self.fail("Max reconnection attempts reached", protocol.RedisError.ConnectionClosed);
+                _ = try self.onValkeyClose();
+                return;
+            }
+            _ = debug("reconnect in {d}ms (attempt {d}/{d})", .{ delay_ms, self.retry_attempts, self.max_retries });
+            self.flags.is_reconnecting = true;
+            self.flags.is_authenticated = false;
+            self.flags.is_selecting_db_internal = false;
+            _ = self.onValkeyReconnect();
+    }
+
+pub fn sendNextCommand(self: *@This()) void {
+            if (((self.write_buffer.remaining().len == 0) and self.connectionReady())) {
+                if ((self.queue.readableLength() > 0)) {
+                    const cmd_flags = (&self.queue.peekItem(0).meta);
+                    if ((!cmd_flags.supports_auto_pipelining)) {
+                        if ((self.in_flight.readableLength() == 0)) {
+                            _ = self.drain();
+                            if (((self.queue.readableLength() > 0) and self.queue.peekItem(0).meta.supports_auto_pipelining)) {
+                                _ = self.registerAutoFlusher(self.vm);
+                            }
+                        } else {
+                        }
+                    } else {
+                        _ = self.registerAutoFlusher(self.vm);
+                    }
+                } else {
+                    if ((self.in_flight.readableLength() == 0)) {
+                        _ = self.drain();
+                    }
+                }
+            }
+            _ = self.flushData();
+    }
+
+pub fn onData(self: *@This(), data: []const u8) bun.JSTerminated!void {
+            _ = debug("Low-level onData called with {d} bytes: {s}", .{ data.len, data });
+            if ((self.read_buffer.remaining().len > 0)) {
+                _ = (blk_catch_3: { break :blk_catch_3 ((self.read_buffer.write(self.allocator, data)) catch |__ce_3| { _ = &__ce_3; @panic("failed to write to read buffer"); }); });
+                while (true) {
+                    const remaining_buffer = self.read_buffer.remaining();
+                    if ((remaining_buffer.len == 0)) {
+                        break;
+                    }
+                    var reader = protocol.ValkeyReader.init(remaining_buffer);
+                    _ = &reader;
+                    const before_read_pos = reader.pos;
+                    var value = (blk_catch_4: { break :blk_catch_4 ((reader.readValue(self.allocator)) catch |e| { _ = &e; if ((e == error.InvalidResponse)) {
+                        if (comptime bun.Environment.allow_assert) {
+                            _ = debug("read_buffer: needs more data ({d} bytes available)", .{ remaining_buffer.len });
+                        }
+                        return;
+                    } else {
+                        _ = try self.fail("Failed to read data (buffer path)", e);
+                        return;
+                    } }); });
+                    _ = &value;
+                    var value_guard = DeinitWithAllocGuard(protocol.RESPValue){ .ptr = (&value), .allocator = self.allocator };
+                    _ = &value_guard;
+                    var __value_guard_moved = false; _ = &__value_guard_moved;
+                    defer if (!__value_guard_moved) { __value_guard_moved = true; const __T = @TypeOf(value_guard); if (@typeInfo(__T) == .optional) { if (value_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { value_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = value_guard; _drop_val.__cp_deinit(); } };
+                    _ = (&value_guard);
+                    const bytes_consumed = (reader.pos - before_read_pos);
+                    if (((bytes_consumed == 0) and (remaining_buffer.len > 0))) {
+                        _ = try self.fail("Parser consumed 0 bytes unexpectedly (buffer path)", error.InvalidResponse);
+                        return;
+                    }
+                    _ = self.read_buffer.consume(@truncate(bytes_consumed));
+                    var value_to_handle = value;
+                    _ = &value_to_handle;
+                    _ = (blk_catch_5: { break :blk_catch_5 ((self.handleResponse((&value_to_handle))) catch |e| { _ = &e; _ = try self.fail("Failed to handle response (buffer path)", e);
+                    return; }); });
+                    if (((self.status == .disconnected) or self.flags.failed)) {
+                        return;
+                    }
+                    _ = self.sendNextCommand();
+                }
+                return;
+            }
+            var current_data_slice = data;
+            _ = &current_data_slice;
+            while ((current_data_slice.len > 0)) {
+                var reader = protocol.ValkeyReader.init(current_data_slice);
+                _ = &reader;
+                const before_read_pos = reader.pos;
+                var value = (blk_catch_6: { break :blk_catch_6 ((reader.readValue(self.allocator)) catch |e| { _ = &e; if ((e == error.InvalidResponse)) {
+                    if (comptime bun.Environment.allow_assert) {
+                        _ = debug("read_buffer: partial message on stack ({d} bytes), switching to buffer", .{ (current_data_slice.len - before_read_pos) });
+                    }
+                    _ = (blk_catch_7: { break :blk_catch_7 ((self.read_buffer.write(self.allocator, current_data_slice[before_read_pos..])) catch |__ce_7| { _ = &__ce_7; @panic("failed to write remaining stack data to buffer"); }); });
+                    return;
+                } else {
+                    _ = try self.fail("Failed to read data (stack path)", e);
+                    return;
+                } }); });
+                _ = &value;
+                var value_guard = DeinitWithAllocGuard(protocol.RESPValue){ .ptr = (&value), .allocator = self.allocator };
+                _ = &value_guard;
+                var __value_guard_moved = false; _ = &__value_guard_moved;
+                defer if (!__value_guard_moved) { __value_guard_moved = true; const __T = @TypeOf(value_guard); if (@typeInfo(__T) == .optional) { if (value_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { value_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = value_guard; _drop_val.__cp_deinit(); } };
+                _ = (&value_guard);
+                const bytes_consumed = (reader.pos - before_read_pos);
+                if ((bytes_consumed == 0)) {
+                    _ = try self.fail("Parser consumed 0 bytes unexpectedly (stack path)", error.InvalidResponse);
+                    return;
+                }
+                current_data_slice = current_data_slice[bytes_consumed..];
+                var value_to_handle = value;
+                _ = &value_to_handle;
+                _ = (blk_catch_8: { break :blk_catch_8 ((self.handleResponse((&value_to_handle))) catch |e| { _ = &e; _ = try self.fail("Failed to handle response (stack path)", e);
+                return; }); });
+                if (((self.status == .disconnected) or self.flags.failed)) {
+                    return;
+                }
+                _ = self.sendNextCommand();
+            }
+    }
+
+pub fn handleSubscribeResponse(self: *@This(), value: *protocol.RESPValue, pair: ?*ValkeyCommand.PromisePair) bun.JSError!enum { handled, fallthrough } {
+            const globalThis = self.globalObject();
+            const loop = self.vm.eventLoop();
+            _ = debug("Handling a subscribe response: {f}", .{ value.* });
+            _ = loop.enter();
+            defer {
+            _ = loop.exit();
+            }
+            return (switch (value.*) {
+.Error => {
+{
+                if (pair) |p| {
+                    _ = &p;
+                    _ = try p.promise.reject(globalThis, value.toJS(globalThis));
+                }
+                return .handled;
+            }
+},
+.Push => |push| {
+{
+                const p = self.parent();
+                const sub_count = try p._subscription_ctx.channelsSubscribedToCount(globalThis);
+                if (protocol.SubscriptionPushMessage.map.get(push.kind)) |msg_type| {
+                    _ = &msg_type;
+                    switch (msg_type) {
+.message => {
+_ = self.onValkeyMessage(push.data);
+                    return .handled;
+},
+.subscribe => {
+_ = p.addSubscription();
+                    _ = self.onValkeySubscribe(value);
+                    if (pair) |req_pair| {
+                        _ = &req_pair;
+                        _ = try req_pair.promise.promise.resolve(globalThis, .jsNumber(sub_count));
+                    }
+                    return .handled;
+},
+.unsubscribe => {
+_ = try self.onValkeyUnsubscribe();
+                    _ = p.removeSubscription();
+                    if (pair) |req_pair| {
+                        _ = &req_pair;
+                        _ = try req_pair.promise.promise.resolve(globalThis, .js_undefined);
+                    }
+                    return .handled;
+},
+}
+                } else {
+                    @branchHint(.cold);
+                    _ = try self.fail("Push message is not a subscription message.", protocol.RedisError.InvalidResponseType);
+                    return .handled;
+                }
+            }
+},
+else => {
+return .fallthrough;
+},
+});
+    }
+
+pub fn handleHelloResponse(self: *@This(), value: *protocol.RESPValue) bun.JSTerminated!void {
+            _ = debug("Processing HELLO response", .{});
+            switch (value.*) {
+.Error => |err| {
+_ = try self.fail(err, protocol.RedisError.AuthenticationFailed);
+            return;
+},
+.SimpleString => |str| {
+if (std.mem.eql(u8, str, "OK")) {
+                self.status = .connected;
+                self.flags.is_authenticated = true;
+                self.flags.is_reconnecting = false;
+                self.retry_attempts = 0;
+                _ = try self.onValkeyConnect(value);
+                return;
+            }
+            _ = try self.fail("Authentication failed (unexpected response)", protocol.RedisError.AuthenticationFailed);
+            return;
+},
+.Map => |map| {
+_ = debug("Got HELLO response map with {d} entries", .{ map.len });
+            for (map) |*entry| {
+                _ = &entry;
+                switch (entry.key) {
+.SimpleString => |key| {
+if (std.mem.eql(u8, key, "proto")) {
+                    if (((if (@typeInfo(@TypeOf(entry)) == .@"enum") @intFromEnum(entry) else entry.value) == .Integer)) {
+                        const proto_version = (if (@typeInfo(@TypeOf(entry)) == .@"enum") @intFromEnum(entry) else entry.value).Integer;
+                        _ = debug("Server protocol version: {d}", .{ proto_version });
+                        if ((proto_version != 3)) {
+                            _ = try self.fail("Server does not support RESP3", protocol.RedisError.UnsupportedProtocol);
+                            return;
+                        }
+                    }
+                }
+},
+else => {
+
+},
+}
+            }
+            self.status = .connected;
+            self.flags.is_authenticated = true;
+            self.flags.is_reconnecting = false;
+            self.retry_attempts = 0;
+            _ = try self.onValkeyConnect(value);
+            return;
+},
+else => {
+_ = try self.fail("Authentication failed with unexpected response", protocol.RedisError.AuthenticationFailed);
+            return;
+},
+}
+    }
+
+pub fn handleResponse(self: *@This(), value: *protocol.RESPValue) !void {
+            if ((!self.flags.is_authenticated)) {
+                _ = try self.handleHelloResponse(value);
+                return;
+            }
+            if (self.flags.is_selecting_db_internal) {
+                self.flags.is_selecting_db_internal = false;
+                return (switch (value.*) {
+.Error => |err_str| try self.fail(err_str, protocol.RedisError.InvalidCommand),
+.SimpleString => |ok_str| {
+{
+                    if ((!std.mem.eql(u8, ok_str, "OK"))) {
+                        _ = try self.fail("SELECT command failed with non-OK response", protocol.RedisError.InvalidResponse);
+                        return;
+                    }
+                    _ = debug("SELECT {d} successful", .{ self.database });
+                    _ = self.sendNextCommand();
+                }
+},
+else => try self.fail("Received non-SELECT response while in the SELECT state.", protocol.RedisError.InvalidResponse),
+});
+            }
+            var should_consume_promise_pair = true;
+            _ = &should_consume_promise_pair;
+            var pair_maybe: ?ValkeyCommand.PromisePair = null;
+            _ = &pair_maybe;
+            if (self.parent().isSubscriber()) {
+                switch (value.*) {
+.Push => |push| {
+if (protocol.SubscriptionPushMessage.map.get(push.kind)) |msg_type| {
+                    _ = &msg_type;
+                    switch (msg_type) {
+.message => {
+should_consume_promise_pair = false;
+},
+.subscribe, .unsubscribe => {
+if ((self.in_flight.readableLength() == 0)) {
+                        should_consume_promise_pair = false;
+                    }
+},
+}
+                }
+},
+else => {
+
+},
+}
+            }
+            if (should_consume_promise_pair) {
+                pair_maybe = self.in_flight.readItem();
+            }
+            var request_is_subscribe = false;
+            _ = &request_is_subscribe;
+            if ((pair_maybe != null)) {
+                request_is_subscribe = pair_maybe.?.meta.subscription_request;
+            }
+            if ((self.parent().isSubscriber() or request_is_subscribe)) {
+                _ = debug("This client is a subscriber. Handling as subscriber...", .{});
+                switch (value.*) {
+.Error => |err| {
+_ = try self.fail(err, protocol.RedisError.InvalidResponse);
+                return;
+},
+.Push => |push| {
+if (protocol.SubscriptionPushMessage.map.get(push.kind)) |_| {
+                    if ((try self.handleSubscribeResponse(value, (if (pair_maybe) |*pm| pm else null)) == .handled)) {
+                        return;
+                    }
+                } else {
+                    @branchHint(.cold);
+                    _ = try self.fail("Unexpected push message kind without promise", protocol.RedisError.InvalidResponseType);
+                    return;
+                }
+},
+else => {
+
+},
+}
+                _ = debug("Treating subscriber response as a regular command...", .{});
+            }
+            var pair = ((pair_maybe) orelse {
+            return;
+});
+            _ = &pair;
+            const meta = pair.meta;
+            if (meta.return_as_bool) {
+                if ((value.* == .Integer)) {
+                    const int_value = value.Integer;
+                    value.* = .{ .Boolean = (int_value > 0) };
+                }
+            }
+            var promise_ptr = (&pair.promise);
+            _ = &promise_ptr;
+            const globalThis = self.globalObject();
+            const loop = self.vm.eventLoop();
+            _ = loop.enter();
+            defer {
+            _ = loop.exit();
+            }
+            if ((value.* == .Error)) {
+                _ = try promise_ptr.reject(globalThis, (blk_catch_9: { break :blk_catch_9 ((value.toJS(globalThis)) catch |e| { _ = &e; break :blk_catch_9 globalThis.takeError(e); }); }));
+            } else {
+                _ = try promise_ptr.resolve(globalThis, value);
+            }
+    }
+
+pub fn authenticate(self: *@This()) bun.JSTerminated!void {
+            _ = debug("Sending HELLO 3 command", .{});
+            var hello_args_buf: [4][]const u8 = .{ "3", "AUTH", "", "" };
+            _ = &hello_args_buf;
+            var hello_args: []const []const u8 = undefined;
+            _ = &hello_args;
+            if (((self.username.len > 0) or (self.password.len > 0))) {
+                hello_args_buf[cp_cast_int(usize, 0)] = "3";
+                hello_args_buf[cp_cast_int(usize, 1)] = "AUTH";
+                if ((self.username.len > 0)) {
+                    hello_args_buf[cp_cast_int(usize, 2)] = self.username;
+                    hello_args_buf[cp_cast_int(usize, 3)] = self.password;
+                } else {
+                    hello_args_buf[cp_cast_int(usize, 2)] = "default";
+                    hello_args_buf[cp_cast_int(usize, 3)] = self.password;
+                }
+                hello_args = hello_args_buf[0..4];
+            } else {
+                hello_args = hello_args_buf[0..1];
+            }
+            var hello_cmd = Command{ .command = "HELLO", .args = .{ .raw = hello_args } };
+            _ = &hello_cmd;
+            _ = (blk_catch_10: { break :blk_catch_10 ((hello_cmd.write(self.writer())) catch |e| { _ = &e; _ = try self.fail("Failed to write HELLO command", e);
+            return; }); });
+            if ((self.database > 0)) {
+                var int_buf: [64]u8 = undefined;
+                _ = &int_buf;
+                const db_str = ((std.fmt.bufPrintZ((&int_buf), "{d}", .{ self.database })) catch unreachable);
+                const select_args: [1][]const u8 = .{ db_str };
+                var select_cmd = Command{ .command = "SELECT", .args = .{ .raw = select_args[0..1] } };
+                _ = &select_cmd;
+                _ = (blk_catch_12: { break :blk_catch_12 ((select_cmd.write(self.writer())) catch |e| { _ = &e; _ = try self.fail("Failed to write SELECT command", e);
+                return; }); });
+                self.flags.is_selecting_db_internal = true;
+            }
+    }
+
+pub fn onOpen(self: *@This(), socket: uws.AnySocket) bun.JSTerminated!void {
+            self.socket = socket;
+            _ = self.write_buffer.clearAndFree(self.allocator);
+            _ = self.read_buffer.clearAndFree(self.allocator);
+            self.flags.failed = false;
+            self.flags.is_authenticated = false;
+            self.flags.is_selecting_db_internal = false;
+            if ((self.socket == .SocketTCP)) {
+                _ = try self.start();
+            }
+    }
+
+pub fn start(self: *@This()) bun.JSTerminated!void {
+            _ = try self.authenticate();
+            _ = self.flushData();
+    }
+
+pub fn connectionReady(self: *const @This()) bool {
+            return (self.flags.is_authenticated and (!self.flags.is_selecting_db_internal));
+    }
+
+pub fn drain(self: *@This()) bool {
+            if ((self.in_flight.readableLength() > 0)) {
+                const queue_slice = self.queue.readableSlice(0);
+                if (((queue_slice.len > 0) and (!queue_slice[0].meta.supports_auto_pipelining))) {
+                    return false;
+                }
+            }
+            const offline_cmd = ((self.queue.readItem()) orelse {
+            return false;
+});
+            _ = (blk_catch_13: { break :blk_catch_13 ((self.in_flight.writeItem(.{ .meta = offline_cmd.meta, .promise = offline_cmd.promise })) catch |e| { _ = &e; break :blk_catch_13 bun.handleOom(e); }); });
+            const data = offline_cmd.serialized_data;
+            if ((self.connectionReady() and (self.write_buffer.remaining().len == 0))) {
+                var data_guard = FreeGuard(u8){ .allocator = self.allocator, .slice = data };
+                _ = &data_guard;
+                var __data_guard_moved = false; _ = &__data_guard_moved;
+                defer if (!__data_guard_moved) { __data_guard_moved = true; const __T = @TypeOf(data_guard); if (@typeInfo(__T) == .optional) { if (data_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { data_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = data_guard; _drop_val.__cp_deinit(); } };
+                _ = (&data_guard);
+                const wrote = self.socket.write(data);
+                const unwritten = data[@intCast(@max(wrote, 0))..];
+                if ((unwritten.len > 0)) {
+                    _ = bun.handleOom(self.write_buffer.write(self.allocator, unwritten));
+                }
+                return true;
+            }
+            _ = bun.handleOom(self.write(data));
+            _ = bun.default_allocator.free(data);
+            return true;
+    }
+
+pub fn onWritable(self: *@This()) void {
+            _ = self.ref();
+            var deref_guard = DerefGuard(ValkeyClient){ .ptr = self };
+            _ = &deref_guard;
+            var __deref_guard_moved = false; _ = &__deref_guard_moved;
+            defer if (!__deref_guard_moved) { __deref_guard_moved = true; const __T = @TypeOf(deref_guard); if (@typeInfo(__T) == .optional) { if (deref_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { deref_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = deref_guard; _drop_val.__cp_deinit(); } };
+            _ = (&deref_guard);
+            _ = self.sendNextCommand();
+    }
+
+pub fn enqueue(self: *@This(), command: *const Command, promise: *Command.Promise) !void {
+            const can_pipeline = (command.meta.supports_auto_pipelining and self.flags.enable_auto_pipelining);
+            const must_wait_for_queue = ((!command.meta.supports_auto_pipelining) and (self.queue.readableLength() > 0));
+            if ((((((self.queue.readableLength() > 0) or ((!can_pipeline) and (self.in_flight.readableLength() > 0))) or (!self.connectionReady())) or must_wait_for_queue) or can_pipeline)) {
+                const entry = try Command.Entry.create(self.allocator, command, promise.*);
+                _ = try self.queue.writeItem(entry);
+                if (((self.status == .connected) and can_pipeline)) {
+                    _ = self.registerAutoFlusher(self.vm);
+                }
+                return;
+            }
+            switch (self.status) {
+.connecting, .connected => {
+_ = (blk_catch_14: { break :blk_catch_14 ((command.write(self.writer())) catch |__ce_14| { _ = &__ce_14; _ = try promise.reject(self.globalObject(), self.globalObject().createOutOfMemoryError());
+            return; }); });
+},
+else => {
+_ = unreachable;
+},
+}
+            const cmd_pair = Command.PromisePair{ .meta = command.meta, .promise = promise.* };
+            _ = try self.in_flight.writeItem(cmd_pair);
+            _ = self.flushData();
+    }
+
+pub fn send(self: *@This(), globalThis: *jsc.JSGlobalObject, command: *const Command) !*jsc.JSPromise {
+            var checked_command = command.*;
+            _ = &checked_command;
+            checked_command.meta = command.meta.check(command);
+            var promise = Command.Promise.create(globalThis, checked_command.meta);
+            _ = &promise;
+            const js_promise = promise.promise.get();
+            if (self.flags.failed) {
+                _ = try promise.reject(globalThis, globalThis.ERR(.REDIS_CONNECTION_CLOSED, "Connection has failed", .{}).toJS());
+            } else {
+                switch (self.status) {
+.connected => {
+_ = try self.enqueue((&checked_command), (&promise));
+                if ((((self.flags.enable_auto_pipelining and checked_command.meta.supports_auto_pipelining) and (self.status == .connected)) and (self.queue.readableLength() > 0))) {
+                    _ = self.registerAutoFlusher(self.vm);
+                }
+},
+.connecting, .disconnected => {
+if (self.flags.enable_offline_queue) {
+                    _ = try self.enqueue((&checked_command), (&promise));
+                } else {
+                    _ = try promise.reject(globalThis, globalThis.ERR(.REDIS_CONNECTION_CLOSED, "Connection is closed and offline queue is disabled", .{}).toJS());
+                }
+},
+}
+            }
+            return js_promise;
+    }
+
+pub fn disconnect(self: *@This()) void {
+            self.flags.is_manually_closed = true;
+            _ = self.unregisterAutoFlusher();
+            if (((self.status == .connected) or (self.status == .connecting))) {
+                _ = self.close();
+            }
+    }
+
+pub fn writer(self: *@This()) std.Io.GenericWriter(*ValkeyClient, protocol.RedisError, write) {
+            return .{ .context = self };
+    }
+
+pub fn write(self: *@This(), data: []const u8) !usize {
+            _ = try self.write_buffer.write(self.allocator, data);
+            return data.len;
+    }
+
+pub fn ref(self: *@This()) void {
+            _ = self.parent().ref();
+    }
+
+pub fn deref(self: *@This()) void {
+            _ = self.parent().deref();
+    }
+
+pub inline fn parent(self: *@This()) *JSValkeyClient {
+            return @fieldParentPtr("client", self);
+    }
+
+pub inline fn globalObject(self: *@This()) *jsc.JSGlobalObject {
+            return self.parent().globalObject;
+    }
+
+pub fn onValkeyConnect(self: *@This(), value: *protocol.RESPValue) bun.JSTerminated!void {
+            return self.parent().onValkeyConnect(value);
+    }
+
+pub fn onValkeySubscribe(self: *@This(), value: *protocol.RESPValue) void {
+            _ = self.parent().onValkeySubscribe(value);
+    }
+
+pub fn onValkeyUnsubscribe(self: *@This()) bun.JSError!void {
+            return self.parent().onValkeyUnsubscribe();
+    }
+
+pub fn onValkeyMessage(self: *@This(), value: []protocol.RESPValue) void {
+            _ = self.parent().onValkeyMessage(value);
+    }
+
+pub fn onValkeyReconnect(self: *@This()) void {
+            _ = self.parent().onValkeyReconnect();
+    }
+
+pub fn onValkeyClose(self: *@This()) bun.JSTerminated!void {
+            return self.parent().onValkeyClose();
+    }
+
+pub fn onValkeyTimeout(self: *@This()) void {
+            _ = self.parent().onValkeyTimeout();
+    }
     const DeferredFailure = struct {
         message: []const u8,
         err: protocol.RedisError,
         globalThis: *jsc.JSGlobalObject,
         in_flight: Command.PromisePair.Queue,
         queue: Command.Entry.Queue,
-
-        pub fn run(this: *DeferredFailure) bun.JSTerminated!void {
-            defer {
-                bun.default_allocator.free(this.message);
-                bun.destroy(this);
-            }
-            debug("running deferred failure", .{});
-            const err = protocol.valkeyErrorToJS(this.globalThis, this.message, this.err);
-            try rejectAllPendingCommands(&this.in_flight, &this.queue, this.globalThis, bun.default_allocator, err);
+    
+    pub fn run(self: *@This()) bun.JSTerminated!void {
+                var failure_guard = DeferredFailureGuard(DeferredFailure){ .ptr = self };
+                _ = &failure_guard;
+                var __failure_guard_moved = false; _ = &__failure_guard_moved;
+                defer if (!__failure_guard_moved) { __failure_guard_moved = true; const __T = @TypeOf(failure_guard); if (@typeInfo(__T) == .optional) { if (failure_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { failure_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = failure_guard; _drop_val.__cp_deinit(); } };
+                _ = (&failure_guard);
+                _ = debug("running deferred failure", .{});
+                const err = protocol.valkeyErrorToJS(self.globalThis, self.message, self.err);
+                _ = try rejectAllPendingCommands((&self.in_flight), (&self.queue), self.globalThis, bun.default_allocator, err);
         }
-
-        pub fn enqueue(this: *DeferredFailure) void {
-            debug("enqueueing deferred failure", .{});
-            const managed_task = jsc.ManagedTask.New(DeferredFailure, run).init(this);
-            jsc.VirtualMachine.get().eventLoop().enqueueTask(managed_task);
+    
+    pub fn enqueue(self: *@This()) void {
+                _ = debug("enqueueing deferred failure", .{});
+                const managed_task = jsc.ManagedTask.New(DeferredFailure, run).init(self);
+                _ = jsc.VirtualMachine.get().eventLoop().enqueueTask(managed_task);
         }
     };
-
-    /// Mark the connection as failed with error message
-    pub fn fail(this: *ValkeyClient, message: []const u8, err: protocol.RedisError) bun.JSTerminated!void {
-        debug("failed: {s}: {}", .{ message, err });
-        if (this.flags.failed) return;
-
-        if (this.flags.finalized) {
-            // We can't run promises inside finalizers.
-            if (this.queue.count + this.in_flight.count > 0) {
-                const vm = this.vm;
-                const deferred_failure = bun.new(DeferredFailure, .{
-                    // This memory is not owned by us.
-                    .message = bun.handleOom(bun.default_allocator.dupe(u8, message)),
-
-                    .err = err,
-                    .globalThis = vm.global,
-                    .in_flight = this.in_flight,
-                    .queue = this.queue,
-                });
-                this.in_flight = .init(this.allocator);
-                this.queue = .init(this.allocator);
-                deferred_failure.enqueue();
-            }
-
-            // Allow the finalizer to call .close()
-            return;
-        }
-
-        const globalThis = this.globalObject();
-        try this.failWithJSValue(globalThis, protocol.valkeyErrorToJS(globalThis, message, err));
-    }
-
-    pub fn failWithJSValue(this: *ValkeyClient, globalThis: *jsc.JSGlobalObject, jsvalue: jsc.JSValue) bun.JSTerminated!void {
-        if (this.flags.failed) return;
-        this.flags.failed = true;
-        const val = rejectAllPendingCommands(&this.in_flight, &this.queue, globalThis, this.allocator, jsvalue);
-
-        if (!this.connectionReady()) {
-            this.flags.is_manually_closed = true;
-            this.close();
-        }
-        return val;
-    }
-
-    pub fn close(this: *ValkeyClient) void {
-        const socket = this.socket;
-        this.socket = .{ .SocketTCP = .detached };
-        socket.close();
-    }
-
-    /// Handle connection closed event
-    pub fn onClose(this: *ValkeyClient) bun.JSTerminated!void {
-        this.unregisterAutoFlusher();
-        this.write_buffer.clearAndFree(this.allocator);
-
-        // If manually closing, don't attempt to reconnect
-        if (this.flags.is_manually_closed) {
-            debug("skip reconnecting since the connection is manually closed", .{});
-            try this.fail("Connection closed", protocol.RedisError.ConnectionClosed);
-            try this.onValkeyClose();
-            return;
-        }
-
-        // If auto reconnect is disabled, just fail
-        if (!this.flags.enable_auto_reconnect) {
-            debug("skip reconnecting since auto reconnect is disabled", .{});
-            try this.fail("Connection closed", protocol.RedisError.ConnectionClosed);
-            try this.onValkeyClose();
-            return;
-        }
-
-        // Calculate reconnection delay with exponential backoff
-        this.retry_attempts += 1;
-        const delay_ms = this.getReconnectDelay();
-
-        if (delay_ms == 0 or this.retry_attempts > this.max_retries) {
-            debug("Max retries reached or retry strategy returned 0, giving up reconnection", .{});
-            try this.fail("Max reconnection attempts reached", protocol.RedisError.ConnectionClosed);
-            try this.onValkeyClose();
-            return;
-        }
-
-        debug("reconnect in {d}ms (attempt {d}/{d})", .{ delay_ms, this.retry_attempts, this.max_retries });
-
-        this.flags.is_reconnecting = true;
-        this.flags.is_authenticated = false;
-        this.flags.is_selecting_db_internal = false;
-
-        // Signal reconnect timer should be started
-        this.onValkeyReconnect();
-    }
-
-    pub fn sendNextCommand(this: *ValkeyClient) void {
-        if (this.write_buffer.remaining().len == 0 and this.connectionReady()) {
-            if (this.queue.readableLength() > 0) {
-                // Check the command at the head of the queue
-                const flags = &this.queue.peekItem(0).meta;
-
-                if (!flags.supports_auto_pipelining) {
-                    // Head is non-pipelineable. Try to drain it serially if nothing is in-flight.
-                    if (this.in_flight.readableLength() == 0) {
-                        _ = this.drain(); // Send the single non-pipelineable command
-
-                        // After draining, check if the *new* head is pipelineable and schedule flush if needed.
-                        // This covers sequences like NON_PIPE -> PIPE -> PIPE ...
-                        if (this.queue.readableLength() > 0 and this.queue.peekItem(0).meta.supports_auto_pipelining) {
-                            this.registerAutoFlusher(this.vm);
-                        }
-                    } else {
-                        // Non-pipelineable command is blocked by in-flight commands. Do nothing, wait for in-flight to finish.
-                    }
-                } else {
-                    // Head is pipelineable. Register the flusher to batch it with others.
-                    this.registerAutoFlusher(this.vm);
-                }
-            } else if (this.in_flight.readableLength() == 0) {
-                // Without auto pipelining, wait for in-flight to empty before draining
-                _ = this.drain();
-            }
-        }
-
-        _ = this.flushData();
-    }
-
-    /// Process data received from socket
-    ///
-    /// Caller refs / derefs.
-    pub fn onData(this: *ValkeyClient, data: []const u8) bun.JSTerminated!void {
-        debug("Low-level onData called with {d} bytes: {s}", .{ data.len, data });
-        // Path 1: Buffer already has data, append and process from buffer
-        if (this.read_buffer.remaining().len > 0) {
-            this.read_buffer.write(this.allocator, data) catch @panic("failed to write to read buffer");
-
-            // Process as many complete messages from the buffer as possible
-            while (true) {
-                const remaining_buffer = this.read_buffer.remaining();
-                if (remaining_buffer.len == 0) {
-                    break; // Buffer processed completely
-                }
-
-                var reader = protocol.ValkeyReader.init(remaining_buffer);
-                const before_read_pos = reader.pos;
-
-                var value = reader.readValue(this.allocator) catch |e| {
-                    if (e == error.InvalidResponse) {
-                        // Need more data in the buffer, wait for next onData call
-                        if (comptime bun.Environment.allow_assert) {
-                            debug("read_buffer: needs more data ({d} bytes available)", .{remaining_buffer.len});
-                        }
-                        return;
-                    } else {
-                        try this.fail("Failed to read data (buffer path)", e);
-                        return;
-                    }
-                };
-                defer value.deinit(this.allocator);
-
-                const bytes_consumed = reader.pos - before_read_pos;
-                if (bytes_consumed == 0 and remaining_buffer.len > 0) {
-                    try this.fail("Parser consumed 0 bytes unexpectedly (buffer path)", error.InvalidResponse);
-                    return;
-                }
-
-                this.read_buffer.consume(@truncate(bytes_consumed));
-
-                var value_to_handle = value; // Use temp let for defer
-                this.handleResponse(&value_to_handle) catch |e| {
-                    try this.fail("Failed to handle response (buffer path)", e);
-                    return;
-                };
-
-                if (this.status == .disconnected or this.flags.failed) {
-                    return;
-                }
-                this.sendNextCommand();
-            }
-            return; // Finished processing buffered data for now
-        }
-
-        // Path 2: Buffer is empty, try processing directly from stack 'data'
-        var current_data_slice = data; // Create a mutable view of the incoming data
-        while (current_data_slice.len > 0) {
-            var reader = protocol.ValkeyReader.init(current_data_slice);
-            const before_read_pos = reader.pos;
-
-            var value = reader.readValue(this.allocator) catch |e| {
-                if (e == error.InvalidResponse) {
-                    // Partial message encountered on the stack-allocated path.
-                    // Copy the *remaining* part of the stack data to the heap buffer
-                    // and wait for more data.
-                    if (comptime bun.Environment.allow_assert) {
-                        debug("read_buffer: partial message on stack ({d} bytes), switching to buffer", .{current_data_slice.len - before_read_pos});
-                    }
-                    this.read_buffer.write(this.allocator, current_data_slice[before_read_pos..]) catch @panic("failed to write remaining stack data to buffer");
-                    return; // Exit onData, next call will use the buffer path
-                } else {
-                    // Any other error is fatal
-                    try this.fail("Failed to read data (stack path)", e);
-                    return;
-                }
-            };
-            // Successfully read a full message from the stack data
-            defer value.deinit(this.allocator);
-
-            const bytes_consumed = reader.pos - before_read_pos;
-            if (bytes_consumed == 0) {
-                // This case should ideally not happen if readValue succeeded and slice wasn't empty
-                try this.fail("Parser consumed 0 bytes unexpectedly (stack path)", error.InvalidResponse);
-                return;
-            }
-
-            // Advance the view into the stack data slice for the next iteration
-            current_data_slice = current_data_slice[bytes_consumed..];
-
-            // Handle the successfully parsed response
-            var value_to_handle = value; // Use temp let for defer
-            this.handleResponse(&value_to_handle) catch |e| {
-                try this.fail("Failed to handle response (stack path)", e);
-                return;
-            };
-
-            // Check connection status after handling
-            if (this.status == .disconnected or this.flags.failed) {
-                return;
-            }
-
-            // After handling a response, try to send the next command
-            this.sendNextCommand();
-
-            // Loop continues with the remainder of current_data_slice
-        }
-
-        // If the loop finishes, the entire 'data' was processed without needing the buffer.
-    }
-
-    /// Try handling this response as a subscriber-state response.
-    /// Returns `handled` if we handled it, `fallthrough` if we did not.
-    fn handleSubscribeResponse(
-        this: *ValkeyClient,
-        value: *protocol.RESPValue,
-        pair: ?*ValkeyCommand.PromisePair,
-    ) bun.JSError!enum { handled, fallthrough } {
-        // Resolve the promise with the potentially transformed value
-        const globalThis = this.globalObject();
-        const loop = this.vm.eventLoop();
-
-        debug("Handling a subscribe response: {f}", .{value.*});
-        loop.enter();
-        defer loop.exit();
-
-        return switch (value.*) {
-            .Error => {
-                if (pair) |p| {
-                    try p.promise.reject(globalThis, value.toJS(globalThis));
-                }
-                return .handled;
-            },
-            .Push => |push| {
-                const p = this.parent();
-                const sub_count = try p._subscription_ctx.channelsSubscribedToCount(globalThis);
-
-                if (protocol.SubscriptionPushMessage.map.get(push.kind)) |msg_type| {
-                    switch (msg_type) {
-                        .message => {
-                            this.onValkeyMessage(push.data);
-                            return .handled;
-                        },
-                        .subscribe => {
-                            p.addSubscription();
-                            this.onValkeySubscribe(value);
-
-                            // For SUBSCRIBE responses, only resolve the promise for the first channel confirmation
-                            // Additional channel confirmations from multi-channel SUBSCRIBE commands don't need promise pairs
-                            if (pair) |req_pair| {
-                                try req_pair.promise.promise.resolve(globalThis, .jsNumber(sub_count));
-                            }
-                            return .handled;
-                        },
-                        .unsubscribe => {
-                            try this.onValkeyUnsubscribe();
-                            p.removeSubscription();
-
-                            // For UNSUBSCRIBE responses, only resolve the promise if we have one
-                            // Additional channel confirmations from multi-channel UNSUBSCRIBE commands don't need promise pairs
-                            if (pair) |req_pair| {
-                                try req_pair.promise.promise.resolve(globalThis, .js_undefined);
-                            }
-                            return .handled;
-                        },
-                    }
-                } else {
-                    // We should rarely reach this point. If we're guaranteed to be handling a subscribe/unsubscribe,
-                    // then this is an unexpected path.
-                    @branchHint(.cold);
-                    try this.fail(
-                        "Push message is not a subscription message.",
-                        protocol.RedisError.InvalidResponseType,
-                    );
-                    return .handled;
-                }
-            },
-            else => {
-                // This may be a regular command response. Let's pass it down
-                // to the next handler.
-                return .fallthrough;
-            },
-        };
-    }
-
-    fn handleHelloResponse(this: *ValkeyClient, value: *protocol.RESPValue) bun.JSTerminated!void {
-        debug("Processing HELLO response", .{});
-
-        switch (value.*) {
-            .Error => |err| {
-                try this.fail(err, protocol.RedisError.AuthenticationFailed);
-                return;
-            },
-            .SimpleString => |str| {
-                if (std.mem.eql(u8, str, "OK")) {
-                    this.status = .connected;
-                    this.flags.is_authenticated = true;
-                    this.flags.is_reconnecting = false;
-                    this.retry_attempts = 0;
-                    try this.onValkeyConnect(value);
-                    return;
-                }
-                try this.fail("Authentication failed (unexpected response)", protocol.RedisError.AuthenticationFailed);
-
-                return;
-            },
-            .Map => |map| {
-                // This is the HELLO response map
-                debug("Got HELLO response map with {d} entries", .{map.len});
-
-                // Process the Map response - find the protocol version
-                for (map) |*entry| {
-                    switch (entry.key) {
-                        .SimpleString => |key| {
-                            if (std.mem.eql(u8, key, "proto")) {
-                                if (entry.value == .Integer) {
-                                    const proto_version = entry.value.Integer;
-                                    debug("Server protocol version: {d}", .{proto_version});
-                                    if (proto_version != 3) {
-                                        try this.fail("Server does not support RESP3", protocol.RedisError.UnsupportedProtocol);
-                                        return;
-                                    }
-                                }
-                            }
-                        },
-                        else => {},
-                    }
-                }
-
-                // Authentication successful via HELLO
-                this.status = .connected;
-                this.flags.is_authenticated = true;
-                this.flags.is_reconnecting = false;
-                this.retry_attempts = 0;
-                try this.onValkeyConnect(value);
-                return;
-            },
-            else => {
-                try this.fail("Authentication failed with unexpected response", protocol.RedisError.AuthenticationFailed);
-                return;
-            },
-        }
-    }
-
-    /// Handle Valkey protocol response
-    fn handleResponse(this: *ValkeyClient, value: *protocol.RESPValue) !void {
-        // Special handling for the initial HELLO response
-        if (!this.flags.is_authenticated) {
-            try this.handleHelloResponse(value);
-
-            // We've handled the HELLO response without consuming anything from the command queue
-            return;
-        }
-
-        // Handle initial SELECT response
-        if (this.flags.is_selecting_db_internal) {
-            this.flags.is_selecting_db_internal = false;
-
-            return switch (value.*) {
-                .Error => |err_str| {
-                    try this.fail(err_str, protocol.RedisError.InvalidCommand);
-                },
-                .SimpleString => |ok_str| {
-                    if (!std.mem.eql(u8, ok_str, "OK")) {
-                        // SELECT returned something other than "OK"
-                        try this.fail("SELECT command failed with non-OK response", protocol.RedisError.InvalidResponse);
-                        return;
-                    }
-
-                    // SELECT was successful.
-                    debug("SELECT {d} successful", .{this.database});
-                    // Connection is now fully ready on the specified database.
-                    // If any commands were queued while waiting for SELECT, try to send them.
-                    this.sendNextCommand();
-                },
-                else => { // Unexpected response type for SELECT
-                    try this.fail("Received non-SELECT response while in the SELECT state.", protocol.RedisError.InvalidResponse);
-                },
-            };
-        }
-        // Check if this is a subscription push message that might not need a promise pair
-        var should_consume_promise_pair = true;
-        var pair_maybe: ?ValkeyCommand.PromisePair = null;
-
-        // For subscription clients, check if this is a push message that doesn't need a promise pair
-        if (this.parent().isSubscriber()) {
-            switch (value.*) {
-                .Push => |push| {
-                    if (protocol.SubscriptionPushMessage.map.get(push.kind)) |msg_type| {
-                        switch (msg_type) {
-                            .message => {
-                                // Message pushes never need promise pairs
-                                should_consume_promise_pair = false;
-                            },
-                            .subscribe, .unsubscribe => {
-                                // Subscribe/unsubscribe pushes only need promise pairs if we have pending commands
-                                if (this.in_flight.readableLength() == 0) {
-                                    should_consume_promise_pair = false;
-                                }
-                            },
-                        }
-                    }
-                },
-                else => {},
-            }
-        }
-
-        // Only consume promise pair if we determined we need one
-        // The reaosn we consume pairs is that a SUBSCRIBE message may actually be followed by a number of SUBSCRIBE
-        // responses which indicate all the channels we have connected to. As a stop-gap, we currently ignore the
-        // actual of content of the SUBSCRIBE responses and just resolve the first one with the count of channels.
-        // TODO(markovejnovic): Do better.
-        if (should_consume_promise_pair) {
-            pair_maybe = this.in_flight.readItem();
-        }
-
-        // We handle subscriptions specially because they are not regular commands and their failure will potentially
-        // cause the client to drop out of subscriber mode.
-        var request_is_subscribe = false;
-        if (pair_maybe != null) {
-            request_is_subscribe = pair_maybe.?.meta.subscription_request;
-        }
-        if (this.parent().isSubscriber() or request_is_subscribe) {
-            debug("This client is a subscriber. Handling as subscriber...", .{});
-
-            switch (value.*) {
-                .Error => |err| {
-                    try this.fail(err, protocol.RedisError.InvalidResponse);
-                    return;
-                },
-                .Push => |push| {
-                    if (protocol.SubscriptionPushMessage.map.get(push.kind)) |_| {
-                        if ((try this.handleSubscribeResponse(value, if (pair_maybe) |*pm| pm else null)) == .handled) {
-                            return;
-                        }
-                    } else {
-                        @branchHint(.cold);
-                        try this.fail(
-                            "Unexpected push message kind without promise",
-                            protocol.RedisError.InvalidResponseType,
-                        );
-                        return;
-                    }
-                },
-                else => {
-                    // In the else case, we fall through to the regular
-                    // handler. Subscribers can send .Push commands which have
-                    // the same semantics as regular commands.
-                },
-            }
-
-            debug("Treating subscriber response as a regular command...", .{});
-        }
-
-        // For regular commands, get the next command+promise pair from the queue
-        var pair = pair_maybe orelse {
-            return;
-        };
-
-        const meta = pair.meta;
-
-        // Handle the response based on command type
-        if (meta.return_as_bool) {
-            // EXISTS returns 1 if key exists, 0 if not - we convert to boolean
-            if (value.* == .Integer) {
-                const int_value = value.Integer;
-                value.* = .{ .Boolean = int_value > 0 };
-            }
-        }
-
-        // Resolve the promise with the potentially transformed value
-        var promise_ptr = &pair.promise;
-        const globalThis = this.globalObject();
-        const loop = this.vm.eventLoop();
-
-        loop.enter();
-        defer loop.exit();
-
-        if (value.* == .Error) {
-            try promise_ptr.reject(globalThis, value.toJS(globalThis) catch |e| globalThis.takeError(e));
-        } else {
-            try promise_ptr.resolve(globalThis, value);
-        }
-    }
-
-    /// Send authentication command to Valkey server
-    fn authenticate(this: *ValkeyClient) bun.JSTerminated!void {
-        // First send HELLO command for RESP3 protocol
-        debug("Sending HELLO 3 command", .{});
-
-        var hello_args_buf: [4][]const u8 = .{ "3", "AUTH", "", "" };
-        var hello_args: []const []const u8 = undefined;
-
-        if (this.username.len > 0 or this.password.len > 0) {
-            hello_args_buf[0] = "3";
-            hello_args_buf[1] = "AUTH";
-
-            if (this.username.len > 0) {
-                hello_args_buf[2] = this.username;
-                hello_args_buf[3] = this.password;
-            } else {
-                hello_args_buf[2] = "default";
-                hello_args_buf[3] = this.password;
-            }
-
-            hello_args = hello_args_buf[0..4];
-        } else {
-            hello_args = hello_args_buf[0..1];
-        }
-
-        // Format and send the HELLO command without adding to command queue
-        // We'll handle this response specially in handleResponse
-        var hello_cmd = Command{
-            .command = "HELLO",
-            .args = .{ .raw = hello_args },
-        };
-
-        hello_cmd.write(this.writer()) catch |e| {
-            try this.fail("Failed to write HELLO command", e);
-            return;
-        };
-
-        // If using a specific database, send SELECT command
-        if (this.database > 0) {
-            var int_buf: [64]u8 = undefined;
-            const db_str = std.fmt.bufPrintZ(&int_buf, "{d}", .{this.database}) catch unreachable;
-            var select_cmd = Command{
-                .command = "SELECT",
-                .args = .{ .raw = &[_][]const u8{db_str} },
-            };
-            select_cmd.write(this.writer()) catch |e| {
-                try this.fail("Failed to write SELECT command", e);
-                return;
-            };
-            this.flags.is_selecting_db_internal = true;
-        }
-    }
-
-    /// Handle socket open event
-    pub fn onOpen(this: *ValkeyClient, socket: uws.AnySocket) bun.JSTerminated!void {
-        this.socket = socket;
-        this.write_buffer.clearAndFree(this.allocator);
-        this.read_buffer.clearAndFree(this.allocator);
-        // A fresh socket has opened, so reset per-connection state. Without
-        // this, `send()` would permanently reject with "Connection has failed"
-        // after a previous connection exhausted retries (#29925), and the
-        // new HELLO response would be dropped because `is_authenticated` was
-        // still set from a prior successful handshake — blocking the client
-        // from ever transitioning back to `.connected`.
-        this.flags.failed = false;
-        this.flags.is_authenticated = false;
-        this.flags.is_selecting_db_internal = false;
-        if (this.socket == .SocketTCP) {
-            // if is tcp, we need to start the connection process
-            // if is tls, we need to wait for the handshake to complete
-            try this.start();
-        }
-    }
-
-    /// Start the connection process
-    pub fn start(this: *ValkeyClient) bun.JSTerminated!void {
-        try this.authenticate();
-        _ = this.flushData();
-    }
-
-    /// Test whether we are ready to run "normal" RESP commands, such as
-    /// get/set, pub/sub, etc.
-    fn connectionReady(this: *const ValkeyClient) bool {
-        return this.flags.is_authenticated and !this.flags.is_selecting_db_internal;
-    }
-
-    /// Process queued commands in the offline queue
-    pub fn drain(this: *ValkeyClient) bool {
-        // If there's something in the in-flight queue and the next command
-        // doesn't support pipelining, we should wait for in-flight commands to complete
-        if (this.in_flight.readableLength() > 0) {
-            const queue_slice = this.queue.readableSlice(0);
-            if (queue_slice.len > 0 and !queue_slice[0].meta.supports_auto_pipelining) {
-                return false;
-            }
-        }
-
-        const offline_cmd = this.queue.readItem() orelse {
-            return false;
-        };
-
-        // Add the promise to the command queue first
-        this.in_flight.writeItem(.{
-            .meta = offline_cmd.meta,
-            .promise = offline_cmd.promise,
-        }) catch |e| bun.handleOom(e);
-        const data = offline_cmd.serialized_data;
-
-        if (this.connectionReady() and this.write_buffer.remaining().len == 0) {
-            // Optimization: avoid cloning the data an extra time.
-            defer this.allocator.free(data);
-
-            const wrote = this.socket.write(data);
-            const unwritten = data[@intCast(@max(wrote, 0))..];
-
-            if (unwritten.len > 0) {
-                // Handle incomplete write.
-                bun.handleOom(this.write_buffer.write(this.allocator, unwritten));
-            }
-
-            return true;
-        }
-
-        // Write the pre-serialized data directly to the output buffer
-        _ = bun.handleOom(this.write(data));
-        bun.default_allocator.free(data);
-
-        return true;
-    }
-
-    pub fn onWritable(this: *ValkeyClient) void {
-        this.ref();
-        defer this.deref();
-
-        this.sendNextCommand();
-    }
-
-    fn enqueue(this: *ValkeyClient, command: *const Command, promise: *Command.Promise) !void {
-        const can_pipeline = command.meta.supports_auto_pipelining and this.flags.enable_auto_pipelining;
-
-        // For commands that don't support pipelining, we need to wait for the queue to drain completely
-        // before sending the command. This ensures proper order of execution for state-changing commands.
-        const must_wait_for_queue = !command.meta.supports_auto_pipelining and this.queue.readableLength() > 0;
-
-        if (
-        // If there are any pending commands, queue this one
-        this.queue.readableLength() > 0 or
-            // With auto pipelining, we can accept commands regardless of in_flight commands
-            (!can_pipeline and this.in_flight.readableLength() > 0) or
-            // We need authentication before processing commands
-            !this.connectionReady() or
-            // Commands that don't support pipelining must wait for the entire queue to drain
-            must_wait_for_queue or
-            // If can pipeline, we can accept commands regardless of in_flight commands
-            can_pipeline)
-        {
-            // We serialize the bytes in here, so we don't need to worry about the lifetime of the Command itself.
-            const entry = try Command.Entry.create(this.allocator, command, promise.*);
-            try this.queue.writeItem(entry);
-
-            // If we're connected and using auto pipelining, schedule a flush
-            if (this.status == .connected and can_pipeline) {
-                this.registerAutoFlusher(this.vm);
-            }
-
-            return;
-        }
-
-        switch (this.status) {
-            .connecting, .connected => {
-                command.write(this.writer()) catch {
-                    try promise.reject(this.globalObject(), this.globalObject().createOutOfMemoryError());
-                    return;
-                };
-            },
-            else => unreachable,
-        }
-
-        const cmd_pair = Command.PromisePair{
-            .meta = command.meta,
-            .promise = promise.*,
-        };
-
-        // Add to queue with command type
-        try this.in_flight.writeItem(cmd_pair);
-
-        _ = this.flushData();
-    }
-
-    pub fn send(this: *ValkeyClient, globalThis: *jsc.JSGlobalObject, command: *const Command) !*jsc.JSPromise {
-        // FIX: Check meta before using it for routing decisions
-        var checked_command = command.*;
-        checked_command.meta = command.meta.check(command);
-
-        var promise = Command.Promise.create(globalThis, checked_command.meta);
-
-        const js_promise = promise.promise.get();
-        if (this.flags.failed) {
-            try promise.reject(globalThis, globalThis.ERR(.REDIS_CONNECTION_CLOSED, "Connection has failed", .{}).toJS());
-        } else {
-            // Handle disconnected state with offline queue
-            switch (this.status) {
-                .connected => {
-                    try this.enqueue(&checked_command, &promise);
-
-                    // Schedule auto-flushing to process this command if pipelining is enabled
-                    if (this.flags.enable_auto_pipelining and
-                        checked_command.meta.supports_auto_pipelining and
-                        this.status == .connected and
-                        this.queue.readableLength() > 0)
-                    {
-                        this.registerAutoFlusher(this.vm);
-                    }
-                },
-                .connecting, .disconnected => {
-                    // Only queue if offline queue is enabled
-                    if (this.flags.enable_offline_queue) {
-                        try this.enqueue(&checked_command, &promise);
-                    } else {
-                        try promise.reject(
-                            globalThis,
-                            globalThis.ERR(
-                                .REDIS_CONNECTION_CLOSED,
-                                "Connection is closed and offline queue is disabled",
-                                {},
-                            ).toJS(),
-                        );
-                    }
-                },
-            }
-        }
-
-        return js_promise;
-    }
-
-    /// Close the Valkey connection
-    pub fn disconnect(this: *ValkeyClient) void {
-        this.flags.is_manually_closed = true;
-        this.unregisterAutoFlusher();
-        if (this.status == .connected or this.status == .connecting) {
-            this.close();
-        }
-    }
-
-    /// Get a writer for the connected socket
-    pub fn writer(this: *ValkeyClient) std.Io.GenericWriter(*ValkeyClient, protocol.RedisError, write) {
-        return .{ .context = this };
-    }
-
-    /// Write data to the socket buffer
-    fn write(this: *ValkeyClient, data: []const u8) !usize {
-        try this.write_buffer.write(this.allocator, data);
-        return data.len;
-    }
-
-    /// Increment reference count
-    pub fn ref(this: *ValkeyClient) void {
-        this.parent().ref();
-    }
-
-    pub fn deref(this: *ValkeyClient) void {
-        this.parent().deref();
-    }
-
-    inline fn parent(this: *ValkeyClient) *JSValkeyClient {
-        return @fieldParentPtr("client", this);
-    }
-
-    inline fn globalObject(this: *ValkeyClient) *jsc.JSGlobalObject {
-        return this.parent().globalObject;
-    }
-
-    pub fn onValkeyConnect(this: *ValkeyClient, value: *protocol.RESPValue) bun.JSTerminated!void {
-        return this.parent().onValkeyConnect(value);
-    }
-
-    pub fn onValkeySubscribe(this: *ValkeyClient, value: *protocol.RESPValue) void {
-        this.parent().onValkeySubscribe(value);
-    }
-
-    pub fn onValkeyUnsubscribe(this: *ValkeyClient) bun.JSError!void {
-        return this.parent().onValkeyUnsubscribe();
-    }
-
-    pub fn onValkeyMessage(this: *ValkeyClient, value: []protocol.RESPValue) void {
-        this.parent().onValkeyMessage(value);
-    }
-
-    pub fn onValkeyReconnect(this: *ValkeyClient) void {
-        this.parent().onValkeyReconnect();
-    }
-
-    pub fn onValkeyClose(this: *ValkeyClient) bun.JSTerminated!void {
-        return this.parent().onValkeyClose();
-    }
-
-    pub fn onValkeyTimeout(this: *ValkeyClient) void {
-        this.parent().onValkeyTimeout();
-    }
 };
 const debug = bun.Output.scoped(.Redis, .visible);
 var empty_connection_strings: [0]u8 = std.mem.zeroes([0]u8);

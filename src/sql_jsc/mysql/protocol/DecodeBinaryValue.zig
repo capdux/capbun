@@ -38,7 +38,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -59,13 +59,28 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 pub const types = @import("../../../sql/mysql/MySQLTypes.zig");
 pub const NewReaderMod = @import("../../../sql/mysql/protocol/NewReader.zig");
 pub const SQLDataCellMod = @import("../../shared/SQLDataCell.zig");
 pub const MySQLValueMod = @import("../MySQLValue.zig");
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.deinit();
+                }
+        }
+    };
+}
+
 const NewReader = NewReaderMod.NewReader;
 const SQLDataCell = SQLDataCellMod.SQLDataCell;
 const Value = MySQLValueMod.Value;
@@ -83,9 +98,13 @@ pub fn decodeBinaryValue(globalObject: *jsc.JSGlobalObject, field_type: types.Fi
             if (raw) {
                 var data = try reader.read(1);
                 _ = &data;
-                defer {
-                _ = data.deinit();
-                }
+                var _data_guard = DeinitGuard(@TypeOf(data)){ .ptr = (blk: {
+                break :blk (&data);
+
+}) };
+                _ = &_data_guard;
+                var ___data_guard_moved = false; _ = &___data_guard_moved;
+                defer if (!___data_guard_moved) { ___data_guard_moved = true; const __T = @TypeOf(_data_guard); if (@typeInfo(__T) == .optional) { if (_data_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _data_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _data_guard; _drop_val.__cp_deinit(); } };
                 return SQLDataCell.raw((&data));
             }
             const val = try reader.byte();
@@ -101,9 +120,13 @@ pub fn decodeBinaryValue(globalObject: *jsc.JSGlobalObject, field_type: types.Fi
             if (raw) {
                 var data = try reader.read(2);
                 _ = &data;
-                defer {
-                _ = data.deinit();
-                }
+                var _data_guard = DeinitGuard(@TypeOf(data)){ .ptr = (blk: {
+                break :blk (&data);
+
+}) };
+                _ = &_data_guard;
+                var ___data_guard_moved = false; _ = &___data_guard_moved;
+                defer if (!___data_guard_moved) { ___data_guard_moved = true; const __T = @TypeOf(_data_guard); if (@typeInfo(__T) == .optional) { if (_data_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _data_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _data_guard; _drop_val.__cp_deinit(); } };
                 return SQLDataCell.raw((&data));
             }
             if (unsigned) {
@@ -117,9 +140,13 @@ pub fn decodeBinaryValue(globalObject: *jsc.JSGlobalObject, field_type: types.Fi
             if (raw) {
                 var data = try reader.read(3);
                 _ = &data;
-                defer {
-                _ = data.deinit();
-                }
+                var _data_guard = DeinitGuard(@TypeOf(data)){ .ptr = (blk: {
+                break :blk (&data);
+
+}) };
+                _ = &_data_guard;
+                var ___data_guard_moved = false; _ = &___data_guard_moved;
+                defer if (!___data_guard_moved) { ___data_guard_moved = true; const __T = @TypeOf(_data_guard); if (@typeInfo(__T) == .optional) { if (_data_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _data_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _data_guard; _drop_val.__cp_deinit(); } };
                 return SQLDataCell.raw((&data));
             }
             if (unsigned) {
@@ -133,9 +160,13 @@ pub fn decodeBinaryValue(globalObject: *jsc.JSGlobalObject, field_type: types.Fi
             if (raw) {
                 var data = try reader.read(4);
                 _ = &data;
-                defer {
-                _ = data.deinit();
-                }
+                var _data_guard = DeinitGuard(@TypeOf(data)){ .ptr = (blk: {
+                break :blk (&data);
+
+}) };
+                _ = &_data_guard;
+                var ___data_guard_moved = false; _ = &___data_guard_moved;
+                defer if (!___data_guard_moved) { ___data_guard_moved = true; const __T = @TypeOf(_data_guard); if (@typeInfo(__T) == .optional) { if (_data_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _data_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _data_guard; _drop_val.__cp_deinit(); } };
                 return SQLDataCell.raw((&data));
             }
             if (unsigned) {
@@ -181,9 +212,13 @@ pub fn decodeBinaryValue(globalObject: *jsc.JSGlobalObject, field_type: types.Fi
             if (raw) {
                 var data = try reader.read(4);
                 _ = &data;
-                defer {
-                _ = data.deinit();
-                }
+                var _data_guard = DeinitGuard(@TypeOf(data)){ .ptr = (blk: {
+                break :blk (&data);
+
+}) };
+                _ = &_data_guard;
+                var ___data_guard_moved = false; _ = &___data_guard_moved;
+                defer if (!___data_guard_moved) { ___data_guard_moved = true; const __T = @TypeOf(_data_guard); if (@typeInfo(__T) == .optional) { if (_data_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _data_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _data_guard; _drop_val.__cp_deinit(); } };
                 return SQLDataCell.raw((&data));
             }
             const fval: f32 = @bitCast(try reader.int(u32));
@@ -195,9 +230,13 @@ pub fn decodeBinaryValue(globalObject: *jsc.JSGlobalObject, field_type: types.Fi
             if (raw) {
                 var data = try reader.read(8);
                 _ = &data;
-                defer {
-                _ = data.deinit();
-                }
+                var _data_guard = DeinitGuard(@TypeOf(data)){ .ptr = (blk: {
+                break :blk (&data);
+
+}) };
+                _ = &_data_guard;
+                var ___data_guard_moved = false; _ = &___data_guard_moved;
+                defer if (!___data_guard_moved) { ___data_guard_moved = true; const __T = @TypeOf(_data_guard); if (@typeInfo(__T) == .optional) { if (_data_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _data_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _data_guard; _drop_val.__cp_deinit(); } };
                 return SQLDataCell.raw((&data));
             }
             return SQLDataCell{ .tag = .float8, .value = .{ .float8 = @bitCast(try reader.int(u64)) } };
@@ -215,9 +254,13 @@ return (switch (try reader.byte()) {
 {
             var data = try reader.read(l);
             _ = &data;
-            defer {
-            _ = data.deinit();
-            }
+            var _data_guard = DeinitGuard(@TypeOf(data)){ .ptr = (blk: {
+            break :blk (&data);
+
+}) };
+            _ = &_data_guard;
+            var ___data_guard_moved = false; _ = &___data_guard_moved;
+            defer if (!___data_guard_moved) { ___data_guard_moved = true; const __T = @TypeOf(_data_guard); if (@typeInfo(__T) == .optional) { if (_data_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _data_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _data_guard; _drop_val.__cp_deinit(); } };
             const time = try Time.fromData((&data));
             const total_hours = (time.hours + (time.days * 24));
             var buffer: [32]u8 = undefined;
@@ -238,9 +281,13 @@ return error.InvalidBinaryValue;
 {
             var data = try reader.read(l);
             _ = &data;
-            defer {
-            _ = data.deinit();
-            }
+            var _data_guard = DeinitGuard(@TypeOf(data)){ .ptr = (blk: {
+            break :blk (&data);
+
+}) };
+            _ = &_data_guard;
+            var ___data_guard_moved = false; _ = &___data_guard_moved;
+            defer if (!___data_guard_moved) { ___data_guard_moved = true; const __T = @TypeOf(_data_guard); if (@typeInfo(__T) == .optional) { if (_data_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _data_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _data_guard; _drop_val.__cp_deinit(); } };
             const time = try DateTime.fromData((&data));
             return SQLDataCell{ .tag = .date, .value = .{ .date = try time.toJSTimestamp(globalObject) } };
         }
@@ -252,16 +299,24 @@ else => error.InvalidBinaryValue,
             if (raw) {
                 var data = try reader.encodeLenString();
                 _ = &data;
-                defer {
-                _ = data.deinit();
-                }
+                var _data_guard = DeinitGuard(@TypeOf(data)){ .ptr = (blk: {
+                break :blk (&data);
+
+}) };
+                _ = &_data_guard;
+                var ___data_guard_moved = false; _ = &___data_guard_moved;
+                defer if (!___data_guard_moved) { ___data_guard_moved = true; const __T = @TypeOf(_data_guard); if (@typeInfo(__T) == .optional) { if (_data_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _data_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _data_guard; _drop_val.__cp_deinit(); } };
                 return SQLDataCell.raw((&data));
             }
             var string_data = try reader.encodeLenString();
             _ = &string_data;
-            defer {
-            _ = string_data.deinit();
-            }
+            var _string_data_guard = DeinitGuard(@TypeOf(string_data)){ .ptr = (blk: {
+            break :blk (&string_data);
+
+}) };
+            _ = &_string_data_guard;
+            var ___string_data_guard_moved = false; _ = &___string_data_guard_moved;
+            defer if (!___string_data_guard_moved) { ___string_data_guard_moved = true; const __T = @TypeOf(_string_data_guard); if (@typeInfo(__T) == .optional) { if (_string_data_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _string_data_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _string_data_guard; _drop_val.__cp_deinit(); } };
             if ((binary and (character_set == binary_charset))) {
                 return SQLDataCell.raw((&string_data));
             }
@@ -274,16 +329,24 @@ else => error.InvalidBinaryValue,
             if (raw) {
                 var data = try reader.encodeLenString();
                 _ = &data;
-                defer {
-                _ = data.deinit();
-                }
+                var _data_guard = DeinitGuard(@TypeOf(data)){ .ptr = (blk: {
+                break :blk (&data);
+
+}) };
+                _ = &_data_guard;
+                var ___data_guard_moved = false; _ = &___data_guard_moved;
+                defer if (!___data_guard_moved) { ___data_guard_moved = true; const __T = @TypeOf(_data_guard); if (@typeInfo(__T) == .optional) { if (_data_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _data_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _data_guard; _drop_val.__cp_deinit(); } };
                 return SQLDataCell.raw((&data));
             }
             var string_data = try reader.encodeLenString();
             _ = &string_data;
-            defer {
-            _ = string_data.deinit();
-            }
+            var _string_data_guard = DeinitGuard(@TypeOf(string_data)){ .ptr = (blk: {
+            break :blk (&string_data);
+
+}) };
+            _ = &_string_data_guard;
+            var ___string_data_guard_moved = false; _ = &___string_data_guard_moved;
+            defer if (!___string_data_guard_moved) { ___string_data_guard_moved = true; const __T = @TypeOf(_string_data_guard); if (@typeInfo(__T) == .optional) { if (_string_data_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _string_data_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _string_data_guard; _drop_val.__cp_deinit(); } };
             const slice = string_data.slice();
             return SQLDataCell{ .tag = .json, .value = .{ .json = (if ((slice.len > 0)) (if (@typeInfo(@TypeOf(bun.String.cloneUTF8(slice))) == .@"enum") @intFromEnum(bun.String.cloneUTF8(slice)) else bun.String.cloneUTF8(slice).value).WTFStringImpl else null) }, .free_value = 1 };
         }
@@ -292,17 +355,25 @@ else => error.InvalidBinaryValue,
 if ((column_length == 1)) {
             var data = try reader.encodeLenString();
             _ = &data;
-            defer {
-            _ = data.deinit();
-            }
+            var _data_guard = DeinitGuard(@TypeOf(data)){ .ptr = (blk: {
+            break :blk (&data);
+
+}) };
+            _ = &_data_guard;
+            var ___data_guard_moved = false; _ = &___data_guard_moved;
+            defer if (!___data_guard_moved) { ___data_guard_moved = true; const __T = @TypeOf(_data_guard); if (@typeInfo(__T) == .optional) { if (_data_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _data_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _data_guard; _drop_val.__cp_deinit(); } };
             const slice = data.slice();
             return SQLDataCell{ .tag = .@"bool", .value = .{ .@"bool" = (if (((slice.len > 0) and (slice[0] == 1))) 1 else 0) } };
         } else {
             var data = try reader.encodeLenString();
             _ = &data;
-            defer {
-            _ = data.deinit();
-            }
+            var _data_guard = DeinitGuard(@TypeOf(data)){ .ptr = (blk: {
+            break :blk (&data);
+
+}) };
+            _ = &_data_guard;
+            var ___data_guard_moved = false; _ = &___data_guard_moved;
+            defer if (!___data_guard_moved) { ___data_guard_moved = true; const __T = @TypeOf(_data_guard); if (@typeInfo(__T) == .optional) { if (_data_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _data_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _data_guard; _drop_val.__cp_deinit(); } };
             return SQLDataCell.raw((&data));
         }
 },
@@ -310,9 +381,13 @@ else => {
 {
             var data = try reader.read(column_length);
             _ = &data;
-            defer {
-            _ = data.deinit();
-            }
+            var _data_guard = DeinitGuard(@TypeOf(data)){ .ptr = (blk: {
+            break :blk (&data);
+
+}) };
+            _ = &_data_guard;
+            var ___data_guard_moved = false; _ = &___data_guard_moved;
+            defer if (!___data_guard_moved) { ___data_guard_moved = true; const __T = @TypeOf(_data_guard); if (@typeInfo(__T) == .optional) { if (_data_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _data_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _data_guard; _drop_val.__cp_deinit(); } };
             return SQLDataCell.raw((&data));
         }
 },

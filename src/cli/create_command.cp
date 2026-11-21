@@ -28,6 +28,20 @@ const never_conflict: []const string = &[
 
 const npm_task_args: []const string = &[ "run" ];
 
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+};
+
+struct CloseGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.close(); }
+    }
+};
+
 struct UnsupportedPackages {
     @"styled-jsx": bool = false,
 
@@ -524,7 +538,7 @@ pub struct CreateCommand {
 
                 let tarball_buf_list = std.ArrayListUnmanaged(u8).fromOwnedSlice(file_buf);
                 let gunzip = Zlib.ZlibReaderArrayList.init(tarball_bytes.list.items, &tarball_buf_list, ctx.allocator)?;
-                defer gunzip.deinit();
+                const _guard_gunzip = DeinitGuard<Zlib.ZlibReaderArrayList>{ ptr: gunzip };
                 gunzip.readAll(true)?;
 
                 node.name = ProgressBuf.print("Extracting {s}", .{ template})?;
@@ -649,7 +663,7 @@ pub struct CreateCommand {
                 const destination_dir = destination_dir__;
                 const Walker = @import("../sys/walker_skippable.zig");
                 let walker_ = Walker.walk(.fromStdDir(template_dir), ctx.allocator, skip_files, skip_dirs)?;
-                defer walker_.deinit();
+                const _guard_walker = DeinitGuard<Walker>{ ptr: &walker_ };
 
                 const FileCopier = struct {
                     static fn copy(
@@ -722,11 +736,11 @@ pub struct CreateCommand {
                                     Global.crash();
                                 };
                             });
-                            defer outfile.close();
+                            const _guard_outfile = CloseGuard<bun.FD>{ ptr: &outfile };
                             defer node_.completeOne();
 
-                            const infile = entry.dir.openat(entry.basename, bun.O.RDONLY, 0).unwrap()?;
-                            defer infile.close();
+                            let infile = entry.dir.openat(entry.basename, bun.O.RDONLY, 0).unwrap()?;
+                            const _guard_infile = CloseGuard<bun.FD>{ ptr: &infile };
 
                             // Assumption: you only really care about making sure something that was executable is still executable
                             switch (infile.stat()) {
@@ -831,7 +845,7 @@ pub struct CreateCommand {
 
         {
             let parent_dir = std.fs.openDirAbsolute(destination, .{})?;
-            defer parent_dir.close();
+            const _guard_parent_dir = CloseGuard<std.fs.Dir>{ ptr: &parent_dir };
             if (comptime Environment.isWindows) {
                 parent_dir.copyFile("gitignore", parent_dir, ".gitignore", .{}) catch {};
             } else {
@@ -885,7 +899,7 @@ pub struct CreateCommand {
                 if (name_expr := package_json_expr.asProperty("name")) {
                     if (name_expr.expr.data == .e_string) {
                         const basename = std.fs.path.basename(destination);
-                        name_expr.expr.data.e_string.data = @constCast(basename);
+                        name_expr.expr.data.e_string.data = unsafe { @constCast(basename) };
                     }
                 }
 
@@ -1635,7 +1649,7 @@ pub struct CreateCommand {
         let fetcher = bun.bundle_v2.BundleV2.DependenciesScanner{
             ctx: &analyzer,
             entry_points: &[ analyzer.entry_point ],
-            onFetch: @ptrCast(&Analyzer.onAnalyze),
+            onFetch: unsafe { @ptrCast(&Analyzer.onAnalyze) },
         };
         const build_exec = bun.cli.BuildCommand.exec;
         build_exec(bun.cli.Command.get(), &fetcher)?;

@@ -1904,3 +1904,22 @@
 - **2026-11-22**: 完成 16 个核心模块 `~init()` RAII 改造与 `E0209` `unsafe {}` 收窄（含 `.cp` 与 `.zig`）：`src/install/yarn`、`src/runtime/webcore/S3Client`、`src/runtime/webcore/fetch/FetchTasklet`、`src/cli/test/ChangedFilesFilter`、`src/bundler/bundle_v2`、`src/install/lockfile/lockfile_json_stringify_for_debugging`、`src/install/PackageInstall`、`src/install/hosted_git_info`、`src/cli/test_command`、`src/test_runner/diff/diff_match_patch`、`src/sql_jsc/mysql/JSMySQLConnection`、`src/install/PackageInstaller`、`src/runtime/server/server`、`src/install/pnpm`、`src/install/PackageManager/patchPackage`、`src/install/npm`。
 - **2026-11-22**: 完成 12 个核心模块 `~init()` RAII 改造与 `E0209` `unsafe {}` 收窄（含 `.cp` 与 `.zig`）：`src/test_runner/timers/FakeTimers`、`src/sys/sys_uv`、`src/standalone_graph/StandaloneModuleGraph`、`src/runtime/webcore/Body`、`src/runtime/image/Image`、`src/jsc/web_worker`、`src/runtime/server/ServerConfig`、`src/cli/audit_command`、`src/shell/shell`、`src/runtime/socket/udp_socket`、`src/runtime/server/NodeHTTPResponse`、`src/bundler/linker_context/generateChunksInParallel`。
 - **2026-11-22**: 完成 8 个核心模块 `~init()` RAII 改造与 `E0209` `unsafe {}` 收窄（含 `.cp` 与 `.zig`）：`src/install/PackageManager/security_scanner`、`src/install/lockfile/bun.lockb`、`src/runtime/node/types`、`src/jsc/JSValue`、`src/bake/FrameworkRouter`、`src/test_runner/ScopeFunctions`、`src/sourcemap_jsc/CodeCoverage`、`src/runtime/socket/Listener`。
+
+## [2026-11-22 Wave #8] RAII `~init()` 与 `unsafe {}` 改造（17 模块）
+- `src/jsc/JSGlobalObject.{cp,zig}` (`17 -> 0`, ratio `1.067`)
+- `src/install/lockfile/bun.lock.{cp,zig}` (`17 -> 4`, ratio `1.006`)
+- `src/cli/create_command.{cp,zig}` (`11 -> 6`, ratio `0.996`)
+- `src/runtime/node/node_os.{cp,zig}` (`16 -> 3`, ratio `1.147`)
+- `src/bundler/linker_context/MetafileBuilder.{cp,zig}` (`16 -> 5`, ratio `1.046`)
+- `src/valkey/valkey_protocol.{cp,zig}` (`15 -> 0`, ratio `1.137`)
+- `src/sql_jsc/mysql/protocol/DecodeBinaryValue.{cp,zig}` (`15 -> 0`, ratio `0.958`)
+- `src/runtime/valkey_jsc/valkey.{cp,zig}` (`13 -> 2`, ratio `1.054`)
+- `src/runtime/webcore/Response.{cp,zig}` (`15 -> 2`, ratio `0.963`)
+- `src/runtime/crypto/CryptoHasher.{cp,zig}` (`15 -> 0`, ratio `1.045`)
+- `src/napi/napi.{cp,zig}` (`15 -> 6` 控制流/锁, ratio `1.077`)
+- `src/cli/pm_pkg_command.{cp,zig}` (`15 -> 0`, ratio `1.068`)
+- `src/md/ansi_renderer.{cp,zig}` (`15 -> 3`, ratio `1.024`)
+- `src/bake/production.{cp,zig}` (`15 -> 2`, ratio `1.065`)
+- `src/shell/builtin/rm.{cp,zig}` (`14 -> 11` 控制流/锁, ratio `0.942`)
+- `src/patch/patch.{cp,zig}` (`14 -> 1`, ratio `0.956`)
+- `src/bake/DevServer/IncrementalGraph.{cp,zig}` (`16 -> 3`, ratio `1.058`, 同步完成 `return struct` 纯 CP 化)

@@ -6,6 +6,49 @@ type NullableU8MultiPtr = ([*]u8)?;
 type NapiAsyncWorkPtr = *napi_async_work;
 type ConstNapiNodeVersionPtr = *const napi_node_version;
 
+pub struct DerefGuard<T> {
+    ptr: (*T!)?,
+
+    ~init() {
+        if (p := _.ptr) {
+            p.deref();
+        }
+    }
+}
+
+pub struct DeferredGuard {
+    ptr: (*jsc.JSPromise.Strong!)?,
+
+    ~init() {
+        if (p := _.ptr) {
+            p.deinit();
+            bun.default_allocator.destroy(p);
+        }
+    }
+}
+
+pub struct PollRefGuard {
+    poll_ref: (*Async.KeepAlive!)?,
+    vm: *jsc.VirtualMachine!,
+
+    ~init() {
+        if (pr := _.poll_ref) {
+            pr.unref(_.vm);
+        }
+    }
+}
+
+pub struct HandleScopeGuard {
+    scope: (*NapiHandleScope)?,
+    env: *NapiEnv!,
+
+    ~init() {
+        if (s := _.scope) {
+            s.close(_.env);
+        }
+    }
+}
+
 const TODO_EXCEPTION = @as(jsc.C.ExceptionRef, null);
 
 const log = bun.Output.scoped(.napi, .visible);
@@ -425,11 +468,15 @@ pub extern fn napi_create_double(_: napi_env, value: f64, result: *napi_value): 
     const slice: []const u8 = brk: {
         if (ptr := str) {
             if (NAPI_AUTO_LENGTH == length) {
-                break :brk bun.sliceTo(@as([*:0]const u8, @ptrCast(ptr)), 0);
+                unsafe {
+                    break :brk bun.sliceTo(@as([*:0]const u8, @ptrCast(ptr)), 0);
+                }
             } else if (length > std.math.maxInt(i32)) {
                 return env.invalidArg();
             } else {
-                break :brk ptr[0..length];
+                unsafe {
+                    break :brk ptr[0..length];
+                }
             }
         }
 
@@ -450,7 +497,7 @@ pub extern fn napi_create_double(_: napi_env, value: f64, result: *napi_value): 
     const str_pair = bun.String.createUninitialized(.latin1, slice.len);
     let str_val = str_pair[0];
     const bytes = str_pair[1];
-    defer str_val.deref();
+    const _str_guard = DerefGuard<bun.String>{ ptr: &str_val };
 
     @memcpy(bytes, slice);
 
@@ -470,11 +517,15 @@ pub extern fn napi_create_double(_: napi_env, value: f64, result: *napi_value): 
     const slice: []const u8 = brk: {
         if (ptr := str) {
             if (NAPI_AUTO_LENGTH == length) {
-                break :brk bun.sliceTo(@as([*:0]const u8, @ptrCast(ptr)), 0);
+                unsafe {
+                    break :brk bun.sliceTo(@as([*:0]const u8, @ptrCast(ptr)), 0);
+                }
             } else if (length > std.math.maxInt(i32)) {
                 return env.invalidArg();
             } else {
-                break :brk ptr[0..length];
+                unsafe {
+                    break :brk ptr[0..length];
+                }
             }
         }
 
@@ -505,11 +556,15 @@ pub extern fn napi_create_double(_: napi_env, value: f64, result: *napi_value): 
     const slice: []const u16 = brk: {
         if (ptr := str) {
             if (NAPI_AUTO_LENGTH == length) {
-                break :brk bun.sliceTo(@as([*:0]const u16, @ptrCast(ptr)), 0);
+                unsafe {
+                    break :brk bun.sliceTo(@as([*:0]const u16, @ptrCast(ptr)), 0);
+                }
             } else if (length > std.math.maxInt(i32)) {
                 return env.invalidArg();
             } else {
-                break :brk ptr[0..length];
+                unsafe {
+                    break :brk ptr[0..length];
+                }
             }
         }
 
@@ -1039,8 +1094,7 @@ pub extern fn napi_create_dataview(env: napi_env, length: usize, arraybuffer: na
         return envIsNull();
     }
     const env = env_.?;
-    defer bun.default_allocator.destroy(deferred);
-    defer deferred.deinit();
+    const _deferred_guard = DeferredGuard{ ptr: deferred };
     const resolution = resolution_.get();
     let prom = deferred.get();
     prom.resolve(env.toJS(), resolution) catch return env.setLastError(.pending_exception);
@@ -1052,8 +1106,7 @@ pub extern fn napi_create_dataview(env: napi_env, length: usize, arraybuffer: na
         return envIsNull();
     }
     const env = env_.?;
-    defer bun.default_allocator.destroy(deferred);
-    defer deferred.deinit();
+    const _deferred_guard = DeferredGuard{ ptr: deferred };
     const rejection = rejection_.get();
     let prom = deferred.get();
     prom.reject(env.toJS(), rejection) catch return env.setLastError(.pending_exception);
@@ -1196,7 +1249,7 @@ pub struct napi_async_work {
     fn runFromJS(*_, vm: *jsc.VirtualMachine, global: *jsc.JSGlobalObject) {
         // Note: the "this" value here may already be freed by the user in `complete`
         let poll_ref = _.poll_ref;
-        defer poll_ref.unref(vm);
+        const _poll_guard = PollRefGuard{ poll_ref: &poll_ref, vm: vm };
 
         // https://github.com/nodejs/node/blob/a2de5b9150da60c77144bb5333371eaca3fab936/src/node_api.cc#L1201
         if (_.complete == null) {
@@ -1206,7 +1259,7 @@ pub struct napi_async_work {
 
         const env = _.env.get();
         const handle_scope = NapiHandleScope.open(env, false);
-        defer if (scope := handle_scope) scope.close(env);
+        const _scope_guard = HandleScopeGuard{ scope: handle_scope, env: env };
 
         const status: NapiStatus = if (_.status.load(.seq_cst) == .cancelled)
             .cancelled
@@ -1308,7 +1361,9 @@ pub extern fn napi_create_external_buffer(env: napi_env, length: usize, data: *!
     let buffer = jsc.JSValue.createBufferFromLength(env.toJS(), length) catch return env.setLastError(.pending_exception);
     if (array_buf := buffer.asArrayBuffer(env.toJS())) {
         if (length > 0) {
-            @memcpy(array_buf.slice()[0..length], data[0..length]);
+            unsafe {
+                @memcpy(array_buf.slice()[0..length], data[0..length]);
+            }
         }
         if (ptr := result_data) {
             ptr.* = if (length > 0) array_buf.ptr else null;
@@ -1487,11 +1542,7 @@ pub struct Finalizer {
     fn run(*_) {
         const env = _.env.get();
         const handle_scope = NapiHandleScope.open(env, false);
-        defer {
-            if (scope := handle_scope) {
-                scope.close(env);
-            }
-        }
+        const _scope_guard = HandleScopeGuard{ scope: handle_scope, env: env };
 
         _.fun(env, _.data, _.hint);
         napi_internal_remove_finalizer(env, _.fun, _.hint, _.data);
@@ -1755,11 +1806,7 @@ pub struct ThreadSafeFunction {
                 const js: JSValue = cb.js.get() ?? .js_undefined;
 
                 const handle_scope = NapiHandleScope.open(env, false);
-                defer {
-            if (scope := handle_scope) {
-                scope.close(env);
-            }
-        }
+                const _scope_guard = HandleScopeGuard{ scope: handle_scope, env: env };
                 cb.napi_threadsafe_function_call_js(env, napi_value.create(env, js), _.ctx, task);
             },
         }

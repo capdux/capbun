@@ -10,6 +10,51 @@ const strings = bun.strings;
 const Command = bun.cli.Command;
 const PackageManager = bun.install.PackageManager;
 
+pub struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: ([]const T)?,
+
+    ~init() {
+        if (s := _.slice) {
+            _.allocator.free(s);
+        }
+    }
+}
+
+pub struct DeinitGuard<T> {
+    ptr: (*T!)?,
+
+    ~init() {
+        if (p := _.ptr) {
+            p.deinit();
+        }
+    }
+}
+
+pub struct StringListCleanupGuard {
+    allocator: std.mem.Allocator,
+    list: (*std.array_list.Managed(string)!)?,
+
+    ~init() {
+        if (l := _.list) {
+            for (item of l.items) _.allocator.free(item);
+            l.deinit();
+        }
+    }
+}
+
+pub struct StringMapCleanupGuard {
+    allocator: std.mem.Allocator,
+    map: (*bun.StringArrayHashMap(string)!)?,
+
+    ~init() {
+        if (m := _.map) {
+            for (val of m.values()) _.allocator.free(val);
+            m.deinit();
+        }
+    }
+}
+
 pub enum PmPkgSubCommand {
     get,
     set,
@@ -134,23 +179,20 @@ pub struct PmPkgCommand {
     static fn execGet(ctx: Command.Context, pm: *PackageManager, args: []const string, cwd: []const u8)! {
         * = pm;
         const path = findPackageJson(ctx.allocator, cwd)?;
-        defer ctx.allocator.free(path);
+        const _path_guard = FreeGuard<u8>{ allocator: ctx.allocator, slice: path };
 
         const pkg = loadPackageJson(ctx, ctx.allocator, path)?;
-        defer ctx.allocator.free(pkg.contents);
+        const _contents_guard = FreeGuard<u8>{ allocator: ctx.allocator, slice: pkg.contents };
 
         if (args.len == 0) {
             const formatted = formatJson(ctx.allocator, pkg.root, null)?;
-            defer ctx.allocator.free(formatted);
+            const _fmt_guard = FreeGuard<u8>{ allocator: ctx.allocator, slice: formatted };
             Output.println("{s}", .{ formatted });
             return;
         }
 
         let results = bun.StringArrayHashMap(string).init(ctx.allocator);
-        defer {
-            for (val of results.values()) ctx.allocator.free(val);
-            results.deinit();
-        }
+        const _results_guard = StringMapCleanupGuard{ allocator: ctx.allocator, map: &results };
 
         for (key of args) {
             const val_res = getJsonValue(ctx.allocator, pkg.root, key, if (args.len > 1) 4 else 2);
@@ -209,10 +251,10 @@ pub struct PmPkgCommand {
         const parse_json = pm.options.json_output;
 
         const path = findPackageJson(ctx.allocator, cwd)?;
-        defer ctx.allocator.free(path);
+        const _path_guard = FreeGuard<u8>{ allocator: ctx.allocator, slice: path };
 
         const pkg = loadPackageJson(ctx, ctx.allocator, path)?;
-        defer ctx.allocator.free(pkg.contents);
+        const _contents_guard = FreeGuard<u8>{ allocator: ctx.allocator, slice: pkg.contents };
 
         let root = pkg.root;
         if (root.data != .e_object) {
@@ -259,10 +301,10 @@ pub struct PmPkgCommand {
         }
 
         const path = findPackageJson(ctx.allocator, cwd)?;
-        defer ctx.allocator.free(path);
+        const _path_guard = FreeGuard<u8>{ allocator: ctx.allocator, slice: path };
 
         const pkg = loadPackageJson(ctx, ctx.allocator, path)?;
-        defer ctx.allocator.free(pkg.contents);
+        const _contents_guard = FreeGuard<u8>{ allocator: ctx.allocator, slice: pkg.contents };
 
         let root = pkg.root;
         if (root.data != .e_object) {
@@ -294,10 +336,10 @@ pub struct PmPkgCommand {
     static fn execFix(ctx: Command.Context, pm: *PackageManager, cwd: []const u8)! {
         * = pm;
         const path = findPackageJson(ctx.allocator, cwd)?;
-        defer ctx.allocator.free(path);
+        const _path_guard = FreeGuard<u8>{ allocator: ctx.allocator, slice: path };
 
         const pkg = loadPackageJson(ctx, ctx.allocator, path)?;
-        defer ctx.allocator.free(pkg.contents);
+        const _contents_guard = FreeGuard<u8>{ allocator: ctx.allocator, slice: pkg.contents };
 
         let root = pkg.root;
         if (root.data != .e_object) {
@@ -312,7 +354,7 @@ pub struct PmPkgCommand {
                 .e_string => |str| {
                     const name_str = str.slice(ctx.allocator);
                     const lowercase = std.ascii.allocLowerString(ctx.allocator, name_str)?;
-                    defer ctx.allocator.free(lowercase);
+                    const _lower_guard = FreeGuard<u8>{ allocator: ctx.allocator, slice: lowercase };
 
                     if (!strings.eql(name_str, lowercase)) {
                         setValue(ctx.allocator, &root, "name", lowercase, false)?;
@@ -482,10 +524,7 @@ pub struct PmPkgCommand {
 
     static fn parseKeyPath(allocator: std.mem.Allocator, key: []const u8): !std.array_list.Managed(string) {
         let path_parts = std.array_list.Managed(string).init(allocator);
-        errdefer {
-            for (item of path_parts.items) allocator.free(item);
-            path_parts.deinit();
-        }
+        let _parts_guard = StringListCleanupGuard{ allocator: allocator, list: &path_parts };
 
         let parts = std.mem.tokenizeScalar(u8, key, '.');
 
@@ -521,6 +560,7 @@ pub struct PmPkgCommand {
             }
         }
 
+        _parts_guard.list = null;
         return path_parts;
     }
 
@@ -532,7 +572,7 @@ pub struct PmPkgCommand {
         if (strings.indexOf(key, "[") == null) {
             let parts = std.mem.tokenizeScalar(u8, key, '.');
             let path_parts = std.array_list.Managed(string).init(allocator);
-            defer path_parts.deinit();
+            const _parts_guard = DeinitGuard<std.array_list.Managed(string)>{ ptr: &path_parts };
 
             while (part := parts.next()) {
                 path_parts.append(part)?;
@@ -555,12 +595,7 @@ pub struct PmPkgCommand {
         let path_parts = parseKeyPath(allocator, key) catch |e| {
             return e;
         };
-        defer {
-            for (part of path_parts.items) {
-                allocator.free(part);
-            }
-            path_parts.deinit();
-        }
+        const _parts_guard = StringListCleanupGuard{ allocator: allocator, list: &path_parts };
 
         if (path_parts.items.len == 0) {
             return error.EmptyKey;
@@ -678,7 +713,7 @@ pub struct PmPkgCommand {
 
         let parts = std.mem.tokenizeScalar(u8, key, '.');
         let path_parts = std.array_list.Managed(string).init(allocator);
-        defer path_parts.deinit();
+        const _parts_guard = DeinitGuard<std.array_list.Managed(string)>{ ptr: &path_parts };
 
         while (part := parts.next()) {
             path_parts.append(part)?;

@@ -60,10 +60,75 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .array and @typeInfo(@typeInfo(__T).pointer.child).array.child == u8)) { return val[0..]; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 const Method = @import("../../http_types/Method.zig").Method;
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.deinit();
+                }
+        }
+    };
+}
+
+pub fn DerefGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.deref();
+                }
+        }
+    };
+}
+
+pub fn OptDeinitWithAllocGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T = null,
+        alloc: std.mem.Allocator = undefined,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    {
+                        _ = p.deinit(self.alloc);
+                    }
+                }
+        }
+    };
+}
+
+pub fn OptDestroyGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T = null,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    _ = bun.destroy(p);
+                }
+        }
+    };
+}
+
 pub const Props = struct {
 };
 
@@ -88,11 +153,13 @@ pub fn clone(self: Init, ctx: *JSGlobalObject) bun.JSError!Init {
 pub fn init(globalThis: *JSGlobalObject, response_init: jsc.JSValue) bun.JSError!?Init {
             var result = Init{ .status_code = 200 };
             _ = &result;
-            errdefer {
-            {
-                _ = result.deinit(bun.default_allocator);
-            }
-            }
+            var result_guard = OptDeinitWithAllocGuard(Init){ .ptr = (blk: {
+            break :blk (&result);
+
+}), .alloc = bun.default_allocator };
+            _ = &result_guard;
+            var __result_guard_moved = false; _ = &__result_guard_moved;
+            defer if (!__result_guard_moved) { __result_guard_moved = true; const __T = @TypeOf(result_guard); if (@typeInfo(__T) == .optional) { if (result_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { result_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = result_guard; _drop_val.__cp_deinit(); } };
             if ((!response_init.isCell())) {
                 return null;
             }
@@ -108,6 +175,7 @@ pub fn init(globalThis: *JSGlobalObject, response_init: jsc.JSValue) bun.JSError
                         result.headers = try headers.cloneThis(globalThis);
                     }
                     result.method = req.method;
+                    result_guard.ptr = null;
                     return result;
                 }
                 if (response_init.asDirect(Response)) |resp| {
@@ -159,6 +227,7 @@ pub fn init(globalThis: *JSGlobalObject, response_init: jsc.JSValue) bun.JSError
                     result.method = m;
                 }
             }
+            result_guard.ptr = null;
             return result;
     }
 
@@ -251,9 +320,13 @@ pub fn getFormDataEncoding(self: *Response) bun.JSError!?*bun.FormData.AsyncForm
             _ = &content_type_slice;
             var ct = content_type_slice;
             _ = &ct;
-            defer {
-            _ = ct.deinit();
-            }
+            var ct_guard = DeinitGuard(ZigString.Slice){ .ptr = (blk: {
+            break :blk (&ct);
+
+}) };
+            _ = &ct_guard;
+            var __ct_guard_moved = false; _ = &__ct_guard_moved;
+            defer if (!__ct_guard_moved) { __ct_guard_moved = true; const __T = @TypeOf(ct_guard); if (@typeInfo(__T) == .optional) { if (ct_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { ct_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = ct_guard; _drop_val.__cp_deinit(); } };
             if (bun.FormData.Encoding.get(ct.slice())) |encoding| {
                 _ = &encoding;
                 return bun.handleOom(bun.FormData.AsyncFormData.init(bun.default_allocator, encoding));
@@ -346,11 +419,11 @@ pub fn statusCode(self: Response) u16 {
         return self.#init.status_code;
 }
 
-pub fn redirectLocation(self: Response) ?[]const u8 {
+pub fn redirectLocation(self: *const Response) ?[]const u8 {
         return self.header(.Location);
 }
 
-pub fn header(self: Response, name: bun.webcore.FetchHeaders.HTTPHeaderName) ?[]const u8 {
+pub fn header(self: *const Response, name: bun.webcore.FetchHeaders.HTTPHeaderName) ?[]const u8 {
         if (self.#init.headers) |headers| {
             _ = &headers;
             if (headers.fastGet(name)) |str| {
@@ -502,14 +575,24 @@ pub fn cloneValue(self: *Response, globalThis: *JSGlobalObject) bun.JSError!Resp
         if ((!cloned_from_stream)) {
             body = try self.#body.clone(globalThis);
         }
-        errdefer {
-        _ = body.deinit(bun.default_allocator);
-        }
+        var body_guard = OptDeinitWithAllocGuard(Body){ .ptr = (blk: {
+        break :blk (&body);
+
+}), .alloc = bun.default_allocator };
+        _ = &body_guard;
+        var __body_guard_moved = false; _ = &__body_guard_moved;
+        defer if (!__body_guard_moved) { __body_guard_moved = true; const __T = @TypeOf(body_guard); if (@typeInfo(__T) == .optional) { if (body_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { body_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = body_guard; _drop_val.__cp_deinit(); } };
         var _init = try self.#init.clone(globalThis);
         _ = &_init;
-        errdefer {
-        _ = _init.deinit(bun.default_allocator);
-        }
+        var init_guard = OptDeinitWithAllocGuard(Init){ .ptr = (blk: {
+        break :blk (&_init);
+
+}), .alloc = bun.default_allocator };
+        _ = &init_guard;
+        var __init_guard_moved = false; _ = &__init_guard_moved;
+        defer if (!__init_guard_moved) { __init_guard_moved = true; const __T = @TypeOf(init_guard); if (@typeInfo(__T) == .optional) { if (init_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { init_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = init_guard; _drop_val.__cp_deinit(); } };
+        body_guard.ptr = null;
+        init_guard.ptr = null;
         return Response{ .#body = body, .#init = _init, .#url = self.#url.clone(), .#redirected = self.#redirected };
 }
 
@@ -574,16 +657,20 @@ pub fn constructJSON(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame)
         _ = &args;
         var response = Response{ .#body = Body{ .value = .Empty }, .#init = Init{ .status_code = 200 }, .#url = bun.String.empty };
         _ = &response;
-        var did_succeed = false;
-        _ = &did_succeed;
-        defer {
-        {
-            if ((!did_succeed)) {
-                _ = response.#body.deinit(bun.default_allocator);
-                _ = response.#init.deinit(bun.default_allocator);
-            }
-        }
-        }
+        var body_guard = OptDeinitWithAllocGuard(Body){ .ptr = (blk: {
+        break :blk (&response.#body);
+
+}), .alloc = bun.default_allocator };
+        _ = &body_guard;
+        var __body_guard_moved = false; _ = &__body_guard_moved;
+        defer if (!__body_guard_moved) { __body_guard_moved = true; const __T = @TypeOf(body_guard); if (@typeInfo(__T) == .optional) { if (body_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { body_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = body_guard; _drop_val.__cp_deinit(); } };
+        var init_guard = OptDeinitWithAllocGuard(Init){ .ptr = (blk: {
+        break :blk (&response.#init);
+
+}), .alloc = bun.default_allocator };
+        _ = &init_guard;
+        var __init_guard_moved = false; _ = &__init_guard_moved;
+        defer if (!__init_guard_moved) { __init_guard_moved = true; const __T = @TypeOf(init_guard); if (@typeInfo(__T) == .optional) { if (init_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { init_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = init_guard; _drop_val.__cp_deinit(); } };
         const json_value = ((args.nextEat()) orelse (jsc.JSValue.zero));
         if ((@intFromEnum(json_value) != 0)) {
             if (((json_value.isUndefined() or json_value.isSymbol()) or (json_value.jsType() == .JSFunction))) {
@@ -604,10 +691,17 @@ pub fn constructJSON(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame)
             if ((!str.isEmpty())) {
                 if ((if (@typeInfo(@TypeOf(str)) == .@"enum") @intFromEnum(str) else str.value).WTFStringImpl.toUTF8IfNeeded(bun.default_allocator)) |bytes| {
                     _ = &bytes;
-                    defer {
-                    _ = str.deref();
-                    }
-                    (if (@typeInfo(@TypeOf(response.#body)) == .@"enum") @intFromEnum(response.#body) else response.#body.value) = .{ .InternalBlob = InternalBlob{ .bytes = std.array_list.Managed(u8).fromOwnedSlice(bun.default_allocator, @constCast(bytes.slice())), .was_string = true } };
+                    var str_guard = DerefGuard(bun.String){ .ptr = (blk: {
+                    break :blk (&str);
+
+}) };
+                    _ = &str_guard;
+                    var __str_guard_moved = false; _ = &__str_guard_moved;
+                    defer if (!__str_guard_moved) { __str_guard_moved = true; const __T = @TypeOf(str_guard); if (@typeInfo(__T) == .optional) { if (str_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { str_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = str_guard; _drop_val.__cp_deinit(); } };
+                    (if (@typeInfo(@TypeOf(response.#body)) == .@"enum") @intFromEnum(response.#body) else response.#body.value) = .{ .InternalBlob = InternalBlob{ .bytes = std.array_list.Managed(u8).fromOwnedSlice(bun.default_allocator, (blk: {
+                    break :blk @constCast(bytes.slice());
+
+})), .was_string = true } };
                 } else {
                     (if (@typeInfo(@TypeOf(response.#body)) == .@"enum") @intFromEnum(response.#body) else response.#body.value) = Body.Value{ .WTFStringImpl = (if (@typeInfo(@TypeOf(str)) == .@"enum") @intFromEnum(str) else str.value).WTFStringImpl };
                 }
@@ -636,7 +730,8 @@ pub fn constructJSON(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame)
         var headers_ref = try response.getOrCreateHeaders(globalThis);
         _ = &headers_ref;
         _ = try headers_ref.putDefault(.ContentType, (if (@typeInfo(@TypeOf(MimeType.json)) == .@"enum") @intFromEnum(MimeType.json) else MimeType.json.value), globalThis);
-        did_succeed = true;
+        body_guard.ptr = null;
+        init_guard.ptr = null;
         return bun.new(Response, response).toJS(globalThis);
 }
 
@@ -669,9 +764,13 @@ pub fn constructRedirectImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.Ca
         _ = &args;
         var url_string_slice = ZigString.Slice.empty;
         _ = &url_string_slice;
-        defer {
-        _ = url_string_slice.deinit();
-        }
+        var url_slice_guard = DeinitGuard(ZigString.Slice){ .ptr = (blk: {
+        break :blk (&url_string_slice);
+
+}) };
+        _ = &url_slice_guard;
+        var __url_slice_guard_moved = false; _ = &__url_slice_guard_moved;
+        defer if (!__url_slice_guard_moved) { __url_slice_guard_moved = true; const __T = @TypeOf(url_slice_guard); if (@typeInfo(__T) == .optional) { if (url_slice_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { url_slice_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = url_slice_guard; _drop_val.__cp_deinit(); } };
         var response = Response{ .#init = Init{ .status_code = 302 }, .#body = Body{ .value = .Empty }, .#url = bun.String.empty };
         _ = &response;
         const url_string_value = ((args.nextEat()) orelse (jsc.JSValue.zero));
@@ -681,12 +780,20 @@ pub fn constructRedirectImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.Ca
             url_string = try url_string_value.getZigString(globalThis);
         }
         url_string_slice = url_string.toSlice(bun.default_allocator);
-        errdefer {
-        {
-            _ = response.#body.deinit(bun.default_allocator);
-            _ = response.#init.deinit(bun.default_allocator);
-        }
-        }
+        var body_guard = OptDeinitWithAllocGuard(Body){ .ptr = (blk: {
+        break :blk (&response.#body);
+
+}), .alloc = bun.default_allocator };
+        _ = &body_guard;
+        var __body_guard_moved = false; _ = &__body_guard_moved;
+        defer if (!__body_guard_moved) { __body_guard_moved = true; const __T = @TypeOf(body_guard); if (@typeInfo(__T) == .optional) { if (body_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { body_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = body_guard; _drop_val.__cp_deinit(); } };
+        var init_guard = OptDeinitWithAllocGuard(Init){ .ptr = (blk: {
+        break :blk (&response.#init);
+
+}), .alloc = bun.default_allocator };
+        _ = &init_guard;
+        var __init_guard_moved = false; _ = &__init_guard_moved;
+        defer if (!__init_guard_moved) { __init_guard_moved = true; const __T = @TypeOf(init_guard); if (@typeInfo(__T) == .optional) { if (init_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { init_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = init_guard; _drop_val.__cp_deinit(); } };
         if (args.nextEat()) |arg_init| {
             _ = &arg_init;
             if (arg_init.isUndefinedOrNull()) {
@@ -711,6 +818,8 @@ pub fn constructRedirectImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.Ca
         var headers_ref = response.#init.headers.?;
         _ = &headers_ref;
         _ = try headers_ref.put(.Location, url_string_slice.slice(), globalThis);
+        body_guard.ptr = null;
+        init_guard.ptr = null;
         return response;
 }
 
@@ -733,22 +842,37 @@ pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, j
                     }
                     var response = Response{ .#init = Init{ .status_code = 302 }, .#body = Body{ .value = .Empty }, .#url = bun.String.empty, .#js_ref = .initWeak(js_this) };
                     _ = &response;
-                    errdefer {
-                    {
-                        _ = response.#body.deinit(bun.default_allocator);
-                        _ = response.#init.deinit(bun.default_allocator);
-                    }
-                    }
+                    var s3_body_guard = OptDeinitWithAllocGuard(Body){ .ptr = (blk: {
+                    break :blk (&response.#body);
+
+}), .alloc = bun.default_allocator };
+                    _ = &s3_body_guard;
+                    var __s3_body_guard_moved = false; _ = &__s3_body_guard_moved;
+                    defer if (!__s3_body_guard_moved) { __s3_body_guard_moved = true; const __T = @TypeOf(s3_body_guard); if (@typeInfo(__T) == .optional) { if (s3_body_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { s3_body_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = s3_body_guard; _drop_val.__cp_deinit(); } };
+                    var s3_init_guard = OptDeinitWithAllocGuard(Init){ .ptr = (blk: {
+                    break :blk (&response.#init);
+
+}), .alloc = bun.default_allocator };
+                    _ = &s3_init_guard;
+                    var __s3_init_guard_moved = false; _ = &__s3_init_guard_moved;
+                    defer if (!__s3_init_guard_moved) { __s3_init_guard_moved = true; const __T = @TypeOf(s3_init_guard); if (@typeInfo(__T) == .optional) { if (s3_init_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { s3_init_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = s3_init_guard; _drop_val.__cp_deinit(); } };
                     const credentials = blob.store.?.data.s3.getCredentials();
-                    const result = (blk_catch_2: { break :blk_catch_2 ((credentials.signRequest(.{ .path = blob.store.?.data.s3.path(), .method = .GET }, false, .{ .expires = (15 * 60) })) catch |sign_err| { _ = &sign_err; return s3.throwSignError(sign_err, globalThis); }); });
-                    defer {
-                    _ = result.deinit();
-                    }
+                    var result = (blk_catch_2: { break :blk_catch_2 ((credentials.signRequest(.{ .path = blob.store.?.data.s3.path(), .method = .GET }, false, .{ .expires = (15 * 60) })) catch |sign_err| { _ = &sign_err; return s3.throwSignError(sign_err, globalThis); }); });
+                    _ = &result;
+                    var result_guard = DeinitGuard(@TypeOf(result)){ .ptr = (blk: {
+                    break :blk (&result);
+
+}) };
+                    _ = &result_guard;
+                    var __result_guard_moved = false; _ = &__result_guard_moved;
+                    defer if (!__result_guard_moved) { __result_guard_moved = true; const __T = @TypeOf(result_guard); if (@typeInfo(__T) == .optional) { if (result_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { result_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = result_guard; _drop_val.__cp_deinit(); } };
                     response.#init.headers = try response.getOrCreateHeaders(globalThis);
                     response.#redirected = true;
                     var headers_ref = response.#init.headers.?;
                     _ = &headers_ref;
                     _ = try headers_ref.put(.Location, result.url, globalThis);
+                    s3_body_guard.ptr = null;
+                    s3_init_guard.ptr = null;
                     return bun.new(Response, response);
                 }
             }
@@ -772,9 +896,13 @@ pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, j
                 return error.JSError;
             }
         }
-        errdefer {
-        _ = _init.deinit(bun.default_allocator);
-        }
+        var init_guard = OptDeinitWithAllocGuard(Init){ .ptr = (blk: {
+        break :blk (&_init);
+
+}), .alloc = bun.default_allocator };
+        _ = &init_guard;
+        var __init_guard_moved = false; _ = &__init_guard_moved;
+        defer if (!__init_guard_moved) { __init_guard_moved = true; const __T = @TypeOf(init_guard); if (@typeInfo(__T) == .optional) { if (init_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { init_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = init_guard; _drop_val.__cp_deinit(); } };
         if (globalThis.hasException()) {
             return error.JSError;
         }
@@ -785,22 +913,33 @@ pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, j
         } else {
             body = try Body.extract(globalThis, arguments[0]);
         }
-        errdefer {
-        _ = body.deinit(bun.default_allocator);
-        }
+        var body_guard = OptDeinitWithAllocGuard(Body){ .ptr = (blk: {
+        break :blk (&body);
+
+}), .alloc = bun.default_allocator };
+        _ = &body_guard;
+        var __body_guard_moved = false; _ = &__body_guard_moved;
+        defer if (!__body_guard_moved) { __body_guard_moved = true; const __T = @TypeOf(body_guard); if (@typeInfo(__T) == .optional) { if (body_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { body_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = body_guard; _drop_val.__cp_deinit(); } };
         if (globalThis.hasException()) {
             return error.JSError;
         }
         var response = bun.new(Response, Response{ .#body = body, .#init = _init, .#js_ref = .initWeak(js_this) });
         _ = &response;
-        errdefer {
-        _ = bun.destroy(response);
-        }
+        var resp_guard = OptDestroyGuard(Response){ .ptr = (blk: {
+        break :blk @ptrCast(response);
+
+}) };
+        _ = &resp_guard;
+        var __resp_guard_moved = false; _ = &__resp_guard_moved;
+        defer if (!__resp_guard_moved) { __resp_guard_moved = true; const __T = @TypeOf(resp_guard); if (@typeInfo(__T) == .optional) { if (resp_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { resp_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = resp_guard; _drop_val.__cp_deinit(); } };
         if ((((((if (@typeInfo(@TypeOf(response.#body)) == .@"enum") @intFromEnum(response.#body) else response.#body.value) == .Blob) and (response.#init.headers != null)) and ((if (@typeInfo(@TypeOf(response.#body)) == .@"enum") @intFromEnum(response.#body) else response.#body.value).Blob.content_type.len > 0)) and (!response.#init.headers.?.fastHas(.ContentType)))) {
             _ = try response.#init.headers.?.put(.ContentType, (if (@typeInfo(@TypeOf(response.#body)) == .@"enum") @intFromEnum(response.#body) else response.#body.value).Blob.content_type, globalThis);
         }
         _ = response.calculateEstimatedByteSize();
         _ = response.checkBodyStreamRef(globalThis);
+        resp_guard.ptr = null;
+        body_guard.ptr = null;
+        init_guard.ptr = null;
         return response;
 }
 

@@ -25,6 +25,39 @@ const BodyMixin = jsc.WebCore.Body.Mixin;
 extern fn Response__getAsyncLocalStorageStore(global: *JSGlobalObject, als: JSValue): JSValue;
 extern fn Response__mergeAsyncLocalStorageOptions(global: *JSGlobalObject, alsStore: JSValue, initOptions: JSValue);
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+pub struct DerefGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deref(); }
+    }
+}
+
+pub struct OptDeinitWithAllocGuard<T> {
+    ptr: (*T!)? = null,
+    alloc: std.mem.Allocator = undefined,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deinit(_.alloc); }
+        }
+    }
+}
+
+pub struct OptDestroyGuard<T> {
+    ptr: (*T!)? = null,
+    ~init() {
+        if (p := _.ptr) {
+            bun.destroy(p);
+        }
+    }
+}
+
 pub struct Props {}
 
 pub struct Init {
@@ -45,9 +78,7 @@ pub struct Init {
 
     static fn init(globalThis: *JSGlobalObject, response_init: jsc.JSValue): Init? ! bun.JSError {
         let result = Init{ status_code: 200 };
-        errdefer {
-            result.deinit(bun.default_allocator);
-        }
+        let result_guard = OptDeinitWithAllocGuard<Init>{ ptr: unsafe { &result }, alloc: bun.default_allocator };
 
         if (!response_init.isCell()) return null;
 
@@ -60,6 +91,7 @@ pub struct Init {
                     result.headers = headers.cloneThis(globalThis)?;
                 }
                 result.method = req.method;
+                result_guard.ptr = null;
                 return result;
             }
 
@@ -107,6 +139,7 @@ pub struct Init {
             }
         }
 
+        result_guard.ptr = null;
         return result;
     }
 
@@ -269,7 +302,7 @@ pub struct Init {
         const content_type_opt = _.getContentType()?;
         if (content_type_slice := content_type_opt) {
             let ct = content_type_slice;
-            defer ct.deinit();
+            const ct_guard = DeinitGuard<ZigString.Slice>{ ptr: unsafe { &ct } };
             if (encoding := bun.FormData.Encoding.get(ct.slice())) {
                 return bun.handleOom(bun.FormData.AsyncFormData.init(bun.default_allocator, encoding));
             }
@@ -516,10 +549,12 @@ pub struct Init {
         if (!cloned_from_stream) {
             body = _.#body.clone(globalThis)?;
         }
-        errdefer body.deinit(bun.default_allocator);
+        let body_guard = OptDeinitWithAllocGuard<Body>{ ptr: unsafe { &body }, alloc: bun.default_allocator };
 
         let _init = _.#init.clone(globalThis)?;
-        errdefer _init.deinit(bun.default_allocator);
+        let init_guard = OptDeinitWithAllocGuard<Init>{ ptr: unsafe { &_init }, alloc: bun.default_allocator };
+        body_guard.ptr = null;
+        init_guard.ptr = null;
         return Response{
             #body: body,
             #init: _init,
@@ -595,13 +630,8 @@ pub struct Init {
             },
             #url: bun.String.empty,
         };
-        let did_succeed = false;
-        defer {
-            if (!did_succeed) {
-                response.#body.deinit(bun.default_allocator);
-                response.#init.deinit(bun.default_allocator);
-            }
-        }
+        let body_guard = OptDeinitWithAllocGuard<Body>{ ptr: unsafe { &response.#body }, alloc: bun.default_allocator };
+        let init_guard = OptDeinitWithAllocGuard<Init>{ ptr: unsafe { &response.#init }, alloc: bun.default_allocator };
         const json_value = args.nextEat() ?? jsc.JSValue.zero;
 
         if (@intFromEnum(json_value) != 0) {
@@ -625,10 +655,10 @@ pub struct Init {
 
             if (!str.isEmpty()) {
                 if (bytes := str.value.WTFStringImpl.toUTF8IfNeeded(bun.default_allocator)) {
-                    defer str.deref();
+                    const str_guard = DerefGuard<bun.String>{ ptr: unsafe { &str } };
                     response.#body.value = .{
                         .InternalBlob = InternalBlob{
-                            bytes: std.array_list.Managed(u8).fromOwnedSlice(bun.default_allocator, @constCast(bytes.slice())),
+                            bytes: std.array_list.Managed(u8).fromOwnedSlice(bun.default_allocator, unsafe { @constCast(bytes.slice()) }),
                             was_string: true,
                         },
                     };
@@ -657,7 +687,8 @@ pub struct Init {
 
         let headers_ref = response.getOrCreateHeaders(globalThis)?;
         headers_ref.putDefault(.ContentType, MimeType.json.value, globalThis)?;
-        did_succeed = true;
+        body_guard.ptr = null;
+        init_guard.ptr = null;
         return bun.new(Response, response).toJS(globalThis);
     }
 
@@ -683,7 +714,7 @@ pub struct Init {
         let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), unsafe { args_list.ptr[0..args_list.len] });
 
         let url_string_slice = ZigString.Slice.empty;
-        defer url_string_slice.deinit();
+        const url_slice_guard = DeinitGuard<ZigString.Slice>{ ptr: unsafe { &url_string_slice } };
 
         let response = Response{
             #init: Init{
@@ -702,10 +733,8 @@ pub struct Init {
             url_string = url_string_value.getZigString(globalThis)?;
         }
         url_string_slice = url_string.toSlice(bun.default_allocator);
-        errdefer {
-            response.#body.deinit(bun.default_allocator);
-            response.#init.deinit(bun.default_allocator);
-        }
+        let body_guard = OptDeinitWithAllocGuard<Body>{ ptr: unsafe { &response.#body }, alloc: bun.default_allocator };
+        let init_guard = OptDeinitWithAllocGuard<Init>{ ptr: unsafe { &response.#init }, alloc: bun.default_allocator };
 
         if (arg_init := args.nextEat()) {
             if (arg_init.isUndefinedOrNull()) {
@@ -727,6 +756,8 @@ pub struct Init {
         response.#init.headers = response.getOrCreateHeaders(globalThis)?;
         let headers_ref = response.#init.headers.?;
         headers_ref.put(.Location, url_string_slice.slice(), globalThis)?;
+        body_guard.ptr = null;
+        init_guard.ptr = null;
         return response;
     }
 
@@ -767,24 +798,24 @@ pub struct Init {
                         #url: bun.String.empty,
                         #js_ref: .initWeak(js_this),
                     };
-                    errdefer {
-                        response.#body.deinit(bun.default_allocator);
-                        response.#init.deinit(bun.default_allocator);
-                    }
+                    let s3_body_guard = OptDeinitWithAllocGuard<Body>{ ptr: unsafe { &response.#body }, alloc: bun.default_allocator };
+                    let s3_init_guard = OptDeinitWithAllocGuard<Init>{ ptr: unsafe { &response.#init }, alloc: bun.default_allocator };
 
                     const credentials = blob.store.?.data.s3.getCredentials();
 
-                    const result = credentials.signRequest(.{
+                    let result = credentials.signRequest(.{
                         .path = blob.store.?.data.s3.path(),
                         .method = .GET,
                     }, false, .{ .expires = 15 * 60 }) catch |sign_err| {
                         return s3.throwSignError(sign_err, globalThis);
                     };
-                    defer result.deinit();
+                    const result_guard = DeinitGuard<@TypeOf(result)>{ ptr: unsafe { &result } };
                     response.#init.headers = response.getOrCreateHeaders(globalThis)?;
                     response.#redirected = true;
                     let headers_ref = response.#init.headers.?;
                     headers_ref.put(.Location, result.url, globalThis)?;
+                    s3_body_guard.ptr = null;
+                    s3_init_guard.ptr = null;
                     return bun.new(Response, response);
                 }
             }
@@ -806,7 +837,7 @@ pub struct Init {
             }
             return error.JSError;
         }
-        errdefer _init.deinit(bun.default_allocator);
+        let init_guard = OptDeinitWithAllocGuard<Init>{ ptr: unsafe { &_init }, alloc: bun.default_allocator };
 
         if (globalThis.hasException()) {
             return error.JSError;
@@ -820,7 +851,7 @@ pub struct Init {
         } else {
             body = Body.extract(globalThis, arguments[0])?;
         }
-        errdefer body.deinit(bun.default_allocator);
+        let body_guard = OptDeinitWithAllocGuard<Body>{ ptr: unsafe { &body }, alloc: bun.default_allocator };
 
         if (globalThis.hasException()) {
             return error.JSError;
@@ -831,7 +862,7 @@ pub struct Init {
             #init: _init,
             #js_ref: .initWeak(js_this),
         });
-        errdefer bun.destroy(response);
+        let resp_guard = OptDestroyGuard<Response>{ ptr: unsafe { @ptrCast(response) } };
 
         if (response.#body.value == .Blob &&
             response.#init.headers != null &&
@@ -843,6 +874,9 @@ pub struct Init {
 
         response.calculateEstimatedByteSize();
         response.checkBodyStreamRef(globalThis);
+        resp_guard.ptr = null;
+        body_guard.ptr = null;
+        init_guard.ptr = null;
         return response;
     }
 

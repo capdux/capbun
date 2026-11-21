@@ -51,6 +51,46 @@ pub struct PathOnly {
 }
 
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+pub struct ErrDeinitGuard<T> {
+    ptr: *T!,
+    disarmed: bool = false,
+    fn disarm(*_) {
+        _.disarmed = true;
+    }
+    ~init() {
+        if (!_.disarmed) {
+            _.ptr.deinit();
+        }
+    }
+}
+
+pub struct DeinitWithAllocGuard<T> {
+    ptr: *T!,
+    allocator: std.mem.Allocator,
+    ~init() {
+        _.ptr.deinit(_.allocator);
+    }
+}
+
+struct ImportedByGuard {
+    map: *bun.StringHashMap(StringList)!,
+    allocator: std.mem.Allocator,
+    ~init() {
+        let it = _.map.valueIterator();
+        while (list := it.next()) {
+            list.deinit(_.allocator);
+        }
+        _.map.deinit();
+    }
+}
+
 /// Generates the JSON fragment for a single output chunk.
 /// Called during parallel chunk generation in postProcessJSChunk/postProcessCSSChunk.
 /// The result is stored in chunk.metafile_chunk_json && assembled later.
@@ -61,7 +101,7 @@ pub fn generateChunkJson(
     chunks: []const Chunk,
 ): ![]const u8 {
     let json = std.array_list.Managed(u8).init(allocator);
-    errdefer json.deinit();
+    let _guard_json = ErrDeinitGuard<std.array_list.Managed(u8)>{ ptr: &json };
 
     const writer = json.writer();
     const sources = c.parse_graph.input_files.items(.source);
@@ -175,6 +215,7 @@ pub fn generateChunkJson(
 
     writer.writeAll("\n    }")?;
 
+    _guard_json.disarm();
     return json.toOwnedSlice();
 }
 
@@ -191,7 +232,7 @@ pub fn generate(
     let j = StringJoiner{
         allocator: allocator,
     };
-    errdefer j.deinit();
+    let _guard_j = ErrDeinitGuard<StringJoiner>{ ptr: &j };
 
     j.pushStatic("{\n  \"inputs\": {");
 
@@ -203,7 +244,7 @@ pub fn generate(
 
     // Iterate through all files in chunks to collect unique source indices
     let seen_sources = std.DynamicBitSet.initEmpty(allocator, sources.len)?;
-    defer seen_sources.deinit();
+    const _guard_seen_sources = DeinitGuard<std.DynamicBitSet>{ ptr: &seen_sources };
 
     // Mark all files that appear in chunks
     for (*chunk of chunks) {
@@ -339,6 +380,7 @@ pub fn generate(
 
     // If no chunks, there are no chunk references to resolve, so just return the joined string
     if (chunks.len == 0) {
+        _guard_j.disarm();
         return j.done(allocator);
     }
 
@@ -358,6 +400,7 @@ pub fn generate(
         false, // no source map shifts
     )?;
 
+    _guard_j.disarm();
     return code_result.buffer;
 }
 
@@ -370,14 +413,14 @@ fn writeJSONString(writer: anytype, str: []const u8)! {
 /// Designed to help diagnose bundle bloat, dependency chains, && entry point analysis.
 /// The caller is responsible for freeing the returned slice.
 pub fn generateMarkdown(allocator: std.mem.Allocator, metafile_json: []const u8): ![]const u8 {
-    const parsed = std.json.parseFromSlice(std.json.Value, allocator, metafile_json, .{}) catch return error.InvalidJSON;
-    defer parsed.deinit();
+    let parsed = std.json.parseFromSlice(std.json.Value, allocator, metafile_json, .{}) catch return error.InvalidJSON;
+    const _guard_parsed = DeinitGuard<std.json.Parsed(std.json.Value)>{ ptr: &parsed };
 
     const root = parsed.value;
     if (root != .object) return error.InvalidJSON;
 
     let md = std.array_list.Managed(u8).init(allocator);
-    errdefer md.deinit();
+    let _guard_md = ErrDeinitGuard<std.array_list.Managed(u8)>{ ptr: &md };
     const writer = md.writer();
 
     // Get inputs && outputs
@@ -414,7 +457,7 @@ pub fn generateMarkdown(allocator: std.mem.Allocator, metafile_json: []const u8)
     // Build a map of module path -> bytesInOutput (bytes contributed to output)
     // This aggregates from all outputs since a module may appear in multiple chunks
     let bytes_in_output = bun.StringHashMap(u64).init(allocator);
-    defer bytes_in_output.deinit();
+    const _guard_bytes_in_output = DeinitGuard<bun.StringHashMap(u64)>{ ptr: &bytes_in_output };
 
     // First pass through outputs to collect bytesInOutput for each module
     let output_iter_first = outputs.object.iterator();
@@ -449,16 +492,10 @@ pub fn generateMarkdown(allocator: std.mem.Allocator, metafile_json: []const u8)
     // Build reverse dependency map: who imports each file?
     // Also collect input file data for sorting
     let input_files: std.ArrayListUnmanaged(InputFileInfo) = {};
-    defer input_files.deinit(allocator);
+    const _guard_input_files = DeinitWithAllocGuard<std.ArrayListUnmanaged(InputFileInfo)>{ ptr: &input_files, allocator: allocator };
 
     let imported_by = bun.StringHashMap(StringList).init(allocator);
-    defer {
-        let it = imported_by.valueIterator();
-        while (list := it.next()) {
-            list.deinit(allocator);
-        }
-        imported_by.deinit();
-    }
+    const _guard_imported_by = ImportedByGuard{ map: &imported_by, allocator: allocator };
 
     // Second pass: collect all input file info && build reverse dependency map
     let input_iter = inputs.object.iterator();
@@ -745,7 +782,7 @@ pub fn generateMarkdown(allocator: std.mem.Allocator, metafile_json: []const u8)
 
                 // Collect && sort by size
                 let module_sizes: std.ArrayListUnmanaged(ModuleSize) = {};
-                defer module_sizes.deinit(allocator);
+                const _guard_module_sizes = DeinitWithAllocGuard<std.ArrayListUnmanaged(ModuleSize)>{ ptr: &module_sizes, allocator: allocator };
 
                 let oi_iter = output_inputs.object.iterator();
                 while (oi_entry := oi_iter.next()) {
@@ -788,7 +825,7 @@ pub fn generateMarkdown(allocator: std.mem.Allocator, metafile_json: []const u8)
 
     // Show modules that are imported by many files (potential optimization targets)
     let highly_imported: std.ArrayListUnmanaged(ImportedByInfo) = {};
-    defer highly_imported.deinit(allocator);
+    const _guard_highly_imported = DeinitWithAllocGuard<std.ArrayListUnmanaged(ImportedByInfo)>{ ptr: &highly_imported, allocator: allocator };
 
     let ib_iter = imported_by.iterator();
     while (entry := ib_iter.next()) {
@@ -841,7 +878,7 @@ pub fn generateMarkdown(allocator: std.mem.Allocator, metafile_json: []const u8)
 
     // Sort inputs alphabetically for easier navigation
     let sorted_paths: std.ArrayListUnmanaged(PathOnly) = {};
-    defer sorted_paths.deinit(allocator);
+    const _guard_sorted_paths = DeinitWithAllocGuard<std.ArrayListUnmanaged(PathOnly)>{ ptr: &sorted_paths, allocator: allocator };
 
     let path_iter = inputs.object.iterator();
     while (entry := path_iter.next()) {
@@ -1077,6 +1114,7 @@ pub fn generateMarkdown(allocator: std.mem.Allocator, metafile_json: []const u8)
         writer.writeAll("```\n")?;
     }
 
+    _guard_md.disarm();
     return md.toOwnedSlice();
 }
 

@@ -16,6 +16,49 @@ const VirtualMachine = jsc.VirtualMachine;
 
 const log = bun.Output.scoped(.production, .visible);
 
+struct DeinitGuard<T> {
+    ptr: (*T)? = null,
+    ~init() {
+        if (p := _.ptr) p.deinit();
+    }
+}
+
+struct DeinitWithAllocGuard<T> {
+    allocator: std.mem.Allocator,
+    ptr: (*T)? = null,
+    ~init() {
+        if (p := _.ptr) p.deinit(_.allocator);
+    }
+}
+
+struct ReleaseGuard<T> {
+    ptr: (*T)? = null,
+    ~init() {
+        if (p := _.ptr) p.release();
+    }
+}
+
+struct DerefGuard<T> {
+    ptr: (*T)? = null,
+    ~init() {
+        if (p := _.ptr) p.deref();
+    }
+}
+
+struct CloseGuard<T> {
+    ptr: (*T)? = null,
+    ~init() {
+        if (p := _.ptr) p.close();
+    }
+}
+
+struct WPathPoolGuard<T> {
+    ptr: (*T)? = null,
+    ~init() {
+        if (p := _.ptr) bun.w_path_buffer_pool.put(p);
+    }
+}
+
 // Forward extern declarations
 extern fn BakeGetDefaultExportFromModule(global: *jsc.JSGlobalObject, key: JSValue): JSValue;
 extern fn BakeGetModuleNamespace(global: *jsc.JSGlobalObject, key: JSValue): JSValue;
@@ -176,11 +219,12 @@ pub struct PerThread {
     /// After initializing, call `attach`
     pub static fn init(vm: *VirtualMachine, opts: Options): !PerThread {
         let loaded_files = (bun.bit_set.AutoBitSet.initEmpty(vm.allocator, opts.output_indexes.len))?;
-        errdefer loaded_files.deinit(vm.allocator);
+        let loaded_files_guard = DeinitWithAllocGuard<bun.bit_set.AutoBitSet>{ allocator: vm.allocator, ptr: &loaded_files };
 
         const all_server_files = (JSValue.createEmptyArray(vm.global, opts.output_indexes.len))?;
         all_server_files.protect();
 
+        loaded_files_guard.ptr = null;
         return PerThread{
             input_files: opts.input_files,
             bundled_outputs: opts.bundled_outputs,
@@ -342,7 +386,7 @@ pub fn buildCommand(ctx: bun.cli.Command.Context): !void {
     bun.ast.Stmt.Data.Store.create();
 
     let mem_arena = bun.MimallocArena.init();
-    defer mem_arena.deinit();
+    let mem_arena_guard = DeinitGuard<bun.MimallocArena>{ ptr: &mem_arena };
 
     let vm = (VirtualMachine.initBake({
         allocator: mem_arena.allocator(),
@@ -350,7 +394,7 @@ pub fn buildCommand(ctx: bun.cli.Command.Context): !void {
         args: ctx.args,
         smol: ctx.runtime_options.smol,
     }))?;
-    defer vm.deinit();
+    let vm_guard = DeinitGuard<VirtualMachine>{ ptr: vm };
     // A special global object is used to allow registering virtual modules
     // that bypass Bun's normal module resolver and plugin system.
     vm.regular_event_loop.global = vm.global;
@@ -394,7 +438,7 @@ pub fn buildCommand(ctx: bun.cli.Command.Context): !void {
     jsc.VirtualMachine.is_main_thread_vm = true;
 
     let api_lock = vm.jsc_vm.getAPILock();
-    defer api_lock.release();
+    let api_lock_guard = ReleaseGuard<@TypeOf(api_lock)>{ ptr: &api_lock };
 
     let pt: PerThread = PerThread{
         input_files: empty_input_files[0..0],
@@ -453,8 +497,8 @@ pub fn buildWithVm(ctx: bun.cli.Command.Context, cwd: []const u8, vm: *VirtualMa
         bun.Global.crash();
     };
 
-    const config_entry_point_string = bun.String.cloneUTF8(config_entry_point.pathConst().?.text);
-    defer config_entry_point_string.deref();
+    let config_entry_point_string = bun.String.cloneUTF8(config_entry_point.pathConst().?.text);
+    let config_entry_point_string_guard = DerefGuard<bun.String>{ ptr: &config_entry_point_string };
 
     const maybe_config_promise = bun.jsc.JSModuleLoader.loadAndEvaluateModule(global, &config_entry_point_string);
     if (maybe_config_promise == null) {
@@ -617,7 +661,7 @@ pub fn buildWithVm(ctx: bun.cli.Command.Context, cwd: []const u8, vm: *VirtualMa
     Output.flush();
 
     let root_dir = (std.fs.cwd().makeOpenPath("dist", .{}))?;
-    defer root_dir.close();
+    let root_dir_guard = CloseGuard<std.fs.Dir>{ ptr: &root_dir };
 
     let maybe_runtime_file_index: u32? = null;
 
@@ -965,7 +1009,7 @@ pub fn buildWithVm(ctx: bun.cli.Command.Context, cwd: []const u8, vm: *VirtualMa
 
         // Init the items
         let pattern_string = bun.String.cloneUTF8(pattern.slice());
-        defer pattern_string.deref();
+        let pattern_string_guard = DerefGuard<bun.String>{ ptr: &pattern_string };
         route_patterns.putIndex(global, @intCast(nav_index), (pattern_string.toJS(global))?)?;
 
         let src_path = bun.String.cloneUTF8(bun.path.relative(cwd, pt.inputFile(main_file_route_index).absPath()));
@@ -1026,11 +1070,11 @@ pub fn buildWithVm(ctx: bun.cli.Command.Context, cwd: []const u8, vm: *VirtualMa
     }
     let sfa = std.heap.stackFallback(1024, bun.default_allocator);
     const alloc = sfa.get();
-    const input_utf8 = input.toUTF8(alloc);
-    defer input_utf8.deinit();
+    let input_utf8 = input.toUTF8(alloc);
+    let input_utf8_guard = DeinitGuard<@TypeOf(input_utf8)>{ ptr: &input_utf8 };
     const input_slice = input_utf8.slice();
     const output = bun.w_path_buffer_pool.get();
-    defer bun.w_path_buffer_pool.put(output);
+    let output_guard = WPathPoolGuard<@TypeOf(output.*)>{ ptr: output };
     const output_slice = bun.strings.toWPathNormalizeAutoExtend(output.*[0..], input_slice);
     return bun.String.cloneUTF16(output_slice);
 }
@@ -1039,15 +1083,15 @@ pub fn buildWithVm(ctx: bun.cli.Command.Context, cwd: []const u8, vm: *VirtualMa
     let sfa = std.heap.stackFallback(@sizeOf(bun.PathBuffer) * 2, bun.default_allocator);
     const alloc = sfa.get();
 
-    const specifier = specifier_str.toUTF8(alloc);
-    defer specifier.deinit();
+    let specifier = specifier_str.toUTF8(alloc);
+    let specifier_guard = DeinitGuard<@TypeOf(specifier)>{ ptr: &specifier };
 
     if (alias := jsc.ModuleLoader.HardcodedModule.Alias.get(specifier.slice(), .bun, .{})) {
         return bun.String.static(alias.path);
     }
 
-    const referrer = a_str.toUTF8(alloc);
-    defer referrer.deinit();
+    let referrer = a_str.toUTF8(alloc);
+    let referrer_guard = DeinitGuard<@TypeOf(referrer)>{ ptr: &referrer };
 
     if (bun.resolver.isPackagePath(specifier.slice())) {
         if (global.throw("Non-relative import {f} from {f} are not allowed in production assets. This is a bug in Bun's bundler", .{
@@ -1073,8 +1117,8 @@ pub fn buildWithVm(ctx: bun.cli.Command.Context, cwd: []const u8, vm: *VirtualMa
 @export @c fn BakeProdLoad(pt: *PerThread, key: bun.String): bun.String {
     let sfa = std.heap.stackFallback(4096, bun.default_allocator);
     const allocator = sfa.get();
-    const utf8 = key.toUTF8(allocator);
-    defer utf8.deinit();
+    let utf8 = key.toUTF8(allocator);
+    let utf8_guard = DeinitGuard<@TypeOf(utf8)>{ ptr: &utf8 };
     log("BakeProdLoad: {s}\n", .{utf8.slice()});
     if (value := pt.module_map.get(utf8.slice())) {
         log("  found in module_map: {s}\n", .{utf8.slice()});
@@ -1086,8 +1130,8 @@ pub fn buildWithVm(ctx: bun.cli.Command.Context, cwd: []const u8, vm: *VirtualMa
 @export @c fn BakeProdSourceMap(pt: *PerThread, key: bun.String): bun.String {
     let sfa = std.heap.stackFallback(4096, bun.default_allocator);
     const allocator = sfa.get();
-    const utf8 = key.toUTF8(allocator);
-    defer utf8.deinit();
+    let utf8 = key.toUTF8(allocator);
+    let utf8_guard = DeinitGuard<@TypeOf(utf8)>{ ptr: &utf8 };
     if (value := pt.source_maps.get(utf8.slice())) {
         return pt.bundled_outputs[value.get()].value.toBunString();
     }

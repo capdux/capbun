@@ -62,10 +62,565 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const Hashers = @import("../../sha_hmac/sha.zig");
 pub const bun = @import("bun");
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.deinit();
+                }
+        }
+    };
+}
+
+pub fn OptDeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T = null,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    {
+                        _ = p.deinit();
+                    }
+                }
+        }
+    };
+}
+
+pub const CryptoHasher = union(enum) {
+    hmac: ?*HMAC,
+    evp: EVP,
+    @"zig": CryptoHasherZig,
+
+pub fn getSSLErr() u32 {
+            const f = BoringSSL.ERR_get_error;
+            return f();
+    }
+
+pub fn clearSSLErr() void {
+            const f = BoringSSL.ERR_clear_error;
+            _ = f();
+    }
+
+pub fn throwHmacConsumed(globalThis: *jsc.JSGlobalObject) bun.JSError {
+            return globalThis.throw("HMAC has been consumed and is no longer usable", .{});
+    }
+
+pub fn getByteLength(self: *CryptoHasher, globalThis: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
+            return jsc.JSValue.jsNumber((switch (self.*) {
+.evp => self.evp.size(),
+.hmac => (if (self.hmac) |h| h.size() else ({
+            return CryptoHasher.throwHmacConsumed(globalThis);
+})),
+.@"zig" => self.@"zig".digest_length,
+}));
+    }
+
+pub fn getAlgorithm(self: *CryptoHasher, globalObject: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
+            return (switch (self.*) {
+.evp => ZigString.fromUTF8(bun.asByteSlice(@tagName(self.evp.algorithm))).toJS(globalObject),
+.@"zig" => ZigString.fromUTF8(bun.asByteSlice(@tagName(self.@"zig".algorithm))).toJS(globalObject),
+.hmac => (if (self.hmac) |h| ZigString.fromUTF8(bun.asByteSlice(@tagName(h.algorithm))).toJS(globalObject) else ({
+            return CryptoHasher.throwHmacConsumed(globalObject);
+})),
+});
+    }
+
+pub fn getAlgorithms(globalThis_: *jsc.JSGlobalObject, _: JSValue, _: JSValue) bun.JSError!jsc.JSValue {
+            return bun.String.toJSArray(globalThis_, (&EVP.Algorithm.names.values));
+    }
+
+pub fn hashToEncoding(globalThis: *JSGlobalObject, evp: *EVP, input: jsc.Node.BlobOrStringOrBuffer, encoding: jsc.Node.Encoding) bun.JSError!jsc.JSValue {
+            var output_digest_buf: Digest = undefined;
+            _ = &output_digest_buf;
+            _ = @memset((&output_digest_buf), 0);
+            var input_val = input;
+            _ = &input_val;
+            var input_guard = DeinitGuard(jsc.Node.BlobOrStringOrBuffer){ .ptr = (blk: {
+            break :blk (&input_val);
+
+}) };
+            _ = &input_guard;
+            var __input_guard_moved = false; _ = &__input_guard_moved;
+            defer if (!__input_guard_moved) { __input_guard_moved = true; const __T = @TypeOf(input_guard); if (@typeInfo(__T) == .optional) { if (input_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { input_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = input_guard; _drop_val.__cp_deinit(); } };
+            if (((input == .blob) and input.blob.isBunFile())) {
+                return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
+            }
+            const len = ((evp.hash(globalThis.bunVM().rareData().boringEngine(), input.slice(), (&output_digest_buf))) orelse {
+            const e = getSSLErr();
+            const instance = createCryptoError(globalThis, e);
+            _ = clearSSLErr();
+            return globalThis.throwValue(instance);
+});
+            var enc = encoding;
+            _ = &enc;
+            return enc.encodeWithMaxSize(globalThis, BoringSSL.EVP_MAX_MD_SIZE, output_digest_buf[0..len]);
+    }
+
+pub fn hashToBytes(globalThis: *JSGlobalObject, evp: *EVP, input: jsc.Node.BlobOrStringOrBuffer, output: ?jsc.ArrayBuffer) bun.JSError!jsc.JSValue {
+            var input_val = input;
+            _ = &input_val;
+            var input_guard = DeinitGuard(jsc.Node.BlobOrStringOrBuffer){ .ptr = (blk: {
+            break :blk (&input_val);
+
+}) };
+            _ = &input_guard;
+            var __input_guard_moved = false; _ = &__input_guard_moved;
+            defer if (!__input_guard_moved) { __input_guard_moved = true; const __T = @TypeOf(input_guard); if (@typeInfo(__T) == .optional) { if (input_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { input_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = input_guard; _drop_val.__cp_deinit(); } };
+            if (((input == .blob) and input.blob.isBunFile())) {
+                return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
+            }
+            if (output) |output_buf| {
+                _ = &output_buf;
+                const size = evp.size();
+                var bytes = output_buf.byteSlice();
+                _ = &bytes;
+                if ((bytes.len < size)) {
+                    return globalThis.throwInvalidArguments("TypedArray must be at least {d} bytes", .{ size });
+                }
+                const len = ((evp.hash(globalThis.bunVM().rareData().boringEngine(), input.slice(), bytes[0..size])) orelse {
+                const e = getSSLErr();
+                const instance = createCryptoError(globalThis, e);
+                _ = clearSSLErr();
+                return globalThis.throwValue(instance);
+});
+                _ = &len;
+                return (if (@typeInfo(@TypeOf(output_buf)) == .@"enum") @intFromEnum(output_buf) else output_buf.value);
+            } else {
+                var output_digest_buf: Digest = undefined;
+                _ = &output_digest_buf;
+                _ = @memset((&output_digest_buf), 0);
+                const len = ((evp.hash(globalThis.bunVM().rareData().boringEngine(), input.slice(), (&output_digest_buf))) orelse {
+                const e = getSSLErr();
+                const instance = createCryptoError(globalThis, e);
+                _ = clearSSLErr();
+                return globalThis.throwValue(instance);
+});
+                return jsc.ArrayBuffer.createBuffer(globalThis, output_digest_buf[0..len]);
+            }
+    }
+
+pub fn hash_(globalThis: *JSGlobalObject, algorithm: ZigString, input: jsc.Node.BlobOrStringOrBuffer, output: ?jsc.Node.StringOrBuffer) bun.JSError!jsc.JSValue {
+            var evp = ((EVP.byName(algorithm, globalThis)) orelse {
+            const res = try CryptoHasherZig.hashByName(globalThis, algorithm, input, output);
+            return ((res) orelse (globalThis.throwInvalidArguments("Unsupported algorithm \"{f}\"", .{ algorithm })));
+});
+            _ = &evp;
+            var evp_guard = DeinitGuard(EVP){ .ptr = (blk: {
+            break :blk (&evp);
+
+}) };
+            _ = &evp_guard;
+            var __evp_guard_moved = false; _ = &__evp_guard_moved;
+            defer if (!__evp_guard_moved) { __evp_guard_moved = true; const __T = @TypeOf(evp_guard); if (@typeInfo(__T) == .optional) { if (evp_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { evp_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = evp_guard; _drop_val.__cp_deinit(); } };
+            if (output) |string_or_buffer| {
+                _ = &string_or_buffer;
+                switch (string_or_buffer) {
+.buffer => |buffer| {
+return hashToBytes(globalThis, (&evp), input, buffer.buffer);
+},
+else => {
+var sob = string_or_buffer;
+                _ = &sob;
+                var sob_guard = DeinitGuard(jsc.Node.StringOrBuffer){ .ptr = (blk: {
+                break :blk (&sob);
+
+}) };
+                _ = &sob_guard;
+                var __sob_guard_moved = false; _ = &__sob_guard_moved;
+                defer if (!__sob_guard_moved) { __sob_guard_moved = true; const __T = @TypeOf(sob_guard); if (@typeInfo(__T) == .optional) { if (sob_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { sob_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = sob_guard; _drop_val.__cp_deinit(); } };
+                const encoding = ((jsc.Node.Encoding.from(string_or_buffer.slice())) orelse {
+                return globalThis.ERR(.INVALID_ARG_VALUE, "Unknown encoding: {s}", .{ string_or_buffer.slice() }).throw();
+});
+                return hashToEncoding(globalThis, (&evp), input, encoding);
+},
+}
+            } else {
+                return hashToBytes(globalThis, (&evp), input, null);
+            }
+    }
+
+pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!*CryptoHasher {
+            const arguments = callframe.arguments_old(2);
+            if ((arguments.len == 0)) {
+                return globalThis.throwInvalidArguments("Expected an algorithm name as an argument", .{});
+            }
+            const algorithm_name = (blk: {
+            break :blk arguments.ptr[0];
+
+});
+            if ((algorithm_name.isEmptyOrUndefinedOrNull() or (!algorithm_name.isString()))) {
+                return globalThis.throwInvalidArguments("algorithm must be a string", .{});
+            }
+            const algorithm = try algorithm_name.getZigString(globalThis);
+            if ((algorithm.len == 0)) {
+                return globalThis.throwInvalidArguments("Invalid algorithm name", .{});
+            }
+            const hmac_value = (blk: {
+            break :blk arguments.ptr[1];
+
+});
+            var hmac_key: ?jsc.Node.StringOrBuffer = null;
+            _ = &hmac_key;
+            var hmac_key_guard = OptDeinitGuard(jsc.Node.StringOrBuffer){  };
+            _ = &hmac_key_guard;
+            var __hmac_key_guard_moved = false; _ = &__hmac_key_guard_moved;
+            defer if (!__hmac_key_guard_moved) { __hmac_key_guard_moved = true; const __T = @TypeOf(hmac_key_guard); if (@typeInfo(__T) == .optional) { if (hmac_key_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { hmac_key_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = hmac_key_guard; _drop_val.__cp_deinit(); } };
+            if ((!hmac_value.isEmptyOrUndefinedOrNull())) {
+                if (try jsc.Node.StringOrBuffer.fromJS(globalThis, bun.default_allocator, hmac_value)) |key| {
+                    _ = &key;
+                    hmac_key = key;
+                    hmac_key_guard.ptr = (blk: {
+                    break :blk (&hmac_key.?);
+
+});
+                } else {
+                    return globalThis.throwInvalidArguments("key must be a string or buffer", .{});
+                }
+            }
+            return CryptoHasher.new(brk: {
+            if (hmac_key) |key| {
+                _ = &key;
+                const chosen_algorithm = try algorithm_name.toEnumFromMap(globalThis, "algorithm", EVP.Algorithm, EVP.Algorithm.map);
+                break :brk .{ .hmac = ((HMAC.init(chosen_algorithm, key.slice())) orelse {
+                if ((!globalThis.hasException())) {
+                    const e = getSSLErr();
+                    if ((e != 0)) {
+                        const instance = createCryptoError(globalThis, e);
+                        _ = clearSSLErr();
+                        return globalThis.throwValue(instance);
+                    } else {
+                        return globalThis.throwTODO("HMAC is not supported for this algorithm yet");
+                    }
+                }
+                return error.JSError;
+}) };
+            }
+            break :brk .{ .evp = ((EVP.byName(algorithm, globalThis)) orelse { return ((CryptoHasherZig.constructor(algorithm)) orelse {
+            return globalThis.throwInvalidArguments("Unsupported algorithm {f}", .{ algorithm });
+}); }) };
+});
+    }
+
+pub fn getter(globalObject: *jsc.JSGlobalObject, _: *jsc.JSObject) jsc.JSValue {
+            return CryptoHasher.js.getConstructor(globalObject);
+    }
+
+pub fn update(self: *CryptoHasher, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+            const thisValue = callframe.this();
+            const arguments = callframe.arguments_old(2);
+            const input = (blk: {
+            break :blk arguments.ptr[0];
+
+});
+            if (input.isEmptyOrUndefinedOrNull()) {
+                return globalThis.throwInvalidArguments("expected blob, string or buffer", .{});
+            }
+            const encoding = (blk: {
+            break :blk arguments.ptr[1];
+
+});
+            const buffer_opt = try jsc.Node.BlobOrStringOrBuffer.fromJSWithEncodingValue(globalThis, globalThis.bunVM().allocator, input, encoding);
+            if ((buffer_opt == null)) {
+                if ((!globalThis.hasException())) {
+                    return globalThis.throwInvalidArguments("expected blob, string or buffer", .{});
+                }
+                return error.JSError;
+            }
+            var buf = buffer_opt.?;
+            _ = &buf;
+            var buf_guard = DeinitGuard(jsc.Node.BlobOrStringOrBuffer){ .ptr = (blk: {
+            break :blk (&buf);
+
+}) };
+            _ = &buf_guard;
+            var __buf_guard_moved = false; _ = &__buf_guard_moved;
+            defer if (!__buf_guard_moved) { __buf_guard_moved = true; const __T = @TypeOf(buf_guard); if (@typeInfo(__T) == .optional) { if (buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = buf_guard; _drop_val.__cp_deinit(); } };
+            if (((buf == .blob) and buf.blob.isBunFile())) {
+                return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
+            }
+            switch (self.*) {
+.evp => {
+_ = self.evp.update(buf.slice());
+            const e = CryptoHasher.getSSLErr();
+            if ((e != 0)) {
+                const instance = createCryptoError(globalThis, e);
+                _ = CryptoHasher.clearSSLErr();
+                return globalThis.throwValue(instance);
+            }
+},
+.hmac => {
+if (self.hmac) |hmac| {
+                _ = &hmac;
+                _ = hmac.update(buf.slice());
+                const e = CryptoHasher.getSSLErr();
+                if ((e != 0)) {
+                    const instance = createCryptoError(globalThis, e);
+                    _ = CryptoHasher.clearSSLErr();
+                    return globalThis.throwValue(instance);
+                }
+            } else {
+                return CryptoHasher.throwHmacConsumed(globalThis);
+            }
+},
+.@"zig" => {
+_ = self.@"zig".update(buf.slice());
+            return thisValue;
+},
+}
+            return thisValue;
+    }
+
+pub fn copy(self: *CryptoHasher, globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+            const copied: CryptoHasher = (switch (self.*) {
+.evp => .{ .evp = bun.handleOom(self.evp.copy(globalObject.bunVM().rareData().boringEngine())) },
+.hmac => brk: {
+            if (self.hmac) |hmac| {
+                _ = &hmac;
+                break :brk .{ .hmac = (blk_catch_0: { break :blk_catch_0 ((hmac.copy()) catch |__ce_0| { _ = &__ce_0; const e_val = createCryptoError(globalObject, CryptoHasher.getSSLErr());
+                _ = CryptoHasher.clearSSLErr();
+                return globalObject.throwValue(e_val); }); }) };
+            } else {
+                return CryptoHasher.throwHmacConsumed(globalObject);
+            }
+},
+.@"zig" => .{ .@"zig" = self.@"zig".copy() },
+});
+            return CryptoHasher.new(copied).toJS(globalObject);
+    }
+
+pub fn digest_(self: *CryptoHasher, globalThis: *JSGlobalObject, output: ?jsc.Node.StringOrBuffer) bun.JSError!jsc.JSValue {
+            if (output) |string_or_buffer| {
+                _ = &string_or_buffer;
+                switch (string_or_buffer) {
+.buffer => |buffer| {
+return self.digestToBytes(globalThis, buffer.buffer);
+},
+else => {
+var sob = string_or_buffer;
+                _ = &sob;
+                var sob_guard = DeinitGuard(jsc.Node.StringOrBuffer){ .ptr = (blk: {
+                break :blk (&sob);
+
+}) };
+                _ = &sob_guard;
+                var __sob_guard_moved = false; _ = &__sob_guard_moved;
+                defer if (!__sob_guard_moved) { __sob_guard_moved = true; const __T = @TypeOf(sob_guard); if (@typeInfo(__T) == .optional) { if (sob_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { sob_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = sob_guard; _drop_val.__cp_deinit(); } };
+                const encoding = ((jsc.Node.Encoding.from(string_or_buffer.slice())) orelse {
+                return globalThis.ERR(.INVALID_ARG_VALUE, "Unknown encoding: {s}", .{ string_or_buffer.slice() }).throw();
+});
+                return self.digestToEncoding(globalThis, encoding);
+},
+}
+            } else {
+                return self.digestToBytes(globalThis, null);
+            }
+    }
+
+pub fn digestToBytes(self: *CryptoHasher, globalThis: *JSGlobalObject, output: ?jsc.ArrayBuffer) bun.JSError!jsc.JSValue {
+            if (output) |output_buf| {
+                _ = &output_buf;
+                var bytes = output_buf.byteSlice();
+                _ = &bytes;
+                if ((bytes.len < BoringSSL.EVP_MAX_MD_SIZE)) {
+                    return globalThis.throwInvalidArguments((comptime std.fmt.comptimePrint("TypedArray must be at least {d} bytes", .{ BoringSSL.EVP_MAX_MD_SIZE })), .{});
+                }
+                _ = (blk_catch_1: { break :blk_catch_1 ((self.final(globalThis, bytes[0..bytes.len])) catch |__ce_1| { _ = &__ce_1; return .zero; }); });
+                if (globalThis.hasException()) {
+                    return error.JSError;
+                }
+                return (if (@typeInfo(@TypeOf(output_buf)) == .@"enum") @intFromEnum(output_buf) else output_buf.value);
+            } else {
+                var output_digest_buf: EVP.Digest = std.mem.zeroes(EVP.Digest);
+                _ = &output_digest_buf;
+                const result = (blk_catch_2: { break :blk_catch_2 ((self.final(globalThis, (&output_digest_buf))) catch |__ce_2| { _ = &__ce_2; return .zero; }); });
+                if (globalThis.hasException()) {
+                    return error.JSError;
+                }
+                return jsc.ArrayBuffer.createBuffer(globalThis, result);
+            }
+    }
+
+pub fn digestToEncoding(self: *CryptoHasher, globalThis: *JSGlobalObject, encoding: jsc.Node.Encoding) bun.JSError!jsc.JSValue {
+            var output_digest_buf: EVP.Digest = std.mem.zeroes(EVP.Digest);
+            _ = &output_digest_buf;
+            const out = (blk_catch_3: { break :blk_catch_3 ((self.final(globalThis, (&output_digest_buf))) catch |__ce_3| { _ = &__ce_3; return .zero; }); });
+            if (globalThis.hasException()) {
+                return error.JSError;
+            }
+            var enc = encoding;
+            _ = &enc;
+            return enc.encodeWithMaxSize(globalThis, BoringSSL.EVP_MAX_MD_SIZE, out);
+    }
+
+pub fn final(self: *CryptoHasher, globalThis: *JSGlobalObject, output_digest_slice: []u8) bun.JSError![]u8 {
+            return (switch (self.*) {
+.hmac => brk: {
+            if (self.hmac) |hmac| {
+                _ = &hmac;
+                self.hmac = null;
+                var hmac_guard = DeinitGuard(HMAC){ .ptr = (blk: {
+                break :blk @ptrCast(hmac);
+
+}) };
+                _ = &hmac_guard;
+                var __hmac_guard_moved = false; _ = &__hmac_guard_moved;
+                defer if (!__hmac_guard_moved) { __hmac_guard_moved = true; const __T = @TypeOf(hmac_guard); if (@typeInfo(__T) == .optional) { if (hmac_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { hmac_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = hmac_guard; _drop_val.__cp_deinit(); } };
+                break :brk hmac.final(output_digest_slice);
+            } else {
+                return CryptoHasher.throwHmacConsumed(globalThis);
+            }
+},
+.evp => self.evp.final(globalThis.bunVM().rareData().boringEngine(), output_digest_slice),
+.@"zig" => self.@"zig".final(output_digest_slice),
+});
+    }
+
+pub fn release(self: *CryptoHasher) void {
+            switch (self.*) {
+.evp => {
+_ = self.evp.deinit();
+},
+.@"zig" => {
+_ = self.@"zig".deinit();
+},
+.hmac => {
+_ = (if (self.hmac) |h| h.deinit() else null);
+},
+}
+            _ = bun.destroy(self);
+    }
+
+pub fn finalize(self: *CryptoHasher) void {
+            _ = self.release();
+    }
+
+pub fn deinit(self: *CryptoHasher) void {
+            _ = self.release();
+    }
+    const Digest = EVP.Digest;
+    pub const js = jsc.Codegen.JSCryptoHasher;
+    pub const toJS = js.toJS;
+    pub const fromJS = js.fromJS;
+    pub const fromJSDirect = js.fromJSDirect;
+    pub const new = bun.TrivialNew(@This());
+    pub const Extern = struct {
+    
+    pub fn getByName(global: *JSGlobalObject, name_bytes: [*:0]const u8, name_len: usize) callconv(.c) ?*CryptoHasher {
+                const name = (blk: {
+                break :blk name_bytes[0..name_len];
+    
+    });
+                if (CryptoHasherZig.init(name)) |inner| {
+                    _ = &inner;
+                    return CryptoHasher.new(.{ .@"zig" = inner });
+                }
+                const algorithm = ((EVP.Algorithm.map.get(name)) orelse {
+                return null;
+    });
+                switch (algorithm) {
+    .ripemd160, .blake2b256, .blake2b512, .@"sha512-224" => {
+    if (algorithm.md()) |md| {
+                    _ = &md;
+                    return CryptoHasher.new(.{ .evp = EVP.init(algorithm, md, global.bunVM().rareData().boringEngine()) });
+                }
+    },
+    else => {
+    return null;
+    },
+    }
+                return null;
+        }
+    
+    pub fn getFromOther(global: *JSGlobalObject, other_handle: *CryptoHasher) callconv(.c) ?*CryptoHasher {
+                switch (other_handle.*) {
+    .@"zig" => {
+    const hasher = CryptoHasher.new(.{ .@"zig" = other_handle.@"zig".copy() });
+                return hasher;
+    },
+    .evp => {
+    return CryptoHasher.new(.{ .evp = (blk_catch_0: { break :blk_catch_0 ((other_handle.evp.copy(global.bunVM().rareData().boringEngine())) catch |__ce_0| { _ = &__ce_0; return null; }); }) });
+    },
+    else => {
+    return null;
+    },
+    }
+        }
+    
+    pub fn destroy(handle: *CryptoHasher) callconv(.c) void {
+                _ = handle.release();
+        }
+    
+    pub fn update(handle: *CryptoHasher, input_bytes: [*]const u8, input_len: usize) callconv(.c) bool {
+                const input = (blk: {
+                break :blk input_bytes[0..input_len];
+    
+    });
+                switch (handle.*) {
+    .@"zig" => {
+    _ = handle.@"zig".update(input);
+                return true;
+    },
+    .evp => {
+    _ = handle.evp.update(input);
+                return true;
+    },
+    else => {
+    return false;
+    },
+    }
+        }
+    
+    pub fn digest(handle: *CryptoHasher, global: *JSGlobalObject, buf: [*]u8, buf_len: usize) callconv(.c) u32 {
+                const digest_buf = buf[0..buf_len];
+                switch (handle.*) {
+    .@"zig" => {
+    const res = handle.@"zig".finalWithLen(digest_buf, buf_len);
+                return @intCast(res.len);
+    },
+    .evp => {
+    const res = handle.evp.final(global.bunVM().rareData().boringEngine(), digest_buf);
+                return @intCast(res.len);
+    },
+    else => {
+    return 0;
+    },
+    }
+        }
+    
+    pub fn getDigestSize(handle: *CryptoHasher) callconv(.c) u32 {
+                return (switch (handle.*) {
+    .@"zig" => handle.@"zig".digest_length,
+    .evp => handle.evp.size(),
+    else => 0,
+    });
+        }
+    
+    pub fn @"export"() void {
+                _ = @export((&CryptoHasher.Extern.getByName), .{ .name = "Bun__CryptoHasherExtern__getByName" });
+                _ = @export((&CryptoHasher.Extern.getFromOther), .{ .name = "Bun__CryptoHasherExtern__getFromOther" });
+                _ = @export((&CryptoHasher.Extern.destroy), .{ .name = "Bun__CryptoHasherExtern__destroy" });
+                _ = @export((&CryptoHasher.Extern.update), .{ .name = "Bun__CryptoHasherExtern__update" });
+                _ = @export((&CryptoHasher.Extern.digest), .{ .name = "Bun__CryptoHasherExtern__digest" });
+                _ = @export((&CryptoHasher.Extern.getDigestSize), .{ .name = "Bun__CryptoHasherExtern__getDigestSize" });
+        }
+    };
+    pub const digest = jsc.host_fn.wrapInstanceMethod(CryptoHasher, "digest_", false);
+    pub const hash = jsc.host_fn.wrapStaticMethod(CryptoHasher, "hash_", false);
+};
+
 pub const AlgoEntry = struct {
     name: []const u8,
     T: type,
@@ -85,470 +640,6 @@ const Crypto = jsc.API.Bun.Crypto;
 const EVP = Crypto.EVP;
 const HMAC = Crypto.HMAC;
 const createCryptoError = Crypto.createCryptoError;
-pub const CryptoHasher = union(enum) {
-    hmac: ?*HMAC,
-    evp: EVP,
-    zig: CryptoHasherZig,
-
-    const Digest = EVP.Digest;
-
-    pub const js = jsc.Codegen.JSCryptoHasher;
-    pub const toJS = js.toJS;
-    pub const fromJS = js.fromJS;
-    pub const fromJSDirect = js.fromJSDirect;
-
-    pub const new = bun.TrivialNew(@This());
-
-    pub const Extern = struct {
-        pub fn getByName(global: *JSGlobalObject, name_bytes: [*:0]const u8, name_len: usize) callconv(.c) ?*CryptoHasher {
-            const name = name_bytes[0..name_len];
-
-            if (CryptoHasherZig.init(name)) |inner| {
-                return CryptoHasher.new(.{
-                    .zig = inner,
-                });
-            }
-
-            const algorithm = EVP.Algorithm.map.get(name) orelse {
-                return null;
-            };
-
-            switch (algorithm) {
-                .ripemd160,
-                .blake2b256,
-                .blake2b512,
-                .@"sha512-224" => {
-                    if (algorithm.md()) |md| {
-                        return CryptoHasher.new(.{
-                            .evp = EVP.init(algorithm, md, global.bunVM().rareData().boringEngine()),
-                        });
-                    }
-                },
-                else => {
-                    return null;
-                },
-            }
-
-            return null;
-        }
-
-        pub fn getFromOther(global: *JSGlobalObject, other_handle: *CryptoHasher) callconv(.c) ?*CryptoHasher {
-            switch (other_handle.*) {
-                .zig => {
-                    const hasher = CryptoHasher.new(.{
-                        .zig = other_handle.zig.copy(),
-                    });
-                    return hasher;
-                },
-                .evp => {
-                    return CryptoHasher.new(.{
-                        .evp = other_handle.evp.copy(global.bunVM().rareData().boringEngine()) catch {
-                            return null;
-                        },
-                    });
-                },
-                else => {
-                    return null;
-                },
-            }
-        }
-
-        pub fn destroy(handle: *CryptoHasher) callconv(.c) void {
-            handle.release();
-        }
-
-        pub fn update(handle: *CryptoHasher, input_bytes: [*]const u8, input_len: usize) callconv(.c) bool {
-            const input = input_bytes[0..input_len];
-
-            switch (handle.*) {
-                .zig => {
-                    handle.zig.update(input);
-                    return true;
-                },
-                .evp => {
-                    handle.evp.update(input);
-                    return true;
-                },
-                else => {
-                    return false;
-                },
-            }
-        }
-
-        pub fn digest(handle: *CryptoHasher, global: *JSGlobalObject, buf: [*]u8, buf_len: usize) callconv(.c) u32 {
-            const digest_buf = buf[0..buf_len];
-            switch (handle.*) {
-                .zig => {
-                    const res = handle.zig.finalWithLen(digest_buf, buf_len);
-                    return @intCast(res.len);
-                },
-                .evp => {
-                    const res = handle.evp.final(global.bunVM().rareData().boringEngine(), digest_buf);
-                    return @intCast(res.len);
-                },
-                else => {
-                    return 0;
-                },
-            }
-        }
-
-        pub fn getDigestSize(handle: *CryptoHasher) callconv(.c) u32 {
-            return switch (handle.*) {
-                .zig => handle.zig.digest_length,
-                .evp => handle.evp.size(),
-                else => 0,
-            };
-        }
-
-        pub fn @"export"() void {
-            @export(&CryptoHasher.Extern.getByName, .{ .name = "Bun__CryptoHasherExtern__getByName" });
-            @export(&CryptoHasher.Extern.getFromOther, .{ .name = "Bun__CryptoHasherExtern__getFromOther" });
-            @export(&CryptoHasher.Extern.destroy, .{ .name = "Bun__CryptoHasherExtern__destroy" });
-            @export(&CryptoHasher.Extern.update, .{ .name = "Bun__CryptoHasherExtern__update" });
-            @export(&CryptoHasher.Extern.digest, .{ .name = "Bun__CryptoHasherExtern__digest" });
-            @export(&CryptoHasher.Extern.getDigestSize, .{ .name = "Bun__CryptoHasherExtern__getDigestSize" });
-        }
-    };
-
-    pub const digest = jsc.host_fn.wrapInstanceMethod(CryptoHasher, "digest_", false);
-    pub const hash = jsc.host_fn.wrapStaticMethod(CryptoHasher, "hash_", false);
-
-    fn throwHmacConsumed(globalThis: *jsc.JSGlobalObject) bun.JSError {
-        return globalThis.throw("HMAC has been consumed and is no longer usable", .{});
-    }
-
-    pub fn getByteLength(this: *CryptoHasher, globalThis: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
-        return jsc.JSValue.jsNumber(switch (this.*) {
-            .evp => this.evp.size(),
-            .hmac => if (this.hmac) |hmac| hmac.size() else {
-                return throwHmacConsumed(globalThis);
-            },
-            .zig => this.zig.digest_length,
-        });
-    }
-
-    pub fn getAlgorithm(this: *CryptoHasher, globalObject: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
-        return switch (this.*) {
-            .evp => ZigString.fromUTF8(bun.asByteSlice(@tagName(this.evp.algorithm))).toJS(globalObject),
-            .zig => ZigString.fromUTF8(bun.asByteSlice(@tagName(this.zig.algorithm))).toJS(globalObject),
-            .hmac => if (this.hmac) |hmac| ZigString.fromUTF8(bun.asByteSlice(@tagName(hmac.algorithm))).toJS(globalObject) else {
-                return throwHmacConsumed(globalObject);
-            },
-        };
-    }
-
-    pub fn getAlgorithms(globalThis_: *jsc.JSGlobalObject, _: JSValue, _: JSValue) bun.JSError!jsc.JSValue {
-        return bun.String.toJSArray(globalThis_, &EVP.Algorithm.names.values);
-    }
-
-    fn hashToEncoding(globalThis: *JSGlobalObject, evp: *EVP, input: jsc.Node.BlobOrStringOrBuffer, encoding: jsc.Node.Encoding) bun.JSError!jsc.JSValue {
-        var output_digest_buf: Digest = undefined;
-        @memset(&output_digest_buf, 0);
-        defer input.deinit();
-
-        if (input == .blob and input.blob.isBunFile()) {
-            return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
-        }
-
-        const len = evp.hash(globalThis.bunVM().rareData().boringEngine(), input.slice(), &output_digest_buf) orelse {
-            const e = BoringSSL.ERR_get_error();
-            const instance = createCryptoError(globalThis, e);
-            BoringSSL.ERR_clear_error();
-            return globalThis.throwValue(instance);
-        };
-        var enc = encoding;
-        return enc.encodeWithMaxSize(globalThis, BoringSSL.EVP_MAX_MD_SIZE, output_digest_buf[0..len]);
-    }
-
-    fn hashToBytes(globalThis: *JSGlobalObject, evp: *EVP, input: jsc.Node.BlobOrStringOrBuffer, output: ?jsc.ArrayBuffer) bun.JSError!jsc.JSValue {
-        defer input.deinit();
-
-        if (input == .blob and input.blob.isBunFile()) {
-            return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
-        }
-
-        if (output) |output_buf| {
-            const size = evp.size();
-            var bytes = output_buf.byteSlice();
-            if (bytes.len < size) {
-                return globalThis.throwInvalidArguments("TypedArray must be at least {d} bytes", .{size});
-            }
-            const len = evp.hash(globalThis.bunVM().rareData().boringEngine(), input.slice(), bytes[0..size]) orelse {
-                const e = BoringSSL.ERR_get_error();
-                const instance = createCryptoError(globalThis, e);
-                BoringSSL.ERR_clear_error();
-                return globalThis.throwValue(instance);
-            };
-            _ = len;
-            return output_buf.value;
-        } else {
-            var output_digest_buf: Digest = undefined;
-            @memset(&output_digest_buf, 0);
-            const len = evp.hash(globalThis.bunVM().rareData().boringEngine(), input.slice(), &output_digest_buf) orelse {
-                const e = BoringSSL.ERR_get_error();
-                const instance = createCryptoError(globalThis, e);
-                BoringSSL.ERR_clear_error();
-                return globalThis.throwValue(instance);
-            };
-            return jsc.ArrayBuffer.createBuffer(globalThis, output_digest_buf[0..len]);
-        }
-    }
-
-    pub fn hash_(
-        globalThis: *JSGlobalObject,
-        algorithm: ZigString,
-        input: jsc.Node.BlobOrStringOrBuffer,
-        output: ?jsc.Node.StringOrBuffer,
-    ) bun.JSError!jsc.JSValue {
-        var evp = EVP.byName(algorithm, globalThis) orelse return try CryptoHasherZig.hashByName(globalThis, algorithm, input, output) orelse {
-            return globalThis.throwInvalidArguments("Unsupported algorithm \"{f}\"", .{algorithm});
-        };
-        defer evp.deinit();
-
-        if (output) |string_or_buffer| {
-            switch (string_or_buffer) {
-                .buffer => |buffer| {
-                    return hashToBytes(globalThis, &evp, input, buffer.buffer);
-                },
-                else => {
-                    defer string_or_buffer.deinit();
-                    const encoding = jsc.Node.Encoding.from(string_or_buffer.slice()) orelse {
-                        return globalThis.ERR(.INVALID_ARG_VALUE, "Unknown encoding: {s}", .{string_or_buffer.slice()}).throw();
-                    };
-
-                    return hashToEncoding(globalThis, &evp, input, encoding);
-                },
-            }
-        } else {
-            return hashToBytes(globalThis, &evp, input, null);
-        }
-    }
-
-    pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!*CryptoHasher {
-        const arguments = callframe.arguments_old(2);
-        if (arguments.len == 0) {
-            return globalThis.throwInvalidArguments("Expected an algorithm name as an argument", .{});
-        }
-
-        const algorithm_name = arguments.ptr[0];
-        if (algorithm_name.isEmptyOrUndefinedOrNull() or !algorithm_name.isString()) {
-            return globalThis.throwInvalidArguments("algorithm must be a string", .{});
-        }
-
-        const algorithm = try algorithm_name.getZigString(globalThis);
-        if (algorithm.len == 0) {
-            return globalThis.throwInvalidArguments("Invalid algorithm name", .{});
-        }
-
-        const hmac_value = arguments.ptr[1];
-        var hmac_key: ?jsc.Node.StringOrBuffer = null;
-        defer {
-            if (hmac_key) |key| {
-                key.deinit();
-            }
-        }
-
-        if (!hmac_value.isEmptyOrUndefinedOrNull()) {
-            hmac_key = try jsc.Node.StringOrBuffer.fromJS(globalThis, bun.default_allocator, hmac_value) orelse {
-                return globalThis.throwInvalidArguments("key must be a string or buffer", .{});
-            };
-        }
-
-        return CryptoHasher.new(brk: {
-            if (hmac_key) |key| {
-                const chosen_algorithm = try algorithm_name.toEnumFromMap(globalThis, "algorithm", EVP.Algorithm, EVP.Algorithm.map);
-
-                break :brk .{
-                    .hmac = HMAC.init(chosen_algorithm, key.slice()) orelse {
-                        if (!globalThis.hasException()) {
-                            const e = BoringSSL.ERR_get_error();
-                            if (e != 0) {
-                                const instance = createCryptoError(globalThis, e);
-                                BoringSSL.ERR_clear_error();
-                                return globalThis.throwValue(instance);
-                            } else {
-                                return globalThis.throwTODO("HMAC is not supported for this algorithm yet");
-                            }
-                        }
-                        return error.JSError;
-                    },
-                };
-            }
-
-            break :brk .{
-                .evp = EVP.byName(algorithm, globalThis) orelse return CryptoHasherZig.constructor(algorithm) orelse {
-                    return globalThis.throwInvalidArguments("Unsupported algorithm {f}", .{algorithm});
-                },
-            };
-        });
-    }
-
-    pub fn getter(
-        globalObject: *jsc.JSGlobalObject,
-        _: *jsc.JSObject,
-    ) jsc.JSValue {
-        return CryptoHasher.js.getConstructor(globalObject);
-    }
-
-    pub fn update(this: *CryptoHasher, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-        const thisValue = callframe.this();
-        const arguments = callframe.arguments_old(2);
-        const input = arguments.ptr[0];
-        if (input.isEmptyOrUndefinedOrNull()) {
-            return globalThis.throwInvalidArguments("expected blob, string or buffer", .{});
-        }
-        const encoding = arguments.ptr[1];
-        const buffer = try jsc.Node.BlobOrStringOrBuffer.fromJSWithEncodingValue(globalThis, globalThis.bunVM().allocator, input, encoding) orelse {
-            if (!globalThis.hasException()) return globalThis.throwInvalidArguments("expected blob, string or buffer", .{});
-            return error.JSError;
-        };
-        defer buffer.deinit();
-        if (buffer == .blob and buffer.blob.isBunFile()) {
-            return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
-        }
-
-        switch (this.*) {
-            .evp => {
-                this.evp.update(buffer.slice());
-                const e = BoringSSL.ERR_get_error();
-                if (e != 0) {
-                    const instance = createCryptoError(globalThis, e);
-                    BoringSSL.ERR_clear_error();
-                    return globalThis.throwValue(instance);
-                }
-            },
-            .hmac => {
-                const hmac = this.hmac orelse {
-                    return throwHmacConsumed(globalThis);
-                };
-
-                hmac.update(buffer.slice());
-                const e = BoringSSL.ERR_get_error();
-                if (e != 0) {
-                    const instance = createCryptoError(globalThis, e);
-                    BoringSSL.ERR_clear_error();
-                    return globalThis.throwValue(instance);
-                }
-            },
-            .zig => {
-                this.zig.update(buffer.slice());
-                return thisValue;
-            },
-        }
-
-        return thisValue;
-    }
-
-    pub fn copy(
-        this: *CryptoHasher,
-        globalObject: *jsc.JSGlobalObject,
-        _: *jsc.CallFrame,
-    ) bun.JSError!jsc.JSValue {
-        const copied: CryptoHasher = switch (this.*) {
-            .evp => .{ .evp = bun.handleOom(this.evp.copy(globalObject.bunVM().rareData().boringEngine())) },
-            .hmac => brk: {
-                const hmac = this.hmac orelse {
-                    return throwHmacConsumed(globalObject);
-                };
-                break :brk .{
-                    .hmac = hmac.copy() catch {
-                        const err = createCryptoError(globalObject, BoringSSL.ERR_get_error());
-                        BoringSSL.ERR_clear_error();
-                        return globalObject.throwValue(err);
-                    },
-                };
-            },
-            .zig => .{ .zig = this.zig.copy() },
-        };
-        return CryptoHasher.new(copied).toJS(globalObject);
-    }
-
-    pub fn digest_(this: *CryptoHasher, globalThis: *JSGlobalObject, output: ?jsc.Node.StringOrBuffer) bun.JSError!jsc.JSValue {
-        if (output) |string_or_buffer| {
-            switch (string_or_buffer) {
-                .buffer => |buffer| {
-                    return this.digestToBytes(
-                        globalThis,
-                        buffer.buffer,
-                    );
-                },
-                else => {
-                    defer string_or_buffer.deinit();
-                    const encoding = jsc.Node.Encoding.from(string_or_buffer.slice()) orelse {
-                        return globalThis.ERR(.INVALID_ARG_VALUE, "Unknown encoding: {s}", .{string_or_buffer.slice()}).throw();
-                    };
-
-                    return this.digestToEncoding(globalThis, encoding);
-                },
-            }
-        } else {
-            return this.digestToBytes(globalThis, null);
-        }
-    }
-
-    fn digestToBytes(this: *CryptoHasher, globalThis: *JSGlobalObject, output: ?jsc.ArrayBuffer) bun.JSError!jsc.JSValue {
-        if (output) |output_buf| {
-            var bytes = output_buf.byteSlice();
-            if (bytes.len < BoringSSL.EVP_MAX_MD_SIZE) {
-                return globalThis.throwInvalidArguments(comptime std.fmt.comptimePrint("TypedArray must be at least {d} bytes", .{BoringSSL.EVP_MAX_MD_SIZE}), .{});
-            }
-            _ = this.final(globalThis, bytes[0..bytes.len]) catch return .zero;
-            if (globalThis.hasException()) {
-                return error.JSError;
-            }
-            return output_buf.value;
-        } else {
-            var output_digest_buf: EVP.Digest = std.mem.zeroes(EVP.Digest);
-            const result = this.final(globalThis, &output_digest_buf) catch return .zero;
-            if (globalThis.hasException()) {
-                return error.JSError;
-            }
-            return jsc.ArrayBuffer.createBuffer(globalThis, result);
-        }
-    }
-
-    fn digestToEncoding(this: *CryptoHasher, globalThis: *JSGlobalObject, encoding: jsc.Node.Encoding) bun.JSError!jsc.JSValue {
-        var output_digest_buf: EVP.Digest = std.mem.zeroes(EVP.Digest);
-        const out = this.final(globalThis, &output_digest_buf) catch return .zero;
-        if (globalThis.hasException()) {
-            return error.JSError;
-        }
-        var enc = encoding;
-        return enc.encodeWithMaxSize(globalThis, BoringSSL.EVP_MAX_MD_SIZE, out);
-    }
-
-    fn final(this: *CryptoHasher, globalThis: *JSGlobalObject, output_digest_slice: []u8) bun.JSError![]u8 {
-        return switch (this.*) {
-            .hmac => brk: {
-                const hmac: *HMAC = this.hmac orelse {
-                    return throwHmacConsumed(globalThis);
-                };
-                this.hmac = null;
-                defer hmac.deinit();
-                break :brk hmac.final(output_digest_slice);
-            },
-            .evp => this.evp.final(globalThis.bunVM().rareData().boringEngine(), output_digest_slice),
-            .zig => this.zig.final(output_digest_slice),
-        };
-    }
-
-    pub fn release(this: *CryptoHasher) void {
-        switch (this.*) {
-            .evp => this.evp.deinit(),
-            .zig => this.zig.deinit(),
-            .hmac => if (this.hmac) |hmac| hmac.deinit(),
-        }
-        bun.destroy(this);
-    }
-
-    pub fn finalize(this: *CryptoHasher) void {
-        this.release();
-    }
-
-    pub fn deinit(this: *CryptoHasher) void {
-        this.release();
-    }
-};
 const CryptoHasherZig = struct {
     algorithm: EVP.Algorithm,
     state: *anyopaque,
@@ -582,9 +673,15 @@ pub fn hashByNameInner(globalThis: *JSGlobalObject, comptime Algorithm: type, in
 return hashByNameInnerToBytes(globalThis, Algorithm, input, buffer.buffer);
 },
 else => {
-defer {
-                _ = string_or_buffer.deinit();
-                }
+var sob = string_or_buffer;
+                _ = &sob;
+                var sob_guard = DeinitGuard(jsc.Node.StringOrBuffer){ .ptr = (blk: {
+                break :blk (&sob);
+
+}) };
+                _ = &sob_guard;
+                var __sob_guard_moved = false; _ = &__sob_guard_moved;
+                defer if (!__sob_guard_moved) { __sob_guard_moved = true; const __T = @TypeOf(sob_guard); if (@typeInfo(__T) == .optional) { if (sob_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { sob_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = sob_guard; _drop_val.__cp_deinit(); } };
                 const encoding = ((jsc.Node.Encoding.from(string_or_buffer.slice())) orelse {
                 return globalThis.ERR(.INVALID_ARG_VALUE, "Unknown encoding: {s}", .{ string_or_buffer.slice() }).throw();
 });
@@ -599,9 +696,15 @@ defer {
     }
 
 pub fn hashByNameInnerToString(globalThis: *JSGlobalObject, comptime Algorithm: type, input: jsc.Node.BlobOrStringOrBuffer, encoding: jsc.Node.Encoding) bun.JSError!jsc.JSValue {
-            defer {
-            _ = input.deinit();
-            }
+            var input_val = input;
+            _ = &input_val;
+            var input_guard = DeinitGuard(jsc.Node.BlobOrStringOrBuffer){ .ptr = (blk: {
+            break :blk (&input_val);
+
+}) };
+            _ = &input_guard;
+            var __input_guard_moved = false; _ = &__input_guard_moved;
+            defer if (!__input_guard_moved) { __input_guard_moved = true; const __T = @TypeOf(input_guard); if (@typeInfo(__T) == .optional) { if (input_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { input_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = input_guard; _drop_val.__cp_deinit(); } };
             if (((input == .blob) and input.blob.isBunFile())) {
                 return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
             }
@@ -618,9 +721,15 @@ pub fn hashByNameInnerToString(globalThis: *JSGlobalObject, comptime Algorithm: 
     }
 
 pub fn hashByNameInnerToBytes(globalThis: *JSGlobalObject, comptime Algorithm: type, input: jsc.Node.BlobOrStringOrBuffer, output: ?jsc.ArrayBuffer) bun.JSError!jsc.JSValue {
-            defer {
-            _ = input.deinit();
-            }
+            var input_val = input;
+            _ = &input_val;
+            var input_guard = DeinitGuard(jsc.Node.BlobOrStringOrBuffer){ .ptr = (blk: {
+            break :blk (&input_val);
+
+}) };
+            _ = &input_guard;
+            var __input_guard_moved = false; _ = &__input_guard_moved;
+            defer if (!__input_guard_moved) { __input_guard_moved = true; const __T = @TypeOf(input_guard); if (@typeInfo(__T) == .optional) { if (input_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { input_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = input_guard; _drop_val.__cp_deinit(); } };
             if (((input == .blob) and input.blob.isBunFile())) {
                 return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
             }
@@ -673,7 +782,10 @@ pub fn update(self: *@This(), bytes: []const u8) void {
             inline for (CryptoHasherZig.algo_map) |item| {
                 _ = &item;
                 if ((self.algorithm == @field(EVP.Algorithm, (if (@typeInfo(@TypeOf(item)) == .@"enum" or @typeInfo(@TypeOf(item)) == .@"union") @tagName(item) else item.name)))) {
-                    return item.T.update(@ptrCast(@alignCast(self.state)), bytes);
+                    return (blk: {
+                    break :blk item.T.update(@ptrCast(@alignCast(self.state)), bytes);
+
+});
                 }
             }
             _ = @panic("unreachable");
@@ -683,7 +795,10 @@ pub fn copy(self: *const @This()) CryptoHasherZig {
             inline for (CryptoHasherZig.algo_map) |item| {
                 _ = &item;
                 if ((self.algorithm == @field(EVP.Algorithm, (if (@typeInfo(@TypeOf(item)) == .@"enum" or @typeInfo(@TypeOf(item)) == .@"union") @tagName(item) else item.name)))) {
-                    return .{ .algorithm = self.algorithm, .state = bun.dupe(item.T, @ptrCast(@alignCast(self.state))), .digest_length = self.digest_length };
+                    return .{ .algorithm = self.algorithm, .state = (blk: {
+                    break :blk bun.dupe(item.T, @ptrCast(@alignCast(self.state)));
+
+}), .digest_length = self.digest_length };
                 }
             }
             _ = @panic("unreachable");
@@ -693,9 +808,11 @@ pub fn finalWithLen(self: *@This(), output_digest_slice: []u8, res_len: usize) [
             inline for (CryptoHasherZig.algo_map) |pair| {
                 _ = &pair;
                 if ((self.algorithm == @field(EVP.Algorithm, (if (@typeInfo(@TypeOf(pair)) == .@"enum" or @typeInfo(@TypeOf(pair)) == .@"union") @tagName(pair) else pair.name)))) {
-                    _ = pair.T.final(@ptrCast(@alignCast(self.state)), @ptrCast(output_digest_slice));
-                    const reset: *pair.T = @ptrCast(@alignCast(self.state));
-                    reset.* = pair.T.init(.{});
+                    {
+                        _ = pair.T.final(@ptrCast(@alignCast(self.state)), @ptrCast(output_digest_slice));
+                        const reset: *pair.T = @ptrCast(@alignCast(self.state));
+                        reset.* = pair.T.init(.{});
+                    }
                     return output_digest_slice[0..res_len];
                 }
             }
@@ -799,9 +916,15 @@ pub fn hashToBytes(globalThis: *JSGlobalObject, input: jsc.Node.BlobOrStringOrBu
     }
 
 pub fn hash_(globalThis: *JSGlobalObject, input: jsc.Node.BlobOrStringOrBuffer, output: ?jsc.Node.StringOrBuffer) bun.JSError!jsc.JSValue {
-            defer {
-            _ = input.deinit();
-            }
+            var input_val = input;
+            _ = &input_val;
+            var input_guard = DeinitGuard(jsc.Node.BlobOrStringOrBuffer){ .ptr = (blk: {
+            break :blk (&input_val);
+
+}) };
+            _ = &input_guard;
+            var __input_guard_moved = false; _ = &__input_guard_moved;
+            defer if (!__input_guard_moved) { __input_guard_moved = true; const __T = @TypeOf(input_guard); if (@typeInfo(__T) == .optional) { if (input_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { input_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = input_guard; _drop_val.__cp_deinit(); } };
             if (((input == .blob) and input.blob.isBunFile())) {
                 return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
             }
@@ -812,9 +935,15 @@ pub fn hash_(globalThis: *JSGlobalObject, input: jsc.Node.BlobOrStringOrBuffer, 
 return hashToBytes(globalThis, input, buffer.buffer);
 },
 else => {
-defer {
-                _ = string_or_buffer.deinit();
-                }
+var sob = string_or_buffer;
+                _ = &sob;
+                var sob_guard = DeinitGuard(jsc.Node.StringOrBuffer){ .ptr = (blk: {
+                break :blk (&sob);
+
+}) };
+                _ = &sob_guard;
+                var __sob_guard_moved = false; _ = &__sob_guard_moved;
+                defer if (!__sob_guard_moved) { __sob_guard_moved = true; const __T = @TypeOf(sob_guard); if (@typeInfo(__T) == .optional) { if (sob_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { sob_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = sob_guard; _drop_val.__cp_deinit(); } };
                 const encoding = ((jsc.Node.Encoding.from(string_or_buffer.slice())) orelse {
                 return globalThis.ERR(.INVALID_ARG_VALUE, "Unknown encoding: {s}", .{ string_or_buffer.slice() }).throw();
 });
@@ -848,9 +977,15 @@ pub fn update(self: *@This(), globalThis: *jsc.JSGlobalObject, callframe: *jsc.C
             const buffer = ((buffer_opt) orelse {
             return globalThis.throwInvalidArguments("expected blob or string or buffer", .{});
 });
-            defer {
-            _ = buffer.deinit();
-            }
+            var buf = buffer;
+            _ = &buf;
+            var buf_guard = DeinitGuard(jsc.Node.BlobOrStringOrBuffer){ .ptr = (blk: {
+            break :blk (&buf);
+
+}) };
+            _ = &buf_guard;
+            var __buf_guard_moved = false; _ = &__buf_guard_moved;
+            defer if (!__buf_guard_moved) { __buf_guard_moved = true; const __T = @TypeOf(buf_guard); if (@typeInfo(__T) == .optional) { if (buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = buf_guard; _drop_val.__cp_deinit(); } };
             if (((buffer == .blob) and buffer.blob.isBunFile())) {
                 return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
             }
@@ -869,9 +1004,15 @@ pub fn digest_(self: *@This(), globalThis: *JSGlobalObject, output: ?jsc.Node.St
 return self.digestToBytes(globalThis, buffer.buffer);
 },
 else => {
-defer {
-                _ = string_or_buffer.deinit();
-                }
+var sob = string_or_buffer;
+                _ = &sob;
+                var sob_guard = DeinitGuard(jsc.Node.StringOrBuffer){ .ptr = (blk: {
+                break :blk (&sob);
+
+}) };
+                _ = &sob_guard;
+                var __sob_guard_moved = false; _ = &__sob_guard_moved;
+                defer if (!__sob_guard_moved) { __sob_guard_moved = true; const __T = @TypeOf(sob_guard); if (@typeInfo(__T) == .optional) { if (sob_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { sob_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = sob_guard; _drop_val.__cp_deinit(); } };
                 const encoding = ((jsc.Node.Encoding.from(string_or_buffer.slice())) orelse {
                 return globalThis.ERR(.INVALID_ARG_VALUE, "Unknown encoding: {s}", .{ string_or_buffer.slice() }).throw();
 });

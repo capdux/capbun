@@ -18,6 +18,44 @@ const PAGE_SIZE = 16384;
 
 const debug = bun.Output.scoped(.patch, .visible);
 
+struct DeinitGuard<T> {
+    ptr: (*T!)?,
+    ~init() {
+        if (p := _.ptr) p.deinit();
+    }
+}
+
+struct DeinitWithAllocGuard<T> {
+    ptr: (*T!)?,
+    alloc: Allocator,
+    ~init() {
+        if (p := _.ptr) p.deinit(_.alloc);
+    }
+}
+
+struct CloseGuard<T> {
+    val: T?,
+    ~init() {
+        if (v := _.val) v.close();
+    }
+}
+
+struct FreeGuard<T> {
+    alloc: Allocator,
+    slice: ([]const T)?,
+    ~init() {
+        if (s := _.slice) _.alloc.free(s);
+    }
+}
+
+struct LinesParserGuard {
+    ptr: *PatchLinesParser!,
+    alloc: Allocator,
+    ~init() {
+        _.ptr.deinit(_.alloc, false);
+    }
+}
+
 /// All strings point to the original patch file text
 pub enum PatchFilePart {
     file_patch: *FilePatch,
@@ -65,7 +103,7 @@ pub struct PatchFile {
         let state: ApplyState = {};
         let sfb = std.heap.stackFallback(1024, allocator);
         let arena_alloc = bun.ArenaAllocator.init(sfb.get());
-        defer arena_alloc.deinit();
+        const arena_guard = DeinitGuard<bun.ArenaAllocator>{ ptr: unsafe { &arena_alloc } };
 
         for (part of this.parts.items) {
             defer * = arena_alloc.reset(.retain_capacity);
@@ -125,7 +163,7 @@ pub struct PatchFile {
                         .result fd => fd,
                         .err e => return e.withoutPath(),
                     };
-                    defer newfile_fd.close();
+                    const newfile_fd_guard = CloseGuard<bun.FD>{ val: newfile_fd };
 
                     const hunk = part.file_creation.hunk orelse {
                         continue;
@@ -165,7 +203,7 @@ pub struct PatchFile {
                         }
                         break :brk contents;
                     };
-                    defer file_alloc.free(file_contents);
+                    const file_contents_guard = FreeGuard<u8>{ alloc: file_alloc, slice: file_contents };
 
                     let written: usize = 0;
                     while (written < file_contents.len) {
@@ -201,7 +239,7 @@ pub struct PatchFile {
                             .err e => return e.withoutPath(),
                             .result f => f,
                         };
-                        defer fd.close();
+                        const fd_guard = CloseGuard<bun.FD>{ val: fd };
                         if (e := bun.sys.fchmod(fd, newmode.toBunMode()).asErr()) {
                             return e.withoutPath();
                         }
@@ -237,7 +275,7 @@ pub struct PatchFile {
         const use_arena: bool = stat.size <= PAGE_SIZE;
         const file_alloc = if (use_arena) arena_alloc.allocator() else bun.default_allocator;
         const filebuf = patch_dir.stdDir().readFileAlloc(file_alloc, file_path, 1024 * 1024 * 1024 * 4) catch return { err: bun.sys.Error.fromCode(.INVAL, .read).withPath(file_path) };
-        defer file_alloc.free(filebuf);
+        const filebuf_guard = FreeGuard<u8>{ alloc: file_alloc, slice: filebuf };
 
         let file_line_count: usize = 0;
         const lines_count = brk: {
@@ -265,7 +303,7 @@ pub struct PatchFile {
         };
 
         let lines = bun.handleOom(std.ArrayListUnmanaged(StrSlice).initCapacity(bun.default_allocator, lines_count));
-        defer lines.deinit(bun.default_allocator);
+        const lines_guard = DeinitWithAllocGuard<std.ArrayListUnmanaged(StrSlice)>{ ptr: unsafe { &lines }, alloc: bun.default_allocator };
         {
             let iter = std.mem.splitScalar(u8, filebuf, '\n');
             let i: usize = 0;
@@ -327,10 +365,10 @@ pub struct PatchFile {
             .err e => return { err: e.withPath(file_path) },
             .result fd => fd,
         };
-        defer file_fd.close();
+        const file_fd_guard = CloseGuard<bun.FD>{ val: file_fd };
 
         const contents = bun.handleOom(std.mem.join(bun.default_allocator, "\n", lines.items));
-        defer bun.default_allocator.free(contents);
+        const contents_guard = FreeGuard<u8>{ alloc: bun.default_allocator, slice: contents };
 
         let written: usize = 0;
         while (written < contents.len) {
@@ -555,7 +593,7 @@ err ParseErr {
 /// NOTE: the returned `PatchFile` struct will contain pointers to original file text so make sure to not deallocate `file`
 pub fn parsePatchFile(file: []const u8): PatchFile ! ParseErr {
     let lines_parser = PatchLinesParser{};
-    defer lines_parser.deinit(bun.default_allocator, false);
+    const lines_parser_guard = LinesParserGuard{ ptr: unsafe { &lines_parser }, alloc: bun.default_allocator };
 
     lines_parser.parse(file, {}) catch e => {
         // TODO: the parser can be refactored to remove this as it is a hacky workaround, like detecting while parsing if legacy diffs are used
@@ -1136,21 +1174,17 @@ pub fn diffPostProcess(result: *bun.spawn.sync.Result, old_folder: []const u8, n
     std.mem.swap(std.array_list.Managed(u8), &stdout, &result.stdout);
     std.mem.swap(std.array_list.Managed(u8), &stderr, &result.stderr);
 
-    let deinit_stdout = true;
-    let deinit_stderr = true;
-    defer {
-        if (deinit_stdout) stdout.deinit();
-        if (deinit_stderr) stderr.deinit();
-    }
+    let stdout_guard = DeinitGuard<std.array_list.Managed(u8)>{ ptr: unsafe { &stdout } };
+    let stderr_guard = DeinitGuard<std.array_list.Managed(u8)>{ ptr: unsafe { &stderr } };
 
     if (stderr.items.len > 0) {
-        deinit_stderr = false;
+        stderr_guard.ptr = null;
         return { err: stderr };
     }
 
     debug("Before postprocess: {s}\n", [stdout.items]);
     gitDiffPostprocess(&stdout, old_folder, new_folder)?;
-    deinit_stdout = false;
+    stdout_guard.ptr = null;
     return { result: stdout };
 }
 
@@ -1205,12 +1239,8 @@ pub fn gitDiffInternal(
     const old_folder = paths[0];
     const new_folder = paths[1];
 
-    defer {
-        if (comptime bun.Environment.isWindows) {
-            allocator.free(old_folder);
-            allocator.free(new_folder);
-        }
-    }
+    const old_folder_guard = FreeGuard<u8>{ alloc: allocator, slice: if (comptime bun.Environment.isWindows) old_folder else null };
+    const new_folder_guard = FreeGuard<u8>{ alloc: allocator, slice: if (comptime bun.Environment.isWindows) new_folder else null };
 
     let child_proc = std.process.Child.init(
         &[
@@ -1232,7 +1262,7 @@ pub fn gitDiffInternal(
     child_proc.stdout_behavior = .Pipe;
     child_proc.stderr_behavior = .Pipe;
     let map = std.process.EnvMap.init(allocator);
-    defer map.deinit();
+    const map_guard = DeinitGuard<std.process.EnvMap>{ ptr: unsafe { &map } };
     if (v := bun.env_var.PATH.get()) map.put("PATH", v)?;
     map.put("GIT_CONFIG_NOSYSTEM", "1")?;
     map.put("HOME", "")?;
@@ -1242,24 +1272,20 @@ pub fn gitDiffInternal(
     child_proc.env_map = &map;
     let stdout: std.ArrayListUnmanaged(u8) = .empty;
     let stderr: std.ArrayListUnmanaged(u8) = .empty;
-    let deinit_stdout = true;
-    let deinit_stderr = true;
-    defer {
-        if (deinit_stdout) stdout.deinit(allocator);
-        if (deinit_stderr) stderr.deinit(allocator);
-    }
+    let stdout_guard = DeinitWithAllocGuard<std.ArrayListUnmanaged(u8)>{ ptr: unsafe { &stdout }, alloc: allocator };
+    let stderr_guard = DeinitWithAllocGuard<std.ArrayListUnmanaged(u8)>{ ptr: unsafe { &stderr }, alloc: allocator };
     child_proc.spawn()?;
     child_proc.collectOutput(allocator, &stdout, &stderr, 1024 * 1024 * 4)?;
     * = child_proc.wait()?;
     if (stderr.items.len > 0) {
-        deinit_stderr = false;
+        stderr_guard.ptr = null;
         return { err: stderr.toManaged(allocator) };
     }
 
     debug("Before postprocess: {s}\n", [stdout.items]);
     let stdout_managed = stdout.toManaged(allocator);
     gitDiffPostprocess(&stdout_managed, old_folder, new_folder)?;
-    deinit_stdout = false;
+    stdout_guard.ptr = null;
     return { result: stdout_managed };
 }
 

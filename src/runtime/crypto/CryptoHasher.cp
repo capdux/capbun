@@ -22,10 +22,36 @@ const EVP = Crypto.EVP;
 const HMAC = Crypto.HMAC;
 const createCryptoError = Crypto.createCryptoError;
 
-pub const CryptoHasher = union(enum) {
-    hmac: ?*HMAC,
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+pub struct OptDeinitGuard<T> {
+    ptr: (*T!)? = null,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deinit(); }
+        }
+    }
+}
+
+pub union(enum) CryptoHasher {
+    hmac: (*HMAC)?,
     evp: EVP,
-    zig: CryptoHasherZig,
+    @"zig": CryptoHasherZig,
+
+    fn getSSLErr(): u32 {
+        const f = BoringSSL.ERR_get_error;
+        return f();
+    }
+
+    fn clearSSLErr() {
+        const f = BoringSSL.ERR_clear_error;
+        f();
+    }
 
     const Digest = EVP.Digest;
 
@@ -38,11 +64,11 @@ pub const CryptoHasher = union(enum) {
 
     pub const Extern = struct {
         pub fn getByName(global: *JSGlobalObject, name_bytes: [*:0]const u8, name_len: usize) callconv(.c) ?*CryptoHasher {
-            const name = name_bytes[0..name_len];
+            const name = unsafe { name_bytes[0..name_len] };
 
-            if (CryptoHasherZig.init(name)) |inner| {
+            if (inner := CryptoHasherZig.init(name)) {
                 return CryptoHasher.new(.{
-                    .zig = inner,
+                    .@"zig" = inner,
                 });
             }
 
@@ -71,9 +97,9 @@ pub const CryptoHasher = union(enum) {
 
         pub fn getFromOther(global: *JSGlobalObject, other_handle: *CryptoHasher) callconv(.c) ?*CryptoHasher {
             switch (other_handle.*) {
-                .zig => {
+                .@"zig" => {
                     const hasher = CryptoHasher.new(.{
-                        .zig = other_handle.zig.copy(),
+                        .@"zig" = other_handle.@"zig".copy(),
                     });
                     return hasher;
                 },
@@ -95,11 +121,11 @@ pub const CryptoHasher = union(enum) {
         }
 
         pub fn update(handle: *CryptoHasher, input_bytes: [*]const u8, input_len: usize) callconv(.c) bool {
-            const input = input_bytes[0..input_len];
+            const input = unsafe { input_bytes[0..input_len] };
 
             switch (handle.*) {
-                .zig => {
-                    handle.zig.update(input);
+                .@"zig" => {
+                    handle.@"zig".update(input);
                     return true;
                 },
                 .evp => {
@@ -115,8 +141,8 @@ pub const CryptoHasher = union(enum) {
         pub fn digest(handle: *CryptoHasher, global: *JSGlobalObject, buf: [*]u8, buf_len: usize) callconv(.c) u32 {
             const digest_buf = buf[0..buf_len];
             switch (handle.*) {
-                .zig => {
-                    const res = handle.zig.finalWithLen(digest_buf, buf_len);
+                .@"zig" => {
+                    const res = handle.@"zig".finalWithLen(digest_buf, buf_len);
                     return @intCast(res.len);
                 },
                 .evp => {
@@ -131,7 +157,7 @@ pub const CryptoHasher = union(enum) {
 
         pub fn getDigestSize(handle: *CryptoHasher) callconv(.c) u32 {
             return switch (handle.*) {
-                .zig => handle.zig.digest_length,
+                .@"zig" => handle.@"zig".digest_length,
                 .evp => handle.evp.size(),
                 else => 0,
             };
@@ -150,81 +176,83 @@ pub const CryptoHasher = union(enum) {
     pub const digest = jsc.host_fn.wrapInstanceMethod(CryptoHasher, "digest_", false);
     pub const hash = jsc.host_fn.wrapStaticMethod(CryptoHasher, "hash_", false);
 
-    fn throwHmacConsumed(globalThis: *jsc.JSGlobalObject) bun.JSError {
+    fn throwHmacConsumed(globalThis: *jsc.JSGlobalObject): bun.JSError {
         return globalThis.throw("HMAC has been consumed and is no longer usable", .{});
     }
 
-    pub fn getByteLength(this: *CryptoHasher, globalThis: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
-        return jsc.JSValue.jsNumber(switch (this.*) {
-            .evp => this.evp.size(),
-            .hmac => if (this.hmac) |hmac| hmac.size() else {
+    pub fn getByteLength(*_, globalThis: *jsc.JSGlobalObject): jsc.JSValue ! bun.JSError {
+        return jsc.JSValue.jsNumber(switch (_.*) {
+            .evp => _.evp.size(),
+            .hmac => if (h := _.hmac) h.size() else {
                 return throwHmacConsumed(globalThis);
             },
-            .zig => this.zig.digest_length,
+            .@"zig" => _.@"zig".digest_length,
         });
     }
 
-    pub fn getAlgorithm(this: *CryptoHasher, globalObject: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
-        return switch (this.*) {
-            .evp => ZigString.fromUTF8(bun.asByteSlice(@tagName(this.evp.algorithm))).toJS(globalObject),
-            .zig => ZigString.fromUTF8(bun.asByteSlice(@tagName(this.zig.algorithm))).toJS(globalObject),
-            .hmac => if (this.hmac) |hmac| ZigString.fromUTF8(bun.asByteSlice(@tagName(hmac.algorithm))).toJS(globalObject) else {
+    pub fn getAlgorithm(*_, globalObject: *jsc.JSGlobalObject): jsc.JSValue ! bun.JSError {
+        return switch (_.*) {
+            .evp => ZigString.fromUTF8(bun.asByteSlice(@tagName(_.evp.algorithm))).toJS(globalObject),
+            .@"zig" => ZigString.fromUTF8(bun.asByteSlice(@tagName(_.@"zig".algorithm))).toJS(globalObject),
+            .hmac => if (h := _.hmac) ZigString.fromUTF8(bun.asByteSlice(@tagName(h.algorithm))).toJS(globalObject) else {
                 return throwHmacConsumed(globalObject);
             },
         };
     }
 
-    pub fn getAlgorithms(globalThis_: *jsc.JSGlobalObject, _: JSValue, _: JSValue) bun.JSError!jsc.JSValue {
+    pub fn getAlgorithms(globalThis_: *jsc.JSGlobalObject, _: JSValue, _: JSValue): bun.JSError!jsc.JSValue {
         return bun.String.toJSArray(globalThis_, &EVP.Algorithm.names.values);
     }
 
-    fn hashToEncoding(globalThis: *JSGlobalObject, evp: *EVP, input: jsc.Node.BlobOrStringOrBuffer, encoding: jsc.Node.Encoding) bun.JSError!jsc.JSValue {
+    fn hashToEncoding(globalThis: *JSGlobalObject, evp: *EVP, input: jsc.Node.BlobOrStringOrBuffer, encoding: jsc.Node.Encoding): bun.JSError!jsc.JSValue {
         let output_digest_buf: Digest = undefined;
         @memset(&output_digest_buf, 0);
-        defer input.deinit();
+        let input_val = input;
+        const input_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &input_val } };
 
         if (input == .blob and input.blob.isBunFile()) {
             return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
         }
 
         const len = evp.hash(globalThis.bunVM().rareData().boringEngine(), input.slice(), &output_digest_buf) orelse {
-            const e = BoringSSL.ERR_get_error();
+            const e = getSSLErr();
             const instance = createCryptoError(globalThis, e);
-            BoringSSL.ERR_clear_error();
+            clearSSLErr();
             return globalThis.throwValue(instance);
         };
         let enc = encoding;
         return enc.encodeWithMaxSize(globalThis, BoringSSL.EVP_MAX_MD_SIZE, output_digest_buf[0..len]);
     }
 
-    fn hashToBytes(globalThis: *JSGlobalObject, evp: *EVP, input: jsc.Node.BlobOrStringOrBuffer, output: ?jsc.ArrayBuffer) bun.JSError!jsc.JSValue {
-        defer input.deinit();
+    fn hashToBytes(globalThis: *JSGlobalObject, evp: *EVP, input: jsc.Node.BlobOrStringOrBuffer, output: jsc.ArrayBuffer?): bun.JSError!jsc.JSValue {
+        let input_val = input;
+        const input_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &input_val } };
 
         if (input == .blob and input.blob.isBunFile()) {
             return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
         }
 
-        if (output) |output_buf| {
+        if (output_buf := output) {
             const size = evp.size();
             let bytes = output_buf.byteSlice();
             if (bytes.len < size) {
                 return globalThis.throwInvalidArguments("TypedArray must be at least {d} bytes", .{size});
             }
             const len = evp.hash(globalThis.bunVM().rareData().boringEngine(), input.slice(), bytes[0..size]) orelse {
-                const e = BoringSSL.ERR_get_error();
+                const e = getSSLErr();
                 const instance = createCryptoError(globalThis, e);
-                BoringSSL.ERR_clear_error();
+                clearSSLErr();
                 return globalThis.throwValue(instance);
             };
-            _ = len;
+            * = len;
             return output_buf.value;
         } else {
             let output_digest_buf: Digest = undefined;
             @memset(&output_digest_buf, 0);
             const len = evp.hash(globalThis.bunVM().rareData().boringEngine(), input.slice(), &output_digest_buf) orelse {
-                const e = BoringSSL.ERR_get_error();
+                const e = getSSLErr();
                 const instance = createCryptoError(globalThis, e);
-                BoringSSL.ERR_clear_error();
+                clearSSLErr();
                 return globalThis.throwValue(instance);
             };
             return jsc.ArrayBuffer.createBuffer(globalThis, output_digest_buf[0..len]);
@@ -235,20 +263,22 @@ pub const CryptoHasher = union(enum) {
         globalThis: *JSGlobalObject,
         algorithm: ZigString,
         input: jsc.Node.BlobOrStringOrBuffer,
-        output: ?jsc.Node.StringOrBuffer,
-    ) bun.JSError!jsc.JSValue {
-        let evp = EVP.byName(algorithm, globalThis) orelse return try CryptoHasherZig.hashByName(globalThis, algorithm, input, output) orelse {
-            return globalThis.throwInvalidArguments("Unsupported algorithm \"{f}\"", .{algorithm});
+        output: jsc.Node.StringOrBuffer?,
+    ): bun.JSError!jsc.JSValue {
+        let evp = EVP.byName(algorithm, globalThis) orelse {
+            const res = CryptoHasherZig.hashByName(globalThis, algorithm, input, output)?;
+            return res orelse globalThis.throwInvalidArguments("Unsupported algorithm \"{f}\"", .{algorithm});
         };
-        defer evp.deinit();
+        const evp_guard = DeinitGuard<EVP>{ ptr: unsafe { &evp } };
 
-        if (output) |string_or_buffer| {
+        if (string_or_buffer := output) {
             switch (string_or_buffer) {
                 .buffer => |buffer| {
                     return hashToBytes(globalThis, &evp, input, buffer.buffer);
                 },
                 else => {
-                    defer string_or_buffer.deinit();
+                    let sob = string_or_buffer;
+                    const sob_guard = DeinitGuard<jsc.Node.StringOrBuffer>{ ptr: unsafe { &sob } };
                     const encoding = jsc.Node.Encoding.from(string_or_buffer.slice()) orelse {
                         return globalThis.ERR(.INVALID_ARG_VALUE, "Unknown encoding: {s}", .{string_or_buffer.slice()}).throw();
                     };
@@ -261,13 +291,13 @@ pub const CryptoHasher = union(enum) {
         }
     }
 
-    pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!*CryptoHasher {
+    pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!*CryptoHasher {
         const arguments = callframe.arguments_old(2);
         if (arguments.len == 0) {
             return globalThis.throwInvalidArguments("Expected an algorithm name as an argument", .{});
         }
 
-        const algorithm_name = arguments.ptr[0];
+        const algorithm_name = unsafe { arguments.ptr[0] };
         if (algorithm_name.isEmptyOrUndefinedOrNull() or !algorithm_name.isString()) {
             return globalThis.throwInvalidArguments("algorithm must be a string", .{});
         }
@@ -277,31 +307,30 @@ pub const CryptoHasher = union(enum) {
             return globalThis.throwInvalidArguments("Invalid algorithm name", .{});
         }
 
-        const hmac_value = arguments.ptr[1];
-        let hmac_key: ?jsc.Node.StringOrBuffer = null;
-        defer {
-            if (hmac_key) |key| {
-                key.deinit();
+        const hmac_value = unsafe { arguments.ptr[1] };
+        let hmac_key: jsc.Node.StringOrBuffer? = null;
+        let hmac_key_guard = OptDeinitGuard<jsc.Node.StringOrBuffer>{};
+
+        if (!hmac_value.isEmptyOrUndefinedOrNull()) {
+            if (key := jsc.Node.StringOrBuffer.fromJS(globalThis, bun.default_allocator, hmac_value)?) {
+                hmac_key = key;
+                hmac_key_guard.ptr = unsafe { &hmac_key.? };
+            } else {
+                return globalThis.throwInvalidArguments("key must be a string or buffer", .{});
             }
         }
 
-        if (!hmac_value.isEmptyOrUndefinedOrNull()) {
-            hmac_key = try jsc.Node.StringOrBuffer.fromJS(globalThis, bun.default_allocator, hmac_value) orelse {
-                return globalThis.throwInvalidArguments("key must be a string or buffer", .{});
-            };
-        }
-
         return CryptoHasher.new(brk: {
-            if (hmac_key) |key| {
+            if (key := hmac_key) {
                 const chosen_algorithm = try algorithm_name.toEnumFromMap(globalThis, "algorithm", EVP.Algorithm, EVP.Algorithm.map);
 
                 break :brk .{
                     .hmac = HMAC.init(chosen_algorithm, key.slice()) orelse {
                         if (!globalThis.hasException()) {
-                            const e = BoringSSL.ERR_get_error();
+                            const e = getSSLErr();
                             if (e != 0) {
                                 const instance = createCryptoError(globalThis, e);
-                                BoringSSL.ERR_clear_error();
+                                clearSSLErr();
                                 return globalThis.throwValue(instance);
                             } else {
                                 return globalThis.throwTODO("HMAC is not supported for this algorithm yet");
@@ -323,52 +352,54 @@ pub const CryptoHasher = union(enum) {
     pub fn getter(
         globalObject: *jsc.JSGlobalObject,
         _: *jsc.JSObject,
-    ) jsc.JSValue {
+    ): jsc.JSValue {
         return CryptoHasher.js.getConstructor(globalObject);
     }
 
-    pub fn update(this: *CryptoHasher, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+    pub fn update(*_, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): jsc.JSValue ! bun.JSError {
         const thisValue = callframe.this();
         const arguments = callframe.arguments_old(2);
-        const input = arguments.ptr[0];
+        const input = unsafe { arguments.ptr[0] };
         if (input.isEmptyOrUndefinedOrNull()) {
             return globalThis.throwInvalidArguments("expected blob, string or buffer", .{});
         }
-        const encoding = arguments.ptr[1];
-        const buffer = try jsc.Node.BlobOrStringOrBuffer.fromJSWithEncodingValue(globalThis, globalThis.bunVM().allocator, input, encoding) orelse {
+        const encoding = unsafe { arguments.ptr[1] };
+        const buffer_opt = jsc.Node.BlobOrStringOrBuffer.fromJSWithEncodingValue(globalThis, globalThis.bunVM().allocator, input, encoding)?;
+        if (buffer_opt == null) {
             if (!globalThis.hasException()) return globalThis.throwInvalidArguments("expected blob, string or buffer", .{});
             return error.JSError;
-        };
-        defer buffer.deinit();
-        if (buffer == .blob and buffer.blob.isBunFile()) {
+        }
+        let buf = buffer_opt.?;
+        const buf_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &buf } };
+        if (buf == .blob && buf.blob.isBunFile()) {
             return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
         }
 
-        switch (this.*) {
+        switch (_.*) {
             .evp => {
-                this.evp.update(buffer.slice());
-                const e = BoringSSL.ERR_get_error();
+                _.evp.update(buf.slice());
+                const e = getSSLErr();
                 if (e != 0) {
                     const instance = createCryptoError(globalThis, e);
-                    BoringSSL.ERR_clear_error();
+                    clearSSLErr();
                     return globalThis.throwValue(instance);
                 }
             },
             .hmac => {
-                const hmac = this.hmac orelse {
+                if (hmac := _.hmac) {
+                    hmac.update(buf.slice());
+                    const e = getSSLErr();
+                    if (e != 0) {
+                        const instance = createCryptoError(globalThis, e);
+                        clearSSLErr();
+                        return globalThis.throwValue(instance);
+                    }
+                } else {
                     return throwHmacConsumed(globalThis);
-                };
-
-                hmac.update(buffer.slice());
-                const e = BoringSSL.ERR_get_error();
-                if (e != 0) {
-                    const instance = createCryptoError(globalThis, e);
-                    BoringSSL.ERR_clear_error();
-                    return globalThis.throwValue(instance);
                 }
             },
-            .zig => {
-                this.zig.update(buffer.slice());
+            .@"zig" => {
+                _.@"zig".update(buf.slice());
                 return thisValue;
             },
         }
@@ -377,66 +408,68 @@ pub const CryptoHasher = union(enum) {
     }
 
     pub fn copy(
-        this: *CryptoHasher,
+        *_,
         globalObject: *jsc.JSGlobalObject,
         _: *jsc.CallFrame,
-    ) bun.JSError!jsc.JSValue {
-        const copied: CryptoHasher = switch (this.*) {
-            .evp => .{ .evp = bun.handleOom(this.evp.copy(globalObject.bunVM().rareData().boringEngine())) },
+    ): jsc.JSValue ! bun.JSError {
+        const copied: CryptoHasher = switch (_.*) {
+            .evp => .{ .evp = bun.handleOom(_.evp.copy(globalObject.bunVM().rareData().boringEngine())) },
             .hmac => brk: {
-                const hmac = this.hmac orelse {
+                if (hmac := _.hmac) {
+                    break :brk .{
+                        .hmac = hmac.copy() catch {
+                            const e_val = createCryptoError(globalObject, getSSLErr());
+                            clearSSLErr();
+                            return globalObject.throwValue(e_val);
+                        },
+                    };
+                } else {
                     return throwHmacConsumed(globalObject);
-                };
-                break :brk .{
-                    .hmac = hmac.copy() catch {
-                        const err = createCryptoError(globalObject, BoringSSL.ERR_get_error());
-                        BoringSSL.ERR_clear_error();
-                        return globalObject.throwValue(err);
-                    },
-                };
+                }
             },
-            .zig => .{ .zig = this.zig.copy() },
+            .@"zig" => .{ .@"zig" = _.@"zig".copy() },
         };
         return CryptoHasher.new(copied).toJS(globalObject);
     }
 
-    pub fn digest_(this: *CryptoHasher, globalThis: *JSGlobalObject, output: ?jsc.Node.StringOrBuffer) bun.JSError!jsc.JSValue {
-        if (output) |string_or_buffer| {
+    pub fn digest_(*_, globalThis: *JSGlobalObject, output: jsc.Node.StringOrBuffer?): jsc.JSValue ! bun.JSError {
+        if (string_or_buffer := output) {
             switch (string_or_buffer) {
                 .buffer => |buffer| {
-                    return this.digestToBytes(
+                    return _.digestToBytes(
                         globalThis,
                         buffer.buffer,
                     );
                 },
                 else => {
-                    defer string_or_buffer.deinit();
+                    let sob = string_or_buffer;
+                    const sob_guard = DeinitGuard<jsc.Node.StringOrBuffer>{ ptr: unsafe { &sob } };
                     const encoding = jsc.Node.Encoding.from(string_or_buffer.slice()) orelse {
                         return globalThis.ERR(.INVALID_ARG_VALUE, "Unknown encoding: {s}", .{string_or_buffer.slice()}).throw();
                     };
 
-                    return this.digestToEncoding(globalThis, encoding);
+                    return _.digestToEncoding(globalThis, encoding);
                 },
             }
         } else {
-            return this.digestToBytes(globalThis, null);
+            return _.digestToBytes(globalThis, null);
         }
     }
 
-    fn digestToBytes(this: *CryptoHasher, globalThis: *JSGlobalObject, output: ?jsc.ArrayBuffer) bun.JSError!jsc.JSValue {
-        if (output) |output_buf| {
+    fn digestToBytes(*_, globalThis: *JSGlobalObject, output: jsc.ArrayBuffer?): jsc.JSValue ! bun.JSError {
+        if (output_buf := output) {
             let bytes = output_buf.byteSlice();
             if (bytes.len < BoringSSL.EVP_MAX_MD_SIZE) {
                 return globalThis.throwInvalidArguments(comptime std.fmt.comptimePrint("TypedArray must be at least {d} bytes", .{BoringSSL.EVP_MAX_MD_SIZE}), .{});
             }
-            _ = this.final(globalThis, bytes[0..bytes.len]) catch return .zero;
+            * = _.final(globalThis, bytes[0..bytes.len]) catch return .zero;
             if (globalThis.hasException()) {
                 return error.JSError;
             }
             return output_buf.value;
         } else {
             let output_digest_buf: EVP.Digest = std.mem.zeroes(EVP.Digest);
-            const result = this.final(globalThis, &output_digest_buf) catch return .zero;
+            const result = _.final(globalThis, &output_digest_buf) catch return .zero;
             if (globalThis.hasException()) {
                 return error.JSError;
             }
@@ -444,9 +477,9 @@ pub const CryptoHasher = union(enum) {
         }
     }
 
-    fn digestToEncoding(this: *CryptoHasher, globalThis: *JSGlobalObject, encoding: jsc.Node.Encoding) bun.JSError!jsc.JSValue {
+    fn digestToEncoding(*_, globalThis: *JSGlobalObject, encoding: jsc.Node.Encoding): jsc.JSValue ! bun.JSError {
         let output_digest_buf: EVP.Digest = std.mem.zeroes(EVP.Digest);
-        const out = this.final(globalThis, &output_digest_buf) catch return .zero;
+        const out = _.final(globalThis, &output_digest_buf) catch return .zero;
         if (globalThis.hasException()) {
             return error.JSError;
         }
@@ -454,38 +487,39 @@ pub const CryptoHasher = union(enum) {
         return enc.encodeWithMaxSize(globalThis, BoringSSL.EVP_MAX_MD_SIZE, out);
     }
 
-    fn final(this: *CryptoHasher, globalThis: *JSGlobalObject, output_digest_slice: []u8) bun.JSError![]u8 {
-        return switch (this.*) {
+    fn final(*_, globalThis: *JSGlobalObject, output_digest_slice: []u8): []u8 ! bun.JSError {
+        return switch (_.*) {
             .hmac => brk: {
-                const hmac: *HMAC = this.hmac orelse {
+                if (hmac := _.hmac) {
+                    _.hmac = null;
+                    const hmac_guard = DeinitGuard<HMAC>{ ptr: unsafe { @ptrCast(hmac) } };
+                    break :brk hmac.final(output_digest_slice);
+                } else {
                     return throwHmacConsumed(globalThis);
-                };
-                this.hmac = null;
-                defer hmac.deinit();
-                break :brk hmac.final(output_digest_slice);
+                }
             },
-            .evp => this.evp.final(globalThis.bunVM().rareData().boringEngine(), output_digest_slice),
-            .zig => this.zig.final(output_digest_slice),
+            .evp => _.evp.final(globalThis.bunVM().rareData().boringEngine(), output_digest_slice),
+            .@"zig" => _.@"zig".final(output_digest_slice),
         };
     }
 
-    pub fn release(this: *CryptoHasher) void {
-        switch (this.*) {
-            .evp => this.evp.deinit(),
-            .zig => this.zig.deinit(),
-            .hmac => if (this.hmac) |hmac| hmac.deinit(),
+    pub fn release(*_) {
+        switch (_.*) {
+            .evp => _.evp.deinit(),
+            .@"zig" => _.@"zig".deinit(),
+            .hmac => if (h := _.hmac) h.deinit(),
         }
-        bun.destroy(this);
+        bun.destroy(_);
     }
 
-    pub fn finalize(this: *CryptoHasher) void {
-        this.release();
+    pub fn finalize(*_) {
+        _.release();
     }
 
-    pub fn deinit(this: *CryptoHasher) void {
-        this.release();
+    pub fn deinit(*_) {
+        _.release();
     }
-};
+}
 
 pub struct AlgoEntry {
     name: []const u8,
@@ -529,7 +563,8 @@ const CryptoHasherZig = struct {
                     return hashByNameInnerToBytes(globalThis, Algorithm, input, buffer.buffer);
                 },
                 else => {
-                    defer string_or_buffer.deinit();
+                    let sob = string_or_buffer;
+                    const sob_guard = DeinitGuard<jsc.Node.StringOrBuffer>{ ptr: unsafe { &sob } };
                     const encoding = jsc.Node.Encoding.from(string_or_buffer.slice()) orelse {
                         return globalThis.ERR(.INVALID_ARG_VALUE, "Unknown encoding: {s}", .{string_or_buffer.slice()}).throw();
                     };
@@ -546,7 +581,8 @@ const CryptoHasherZig = struct {
     }
 
     fn hashByNameInnerToString(globalThis: *JSGlobalObject, comptime Algorithm: type, input: jsc.Node.BlobOrStringOrBuffer, encoding: jsc.Node.Encoding) bun.JSError!jsc.JSValue {
-        defer input.deinit();
+        let input_val = input;
+        const input_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &input_val } };
 
         if (input == .blob and input.blob.isBunFile()) {
             return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
@@ -564,7 +600,8 @@ const CryptoHasherZig = struct {
     }
 
     fn hashByNameInnerToBytes(globalThis: *JSGlobalObject, comptime Algorithm: type, input: jsc.Node.BlobOrStringOrBuffer, output: ?jsc.ArrayBuffer) bun.JSError!jsc.JSValue {
-        defer input.deinit();
+        let input_val = input;
+        const input_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &input_val } };
 
         if (input == .blob and input.blob.isBunFile()) {
             return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
@@ -622,7 +659,7 @@ const CryptoHasherZig = struct {
     fn update(this: *CryptoHasherZig, bytes: string) void {
         inline for (CryptoHasherZig.algo_map) |item| {
             if (this.algorithm == @field(EVP.Algorithm, item.name)) {
-                return item.T.update(@ptrCast(@alignCast(this.state)), bytes);
+                return unsafe { item.T.update(@ptrCast(@alignCast(this.state)), bytes) };
             }
         }
         @panic("unreachable");
@@ -633,7 +670,7 @@ const CryptoHasherZig = struct {
             if (this.algorithm == @field(EVP.Algorithm, item.name)) {
                 return .{
                     .algorithm = this.algorithm,
-                    .state = bun.dupe(item.T, @ptrCast(@alignCast(this.state))),
+                    .state = unsafe { bun.dupe(item.T, @ptrCast(@alignCast(this.state))) },
                     .digest_length = this.digest_length,
                 };
             }
@@ -644,9 +681,11 @@ const CryptoHasherZig = struct {
     fn finalWithLen(this: *CryptoHasherZig, output_digest_slice: []u8, res_len: usize) []u8 {
         inline for (CryptoHasherZig.algo_map) |pair| {
             if (this.algorithm == @field(EVP.Algorithm, pair.name)) {
-                pair.T.final(@ptrCast(@alignCast(this.state)), @ptrCast(output_digest_slice));
-                const reset: *pair.T = @ptrCast(@alignCast(this.state));
-                reset.* = pair.T.init(.{});
+                unsafe {
+                    pair.T.final(@ptrCast(@alignCast(this.state)), @ptrCast(output_digest_slice));
+                    const reset: *pair.T = @ptrCast(@alignCast(this.state));
+                    reset.* = pair.T.init(.{});
+                }
                 return output_digest_slice[0..res_len];
             }
         }
@@ -751,7 +790,8 @@ pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8): typ
             input: jsc.Node.BlobOrStringOrBuffer,
             output: ?jsc.Node.StringOrBuffer,
         ) bun.JSError!jsc.JSValue {
-            defer input.deinit();
+            let input_val = input;
+            const input_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &input_val } };
 
             if (input == .blob and input.blob.isBunFile()) {
                 return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
@@ -763,7 +803,8 @@ pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8): typ
                         return hashToBytes(globalThis, input, buffer.buffer);
                     },
                     else => {
-                        defer string_or_buffer.deinit();
+                        let sob = string_or_buffer;
+                        const sob_guard = DeinitGuard<jsc.Node.StringOrBuffer>{ ptr: unsafe { &sob } };
                         const encoding = jsc.Node.Encoding.from(string_or_buffer.slice()) orelse {
                             return globalThis.ERR(.INVALID_ARG_VALUE, "Unknown encoding: {s}", .{string_or_buffer.slice()}).throw();
                         };
@@ -801,7 +842,8 @@ pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8): typ
             const buffer = buffer_opt orelse {
                 return globalThis.throwInvalidArguments("expected blob or string or buffer", .{});
             };
-            defer buffer.deinit();
+            let buf = buffer;
+            const buf_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &buf } };
 
             if (buffer == .blob and buffer.blob.isBunFile()) {
                 return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
@@ -827,7 +869,8 @@ pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8): typ
                         );
                     },
                     else => {
-                        defer string_or_buffer.deinit();
+                        let sob = string_or_buffer;
+                        const sob_guard = DeinitGuard<jsc.Node.StringOrBuffer>{ ptr: unsafe { &sob } };
                         const encoding = jsc.Node.Encoding.from(string_or_buffer.slice()) orelse {
                             return globalThis.ERR(.INVALID_ARG_VALUE, "Unknown encoding: {s}", .{string_or_buffer.slice()}).throw();
                         };

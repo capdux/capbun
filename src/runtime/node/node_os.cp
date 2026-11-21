@@ -14,6 +14,77 @@ extern fn get_process_priority(pid: i32): i32;
 extern fn set_process_priority(pid: i32, priority: i32): i32;
 extern fn Bun__Os__getFreeMemory(): u64;
 
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+struct CloseGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.close(); }
+    }
+}
+
+struct DerefGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deref(); }
+    }
+}
+
+struct FreeGuard<T> {
+    slice: []T,
+    ~init() {
+        bun.default_allocator.free(_.slice);
+    }
+}
+
+struct FallbackFreeGuard {
+    slice_ptr: *([]u8)!,
+    stack_ptr: [*]const u8!,
+    ~init() {
+        unsafe {
+            if (_.slice_ptr.*.ptr != _.stack_ptr) {
+                bun.default_allocator.free(_.slice_ptr.*);
+            }
+        }
+    }
+}
+
+struct VmDeallocateGuard {
+    addr: usize,
+    size: usize,
+    ~init() {
+        * = std.c.vm_deallocate(std.c.mach_task_self(), _.addr, _.size);
+    }
+}
+
+struct UvCpuInfoGuard {
+    ptr: [*]libuv.uv_cpu_info_t!,
+    count: c_int,
+    ~init() {
+        libuv.uv_free_cpu_info(_.ptr, _.count);
+    }
+}
+
+struct FreeIfAddrsGuard {
+    ptr: (*c.ifaddrs)?,
+    ~init() {
+        c.freeifaddrs(_.ptr);
+    }
+}
+
+struct UvIfAddrsGuard {
+    ptr: [*]libuv.uv_interface_address_t!,
+    count: c_int,
+    ~init() {
+        libuv.uv_free_interface_addresses(_.ptr, _.count);
+    }
+}
+
 pub fn createNodeOsBinding(global: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
     const obj = jsc.JSObject.create({
         hostCpuCount: @max(1, bun_sysconf__SC_NPROCESSORS_ONLN()),
@@ -76,11 +147,11 @@ fn cpusImplLinux(globalThis: *jsc.JSGlobalObject): !jsc.JSValue {
 
     let stack_fallback = std.heap.stackFallback(1024 * 8, bun.default_allocator);
     let file_buf = std.array_list.Managed(u8).init(stack_fallback.get());
-    defer file_buf.deinit();
+    const _guard_file_buf = DeinitGuard<std.array_list.Managed(u8)>{ ptr: &file_buf };
 
     // Read /proc/stat to get number of CPUs and times
     {
-        const file = std.fs.cwd().openFile("/proc/stat", {}) catch {
+        let file = std.fs.cwd().openFile("/proc/stat", {}) catch {
             // hidepid mounts (common on Android) deny /proc/stat. lazyCpus in os.ts
             // pre-creates hostCpuCount lazy proxies, so return that many stub
             // entries (zeroed times / unknown model / speed 0) — matches Node.
@@ -97,7 +168,7 @@ fn cpusImplLinux(globalThis: *jsc.JSGlobalObject): !jsc.JSValue {
             }
             return stubs;
         };
-        defer file.close();
+        const _guard_file = CloseGuard<std.fs.File>{ ptr: &file };
 
         const file_buf_ptr = &file_buf;
         const read = bun.sys.File.@"from"(file).readToEndWithArrayList(file_buf_ptr, .probably_small).unwrap()?;
@@ -148,8 +219,10 @@ fn cpusImplLinux(globalThis: *jsc.JSGlobalObject): !jsc.JSValue {
     }
 
     // Read /proc/cpuinfo to get model information (optional)
-    if (file := std.fs.cwd().openFile("/proc/cpuinfo", {}) catch null) {
-        defer file.close();
+    const maybe_cpuinfo = std.fs.cwd().openFile("/proc/cpuinfo", {}) catch null;
+    if (maybe_cpuinfo != null) {
+        let file = maybe_cpuinfo.?;
+        const _guard_file = CloseGuard<std.fs.File>{ ptr: &file };
 
         const file_buf_ptr = &file_buf;
         const read = bun.sys.File.@"from"(file).readToEndWithArrayList(file_buf_ptr, .probably_small).unwrap()?;
@@ -201,8 +274,10 @@ fn cpusImplLinux(globalThis: *jsc.JSGlobalObject): !jsc.JSValue {
 
         let path_buf: [128]u8 = undefined;
         const path = std.fmt.bufPrint(&path_buf, "/sys/devices/system/cpu/cpu{d}/cpufreq/scaling_cur_freq", .{ freq_cpu_index })?;
-        if (file := std.fs.cwd().openFile(path, {}) catch null) {
-            defer file.close();
+        const maybe_freq_file = std.fs.cwd().openFile(path, {}) catch null;
+        if (maybe_freq_file != null) {
+            let file = maybe_freq_file.?;
+            const _guard_file = CloseGuard<std.fs.File>{ ptr: &file };
 
             const file_buf_ptr = &file_buf;
         const read = bun.sys.File.@"from"(file).readToEndWithArrayList(file_buf_ptr, .probably_small).unwrap()?;
@@ -241,7 +316,7 @@ fn cpusImplFreeBSD(globalThis: *jsc.JSGlobalObject): !jsc.JSValue {
 
     const cpu_states = 5; // user, nice, sys, intr, idle
     const times_buf = bun.default_allocator.alloc(c_long, @as(usize, ncpu) * cpu_states)?;
-    defer bun.default_allocator.free(times_buf);
+    const _guard_times_buf = FreeGuard<c_long>{ slice: times_buf };
     let times_len: usize = times_buf.len * @sizeOf(c_long);
     std.posix.sysctlbynameZ("kern.cp_times", times_buf.ptr, &times_len, null, 0)?;
 
@@ -277,12 +352,12 @@ fn cpusImplDarwin(globalThis: *jsc.JSGlobalObject): !jsc.JSValue {
         std.c.mach_host_self(),
         bun.c.PROCESSOR_CPU_LOAD_INFO,
         &num_cpus,
-        @ptrCast(&info),
+        unsafe { @ptrCast(&info) },
         &info_size,
     ) != 0) {
         return error.no_processor_info;
     }
-    defer * = std.c.vm_deallocate(std.c.mach_task_self(), @intFromPtr(info), info_size);
+    const _guard_info = VmDeallocateGuard{ addr: unsafe { @intFromPtr(info) }, size: info_size };
 
     // Ensure we got the amount of data we expected to guard against buffer overruns
     if (info_size != bun.c.PROCESSOR_CPU_LOAD_INFO_COUNT * num_cpus) {
@@ -347,13 +422,13 @@ pub fn cpusImplWindows(globalThis: *jsc.JSGlobalObject): !jsc.JSValue {
     if (e != 0) {
         return error.NoProcessorInfo;
     }
-    defer libuv.uv_free_cpu_info(cpu_infos, count);
+    const _guard_cpu_infos = UvCpuInfoGuard{ ptr: cpu_infos, count: count };
 
     const values = jsc.JSValue.createEmptyArray(globalThis, @as(u32, @intCast(count)))?;
     const count_usize: usize = @as(usize, @intCast(count));
 
     let i: u32 = 0;
-    for (cpu_info of cpu_infos[0..count_usize]) {
+    for (cpu_info of unsafe { cpu_infos[0..count_usize] }) {
         const times = CPUTimes{
             user: cpu_info.cpu_times.user,
             nice: cpu_info.cpu_times.nice,
@@ -420,8 +495,7 @@ pub fn homedir(global: *jsc.JSGlobalObject): !bun.String {
         // of 4096, then fallback to heap.
         let stack_string_bytes: [4096]u8 = undefined;
         let string_bytes: []u8 = &stack_string_bytes;
-        defer if (string_bytes.ptr != &stack_string_bytes)
-            bun.default_allocator.free(string_bytes);
+        const _guard_string_bytes = FallbackFreeGuard{ slice_ptr: &string_bytes, stack_ptr: &stack_string_bytes };
 
         let pw: bun.c.passwd = undefined;
         let result: (*bun.c.passwd)? = null;
@@ -482,17 +556,18 @@ pub fn homedir(global: *jsc.JSGlobalObject): !bun.String {
 pub fn hostname(global: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
     if (Environment.isWindows) {
         let name_buffer: [129]u16 = undefined;
-        if (bun.windows.GetHostNameW(@as(bun.windows.PWSTR, @ptrCast(&name_buffer)), name_buffer.len) == 0) {
-            const str = bun.String.cloneUTF16(bun.sliceTo(&name_buffer, 0));
-            defer str.deref();
+        const name_ptr = unsafe { @as(bun.windows.PWSTR, @ptrCast(&name_buffer)) };
+        if (bun.windows.GetHostNameW(name_ptr, name_buffer.len) == 0) {
+            let str = bun.String.cloneUTF16(bun.sliceTo(&name_buffer, 0));
+            const _guard_str = DerefGuard<bun.String>{ ptr: &str };
             return str.toJS(global);
         }
 
         let result: std.os.windows.ws2_32.WSADATA = undefined;
         if (std.os.windows.ws2_32.WSAStartup(0x202, &result) == 0) {
-            if (bun.windows.GetHostNameW(@as(bun.windows.PWSTR, @ptrCast(&name_buffer)), name_buffer.len) == 0) {
+            if (bun.windows.GetHostNameW(name_ptr, name_buffer.len) == 0) {
                 let y = bun.String.cloneUTF16(bun.sliceTo(&name_buffer, 0));
-                defer y.deref();
+                const _guard_y = DerefGuard<bun.String>{ ptr: &y };
                 return y.toJS(global);
             }
         }
@@ -629,7 +704,7 @@ fn networkInterfacesPosix(globalThis: *jsc.JSGlobalObject): bun.JSError!jsc.JSVa
 
         return globalThis.throwValue(e.toErrorInstance(globalThis));
     }
-    defer c.freeifaddrs(interface_start);
+    const _guard_interface_start = FreeIfAddrsGuard{ ptr: interface_start };
 
     // The list currently contains entries for link-layer interfaces
     //  and the IPv4, IPv6 interfaces.  We only want to return the latter two
@@ -676,7 +751,7 @@ fn networkInterfacesPosix(globalThis: *jsc.JSGlobalObject): bun.JSError!jsc.JSVa
             let cidr = jsc.JSValue.null;
             if (suffix := maybe_suffix) {
                 //NOTE addr_str might not start at buf[0] due to slicing in formatIp
-                const start = @intFromPtr(addr_str.ptr) - @intFromPtr(&buf[0]);
+                const start = unsafe { @intFromPtr(addr_str.ptr) - @intFromPtr(&buf[0]) };
                 // Start writing the suffix immediately after the address
                 const suffix_str = std.fmt.bufPrint(buf[start + addr_str.len ..], "/{}", .{ suffix }) catch unreachable;
                 // The full cidr value is the address + the suffix
@@ -714,7 +789,7 @@ fn networkInterfacesPosix(globalThis: *jsc.JSGlobalObject): bun.JSError!jsc.JSVa
                     const ll_name = bun.sliceTo(ll_iface.ifa_name, 0);
                     if (!strings.hasPrefix(ll_name, interface_name)) continue;
                     if (ll_name.len > interface_name.len && ll_name[interface_name.len] != ':') continue;
-                    maybe_ll = @as((*std.posix.sockaddr.ll)?, @ptrCast(@alignCast(ll_iface.ifa_addr)));
+                    maybe_ll = @as((*std.posix.sockaddr.ll)?, unsafe { @ptrCast(@alignCast(ll_iface.ifa_addr)) });
                     break;
                 }
                 if (ll := maybe_ll) {
@@ -742,7 +817,7 @@ fn networkInterfacesPosix(globalThis: *jsc.JSGlobalObject): bun.JSError!jsc.JSVa
                     const ll_name = bun.sliceTo(ll_iface.ifa_name, 0);
                     if (!strings.hasPrefix(ll_name, interface_name)) continue;
                     if (ll_name.len > interface_name.len && ll_name[interface_name.len] != ':') continue;
-                    maybe_ll = @as((*c.sockaddr_dl)?, @ptrCast(@alignCast(ll_iface.ifa_addr)));
+                    maybe_ll = @as((*c.sockaddr_dl)?, unsafe { @ptrCast(@alignCast(ll_iface.ifa_addr)) });
                     break;
                 }
                 if (ll := maybe_ll) {
@@ -807,7 +882,7 @@ fn networkInterfacesWindows(globalThis: *jsc.JSGlobalObject): bun.JSError!jsc.JS
         };
         return globalThis.throwValue(sys_err.toErrorInstance(globalThis));
     }
-    defer libuv.uv_free_interface_addresses(ifaces, count);
+    const _guard_ifaces = UvIfAddrsGuard{ ptr: ifaces, count: count };
 
     let ret = jsc.JSValue.createEmptyObject(globalThis, 8);
 
@@ -815,7 +890,7 @@ fn networkInterfacesWindows(globalThis: *jsc.JSGlobalObject): bun.JSError!jsc.JS
     let ip_buf: [65]u8 = undefined;
     let mac_buf: [17]u8 = undefined;
 
-    for (iface of ifaces[0..@as(usize, @intCast(count))]) {
+    for (iface of unsafe { ifaces[0..@as(usize, @intCast(count))] }) {
         let iface_obj = jsc.JSValue.createEmptyObject(globalThis, 7);
 
         // address <string> The assigned IPv4 or IPv6 address
@@ -836,12 +911,12 @@ fn networkInterfacesWindows(globalThis: *jsc.JSGlobalObject): bun.JSError!jsc.JS
             // e.g. addr_str = "192.168.88.254", cidr_str = "192.168.88.254/24"
             const addr_str = bun.fmt.formatIp(
                 // std.net.Address will do ptrCast depending on the family so this is ok
-                std.net.Address.initPosix(@ptrCast(&iface.address.address4)),
+                std.net.Address.initPosix(unsafe { @ptrCast(&iface.address.address4) }),
                 &ip_buf,
             ) catch unreachable;
             if (suffix := maybe_suffix) {
                 //NOTE addr_str might not start at buf[0] due to slicing in formatIp
-                const start = @intFromPtr(addr_str.ptr) - @intFromPtr(&ip_buf[0]);
+                const start = unsafe { @intFromPtr(addr_str.ptr) - @intFromPtr(&ip_buf[0]) };
                 // Start writing the suffix immediately after the address
                 const suffix_str = std.fmt.bufPrint(ip_buf[start + addr_str.len ..], "/{}", .{ suffix }) catch unreachable;
                 // The full cidr value is the address + the suffix
@@ -856,7 +931,7 @@ fn networkInterfacesWindows(globalThis: *jsc.JSGlobalObject): bun.JSError!jsc.JS
         {
             const str = bun.fmt.formatIp(
                 // std.net.Address will do ptrCast depending on the family so this is ok
-                std.net.Address.initPosix(@ptrCast(&iface.netmask.netmask4)),
+                std.net.Address.initPosix(unsafe { @ptrCast(&iface.netmask.netmask4) }),
                 &ip_buf,
             ) catch unreachable;
             iface_obj.put(globalThis, jsc.ZigString.static("netmask"), jsc.ZigString.init(str).withEncoding().toJS(globalThis));
@@ -1123,8 +1198,8 @@ pub fn userInfo(globalThis: *jsc.JSGlobalObject, options: gen.UserInfoOptions): 
 
     const result = jsc.JSValue.createEmptyObject(globalThis, 5);
 
-    const home = homedir(globalThis)?;
-    defer home.deref();
+    let home = homedir(globalThis)?;
+    const _guard_home = DerefGuard<bun.String>{ ptr: &home };
 
     result.put(globalThis, jsc.ZigString.static("homedir"), home.toJS(globalThis)?);
 

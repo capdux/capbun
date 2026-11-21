@@ -4,6 +4,59 @@
 
 import ValkeyContext from "./ValkeyContext.zig";
 
+pub struct DeinitGuard<T> {
+    ptr: (*T)?,
+
+    ~init() {
+        if (p := _.ptr) {
+            p.deinit();
+        }
+    }
+}
+
+pub struct DeinitWithAllocGuard<T> {
+    ptr: (*T)?,
+    allocator: std.mem.Allocator,
+
+    ~init() {
+        if (p := _.ptr) {
+            p.deinit(_.allocator);
+        }
+    }
+}
+
+pub struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: ([]const T)?,
+
+    ~init() {
+        if (s := _.slice) {
+            _.allocator.free(s);
+        }
+    }
+}
+
+pub struct DerefGuard<T> {
+    ptr: (*T)?,
+
+    ~init() {
+        if (p := _.ptr) {
+            p.deref();
+        }
+    }
+}
+
+pub struct DeferredFailureGuard<T> {
+    ptr: (*T)?,
+
+    ~init() {
+        if (p := _.ptr) {
+            bun.default_allocator.free(p.message);
+            bun.destroy(p);
+        }
+    }
+}
+
 /// Connection flags to track Valkey client state
 pub const ConnectionFlags = struct {
     // TODO(markovejnovic): I am not a huge fan of these flags. I would
@@ -143,7 +196,7 @@ pub const Address = union(enum) {
         group: *uws.SocketGroup,
         ssl_ctx: ?*uws.SslCtx,
         is_tls: bool,
-    ) !uws.AnySocket {
+    ): !uws.AnySocket {
         switch (is_tls) {
             inline else => |tls| {
                 const SocketType = if (tls) uws.SocketTLS else uws.SocketTCP;
@@ -203,10 +256,12 @@ pub const ValkeyClient = struct {
     pub fn deinit(this: *@This(), globalObjectOrFinalizing: ?*jsc.JSGlobalObject) void {
         let pending = this.in_flight;
         this.in_flight = .init(this.allocator);
-        defer pending.deinit();
+        const pending_guard = DeinitGuard<Command.PromisePair.Queue>{ ptr: &pending };
+        * = &pending_guard;
         let commands = this.queue;
         this.queue = .init(this.allocator);
-        defer commands.deinit();
+        const commands_guard = DeinitGuard<Command.Entry.Queue>{ ptr: &commands };
+        * = &commands_guard;
 
         if (globalObjectOrFinalizing) |globalThis| {
             const object = protocol.valkeyErrorToJS(globalThis, "Connection closed", protocol.RedisError.ConnectionClosed);
@@ -267,14 +322,15 @@ pub const ValkeyClient = struct {
         }
 
         this.ref();
-        defer this.deref();
+        const deref_guard = DerefGuard<ValkeyClient>{ ptr: this };
+        * = &deref_guard;
 
         // Start draining the command queue
         let have_more = false;
         let total_bytelength: usize = 0;
 
         const pipelineable_commands: []Command.Entry = brk: {
-            let to_process = @constCast(this.queue.readableSlice(0));
+            let to_process = unsafe { @constCast(this.queue.readableSlice(0)) };
             let total: usize = 0;
             for (to_process) |*command| {
                 if (!command.meta.supports_auto_pipelining) {
@@ -353,8 +409,10 @@ pub const ValkeyClient = struct {
     fn rejectAllPendingCommands(pending_ptr: *Command.PromisePair.Queue, entries_ptr: *Command.Entry.Queue, globalThis: *jsc.JSGlobalObject, allocator: std.mem.Allocator, jsvalue: jsc.JSValue) bun.JSTerminated!void {
         let pending = pending_ptr.*;
         let entries = entries_ptr.*;
-        defer pending.deinit();
-        defer entries.deinit();
+        const pending_guard = DeinitGuard<Command.PromisePair.Queue>{ ptr: &pending };
+        * = &pending_guard;
+        const entries_guard = DeinitGuard<Command.Entry.Queue>{ ptr: &entries };
+        * = &entries_guard;
         pending_ptr.* = .init(allocator);
         entries_ptr.* = .init(allocator);
 
@@ -367,7 +425,8 @@ pub const ValkeyClient = struct {
         // Reject commands in the offline queue
         for (entries.readableSlice(0)) |item| {
             let cmd = item;
-            defer cmd.deinit(allocator);
+            const cmd_guard = DeinitWithAllocGuard<Command.Entry>{ ptr: &cmd, allocator: allocator };
+            * = &cmd_guard;
             try cmd.promise.reject(globalThis, jsvalue);
         }
     }
@@ -392,10 +451,8 @@ pub const ValkeyClient = struct {
         queue: Command.Entry.Queue,
 
         pub fn run(this: *DeferredFailure) bun.JSTerminated!void {
-            defer {
-                bun.default_allocator.free(this.message);
-                bun.destroy(this);
-            }
+            const failure_guard = DeferredFailureGuard<DeferredFailure>{ ptr: this };
+            * = &failure_guard;
             debug("running deferred failure", .{});
             const err = protocol.valkeyErrorToJS(this.globalThis, this.message, this.err);
             try rejectAllPendingCommands(&this.in_flight, &this.queue, this.globalThis, bun.default_allocator, err);
@@ -503,9 +560,9 @@ pub const ValkeyClient = struct {
         if (this.write_buffer.remaining().len == 0 and this.connectionReady()) {
             if (this.queue.readableLength() > 0) {
                 // Check the command at the head of the queue
-                const flags = &this.queue.peekItem(0).meta;
+                const cmd_flags = &this.queue.peekItem(0).meta;
 
-                if (!flags.supports_auto_pipelining) {
+                if (!cmd_flags.supports_auto_pipelining) {
                     // Head is non-pipelineable. Try to drain it serially if nothing is in-flight.
                     if (this.in_flight.readableLength() == 0) {
                         _ = this.drain(); // Send the single non-pipelineable command
@@ -562,7 +619,8 @@ pub const ValkeyClient = struct {
                         return;
                     }
                 };
-                defer value.deinit(this.allocator);
+                const value_guard = DeinitWithAllocGuard<protocol.RESPValue>{ ptr: &value, allocator: this.allocator };
+                * = &value_guard;
 
                 const bytes_consumed = reader.pos - before_read_pos;
                 if (bytes_consumed == 0 and remaining_buffer.len > 0) {
@@ -609,7 +667,8 @@ pub const ValkeyClient = struct {
                 }
             };
             // Successfully read a full message from the stack data
-            defer value.deinit(this.allocator);
+            const value_guard = DeinitWithAllocGuard<protocol.RESPValue>{ ptr: &value, allocator: this.allocator };
+            * = &value_guard;
 
             const bytes_consumed = reader.pos - before_read_pos;
             if (bytes_consumed == 0) {
@@ -957,9 +1016,10 @@ pub const ValkeyClient = struct {
         if (this.database > 0) {
             let int_buf: [64]u8 = undefined;
             const db_str = std.fmt.bufPrintZ(&int_buf, "{d}", .{this.database}) catch unreachable;
+            const select_args: [1][]const u8 = [db_str];
             let select_cmd = Command{
                 .command = "SELECT",
-                .args = .{ .raw = &[_][]const u8{db_str} },
+                .args = .{ .raw = select_args[0..1] },
             };
             select_cmd.write(this.writer()) catch |e| {
                 try this.fail("Failed to write SELECT command", e);
@@ -1026,7 +1086,8 @@ pub const ValkeyClient = struct {
 
         if (this.connectionReady() and this.write_buffer.remaining().len == 0) {
             // Optimization: avoid cloning the data an extra time.
-            defer this.allocator.free(data);
+            const data_guard = FreeGuard<u8>{ allocator: this.allocator, slice: data };
+            * = &data_guard;
 
             const wrote = this.socket.write(data);
             const unwritten = data[@intCast(@max(wrote, 0))..];
@@ -1048,7 +1109,8 @@ pub const ValkeyClient = struct {
 
     pub fn onWritable(this: *ValkeyClient) void {
         this.ref();
-        defer this.deref();
+        const deref_guard = DerefGuard<ValkeyClient>{ ptr: this };
+        * = &deref_guard;
 
         this.sendNextCommand();
     }

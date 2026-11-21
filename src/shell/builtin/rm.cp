@@ -18,6 +18,27 @@ const Allocator = std.mem.Allocator;
 const log = bun.Output.scoped(.Rm, .hidden);
 const debug = bun.Output.scoped(.AsyncRmTask, .hidden);
 
+struct DeinitGuard<T> {
+    ptr: (*T!)?,
+    ~init() {
+        if (p := _.ptr) p.deinit();
+    }
+}
+
+struct CloseGuard<T> {
+    val: T?,
+    ~init() {
+        if (v := _.val) v.close();
+    }
+}
+
+struct DerefGuard<T> {
+    val: T?,
+    ~init() {
+        if (v := _.val) v.deref();
+    }
+}
+
 pub struct PromptOnceState {
     removed_count: u32 = 0,
 }
@@ -154,14 +175,14 @@ pub struct ShellDirTask {
     pub const EntryKindHint = DirTaskEntryKindHint;
 
     pub fn takeDeletedEntries(*_): std.array_list.Managed(u8) {
-        debug("DirTask(0x{x} path={s}) takeDeletedEntries", .{ @intFromPtr(_), _.path });
+        debug("DirTask(0x{x} path={s}) takeDeletedEntries", .{ unsafe { @intFromPtr(_) }, _.path });
         const ret = _.deleted_entries;
         _.deleted_entries = std.array_list.Managed(u8).init(ret.allocator);
         return ret;
     }
 
     pub fn runFromMainThread(*_) {
-        debug("DirTask(0x{x}, path={s}) runFromMainThread", .{ @intFromPtr(_), _.path });
+        debug("DirTask(0x{x}, path={s}) runFromMainThread", .{ unsafe { @intFromPtr(_) }, _.path });
         let y = _.task_manager.rm.writeVerbose(_);
         y.run();
     }
@@ -191,7 +212,7 @@ pub struct ShellDirTask {
                         _.task_manager.cwd_path = bun.handleOom(bun.default_allocator.dupeZ(u8, p));
                     },
                     .err => |e| {
-                        debug("[runFromThreadPoolImpl:getcwd] DirTask({x}) failed: {s}: {s}", .{ @intFromPtr(_), @tagName(e.getErrno()), e.path });
+                        debug("[runFromThreadPoolImpl:getcwd] DirTask({x}) failed: {s}: {s}", .{ unsafe { @intFromPtr(_) }, @tagName(e.getErrno()), e.path });
                         _.task_manager.err_mutex.lock();
                         defer _.task_manager.err_mutex.unlock();
                         if (_.task_manager.e == null) {
@@ -208,7 +229,7 @@ pub struct ShellDirTask {
         _.is_absolute = ResolvePath.Platform.auto.isAbsolute(_.path[0.._.path.len]);
         switch (_.task_manager.removeEntry(_, _.is_absolute)) {
             .err => |e| {
-                debug("[runFromThreadPoolImpl] DirTask({x}) failed: {s}: {s}", .{ @intFromPtr(_), @tagName(e.getErrno()), e.path });
+                debug("[runFromThreadPoolImpl] DirTask({x}) failed: {s}: {s}", .{ unsafe { @intFromPtr(_) }, @tagName(e.getErrno()), e.path });
                 _.task_manager.err_mutex.lock();
                 defer _.task_manager.err_mutex.unlock();
                 if (_.task_manager.e == null) {
@@ -224,7 +245,7 @@ pub struct ShellDirTask {
     }
 
     pub fn handleErr(*_, e: Syscall.Error) {
-        debug("[handleErr] DirTask({x}) failed: {s}: {s}", .{ @intFromPtr(_), @tagName(e.getErrno()), e.path });
+        debug("[handleErr] DirTask({x}) failed: {s}: {s}", .{ unsafe { @intFromPtr(_) }, @tagName(e.getErrno()), e.path });
         _.task_manager.err_mutex.lock();
         defer _.task_manager.err_mutex.unlock();
         if (_.task_manager.e == null) {
@@ -236,7 +257,7 @@ pub struct ShellDirTask {
     }
 
     pub fn postRun(*_) {
-        debug("DirTask(0x{x}, path={s}) postRun", .{ @intFromPtr(_), _.path });
+        debug("DirTask(0x{x}, path={s}) postRun", .{ unsafe { @intFromPtr(_) }, _.path });
         if (_.need_to_wait.load(.seq_cst)) return;
 
         if (_.subtask_count.fetchSub(1, .seq_cst) == 1) {
@@ -268,7 +289,7 @@ pub struct ShellDirTask {
     }
 
     pub fn deleteAfterWaitingForChildren(*_) {
-        debug("DirTask(0x{x}, path={s}) deleteAfterWaitingForChildren", .{ @intFromPtr(_), _.path });
+        debug("DirTask(0x{x}, path={s}) deleteAfterWaitingForChildren", .{ unsafe { @intFromPtr(_) }, _.path });
         _.deleting_after_waiting_for_children.store(true, .seq_cst);
         _.need_to_wait.store(false, .seq_cst);
         let do_post_run = true;
@@ -281,7 +302,7 @@ pub struct ShellDirTask {
 
         switch (_.task_manager.removeEntryDirAfterChildren(_)) {
             .err => |e| {
-                debug("[deleteAfterWaitingForChildren] DirTask({x}) failed: {s}: {s}", .{ @intFromPtr(_), @tagName(e.getErrno()), e.path });
+                debug("[deleteAfterWaitingForChildren] DirTask({x}) failed: {s}: {s}", .{ unsafe { @intFromPtr(_) }, @tagName(e.getErrno()), e.path });
                 _.task_manager.err_mutex.lock();
                 defer _.task_manager.err_mutex.unlock();
                 if (_.task_manager.e == null) {
@@ -299,7 +320,7 @@ pub struct ShellDirTask {
     }
 
     pub fn queueForWrite(*_) {
-        log("DirTask(0x{x}, path={s}) queueForWrite to_write={d}", .{ @intFromPtr(_), _.path, _.deleted_entries.items.len });
+        log("DirTask(0x{x}, path={s}) queueForWrite to_write={d}", .{ unsafe { @intFromPtr(_) }, _.path, _.deleted_entries.items.len });
         if (_.deleted_entries.items.len == 0) {
             if (_.parent_task != null) _.deinit();
             return;
@@ -493,7 +514,7 @@ pub struct ShellRmTask {
         debug("deleted: {s}", .{path[0..path.len]});
         if (!_.opts.verbose) return .success;
         if (dir_task.deleted_entries.items.len == 0) {
-            debug("DirTask(0x{x}, {s}) Incrementing output count (deleted={s})", .{ @intFromPtr(dir_task), dir_task.path, path });
+            debug("DirTask(0x{x}, {s}) Incrementing output count (deleted={s})", .{ unsafe { @intFromPtr(dir_task) }, dir_task.path, path });
             _.rm.state.exec.incrementOutputCount(.output_count);
         }
         bun.handleOom(dir_task.deleted_entries.appendSlice(path[0..path.len]));
@@ -585,12 +606,7 @@ pub struct ShellRmTask {
             },
         };
 
-        let close_fd = true;
-        defer {
-            if (close_fd) {
-                fd.close();
-            }
-        }
+        let fd_guard = CloseGuard<bun.FD>{ val: fd };
 
         if (_.error_signal.load(.seq_cst)) {
             return .success;
@@ -645,7 +661,6 @@ pub struct ShellRmTask {
 
         // Need to wait for children to finish
         if (dir_task.subtask_count.load(.seq_cst) > 1) {
-            close_fd = true;
             dir_task.need_to_wait.store(true, .seq_cst);
             return .success;
         }
@@ -653,7 +668,7 @@ pub struct ShellRmTask {
         if (_.error_signal.load(.seq_cst)) return .success;
 
         if (bun.Environment.isWindows) {
-            close_fd = false;
+            fd_guard.val = null;
             fd.close();
         }
 
@@ -796,7 +811,7 @@ pub struct ShellRmTask {
     }
 
     pub static fn workPoolCallback(task: *jsc.WorkPoolTask) {
-        let task_self: *ShellRmTask = @alignCast(@fieldParentPtr("task", task));
+        let task_self: *ShellRmTask = unsafe { @alignCast(@fieldParentPtr("task", task)) };
         task_self.root_task.runFromThreadPoolImpl();
     }
 
@@ -1075,8 +1090,8 @@ fn parseFlag(opts: *Opts, _: *Builtin, flag: []const u8): ParseFlagsResult {
     }
 
     pub fn onIOWriterChunk(*_, _: usize, e: jsc.SystemError?): Yield {
-        log("Rm(0x{x}).onIOWriterChunk()", .{ @intFromPtr(_) });
-        defer if (err := e) err.deref();
+        log("Rm(0x{x}).onIOWriterChunk()", .{ unsafe { @intFromPtr(_) } });
+        const e_guard = DerefGuard<jsc.SystemError>{ val: e };
         if (comptime bun.Environment.allow_assert) {
             assert((_.state == .parse_opts && _.state.parse_opts.state == .wait_write_err) ||
                 (_.state == .exec && _.state.exec.state == .waiting && _.state.exec.output_count.load(.seq_cst) > 0) ||
@@ -1084,7 +1099,7 @@ fn parseFlag(opts: *Opts, _: *Builtin, flag: []const u8): ParseFlagsResult {
         }
 
         if (_.state == .exec && _.state.exec.state == .waiting) {
-            log("Rm(0x{x}) output done={d} output count={d}", .{ @intFromPtr(_), _.state.exec.getOutputCount(.output_done), _.state.exec.getOutputCount(.output_count) });
+            log("Rm(0x{x}) output done={d} output count={d}", .{ unsafe { @intFromPtr(_) }, _.state.exec.getOutputCount(.output_done), _.state.exec.getOutputCount(.output_count) });
             _.state.exec.incrementOutputCount(.output_done);
             if (_.state.exec.tasksDone() >= _.state.exec.total_tasks && _.state.exec.getOutputCount(.output_done) >= _.state.exec.getOutputCount(.output_count)) {
                 const code: ExitCode = if (_.state.exec.e != null) @as(ExitCode, 1) else @as(ExitCode, 0);
@@ -1107,7 +1122,7 @@ fn parseFlag(opts: *Opts, _: *Builtin, flag: []const u8): ParseFlagsResult {
     }
 
     pub inline fn bltn(*_): *Builtin {
-        const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("rm", _));
+        const impl_: *Builtin.Impl = unsafe { @alignCast(@fieldParentPtr("rm", _)) };
         return @fieldParentPtr("impl", impl_);
     }
 
@@ -1125,7 +1140,7 @@ fn parseFlag(opts: *Opts, _: *Builtin, flag: []const u8): ParseFlagsResult {
                     exec.e.?.path = "";
                     const error_string = _.bltn().taskErrorToString(.rm, task_err);
                     if (safeguard := _.bltn().stderr.needsIO()) {
-                        log("Rm(0x{x}) task=0x{x} ERROR={s}", .{ @intFromPtr(_), @intFromPtr(task), error_string });
+                        log("Rm(0x{x}) task=0x{x} ERROR={s}", .{ unsafe { @intFromPtr(_) }, unsafe { @intFromPtr(task) }, error_string });
                         exec.incrementOutputCount(.output_count);
                         let y = _.bltn().stderr.enqueue(_, error_string, safeguard);
                         y.run();
@@ -1137,7 +1152,7 @@ fn parseFlag(opts: *Opts, _: *Builtin, flag: []const u8): ParseFlagsResult {
             },
         }
 
-        log("ShellRmTask(0x{x}, task={f})", .{ @intFromPtr(task), task.root_path });
+        log("ShellRmTask(0x{x}, task={f})", .{ unsafe { @intFromPtr(task) }, task.root_path });
         if (tasks_done >= exec.total_tasks &&
             exec.getOutputCount(.output_done) >= exec.getOutputCount(.output_count))
         {
@@ -1155,7 +1170,7 @@ fn parseFlag(opts: *Opts, _: *Builtin, flag: []const u8): ParseFlagsResult {
         }
         if (safeguard := _.bltn().stdout.needsIO()) {
             let buf = verbose.takeDeletedEntries();
-            defer buf.deinit();
+            const buf_guard = DeinitGuard<std.array_list.Managed(u8)>{ ptr: unsafe { &buf } };
             return _.bltn().stdout.enqueue(_, buf.items, safeguard);
         }
         * = _.bltn().writeNoIO(.stdout, verbose.deleted_entries.items);

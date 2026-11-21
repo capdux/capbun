@@ -62,7 +62,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const builtin = @import("builtin");
 pub const interpreter = @import("../interpreter.zig");
@@ -87,6 +87,54 @@ pub const DirTaskEntryKindHint = enum {
     pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
+
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    _ = p.deinit();
+                }
+        }
+    };
+}
+
+pub fn CloseGuard(comptime T: type) type {
+    return struct {
+        val: ?T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.val) |v| {
+                    _ = &v;
+                    _ = v.close();
+                }
+        }
+    };
+}
+
+pub fn DerefGuard(comptime T: type) type {
+    return struct {
+        val: ?T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.val) |v| {
+                    _ = &v;
+                    _ = v.deref();
+                }
+        }
+    };
+}
 
 pub const PromptOnceState = struct {
     removed_count: u32 = 0,
@@ -161,14 +209,20 @@ pub const ShellDirTask = struct {
     concurrent_task: jsc.EventLoopTask,
 
 pub fn takeDeletedEntries(self: *ShellDirTask) std.array_list.Managed(u8) {
-            _ = debug("DirTask(0x{x} path={s}) takeDeletedEntries", .{ @intFromPtr(self), self.path });
+            _ = debug("DirTask(0x{x} path={s}) takeDeletedEntries", .{ (blk: {
+            break :blk @intFromPtr(self);
+
+}), self.path });
             const ret = self.deleted_entries;
             self.deleted_entries = std.array_list.Managed(u8).init(ret.allocator);
             return ret;
     }
 
 pub fn runFromMainThread(self: *ShellDirTask) void {
-            _ = debug("DirTask(0x{x}, path={s}) runFromMainThread", .{ @intFromPtr(self), self.path });
+            _ = debug("DirTask(0x{x}, path={s}) runFromMainThread", .{ (blk: {
+            break :blk @intFromPtr(self);
+
+}), self.path });
             var y = self.task_manager.rm.writeVerbose(self);
             _ = &y;
             _ = y.run();
@@ -201,7 +255,10 @@ pub fn runFromThreadPoolImpl(self: *ShellDirTask) void {
 self.task_manager.cwd_path = bun.handleOom(bun.default_allocator.dupeZ(u8, p));
 },
 .err => |e| {
-_ = debug("[runFromThreadPoolImpl:getcwd] DirTask({x}) failed: {s}: {s}", .{ @intFromPtr(self), @tagName(e.getErrno()), e.path });
+_ = debug("[runFromThreadPoolImpl:getcwd] DirTask({x}) failed: {s}: {s}", .{ (blk: {
+                    break :blk @intFromPtr(self);
+
+}), @tagName(e.getErrno()), e.path });
                     _ = self.task_manager.err_mutex.lock();
                     defer {
                     _ = self.task_manager.err_mutex.unlock();
@@ -219,7 +276,10 @@ _ = debug("[runFromThreadPoolImpl:getcwd] DirTask({x}) failed: {s}: {s}", .{ @in
             self.is_absolute = ResolvePath.Platform.auto.isAbsolute(self.path[0..self.path.len]);
             switch (self.task_manager.removeEntry(self, self.is_absolute)) {
 .err => |e| {
-_ = debug("[runFromThreadPoolImpl] DirTask({x}) failed: {s}: {s}", .{ @intFromPtr(self), @tagName(e.getErrno()), e.path });
+_ = debug("[runFromThreadPoolImpl] DirTask({x}) failed: {s}: {s}", .{ (blk: {
+            break :blk @intFromPtr(self);
+
+}), @tagName(e.getErrno()), e.path });
             _ = self.task_manager.err_mutex.lock();
             defer {
             _ = self.task_manager.err_mutex.unlock();
@@ -240,7 +300,10 @@ _ = debug("[runFromThreadPoolImpl] DirTask({x}) failed: {s}: {s}", .{ @intFromPt
     }
 
 pub fn handleErr(self: *ShellDirTask, e: Syscall.Error) void {
-            _ = debug("[handleErr] DirTask({x}) failed: {s}: {s}", .{ @intFromPtr(self), @tagName(e.getErrno()), e.path });
+            _ = debug("[handleErr] DirTask({x}) failed: {s}: {s}", .{ (blk: {
+            break :blk @intFromPtr(self);
+
+}), @tagName(e.getErrno()), e.path });
             _ = self.task_manager.err_mutex.lock();
             defer {
             _ = self.task_manager.err_mutex.unlock();
@@ -254,7 +317,10 @@ pub fn handleErr(self: *ShellDirTask, e: Syscall.Error) void {
     }
 
 pub fn postRun(self: *ShellDirTask) void {
-            _ = debug("DirTask(0x{x}, path={s}) postRun", .{ @intFromPtr(self), self.path });
+            _ = debug("DirTask(0x{x}, path={s}) postRun", .{ (blk: {
+            break :blk @intFromPtr(self);
+
+}), self.path });
             if (self.need_to_wait.load(.seq_cst)) {
                 return;
             }
@@ -288,7 +354,10 @@ pub fn postRun(self: *ShellDirTask) void {
     }
 
 pub fn deleteAfterWaitingForChildren(self: *ShellDirTask) void {
-            _ = debug("DirTask(0x{x}, path={s}) deleteAfterWaitingForChildren", .{ @intFromPtr(self), self.path });
+            _ = debug("DirTask(0x{x}, path={s}) deleteAfterWaitingForChildren", .{ (blk: {
+            break :blk @intFromPtr(self);
+
+}), self.path });
             _ = self.deleting_after_waiting_for_children.store(true, .seq_cst);
             _ = self.need_to_wait.store(false, .seq_cst);
             var do_post_run = true;
@@ -305,7 +374,10 @@ pub fn deleteAfterWaitingForChildren(self: *ShellDirTask) void {
             }
             switch (self.task_manager.removeEntryDirAfterChildren(self)) {
 .err => |e| {
-_ = debug("[deleteAfterWaitingForChildren] DirTask({x}) failed: {s}: {s}", .{ @intFromPtr(self), @tagName(e.getErrno()), e.path });
+_ = debug("[deleteAfterWaitingForChildren] DirTask({x}) failed: {s}: {s}", .{ (blk: {
+            break :blk @intFromPtr(self);
+
+}), @tagName(e.getErrno()), e.path });
             _ = self.task_manager.err_mutex.lock();
             defer {
             _ = self.task_manager.err_mutex.unlock();
@@ -325,7 +397,10 @@ if ((!deleted)) {
     }
 
 pub fn queueForWrite(self: *ShellDirTask) void {
-            _ = log("DirTask(0x{x}, path={s}) queueForWrite to_write={d}", .{ @intFromPtr(self), self.path, self.deleted_entries.items.len });
+            _ = log("DirTask(0x{x}, path={s}) queueForWrite to_write={d}", .{ (blk: {
+            break :blk @intFromPtr(self);
+
+}), self.path, self.deleted_entries.items.len });
             if ((self.deleted_entries.items.len == 0)) {
                 if ((self.parent_task != null)) {
                     _ = self.deinit();
@@ -487,7 +562,10 @@ pub fn verboseDeleted(self: *ShellRmTask, dir_task: *ShellDirTask, path: [:0]con
                 return .success;
             }
             if ((dir_task.deleted_entries.items.len == 0)) {
-                _ = debug("DirTask(0x{x}, {s}) Incrementing output count (deleted={s})", .{ @intFromPtr(dir_task), dir_task.path, path });
+                _ = debug("DirTask(0x{x}, {s}) Incrementing output count (deleted={s})", .{ (blk: {
+                break :blk @intFromPtr(dir_task);
+
+}), dir_task.path, path });
                 _ = self.rm.state.exec.incrementOutputCount(.output_count);
             }
             _ = bun.handleOom(dir_task.deleted_entries.appendSlice(path[0..path.len]));
@@ -593,15 +671,10 @@ return .{ .err = self.errorWithPath(sys_err, path) };
 },
 }),
 });
-            var close_fd = true;
-            _ = &close_fd;
-            defer {
-            {
-                if (close_fd) {
-                    _ = fd.close();
-                }
-            }
-            }
+            var fd_guard = CloseGuard(bun.FD){ .val = fd };
+            _ = &fd_guard;
+            var __fd_guard_moved = false; _ = &__fd_guard_moved;
+            defer if (!__fd_guard_moved) { __fd_guard_moved = true; const __T = @TypeOf(fd_guard); if (@typeInfo(__T) == .optional) { if (fd_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { fd_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = fd_guard; _drop_val.__cp_deinit(); } };
             if (self.error_signal.load(.seq_cst)) {
                 return .success;
             }
@@ -655,7 +728,6 @@ return .{ .err = e };
 }
             }
             if ((dir_task.subtask_count.load(.seq_cst) > 1)) {
-                close_fd = true;
                 _ = dir_task.need_to_wait.store(true, .seq_cst);
                 return .success;
             }
@@ -663,7 +735,7 @@ return .{ .err = e };
                 return .success;
             }
             if (bun.Environment.isWindows) {
-                close_fd = false;
+                fd_guard.val = null;
                 _ = fd.close();
             }
             _ = debug("[removeEntryDir] remove after children {s}", .{ path });
@@ -830,7 +902,10 @@ pub inline fn join(self: *ShellRmTask, alloc: Allocator, subdir_parts: []const [
     }
 
 pub fn workPoolCallback(task: *jsc.WorkPoolTask) void {
-            var task_self: *ShellRmTask = @alignCast(@fieldParentPtr("task", task));
+            var task_self: *ShellRmTask = (blk: {
+            break :blk @alignCast(@fieldParentPtr("task", task));
+
+});
             _ = &task_self;
             _ = task_self.root_task.runFromThreadPoolImpl();
     }
@@ -1032,18 +1107,22 @@ _ = unreachable;
 }
 
 pub fn onIOWriterChunk(self: *Rm, _: usize, e: ?jsc.SystemError) Yield {
-        _ = log("Rm(0x{x}).onIOWriterChunk()", .{ @intFromPtr(self) });
-        defer {
-        if (e) |err| {
-            _ = &err;
-            _ = err.deref();
-        }
-        }
+        _ = log("Rm(0x{x}).onIOWriterChunk()", .{ (blk: {
+        break :blk @intFromPtr(self);
+
+}) });
+        var e_guard = DerefGuard(jsc.SystemError){ .val = e };
+        _ = &e_guard;
+        var __e_guard_moved = false; _ = &__e_guard_moved;
+        defer if (!__e_guard_moved) { __e_guard_moved = true; const __T = @TypeOf(e_guard); if (@typeInfo(__T) == .optional) { if (e_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { e_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = e_guard; _drop_val.__cp_deinit(); } };
         if (comptime bun.Environment.allow_assert) {
             _ = assert(((((self.state == .parse_opts) and (self.state.parse_opts.state == .wait_write_err)) or (((self.state == .exec) and (self.state.exec.state == .waiting)) and (self.state.exec.output_count.load(.seq_cst) > 0))) or (self.state == .waiting_write_err)));
         }
         if (((self.state == .exec) and (self.state.exec.state == .waiting))) {
-            _ = log("Rm(0x{x}) output done={d} output count={d}", .{ @intFromPtr(self), self.state.exec.getOutputCount(.output_done), self.state.exec.getOutputCount(.output_count) });
+            _ = log("Rm(0x{x}) output done={d} output count={d}", .{ (blk: {
+            break :blk @intFromPtr(self);
+
+}), self.state.exec.getOutputCount(.output_done), self.state.exec.getOutputCount(.output_count) });
             _ = self.state.exec.incrementOutputCount(.output_done);
             if (((self.state.exec.tasksDone() >= self.state.exec.total_tasks) and (self.state.exec.getOutputCount(.output_done) >= self.state.exec.getOutputCount(.output_count)))) {
                 const code: ExitCode = (if ((self.state.exec.e != null)) (if (comptime @typeInfo(ExitCode) == .@"enum") @as(ExitCode, @enumFromInt(1)) else @as(ExitCode, 1)) else (if (comptime @typeInfo(ExitCode) == .@"enum") @as(ExitCode, @enumFromInt(0)) else @as(ExitCode, 0)));
@@ -1066,7 +1145,10 @@ pub fn deinit(self: *Rm) void {
 }
 
 pub inline fn bltn(self: *Rm) *Builtin {
-        const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("rm", self));
+        const impl_: *Builtin.Impl = (blk: {
+        break :blk @alignCast(@fieldParentPtr("rm", self));
+
+});
         return @fieldParentPtr("impl", impl_);
 }
 
@@ -1092,7 +1174,13 @@ exec.state.waiting.tasks_done = (exec.state.waiting.tasks_done + 1);
             const error_string = self.bltn().taskErrorToString(.rm, task_err);
             if (self.bltn().stderr.needsIO()) |safeguard| {
                 _ = &safeguard;
-                _ = log("Rm(0x{x}) task=0x{x} ERROR={s}", .{ @intFromPtr(self), @intFromPtr(task), error_string });
+                _ = log("Rm(0x{x}) task=0x{x} ERROR={s}", .{ (blk: {
+                break :blk @intFromPtr(self);
+
+}), (blk: {
+                break :blk @intFromPtr(task);
+
+}), error_string });
                 _ = exec.incrementOutputCount(.output_count);
                 var y = self.bltn().stderr.enqueue(self, error_string, safeguard);
                 _ = &y;
@@ -1104,7 +1192,10 @@ exec.state.waiting.tasks_done = (exec.state.waiting.tasks_done + 1);
         }
 },
 }
-        _ = log("ShellRmTask(0x{x}, task={f})", .{ @intFromPtr(task), task.root_path });
+        _ = log("ShellRmTask(0x{x}, task={f})", .{ (blk: {
+        break :blk @intFromPtr(task);
+
+}), task.root_path });
         if (((tasks_done >= exec.total_tasks) and (exec.getOutputCount(.output_done) >= exec.getOutputCount(.output_count)))) {
             self.state = .{ .done = .{ .exit_code = (if ((exec.e != null)) 1 else 0) } };
             var y = self.next();
@@ -1127,9 +1218,13 @@ pub fn writeVerbose(self: *Rm, verbose: *ShellDirTask) Yield {
             _ = &safeguard;
             var buf = verbose.takeDeletedEntries();
             _ = &buf;
-            defer {
-            _ = buf.deinit();
-            }
+            var buf_guard = DeinitGuard(std.array_list.Managed(u8)){ .ptr = (blk: {
+            break :blk (&buf);
+
+}) };
+            _ = &buf_guard;
+            var __buf_guard_moved = false; _ = &__buf_guard_moved;
+            defer if (!__buf_guard_moved) { __buf_guard_moved = true; const __T = @TypeOf(buf_guard); if (@typeInfo(__T) == .optional) { if (buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = buf_guard; _drop_val.__cp_deinit(); } };
             return self.bltn().stdout.enqueue(self, buf.items, safeguard);
         }
         _ = self.bltn().writeNoIO(.stdout, verbose.deleted_entries.items);

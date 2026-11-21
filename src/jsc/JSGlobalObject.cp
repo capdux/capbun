@@ -18,6 +18,43 @@ const ZigString = jsc.ZigString;
 type str_slice = []const u8;
 type string = []const u8;
 
+pub struct DerefGuard<T> {
+    ptr: *const T!,
+    active: bool = true,
+    ~init() {
+        if (_.active) unsafe { _.ptr.deref(); }
+    }
+}
+
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+pub struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: []const T,
+    ~init() {
+        _.allocator.free(_.slice);
+    }
+}
+
+pub struct EndGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.end(); }
+    }
+}
+
+pub struct DetachGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.detach(); }
+    }
+}
+
 pub struct _GregorianDateTime {
     year: i32,
     month: i32,
@@ -181,7 +218,7 @@ inline fn argsIsEmpty(comptime T: type): bool {
     }
 
     pub inline fn toJSValue(*_): JSValue {
-        return @enumFromInt(@intFromPtr(_));
+        return unsafe { @enumFromInt(@intFromPtr(_)) };
     }
 
     pub fn throwInvalidArguments(*_, comptime fmt: [:0]const u8, args: auto): bun.JSError {
@@ -230,7 +267,7 @@ inline fn argsIsEmpty(comptime T: type): bool {
         value: JSValue,
     ): bun.JSError {
         const actual_string_value = determineSpecificType(_, value)?;
-        defer actual_string_value.deref();
+        const _guard_actual_string_value = DerefGuard<String>{ ptr: unsafe { &actual_string_value } };
         return _.ERR(.INVALID_ARG_VALUE, "The \"{s}\" argument is invalid. Received {f}", .{ argname, actual_string_value }).throw();
     }
 
@@ -241,7 +278,7 @@ inline fn argsIsEmpty(comptime T: type): bool {
         message: []const u8,
     ): bun.JSError {
         const actual_string_value = determineSpecificType(_, value)?;
-        defer actual_string_value.deref();
+        const _guard_actual_string_value = DerefGuard<String>{ ptr: unsafe { &actual_string_value } };
         return _.ERR(.INVALID_ARG_VALUE, "The \"{s}\" argument {s}. Received {f}", .{ argname, message, actual_string_value }).throw();
     }
 
@@ -256,7 +293,7 @@ inline fn argsIsEmpty(comptime T: type): bool {
         value: JSValue,
     ): bun.JSError {
         const actual_string_value = determineSpecificType(_, value)?;
-        defer actual_string_value.deref();
+        const _guard_actual_string_value = DerefGuard<String>{ ptr: unsafe { &actual_string_value } };
         if (_expected := comptime expected) {
             return _.ERR(.INVALID_ARG_VALUE, "The property \"{s}\" is invalid. Expected {s}, received {f}", .{ argname, _expected, actual_string_value }).throw();
         } else {
@@ -266,10 +303,11 @@ inline fn argsIsEmpty(comptime T: type): bool {
 
     pub static fn determineSpecificType(global: *JSGlobalObject, value: JSValue): JSError!String {
         const str = Bun__ErrorCode__determineSpecificType(global, value);
-        errdefer str.deref();
+        let _guard_str = DerefGuard<String>{ ptr: unsafe { &str } };
         if (global.hasException()) {
             return error.JSError;
         }
+        _guard_str.active = false;
         return str;
     }
 
@@ -302,7 +340,7 @@ inline fn argsIsEmpty(comptime T: type): bool {
         value: JSValue,
     ): bun.JSError {
         const actual_string_value = determineSpecificType(_, value)?;
-        defer actual_string_value.deref();
+        const _guard_actual_string_value = DerefGuard<String>{ ptr: unsafe { &actual_string_value } };
         return _.ERR(.INVALID_ARG_TYPE, "The \"{s}\" argument must be of type {s}. Received {f}", .{ argname, typename, actual_string_value }).throw();
     }
 
@@ -313,7 +351,7 @@ inline fn argsIsEmpty(comptime T: type): bool {
         value: JSValue,
     ): JSError {
         const actual_string_value = determineSpecificType(_, value)?;
-        defer actual_string_value.deref();
+        const _guard_actual_string_value = DerefGuard<String>{ ptr: unsafe { &actual_string_value } };
         return _.ERR(.INVALID_ARG_TYPE, "The \"{s}\" argument must be {s}. Received {f}", .{ argname, typename, actual_string_value }).throw();
     }
 
@@ -325,7 +363,7 @@ inline fn argsIsEmpty(comptime T: type): bool {
         value: JSValue,
     ): bun.JSError {
         const actual_string_value = determineSpecificType(_, value)?;
-        defer actual_string_value.deref();
+        const _guard_actual_string_value = DerefGuard<String>{ ptr: unsafe { &actual_string_value } };
         return _.ERR(.INVALID_ARG_TYPE, "The \"{s}\" argument must be one of type {s}. Received {f}", .{ argname, typename, actual_string_value }).throw();
     }
 
@@ -344,8 +382,8 @@ inline fn argsIsEmpty(comptime T: type): bool {
         typename: []const u8,
         value: JSValue,
     ): bun.JSError {
-        const ty_str = value.jsTypeString(_).toSlice(_, bun.default_allocator);
-        defer ty_str.deinit();
+        let ty_str = value.jsTypeString(_).toSlice(_, bun.default_allocator);
+        const _guard_ty_str = DeinitGuard<@TypeOf(ty_str)>{ ptr: unsafe { &ty_str } };
         return _.ERR(.INVALID_ARG_TYPE, "The \"{s}\" property must be of type {s}. Received {s}", .{ field, typename, ty_str.slice() }).throw();
     }
 
@@ -392,7 +430,7 @@ inline fn argsIsEmpty(comptime T: type): bool {
         if (comptime (@TypeOf(args) != void and (if (@typeInfo(@TypeOf(args)) == .pointer) std.@"meta".fieldNames(std.@"meta".Child(@TypeOf(args))).len > 0 else std.@"meta".fieldNames(@TypeOf(args)).len > 0))) {
             let stack_fallback = std.heap.stackFallback(1024 * 4, _.allocator());
             let buf = std.Io.Writer.Allocating.initCapacity(stack_fallback.get(), 2048) catch unreachable;
-            defer buf.deinit();
+            const _guard_buf = DeinitGuard<std.Io.Writer.Allocating>{ ptr: unsafe { &buf } };
             let writer = &buf.writer;
             writer.print(fmt, args) catch {
                 // if an exception occurs in the middle of formatting the error message, it's better to just return the formatting string than an error about an error.
@@ -418,7 +456,7 @@ inline fn argsIsEmpty(comptime T: type): bool {
         if (comptime (@TypeOf(args) != void and (if (@typeInfo(@TypeOf(args)) == .pointer) std.@"meta".fieldNames(std.@"meta".Child(@TypeOf(args))).len > 0 else std.@"meta".fieldNames(@TypeOf(args)).len > 0))) {
             let stack_fallback = std.heap.stackFallback(1024 * 4, _.allocator());
             let buf = bun.MutableString.init2048(stack_fallback.get()) catch unreachable;
-            defer buf.deinit();
+            const _guard_buf = DeinitGuard<bun.MutableString>{ ptr: unsafe { &buf } };
             let writer = buf.writer();
             writer.print(fmt, args) catch {
                 * = _.clearExceptionExceptTermination();
@@ -435,7 +473,7 @@ inline fn argsIsEmpty(comptime T: type): bool {
         if (comptime (@TypeOf(args) != void and (if (@typeInfo(@TypeOf(args)) == .pointer) std.@"meta".fieldNames(std.@"meta".Child(@TypeOf(args))).len > 0 else std.@"meta".fieldNames(@TypeOf(args)).len > 0))) {
             let stack_fallback = std.heap.stackFallback(1024 * 4, _.allocator());
             let buf = bun.MutableString.init2048(stack_fallback.get())?;
-            defer buf.deinit();
+            const _guard_buf = DeinitGuard<bun.MutableString>{ ptr: unsafe { &buf } };
             let writer = buf.writer();
             writer.print(fmt, args)?;
             let str = ZigString.fromUTF8(buf.slice());
@@ -449,7 +487,7 @@ inline fn argsIsEmpty(comptime T: type): bool {
         if (comptime (@TypeOf(args) != void and (if (@typeInfo(@TypeOf(args)) == .pointer) std.@"meta".fieldNames(std.@"meta".Child(@TypeOf(args))).len > 0 else std.@"meta".fieldNames(@TypeOf(args)).len > 0))) {
             let stack_fallback = std.heap.stackFallback(1024 * 4, _.allocator());
             let buf = bun.MutableString.init2048(stack_fallback.get()) catch unreachable;
-            defer buf.deinit();
+            const _guard_buf = DeinitGuard<bun.MutableString>{ ptr: unsafe { &buf } };
             let writer = buf.writer();
             writer.print(fmt, args) catch {
                 * = _.clearExceptionExceptTermination();
@@ -466,7 +504,7 @@ inline fn argsIsEmpty(comptime T: type): bool {
         if (comptime (@TypeOf(args) != void and (if (@typeInfo(@TypeOf(args)) == .pointer) std.@"meta".fieldNames(std.@"meta".Child(@TypeOf(args))).len > 0 else std.@"meta".fieldNames(@TypeOf(args)).len > 0))) {
             let stack_fallback = std.heap.stackFallback(1024 * 4, _.allocator());
             let buf = bun.MutableString.init2048(stack_fallback.get()) catch unreachable;
-            defer buf.deinit();
+            const _guard_buf = DeinitGuard<bun.MutableString>{ ptr: unsafe { &buf } };
             let writer = buf.writer();
             writer.print(fmt, args) catch {
                 * = _.clearExceptionExceptTermination();
@@ -600,7 +638,7 @@ inline fn argsIsEmpty(comptime T: type): bool {
         let stack = std.heap.stackFallback(128, bun.default_allocator);
         const allocator_ = stack.get();
         const buffer = std.fmt.allocPrint(allocator_, comptime "{s} " ++ fmt, .{ @errorName(e) })?;
-        defer allocator_.free(buffer);
+        const _guard_buffer = FreeGuard<u8>{ allocator: allocator_, slice: buffer };
         const str = ZigString.initUTF8(buffer);
         const err_value = str.toErrorInstance(_);
         return _.throwValue(err_value);
@@ -917,7 +955,7 @@ inline fn argsIsEmpty(comptime T: type): bool {
         worker_ptr: *!?,
     ): *JSGlobalObject {
         let trace = bun.perf.trace("JSGlobalObject.create");
-        defer trace.end();
+        const _guard_trace = EndGuard<@TypeOf(trace)>{ ptr: unsafe { &trace } };
 
         v.eventLoop().ensureWaker();
         const global = Zig__GlobalObject__create(console, context_id, mini_mode, eval_mode, worker_ptr);
@@ -1029,14 +1067,14 @@ inline fn argsIsEmpty(comptime T: type): bool {
 
                 // Logic from JSC.WebCore.Body.Value.toReadableStream
                 let blob = any_blob.Blob;
-                defer blob.detach();
+                const _guard_blob = DetachGuard<@TypeOf(blob)>{ ptr: unsafe { &blob } };
 
                 blob.resolveSize();
                 return jsc.WebCore.ReadableStream.fromBlobCopyRef(this_global, &blob, blob.size);
             }
         }
 
-        defer any_blob.detach();
+        const _guard_any_blob = DetachGuard<@TypeOf(any_blob)>{ ptr: unsafe { &any_blob } };
 
         // Push the blob contents into the streaming compiler by passing a pointer and
         // length, and return null to signify this has been done.

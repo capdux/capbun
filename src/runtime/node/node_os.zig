@@ -62,9 +62,130 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.deinit();
+                }
+        }
+    };
+}
+
+pub fn CloseGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.close();
+                }
+        }
+    };
+}
+
+pub fn DerefGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.deref();
+                }
+        }
+    };
+}
+
+pub fn FreeGuard(comptime T: type) type {
+    return struct {
+        slice: []T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = bun.default_allocator.free(self.slice);
+        }
+    };
+}
+
+pub const FallbackFreeGuard = struct {
+    slice_ptr: *[]u8,
+    stack_ptr: [*]const u8,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *FallbackFreeGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            {
+                if ((self.slice_ptr.*.ptr != self.stack_ptr)) {
+                    _ = bun.default_allocator.free(self.slice_ptr.*);
+                }
+            }
+    }
+};
+
+pub const VmDeallocateGuard = struct {
+    addr: usize,
+    size: usize,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *VmDeallocateGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = std.c.vm_deallocate(std.c.mach_task_self(), self.addr, self.size);
+    }
+};
+
+pub const UvCpuInfoGuard = struct {
+    ptr: [*]libuv.uv_cpu_info_t,
+    count: c_int,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *UvCpuInfoGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = libuv.uv_free_cpu_info(self.ptr, self.count);
+    }
+};
+
+pub const FreeIfAddrsGuard = struct {
+    ptr: ?*c.ifaddrs,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *FreeIfAddrsGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = c.freeifaddrs(self.ptr);
+    }
+};
+
+pub const UvIfAddrsGuard = struct {
+    ptr: [*]libuv.uv_interface_address_t,
+    count: c_int,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *UvIfAddrsGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = libuv.uv_free_interface_addresses(self.ptr, self.count);
+    }
+};
+
 pub const CPUTimes = struct {
     user: u64 = 0,
     nice: u64 = 0,
@@ -171,11 +292,12 @@ pub fn cpusImplLinux(globalThis: *jsc.JSGlobalObject) !jsc.JSValue {
         _ = &stack_fallback;
         var file_buf = std.array_list.Managed(u8).init(stack_fallback.get());
         _ = &file_buf;
-        defer {
-        _ = file_buf.deinit();
-        }
+        var _guard_file_buf = DeinitGuard(std.array_list.Managed(u8)){ .ptr = (&file_buf) };
+        _ = &_guard_file_buf;
+        var ___guard_file_buf_moved = false; _ = &___guard_file_buf_moved;
+        defer if (!___guard_file_buf_moved) { ___guard_file_buf_moved = true; const __T = @TypeOf(_guard_file_buf); if (@typeInfo(__T) == .optional) { if (_guard_file_buf) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_file_buf.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_file_buf; _drop_val.__cp_deinit(); } };
         {
-            const file = (blk_catch_1: { break :blk_catch_1 ((std.fs.cwd().openFile("/proc/stat", .{})) catch |__ce_1| { _ = &__ce_1; const count: u32 = @as(u32, @intCast(@max(1, bun_sysconf__SC_NPROCESSORS_ONLN())));
+            var file = (blk_catch_1: { break :blk_catch_1 ((std.fs.cwd().openFile("/proc/stat", .{})) catch |__ce_1| { _ = &__ce_1; const count: u32 = @as(u32, @intCast(@max(1, bun_sysconf__SC_NPROCESSORS_ONLN())));
             const stubs = try jsc.JSValue.createEmptyArray(globalThis, count);
             const empty_times = CPUTimes{  };
             var i: u32 = 0;
@@ -188,9 +310,11 @@ pub fn cpusImplLinux(globalThis: *jsc.JSGlobalObject) !jsc.JSValue {
                 _ = try stubs.putIndex(globalThis, i, cpu);
             }
             return stubs; }); });
-            defer {
-            _ = file.close();
-            }
+            _ = &file;
+            var _guard_file = CloseGuard(std.fs.File){ .ptr = (&file) };
+            _ = &_guard_file;
+            var ___guard_file_moved = false; _ = &___guard_file_moved;
+            defer if (!___guard_file_moved) { ___guard_file_moved = true; const __T = @TypeOf(_guard_file); if (@typeInfo(__T) == .optional) { if (_guard_file) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_file.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_file; _drop_val.__cp_deinit(); } };
             const file_buf_ptr = (&file_buf);
             const read = try bun.sys.File.@"from"(file).readToEndWithArrayList(file_buf_ptr, .probably_small).unwrap();
             defer {
@@ -244,11 +368,14 @@ pub fn cpusImplLinux(globalThis: *jsc.JSGlobalObject) !jsc.JSValue {
                 num_cpus = (num_cpus + 1);
             }
         }
-        if ((blk_catch_2: { break :blk_catch_2 ((std.fs.cwd().openFile("/proc/cpuinfo", .{})) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 null; }); })) |file| {
+        const maybe_cpuinfo = (blk_catch_2: { break :blk_catch_2 ((std.fs.cwd().openFile("/proc/cpuinfo", .{})) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 null; }); });
+        if ((maybe_cpuinfo != null)) {
+            var file = maybe_cpuinfo.?;
             _ = &file;
-            defer {
-            _ = file.close();
-            }
+            var _guard_file = CloseGuard(std.fs.File){ .ptr = (&file) };
+            _ = &_guard_file;
+            var ___guard_file_moved = false; _ = &___guard_file_moved;
+            defer if (!___guard_file_moved) { ___guard_file_moved = true; const __T = @TypeOf(_guard_file); if (@typeInfo(__T) == .optional) { if (_guard_file) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_file.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_file; _drop_val.__cp_deinit(); } };
             const file_buf_ptr = (&file_buf);
             const read = try bun.sys.File.@"from"(file).readToEndWithArrayList(file_buf_ptr, .probably_small).unwrap();
             defer {
@@ -302,11 +429,14 @@ pub fn cpusImplLinux(globalThis: *jsc.JSGlobalObject) !jsc.JSValue {
             var path_buf: [128]u8 = undefined;
             _ = &path_buf;
             const path = try std.fmt.bufPrint((&path_buf), "/sys/devices/system/cpu/cpu{d}/cpufreq/scaling_cur_freq", .{ freq_cpu_index });
-            if ((blk_catch_3: { break :blk_catch_3 ((std.fs.cwd().openFile(path, .{})) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 null; }); })) |file| {
+            const maybe_freq_file = (blk_catch_3: { break :blk_catch_3 ((std.fs.cwd().openFile(path, .{})) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 null; }); });
+            if ((maybe_freq_file != null)) {
+                var file = maybe_freq_file.?;
                 _ = &file;
-                defer {
-                _ = file.close();
-                }
+                var _guard_file = CloseGuard(std.fs.File){ .ptr = (&file) };
+                _ = &_guard_file;
+                var ___guard_file_moved = false; _ = &___guard_file_moved;
+                defer if (!___guard_file_moved) { ___guard_file_moved = true; const __T = @TypeOf(_guard_file); if (@typeInfo(__T) == .optional) { if (_guard_file) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_file.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_file; _drop_val.__cp_deinit(); } };
                 const file_buf_ptr = (&file_buf);
                 const read = try bun.sys.File.@"from"(file).readToEndWithArrayList(file_buf_ptr, .probably_small).unwrap();
                 defer {
@@ -348,9 +478,10 @@ pub fn cpusImplFreeBSD(globalThis: *jsc.JSGlobalObject) !jsc.JSValue {
         _ = (blk_catch_6: { break :blk_catch_6 ((std.posix.sysctlbynameZ("hw.clockrate", (&speed_mhz), (&speed_len), null, 0)) catch |__ce_6| { _ = &__ce_6;  }); });
         const cpu_states: i32 = 5;
         const times_buf = try bun.default_allocator.alloc(c_long, ((if (comptime @typeInfo(@TypeOf(ncpu)) == .@"enum") cp_cast_int(usize, @intFromEnum(ncpu)) else cp_cast_int(usize, ncpu)) * cpu_states));
-        defer {
-        _ = bun.default_allocator.free(times_buf);
-        }
+        var _guard_times_buf = FreeGuard(c_long){ .slice = times_buf };
+        _ = &_guard_times_buf;
+        var ___guard_times_buf_moved = false; _ = &___guard_times_buf_moved;
+        defer if (!___guard_times_buf_moved) { ___guard_times_buf_moved = true; const __T = @TypeOf(_guard_times_buf); if (@typeInfo(__T) == .optional) { if (_guard_times_buf) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_times_buf.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_times_buf; _drop_val.__cp_deinit(); } };
         var times_len: usize = (times_buf.len * @sizeOf(c_long));
         _ = &times_len;
         _ = try std.posix.sysctlbynameZ("kern.cp_times", times_buf.ptr, (&times_len), null, 0);
@@ -378,12 +509,19 @@ pub fn cpusImplDarwin(globalThis: *jsc.JSGlobalObject) !jsc.JSValue {
         _ = &info;
         var info_size: std.c.mach_msg_type_number_t = (if (comptime @typeInfo(std.c.mach_msg_type_number_t) == .@"enum") @as(std.c.mach_msg_type_number_t, @enumFromInt(0)) else @as(std.c.mach_msg_type_number_t, 0));
         _ = &info_size;
-        if ((bun.c.host_processor_info(std.c.mach_host_self(), bun.c.PROCESSOR_CPU_LOAD_INFO, (&num_cpus), @ptrCast((&info)), (&info_size)) != 0)) {
+        if ((bun.c.host_processor_info(std.c.mach_host_self(), bun.c.PROCESSOR_CPU_LOAD_INFO, (&num_cpus), (blk: {
+        break :blk @ptrCast((&info));
+
+}), (&info_size)) != 0)) {
             return error.no_processor_info;
         }
-        defer {
-        _ = std.c.vm_deallocate(std.c.mach_task_self(), @intFromPtr(info), info_size);
-        }
+        var _guard_info = VmDeallocateGuard{ .addr = (blk: {
+        break :blk @intFromPtr(info);
+
+}), .size = info_size };
+        _ = &_guard_info;
+        var ___guard_info_moved = false; _ = &___guard_info_moved;
+        defer if (!___guard_info_moved) { ___guard_info_moved = true; const __T = @TypeOf(_guard_info); if (@typeInfo(__T) == .optional) { if (_guard_info) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_info.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_info; _drop_val.__cp_deinit(); } };
         if ((info_size != (bun.c.PROCESSOR_CPU_LOAD_INFO_COUNT * num_cpus))) {
             return error.broken_process_info;
         }
@@ -427,14 +565,18 @@ pub fn cpusImplWindows(globalThis: *jsc.JSGlobalObject) !jsc.JSValue {
         if ((e != 0)) {
             return error.NoProcessorInfo;
         }
-        defer {
-        _ = libuv.uv_free_cpu_info(cpu_infos, count);
-        }
+        var _guard_cpu_infos = UvCpuInfoGuard{ .ptr = cpu_infos, .count = count };
+        _ = &_guard_cpu_infos;
+        var ___guard_cpu_infos_moved = false; _ = &___guard_cpu_infos_moved;
+        defer if (!___guard_cpu_infos_moved) { ___guard_cpu_infos_moved = true; const __T = @TypeOf(_guard_cpu_infos); if (@typeInfo(__T) == .optional) { if (_guard_cpu_infos) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_cpu_infos.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_cpu_infos; _drop_val.__cp_deinit(); } };
         const values = try jsc.JSValue.createEmptyArray(globalThis, @as(u32, @intCast(count)));
         const count_usize: usize = @as(usize, @intCast(count));
         var i: u32 = 0;
         _ = &i;
-        for (cp_iter_slice(cpu_infos[0..count_usize])) |cpu_info| {
+        for (cp_iter_slice((blk: {
+        break :blk cpu_infos[0..count_usize];
+
+}))) |cpu_info| {
             _ = &cpu_info;
             const times = CPUTimes{ .user = cpu_info.cpu_times.user, .nice = cpu_info.cpu_times.nice, .sys = cpu_info.cpu_times.sys, .idle = cpu_info.cpu_times.idle, .irq = cpu_info.cpu_times.irq };
             const cpu = jsc.JSValue.createEmptyObject(globalThis, 3);
@@ -486,11 +628,10 @@ pub fn homedir(global: *jsc.JSGlobalObject) !bun.String {
             _ = &stack_string_bytes;
             var string_bytes: []u8 = (&stack_string_bytes);
             _ = &string_bytes;
-            defer {
-            if ((string_bytes.ptr != (&stack_string_bytes))) {
-                _ = bun.default_allocator.free(string_bytes);
-            }
-            }
+            var _guard_string_bytes = FallbackFreeGuard{ .slice_ptr = (&string_bytes), .stack_ptr = (&stack_string_bytes) };
+            _ = &_guard_string_bytes;
+            var ___guard_string_bytes_moved = false; _ = &___guard_string_bytes_moved;
+            defer if (!___guard_string_bytes_moved) { ___guard_string_bytes_moved = true; const __T = @TypeOf(_guard_string_bytes); if (@typeInfo(__T) == .optional) { if (_guard_string_bytes) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_string_bytes.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_string_bytes; _drop_val.__cp_deinit(); } };
             var pw: bun.c.passwd = undefined;
             _ = &pw;
             var result: ?*bun.c.passwd = null;
@@ -533,22 +674,29 @@ pub fn hostname(global: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
         if (Environment.isWindows) {
             var name_buffer: [129]u16 = undefined;
             _ = &name_buffer;
-            if ((bun.windows.GetHostNameW(@as(bun.windows.PWSTR, @ptrCast((&name_buffer))), name_buffer.len) == 0)) {
-                const str = bun.String.cloneUTF16(bun.sliceTo((&name_buffer), 0));
-                defer {
-                _ = str.deref();
-                }
+            const name_ptr = (blk: {
+            break :blk @as(bun.windows.PWSTR, @ptrCast((&name_buffer)));
+
+});
+            if ((bun.windows.GetHostNameW(name_ptr, name_buffer.len) == 0)) {
+                var str = bun.String.cloneUTF16(bun.sliceTo((&name_buffer), 0));
+                _ = &str;
+                var _guard_str = DerefGuard(bun.String){ .ptr = (&str) };
+                _ = &_guard_str;
+                var ___guard_str_moved = false; _ = &___guard_str_moved;
+                defer if (!___guard_str_moved) { ___guard_str_moved = true; const __T = @TypeOf(_guard_str); if (@typeInfo(__T) == .optional) { if (_guard_str) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_str.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_str; _drop_val.__cp_deinit(); } };
                 return str.toJS(global);
             }
             var result: std.os.windows.ws2_32.WSADATA = undefined;
             _ = &result;
             if ((std.os.windows.ws2_32.WSAStartup(514, (&result)) == 0)) {
-                if ((bun.windows.GetHostNameW(@as(bun.windows.PWSTR, @ptrCast((&name_buffer))), name_buffer.len) == 0)) {
+                if ((bun.windows.GetHostNameW(name_ptr, name_buffer.len) == 0)) {
                     var y = bun.String.cloneUTF16(bun.sliceTo((&name_buffer), 0));
                     _ = &y;
-                    defer {
-                    _ = y.deref();
-                    }
+                    var _guard_y = DerefGuard(bun.String){ .ptr = (&y) };
+                    _ = &_guard_y;
+                    var ___guard_y_moved = false; _ = &___guard_y_moved;
+                    defer if (!___guard_y_moved) { ___guard_y_moved = true; const __T = @TypeOf(_guard_y); if (@typeInfo(__T) == .optional) { if (_guard_y) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_y.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_y; _drop_val.__cp_deinit(); } };
                     return y.toJS(global);
                 }
             }
@@ -625,9 +773,10 @@ pub fn networkInterfacesPosix(globalThis: *jsc.JSGlobalObject) bun.JSError!jsc.J
             _ = &e;
             return globalThis.throwValue(e.toErrorInstance(globalThis));
         }
-        defer {
-        _ = c.freeifaddrs(interface_start);
-        }
+        var _guard_interface_start = FreeIfAddrsGuard{ .ptr = interface_start };
+        _ = &_guard_interface_start;
+        var ___guard_interface_start_moved = false; _ = &___guard_interface_start_moved;
+        defer if (!___guard_interface_start_moved) { ___guard_interface_start_moved = true; const __T = @TypeOf(_guard_interface_start); if (@typeInfo(__T) == .optional) { if (_guard_interface_start) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_interface_start.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_interface_start; _drop_val.__cp_deinit(); } };
         var num_inet_interfaces: usize = 0;
         _ = &num_inet_interfaces;
         var it = interface_start;
@@ -673,7 +822,10 @@ pub fn networkInterfacesPosix(globalThis: *jsc.JSGlobalObject) bun.JSError!jsc.J
                 _ = &cidr;
                 if (maybe_suffix) |suffix| {
                     _ = &suffix;
-                    const start = (@intFromPtr(addr_str.ptr) - @intFromPtr((&buf[0])));
+                    const start = (blk: {
+                    break :blk (@intFromPtr(addr_str.ptr) - @intFromPtr((&buf[0])));
+
+});
                     const suffix_str = ((std.fmt.bufPrint(buf[(start + addr_str.len)..], "/{}", .{ suffix })) catch unreachable);
                     const cidr_str = buf[start..((start + addr_str.len) + suffix_str.len)];
                     cidr = jsc.ZigString.init(cidr_str).withEncoding().toJS(globalThis);
@@ -706,7 +858,10 @@ pub fn networkInterfacesPosix(globalThis: *jsc.JSGlobalObject) bun.JSError!jsc.J
                         if (((ll_name.len > interface_name.len) and (ll_name[@as(usize, @intCast(interface_name.len))] != 58))) {
                             continue;
                         }
-                        maybe_ll = @as(?*std.posix.sockaddr.ll, @ptrCast(@alignCast(ll_iface.ifa_addr)));
+                        maybe_ll = @as(?*std.posix.sockaddr.ll, (blk: {
+                        break :blk @ptrCast(@alignCast(ll_iface.ifa_addr));
+
+}));
                         break;
                     }
                     if (maybe_ll) |ll| {
@@ -742,7 +897,10 @@ pub fn networkInterfacesPosix(globalThis: *jsc.JSGlobalObject) bun.JSError!jsc.J
                             if (((ll_name.len > interface_name.len) and (ll_name[@as(usize, @intCast(interface_name.len))] != 58))) {
                                 continue;
                             }
-                            maybe_ll = @as(?*c.sockaddr_dl, @ptrCast(@alignCast(ll_iface.ifa_addr)));
+                            maybe_ll = @as(?*c.sockaddr_dl, (blk: {
+                            break :blk @ptrCast(@alignCast(ll_iface.ifa_addr));
+
+}));
                             break;
                         }
                         if (maybe_ll) |ll| {
@@ -797,16 +955,20 @@ pub fn networkInterfacesWindows(globalThis: *jsc.JSGlobalObject) bun.JSError!jsc
             _ = &sys_err;
             return globalThis.throwValue(sys_err.toErrorInstance(globalThis));
         }
-        defer {
-        _ = libuv.uv_free_interface_addresses(ifaces, count);
-        }
+        var _guard_ifaces = UvIfAddrsGuard{ .ptr = ifaces, .count = count };
+        _ = &_guard_ifaces;
+        var ___guard_ifaces_moved = false; _ = &___guard_ifaces_moved;
+        defer if (!___guard_ifaces_moved) { ___guard_ifaces_moved = true; const __T = @TypeOf(_guard_ifaces); if (@typeInfo(__T) == .optional) { if (_guard_ifaces) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_ifaces.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_ifaces; _drop_val.__cp_deinit(); } };
         var ret = jsc.JSValue.createEmptyObject(globalThis, 8);
         _ = &ret;
         var ip_buf: [65]u8 = undefined;
         _ = &ip_buf;
         var mac_buf: [17]u8 = undefined;
         _ = &mac_buf;
-        for (cp_iter_slice(ifaces[0..@as(usize, @intCast(count))])) |iface| {
+        for (cp_iter_slice((blk: {
+        break :blk ifaces[0..@as(usize, @intCast(count))];
+
+}))) |iface| {
             _ = &iface;
             var iface_obj = jsc.JSValue.createEmptyObject(globalThis, 7);
             _ = &iface_obj;
@@ -822,10 +984,16 @@ pub fn networkInterfacesWindows(globalThis: *jsc.JSGlobalObject) bun.JSError!jsc
                         maybe_suffix = netmaskToCIDRSuffix(@as(u128, @bitCast(iface.netmask.netmask6.addr)));
                     }
                 }
-                const addr_str = ((bun.fmt.formatIp(std.net.Address.initPosix(@ptrCast((&iface.address.address4))), (&ip_buf))) catch unreachable);
+                const addr_str = ((bun.fmt.formatIp(std.net.Address.initPosix((blk: {
+                break :blk @ptrCast((&iface.address.address4));
+
+})), (&ip_buf))) catch unreachable);
                 if (maybe_suffix) |suffix| {
                     _ = &suffix;
-                    const start = (@intFromPtr(addr_str.ptr) - @intFromPtr((&ip_buf[0])));
+                    const start = (blk: {
+                    break :blk (@intFromPtr(addr_str.ptr) - @intFromPtr((&ip_buf[0])));
+
+});
                     const suffix_str = ((std.fmt.bufPrint(ip_buf[(start + addr_str.len)..], "/{}", .{ suffix })) catch unreachable);
                     const cidr_str = ip_buf[start..((start + addr_str.len) + suffix_str.len)];
                     cidr = jsc.ZigString.init(cidr_str).withEncoding().toJS(globalThis);
@@ -833,7 +1001,10 @@ pub fn networkInterfacesWindows(globalThis: *jsc.JSGlobalObject) bun.JSError!jsc
                 _ = iface_obj.put(globalThis, jsc.ZigString.static("address"), jsc.ZigString.init(addr_str).withEncoding().toJS(globalThis));
             }
             {
-                const str = ((bun.fmt.formatIp(std.net.Address.initPosix(@ptrCast((&iface.netmask.netmask4))), (&ip_buf))) catch unreachable);
+                const str = ((bun.fmt.formatIp(std.net.Address.initPosix((blk: {
+                break :blk @ptrCast((&iface.netmask.netmask4));
+
+})), (&ip_buf))) catch unreachable);
                 _ = iface_obj.put(globalThis, jsc.ZigString.static("netmask"), jsc.ZigString.init(str).withEncoding().toJS(globalThis));
             }
             const family_val = (if ((iface.address.address4.family == std.posix.AF.INET)) globalThis.commonStrings().IPv4() else (if ((iface.address.address4.family == std.posix.AF.INET6)) globalThis.commonStrings().IPv6() else jsc.ZigString.static("unknown").toJS(globalThis)));
@@ -1047,10 +1218,12 @@ _ = @compileError("unsupported os");
 pub fn userInfo(globalThis: *jsc.JSGlobalObject, options: gen.UserInfoOptions) bun.JSError!jsc.JSValue {
         _ = &options;
         const result = jsc.JSValue.createEmptyObject(globalThis, 5);
-        const home = try homedir(globalThis);
-        defer {
-        _ = home.deref();
-        }
+        var home = try homedir(globalThis);
+        _ = &home;
+        var _guard_home = DerefGuard(bun.String){ .ptr = (&home) };
+        _ = &_guard_home;
+        var ___guard_home_moved = false; _ = &___guard_home_moved;
+        defer if (!___guard_home_moved) { ___guard_home_moved = true; const __T = @TypeOf(_guard_home); if (@typeInfo(__T) == .optional) { if (_guard_home) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_home.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_home; _drop_val.__cp_deinit(); } };
         _ = result.put(globalThis, jsc.ZigString.static("homedir"), try home.toJS(globalThis));
         if (comptime Environment.isWindows) {
             _ = result.put(globalThis, jsc.ZigString.static("username"), jsc.ZigString.init(((bun.env_var.USER.get()) orelse ("unknown"))).withEncoding().toJS(globalThis));

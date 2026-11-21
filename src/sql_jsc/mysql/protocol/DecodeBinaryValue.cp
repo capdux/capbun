@@ -15,13 +15,20 @@ const debug = bun.Output.scoped(.MySQLDecodeBinaryValue, .visible);
 
 pub const binary_charset: u16 = 63;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
 pub fn decodeBinaryValue(globalObject: *jsc.JSGlobalObject, field_type: types.FieldType, column_length: u32, raw: bool, bigint: bool, unsigned: bool, binary: bool, character_set: u16, comptime Context: type, reader: NewReader(Context)): anyerror!SQLDataCell {
     debug("decodeBinaryValue: {s}", .{@tagName(field_type)});
     return switch (field_type) {
         .MYSQL_TYPE_TINY => {
             if (raw) {
                 let data = reader.read(1)?;
-                defer data.deinit();
+                const _data_guard = DeinitGuard<@TypeOf(data)>{ ptr: unsafe { &data } };
                 return SQLDataCell.raw(&data);
             }
             const val = reader.byte()?;
@@ -34,7 +41,7 @@ pub fn decodeBinaryValue(globalObject: *jsc.JSGlobalObject, field_type: types.Fi
         .MYSQL_TYPE_SHORT => {
             if (raw) {
                 let data = reader.read(2)?;
-                defer data.deinit();
+                const _data_guard = DeinitGuard<@TypeOf(data)>{ ptr: unsafe { &data } };
                 return SQLDataCell.raw(&data);
             }
             if (unsigned) {
@@ -45,7 +52,7 @@ pub fn decodeBinaryValue(globalObject: *jsc.JSGlobalObject, field_type: types.Fi
         .MYSQL_TYPE_INT24 => {
             if (raw) {
                 let data = reader.read(3)?;
-                defer data.deinit();
+                const _data_guard = DeinitGuard<@TypeOf(data)>{ ptr: unsafe { &data } };
                 return SQLDataCell.raw(&data);
             }
             if (unsigned) {
@@ -56,7 +63,7 @@ pub fn decodeBinaryValue(globalObject: *jsc.JSGlobalObject, field_type: types.Fi
         .MYSQL_TYPE_LONG => {
             if (raw) {
                 let data = reader.read(4)?;
-                defer data.deinit();
+                const _data_guard = DeinitGuard<@TypeOf(data)>{ ptr: unsafe { &data } };
                 return SQLDataCell.raw(&data);
             }
             if (unsigned) {
@@ -95,7 +102,7 @@ pub fn decodeBinaryValue(globalObject: *jsc.JSGlobalObject, field_type: types.Fi
         .MYSQL_TYPE_FLOAT => {
             if (raw) {
                 let data = reader.read(4)?;
-                defer data.deinit();
+                const _data_guard = DeinitGuard<@TypeOf(data)>{ ptr: unsafe { &data } };
                 return SQLDataCell.raw(&data);
             }
             const fval: f32 = @bitCast(reader.int(u32)?);
@@ -104,7 +111,7 @@ pub fn decodeBinaryValue(globalObject: *jsc.JSGlobalObject, field_type: types.Fi
         .MYSQL_TYPE_DOUBLE => {
             if (raw) {
                 let data = reader.read(8)?;
-                defer data.deinit();
+                const _data_guard = DeinitGuard<@TypeOf(data)>{ ptr: unsafe { &data } };
                 return SQLDataCell.raw(&data);
             }
             return SQLDataCell{ tag: .float8, value: { float8: @bitCast(reader.int(u64)?) } };
@@ -117,7 +124,7 @@ pub fn decodeBinaryValue(globalObject: *jsc.JSGlobalObject, field_type: types.Fi
                 },
                 8, 12 => |l| {
                     let data = reader.read(l)?;
-                    defer data.deinit();
+                    const _data_guard = DeinitGuard<@TypeOf(data)>{ ptr: unsafe { &data } };
                     const time = Time.fromData(&data)?;
 
                     const total_hours = time.hours + time.days * 24;
@@ -136,7 +143,7 @@ pub fn decodeBinaryValue(globalObject: *jsc.JSGlobalObject, field_type: types.Fi
             0 => SQLDataCell{ tag: .date, value: { date: 0 } },
             11, 7, 4 => |l| {
                 let data = reader.read(l)?;
-                defer data.deinit();
+                const _data_guard = DeinitGuard<@TypeOf(data)>{ ptr: unsafe { &data } };
                 const time = DateTime.fromData(&data)?;
                 return SQLDataCell{ tag: .date, value: { date: time.toJSTimestamp(globalObject)? } };
             },
@@ -155,11 +162,11 @@ pub fn decodeBinaryValue(globalObject: *jsc.JSGlobalObject, field_type: types.Fi
         .MYSQL_TYPE_BLOB => {
             if (raw) {
                 let data = reader.encodeLenString()?;
-                defer data.deinit();
+                const _data_guard = DeinitGuard<@TypeOf(data)>{ ptr: unsafe { &data } };
                 return SQLDataCell.raw(&data);
             }
             let string_data = reader.encodeLenString()?;
-            defer string_data.deinit();
+            const _string_data_guard = DeinitGuard<@TypeOf(string_data)>{ ptr: unsafe { &string_data } };
             if (binary && character_set == binary_charset) {
                 return SQLDataCell.raw(&string_data);
             }
@@ -169,29 +176,29 @@ pub fn decodeBinaryValue(globalObject: *jsc.JSGlobalObject, field_type: types.Fi
         .MYSQL_TYPE_JSON => {
             if (raw) {
                 let data = reader.encodeLenString()?;
-                defer data.deinit();
+                const _data_guard = DeinitGuard<@TypeOf(data)>{ ptr: unsafe { &data } };
                 return SQLDataCell.raw(&data);
             }
             let string_data = reader.encodeLenString()?;
-            defer string_data.deinit();
+            const _string_data_guard = DeinitGuard<@TypeOf(string_data)>{ ptr: unsafe { &string_data } };
             const slice = string_data.slice();
             return SQLDataCell{ tag: .json, value: { json: if (slice.len > 0) bun.String.cloneUTF8(slice).value.WTFStringImpl else null }, free_value: 1 };
         },
         .MYSQL_TYPE_BIT => {
             if (column_length == 1) {
                 let data = reader.encodeLenString()?;
-                defer data.deinit();
+                const _data_guard = DeinitGuard<@TypeOf(data)>{ ptr: unsafe { &data } };
                 const slice = data.slice();
                 return SQLDataCell{ tag: .@"bool", value: { @"bool": if (slice.len > 0 && slice[0] == 1) 1 else 0 } };
             } else {
                 let data = reader.encodeLenString()?;
-                defer data.deinit();
+                const _data_guard = DeinitGuard<@TypeOf(data)>{ ptr: unsafe { &data } };
                 return SQLDataCell.raw(&data);
             }
         },
         else => {
             let data = reader.read(column_length)?;
-            defer data.deinit();
+            const _data_guard = DeinitGuard<@TypeOf(data)>{ ptr: unsafe { &data } };
             return SQLDataCell.raw(&data);
         },
     };

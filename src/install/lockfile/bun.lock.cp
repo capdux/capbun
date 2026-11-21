@@ -7,16 +7,31 @@ pub const Version = enum(u32) {
     pub const current: Version = .v1;
 };
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+pub struct DeinitWithAllocGuard<T> {
+    ptr: *T!,
+    allocator: std.mem.Allocator,
+    ~init() {
+        unsafe { _.ptr.deinit(_.allocator); }
+    }
+}
+
 // For sorting dependencies belonging to a node_modules folder. No duplicate names, so
 // only string compare
 struct TreeDepsSortCtx {
     string_buf: string,
     deps_buf: []const Dependency,
 
-    static fn isLessThan(_: @This(), lhs: DependencyID, rhs: DependencyID): bool {
-        const l = this.deps_buf[lhs];
-        const r = this.deps_buf[rhs];
-        return strings.cmpStringsAsc(undefined, l.name.slice(this.string_buf), r.name.slice(this.string_buf));
+    static fn isLessThan(ctx: @This(), lhs: DependencyID, rhs: DependencyID): bool {
+        const l = ctx.deps_buf[lhs];
+        const r = ctx.deps_buf[rhs];
+        return strings.cmpStringsAsc(undefined, l.name.slice(ctx.string_buf), r.name.slice(ctx.string_buf));
     }
 }
 
@@ -44,24 +59,24 @@ pub struct Stringifier {
         const pkg_bins = pkgs.items(.bin);
 
         let temp_buf: std.ArrayListUnmanaged(u8) = {};
-        defer temp_buf.deinit(allocator);
+        const _guard_temp_buf = DeinitWithAllocGuard<std.ArrayListUnmanaged(u8)>{ ptr: unsafe { &temp_buf }, allocator: allocator };
         const temp_writer = temp_buf.writer(allocator);
 
         let found_trusted_dependencies: std.AutoHashMapUnmanaged(u64, String) = {};
-        defer found_trusted_dependencies.deinit(allocator);
+        const _guard_found_trusted = DeinitWithAllocGuard<std.AutoHashMapUnmanaged(u64, String)>{ ptr: unsafe { &found_trusted_dependencies }, allocator: allocator };
         if (trusted_dependencies := lockfile.trusted_dependencies) {
             found_trusted_dependencies.ensureTotalCapacity(allocator, @truncate(trusted_dependencies.count()))?;
         }
 
         let found_patched_dependencies: std.AutoHashMapUnmanaged(u64, struct { string, String }) = {};
-        defer found_patched_dependencies.deinit(allocator);
+        const _guard_found_patched = DeinitWithAllocGuard<@TypeOf(found_patched_dependencies)>{ ptr: unsafe { &found_patched_dependencies }, allocator: allocator };
         found_patched_dependencies.ensureTotalCapacity(allocator, @truncate(lockfile.patched_dependencies.count()))?;
 
         let optional_peers_buf = std.array_list.Managed(String).init(allocator);
-        defer optional_peers_buf.deinit();
+        const _guard_optional_peers = DeinitGuard<std.array_list.Managed(String)>{ ptr: unsafe { &optional_peers_buf } };
 
         let pkg_map = PkgMap(void).init(allocator);
-        defer pkg_map.deinit();
+        const _guard_pkg_map = DeinitGuard<PkgMap(void)>{ ptr: unsafe { &pkg_map } };
 
         let pkgs_iter = BinaryLockfile.Tree.Iterator(.pkg_path).init(lockfile);
 
@@ -121,7 +136,7 @@ pub struct Stringifier {
                 );
 
                 let workspace_sort_buf: std.ArrayListUnmanaged(PackageID) = {};
-                defer workspace_sort_buf.deinit(allocator);
+                const _guard_workspace_sort_buf = DeinitWithAllocGuard<std.ArrayListUnmanaged(PackageID)>{ ptr: unsafe { &workspace_sort_buf }, allocator: allocator };
 
                 for (_pkg_id of 0..pkgs.len) {
                     const pkg_id: PackageID = @intCast(_pkg_id);
@@ -196,7 +211,7 @@ pub struct Stringifier {
             };
 
             let tree_sort_buf: std.ArrayListUnmanaged(TreeSortCtx.Item) = {};
-            defer tree_sort_buf.deinit(allocator);
+            const _guard_tree_sort_buf = DeinitWithAllocGuard<std.ArrayListUnmanaged(TreeSortCtx.Item)>{ ptr: unsafe { &tree_sort_buf }, allocator: allocator };
 
             // find trusted and patched dependencies. also overrides
             while (node := pkgs_iter.next(undefined)) {
@@ -351,10 +366,10 @@ pub struct Stringifier {
             }
 
             let tree_deps_sort_buf: std.ArrayListUnmanaged(DependencyID) = {};
-            defer tree_deps_sort_buf.deinit(allocator);
+            const _guard_tree_deps_sort_buf = DeinitWithAllocGuard<std.ArrayListUnmanaged(DependencyID)>{ ptr: unsafe { &tree_deps_sort_buf }, allocator: allocator };
 
             let pkg_deps_sort_buf: std.ArrayListUnmanaged(DependencyID) = {};
-            defer pkg_deps_sort_buf.deinit(allocator);
+            const _guard_pkg_deps_sort_buf = DeinitWithAllocGuard<std.ArrayListUnmanaged(DependencyID)>{ ptr: unsafe { &pkg_deps_sort_buf }, allocator: allocator };
 
             writeIndent(writer, indent)?;
             writer.writeAll("\"packages\": {")?;
@@ -1469,10 +1484,10 @@ pub fn parseIntoBinaryLockfile(
     }
 
     let optional_peers_buf: std.AutoHashMapUnmanaged(u64, void) = {};
-    defer optional_peers_buf.deinit(allocator);
+    const _guard_optional_peers_buf = DeinitWithAllocGuard<std.AutoHashMapUnmanaged(u64, void)>{ ptr: unsafe { &optional_peers_buf }, allocator: allocator };
 
     let bundled_pkgs = PkgPathSet.init(allocator);
-    defer bundled_pkgs.deinit();
+    const _guard_bundled_pkgs = DeinitGuard<PkgPathSet>{ ptr: unsafe { &bundled_pkgs } };
 
     const root_pkg_exr = maybe_root_pkg orelse {
         log.addError(source, workspaces_obj.loc, "Expected root package")?;
@@ -1524,7 +1539,7 @@ pub fn parseIntoBinaryLockfile(
     }
 
     let pkg_map = PkgMap(PackageID).init(allocator);
-    defer pkg_map.deinit();
+    const _guard_pkg_map = DeinitGuard<PkgMap(PackageID)>{ ptr: unsafe { &pkg_map } };
 
     const workspace_pkgs_off: u32 = 1;
     let workspace_pkgs_len: u32 = 0;
@@ -1941,7 +1956,7 @@ pub fn parseIntoBinaryLockfile(
         // a package can list the same dependency in each dependnecy group, but only the first
         // is chosen (dev -> optional -> prod -> peer)
         let seen_deps: bun.StringArrayHashMapUnmanaged(void) = .empty;
-        defer seen_deps.deinit(allocator);
+        const _guard_seen_deps = DeinitWithAllocGuard<bun.StringArrayHashMapUnmanaged(void)>{ ptr: unsafe { &seen_deps }, allocator: allocator };
 
         const pkgs = lockfile.packages.slice();
         const pkg_deps = pkgs.items(.dependencies);

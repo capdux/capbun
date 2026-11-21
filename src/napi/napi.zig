@@ -62,7 +62,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const WorkPoolMod = @import("../threading/work_pool.zig");
 pub const BufferMod = @import("../runtime/node/buffer.zig");
@@ -144,6 +144,67 @@ pub fn toJSType(self: napi_typedarray_type) jsc.JSValue.JSType {
 
 pub fn toC(self: napi_typedarray_type) jsc.C.JSTypedArrayType {
             return self.toJSType().toC();
+    }
+};
+
+pub fn DerefGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    _ = p.deref();
+                }
+        }
+    };
+}
+
+pub const DeferredGuard = struct {
+    ptr: ?*jsc.JSPromise.Strong,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *DeferredGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (self.ptr) |p| {
+                _ = &p;
+                _ = p.deinit();
+                _ = bun.default_allocator.destroy(p);
+            }
+    }
+};
+
+pub const PollRefGuard = struct {
+    poll_ref: ?*Async.KeepAlive,
+    vm: *jsc.VirtualMachine,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *PollRefGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (self.poll_ref) |pr| {
+                _ = &pr;
+                _ = pr.unref(self.vm);
+            }
+    }
+};
+
+pub const HandleScopeGuard = struct {
+    scope: ?*NapiHandleScope,
+    env: *NapiEnv,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *HandleScopeGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (self.scope) |s| {
+                _ = &s;
+                _ = s.close(self.env);
+            }
     }
 };
 
@@ -280,21 +341,20 @@ pub fn cancel(self: *napi_async_work) bool {
 pub fn runFromJS(self: *napi_async_work, vm: *jsc.VirtualMachine, global: *jsc.JSGlobalObject) void {
             var poll_ref = self.poll_ref;
             _ = &poll_ref;
-            defer {
-            _ = poll_ref.unref(vm);
-            }
+            var _poll_guard = PollRefGuard{ .poll_ref = (&poll_ref), .vm = vm };
+            _ = &_poll_guard;
+            var ___poll_guard_moved = false; _ = &___poll_guard_moved;
+            defer if (!___poll_guard_moved) { ___poll_guard_moved = true; const __T = @TypeOf(_poll_guard); if (@typeInfo(__T) == .optional) { if (_poll_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _poll_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _poll_guard; _drop_val.__cp_deinit(); } };
             if ((self.complete == null)) {
                 return;
             }
             const complete = self.complete.?;
             const env = self.env.get();
             const handle_scope = NapiHandleScope.open(env, false);
-            defer {
-            if (handle_scope) |scope| {
-                _ = &scope;
-                _ = scope.close(env);
-            }
-            }
+            var _scope_guard = HandleScopeGuard{ .scope = handle_scope, .env = env };
+            _ = &_scope_guard;
+            var ___scope_guard_moved = false; _ = &___scope_guard_moved;
+            defer if (!___scope_guard_moved) { ___scope_guard_moved = true; const __T = @TypeOf(_scope_guard); if (@typeInfo(__T) == .optional) { if (_scope_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _scope_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _scope_guard; _drop_val.__cp_deinit(); } };
             const status: NapiStatus = (if ((self.status.load(.seq_cst) == .cancelled)) .cancelled else .ok);
             _ = complete(env, @intFromEnum(status), self.data);
             if (env.getAndClearPendingException()) |exception| {
@@ -332,14 +392,10 @@ pub const Finalizer = struct {
 pub fn run(self: *Finalizer) void {
             const env = self.env.get();
             const handle_scope = NapiHandleScope.open(env, false);
-            defer {
-            {
-                if (handle_scope) |scope| {
-                    _ = &scope;
-                    _ = scope.close(env);
-                }
-            }
-            }
+            var _scope_guard = HandleScopeGuard{ .scope = handle_scope, .env = env };
+            _ = &_scope_guard;
+            var ___scope_guard_moved = false; _ = &___scope_guard_moved;
+            defer if (!___scope_guard_moved) { ___scope_guard_moved = true; const __T = @TypeOf(_scope_guard); if (@typeInfo(__T) == .optional) { if (_scope_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _scope_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _scope_guard; _drop_val.__cp_deinit(); } };
             _ = self.fun(env, self.data, self.hint);
             _ = napi_internal_remove_finalizer(env, self.fun, self.hint, self.data);
             if (env.toJS().tryTakeException()) |exception| {
@@ -384,7 +440,7 @@ pub fn deinit(self: *ThreadSafeFunctionCallback) void {
 };
 
 pub const ThreadSafeFunctionQueue = struct {
-    data: bun.LinearFifo(OpaquePtr,.Dynamic),
+    data: bun.LinearFifo(OpaquePtr, .Dynamic),
     max_queue_size: usize,
     count: std.atomic.Value(u32) = std.atomic.Value(u32).init(0),
 
@@ -524,14 +580,10 @@ const js: JSValue = ((strong.get()) orelse (.js_undefined));
 .c => |cb| {
 const js: JSValue = ((cb.js.get()) orelse (.js_undefined));
             const handle_scope = NapiHandleScope.open(env, false);
-            defer {
-            {
-                if (handle_scope) |scope| {
-                    _ = &scope;
-                    _ = scope.close(env);
-                }
-            }
-            }
+            var _scope_guard = HandleScopeGuard{ .scope = handle_scope, .env = env };
+            _ = &_scope_guard;
+            var ___scope_guard_moved = false; _ = &___scope_guard_moved;
+            defer if (!___scope_guard_moved) { ___scope_guard_moved = true; const __T = @TypeOf(_scope_guard); if (@typeInfo(__T) == .optional) { if (_scope_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _scope_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _scope_guard; _drop_val.__cp_deinit(); } };
             _ = cb.napi_threadsafe_function_call_js(env, napi_value.create(env, js), self.ctx, task);
 },
 }
@@ -1630,12 +1682,16 @@ pub export fn napi_create_string_latin1(env_: napi_env, str: ?[*]const u8, lengt
         if (str) |ptr| {
             _ = &ptr;
             if ((NAPI_AUTO_LENGTH == length)) {
-                break :brk bun.sliceTo(@as([*:0]const u8, @ptrCast(ptr)), 0);
+                {
+                    break :brk bun.sliceTo(@as([*:0]const u8, @ptrCast(ptr)), 0);
+                }
             } else {
                 if ((length > std.math.maxInt(i32))) {
                     return env.invalidArg();
                 } else {
-                    break :brk ptr[0..length];
+                    {
+                        break :brk ptr[0..length];
+                    }
                 }
             }
         }
@@ -1654,9 +1710,10 @@ pub export fn napi_create_string_latin1(env_: napi_env, str: ?[*]const u8, lengt
         var str_val = str_pair[0];
         _ = &str_val;
         const bytes = str_pair[1];
-        defer {
-        _ = str_val.deref();
-        }
+        var _str_guard = DerefGuard(bun.String){ .ptr = (&str_val) };
+        _ = &_str_guard;
+        var ___str_guard_moved = false; _ = &___str_guard_moved;
+        defer if (!___str_guard_moved) { ___str_guard_moved = true; const __T = @TypeOf(_str_guard); if (@typeInfo(__T) == .optional) { if (_str_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _str_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _str_guard; _drop_val.__cp_deinit(); } };
         _ = @memcpy(bytes, slice);
         _ = result.set(env, (blk_catch_6: { break :blk_catch_6 ((str_val.toJS(env.toJS())) catch |__ce_6| { _ = &__ce_6; return env.setLastError(.generic_failure); }); }));
         return env.ok();
@@ -1675,12 +1732,16 @@ pub export fn napi_create_string_utf8(env_: napi_env, str: ?[*]const u8, length:
         if (str) |ptr| {
             _ = &ptr;
             if ((NAPI_AUTO_LENGTH == length)) {
-                break :brk bun.sliceTo(@as([*:0]const u8, @ptrCast(ptr)), 0);
+                {
+                    break :brk bun.sliceTo(@as([*:0]const u8, @ptrCast(ptr)), 0);
+                }
             } else {
                 if ((length > std.math.maxInt(i32))) {
                     return env.invalidArg();
                 } else {
-                    break :brk ptr[0..length];
+                    {
+                        break :brk ptr[0..length];
+                    }
                 }
             }
         }
@@ -1710,12 +1771,16 @@ pub export fn napi_create_string_utf16(env_: napi_env, str: ?[*]const char16_t, 
         if (str) |ptr| {
             _ = &ptr;
             if ((NAPI_AUTO_LENGTH == length)) {
-                break :brk bun.sliceTo(@as([*:0]const u16, @ptrCast(ptr)), 0);
+                {
+                    break :brk bun.sliceTo(@as([*:0]const u16, @ptrCast(ptr)), 0);
+                }
             } else {
                 if ((length > std.math.maxInt(i32))) {
                     return env.invalidArg();
                 } else {
-                    break :brk ptr[0..length];
+                    {
+                        break :brk ptr[0..length];
+                    }
                 }
             }
         }
@@ -1969,7 +2034,7 @@ pub export fn napi_make_callback(env_: napi_env, _: *anyopaque, recv_: napi_valu
 }
 
 pub fn notImplementedYet(comptime name: []const u8) void {
-        _ = bun.onceUnsafe(struct {
+        _ = bun.onceUnsafe((struct {
 
 pub fn warn() void {
             if (jsc.VirtualMachine.get().log.level.atLeast(.warn)) {
@@ -1977,7 +2042,7 @@ pub fn warn() void {
                 _ = bun.Output.flush();
             }
     }
-}.warn, void);
+}).warn, void);
 }
 
 pub export fn napi_open_escapable_handle_scope(env_: napi_env, result_: ?*napi_escapable_handle_scope) callconv(.c) napi_status {
@@ -2252,12 +2317,10 @@ pub export fn napi_resolve_deferred(env_: napi_env, deferred: napi_deferred, res
             return envIsNull();
         }
         const env = env_.?;
-        defer {
-        _ = bun.default_allocator.destroy(deferred);
-        }
-        defer {
-        _ = deferred.deinit();
-        }
+        var _deferred_guard = DeferredGuard{ .ptr = deferred };
+        _ = &_deferred_guard;
+        var ___deferred_guard_moved = false; _ = &___deferred_guard_moved;
+        defer if (!___deferred_guard_moved) { ___deferred_guard_moved = true; const __T = @TypeOf(_deferred_guard); if (@typeInfo(__T) == .optional) { if (_deferred_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _deferred_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _deferred_guard; _drop_val.__cp_deinit(); } };
         const resolution = resolution_.get();
         var prom = deferred.get();
         _ = &prom;
@@ -2271,12 +2334,10 @@ pub export fn napi_reject_deferred(env_: napi_env, deferred: napi_deferred, reje
             return envIsNull();
         }
         const env = env_.?;
-        defer {
-        _ = bun.default_allocator.destroy(deferred);
-        }
-        defer {
-        _ = deferred.deinit();
-        }
+        var _deferred_guard = DeferredGuard{ .ptr = deferred };
+        _ = &_deferred_guard;
+        var ___deferred_guard_moved = false; _ = &___deferred_guard_moved;
+        defer if (!___deferred_guard_moved) { ___deferred_guard_moved = true; const __T = @TypeOf(_deferred_guard); if (@typeInfo(__T) == .optional) { if (_deferred_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _deferred_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _deferred_guard; _drop_val.__cp_deinit(); } };
         const rejection = rejection_.get();
         var prom = deferred.get();
         _ = &prom;
@@ -2409,7 +2470,9 @@ pub export fn napi_create_buffer_copy(env_: napi_env, length: usize, data: [*]u8
         if (buffer.asArrayBuffer(env.toJS())) |array_buf| {
             _ = &array_buf;
             if ((length > 0)) {
-                _ = @memcpy(array_buf.slice()[0..length], data[0..length]);
+                {
+                    _ = @memcpy(array_buf.slice()[0..length], data[0..length]);
+                }
             }
             if (result_data) |ptr| {
                 _ = &ptr;

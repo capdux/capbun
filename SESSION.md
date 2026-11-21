@@ -247,3 +247,7 @@
 - **2026-11-22 [结单验收 `cp_agy`]**: 已验收并 `ack` `task-bun-20261122-unpack-prelude-shadow-end`（`repro_unpack_prelude_shadow_end.cp` 经 `cpc --lib` + `zig ast-check` 验证通过；`cp_unpack_*` 与 `cp_string_from` prelude 局部变量已统一加 `__cp_` 前缀，消除 `@root struct` 顶层成员遮蔽）。
 - **2026-11-22 [RAII Wave #6 里程碑验收]**: 完成 12 个核心模块（`FakeTimers`、`sys_uv`、`StandaloneModuleGraph`、`Body`、`Image`、`web_worker`、`ServerConfig`、`audit_command`、`shell`、`udp_socket`、`NodeHTTPResponse`、`generateChunksInParallel`）`~init()` RAII 改造与 `E0209` `unsafe {}` 收窄；`bun run zig:check` 与 `bun-debug` 链接通过，`bun bd test`（`28083`、`29181`、`bunshell-file`、`bun-file`、`blob`）31/31 PASS（591 expects）。
 - **2026-11-22 [RAII Wave #7 里程碑验收]**: 完成 8 个核心模块（`security_scanner`、`bun.lockb`、`node/types`、`JSValue`、`FrameworkRouter`、`ScopeFunctions`、`CodeCoverage`、`Listener`）`~init()` RAII 改造与 `E0209` `unsafe {}` 收窄；`bun run zig:check` 5/5 通过，`bun bd test`（`29181`、`bun-file`、`28083`）14/14 PASS。
+
+### [2026-11-22 Wave #8] RAII `~init()` + `unsafe {}` 专项改造（17 模块，全仓 `zig:check` + `bun bd test` 60/60 PASS）
+- 完成 `JSGlobalObject`, `bun.lock`, `create_command`, `node_os`, `MetafileBuilder`, `valkey_protocol`, `DecodeBinaryValue`, `valkey`, `Response`, `CryptoHasher`, `napi`, `pm_pkg_command`, `ansi_renderer`, `production`, `rm`, `patch`, `IncrementalGraph` 共 17 个核心模块的 `~init()` RAII 析构与 `unsafe {}` (E0209) 合规化。
+- 验证：`cpc_brief.py` 17/17 四门禁全绿（膨胀率 `0.942 ~ 1.147 <= 1.2x`）；`bun run zig:check` 5/5 PASS；`bun bd test test/js/node/os/ test/js/bun/util/bun-file.test.ts test/regression/issue/29181.test.ts` 60 pass / 0 fail（1241 expects）。

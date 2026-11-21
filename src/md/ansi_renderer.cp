@@ -2,6 +2,49 @@
 //! markdown documents to the terminal with colors, hyperlinks, syntax
 //! highlighting, && Unicode box drawing.
 
+struct DeinitGuard<T> {
+    ptr: (*T)? = null,
+    ~init() {
+        if (p := _.ptr) p.deinit();
+    }
+}
+
+struct DeinitWithAllocGuard<T> {
+    allocator: Allocator,
+    ptr: (*T)? = null,
+    ~init() {
+        if (p := _.ptr) p.deinit(_.allocator);
+    }
+}
+
+struct FreeGuard<T> {
+    allocator: Allocator,
+    slice: ([]T)? = null,
+    ~init() {
+        if (s := _.slice) _.allocator.free(s);
+    }
+}
+
+struct FreeZGuard<T> {
+    allocator: Allocator,
+    slice: ([:0]T)? = null,
+    ~init() {
+        if (s := _.slice) _.allocator.free(s);
+    }
+}
+
+struct SliceDeinitWithAllocGuard<T> {
+    allocator: Allocator,
+    slice: ([]T)? = null,
+    ~init() {
+        if (s := _.slice) {
+            let i: usize = 0;
+            while (i < s.len) : (i += 1) s[i].deinit(_.allocator);
+            _.allocator.free(s);
+        }
+    }
+}
+
 pub struct Theme {
     /// True when the terminal background is light. Controls color choices
     /// so text stays readable.
@@ -62,8 +105,9 @@ pub struct ImageUrlCollector {
         const self_ptr: *ImageUrlCollector = unsafe { @ptrCast(@alignCast(ptr)) };
         if (detail.href.len == 0) return;
         const owned = self_ptr.allocator.dupe(u8, detail.href) catch return error.OutOfMemory;
-        errdefer self_ptr.allocator.free(owned);
+        let owned_guard = FreeGuard<u8>{ allocator: self_ptr.allocator, slice: owned };
         self_ptr.urls.append(self_ptr.allocator, owned) catch return error.OutOfMemory;
+        owned_guard.slice = null;
     }
 }
 
@@ -1419,7 +1463,7 @@ pub struct AnsiRenderer {
             opts: { enable_colors: true, check_for_unhighlighted_write: false },
         };
         let aw: std.Io.Writer.Allocating = .init(_.allocator);
-        defer aw.deinit();
+        let aw_guard = DeinitGuard<std.Io.Writer.Allocating>{ ptr: &aw };
         highlighter.format(&aw.writer) catch {
             _.out.write(line);
             return;
@@ -1443,14 +1487,14 @@ pub struct AnsiRenderer {
             _.out.oom = true;
             return;
         };
-        defer _.allocator.free(widths);
+        let widths_guard = FreeGuard<usize>{ allocator: _.allocator, slice: widths };
         @memset(widths, 3);
         // Track alignment per column (first seen wins, headers precede body).
         let aligns = _.allocator.alloc(types.Align, col_count) catch {
             _.out.oom = true;
             return;
         };
-        defer _.allocator.free(aligns);
+        let aligns_guard = FreeGuard<types.Align>{ allocator: _.allocator, slice: aligns };
         @memset(aligns, .default);
         for (row of _.table_rows.items) {
             let i: usize = 0;
@@ -1592,11 +1636,7 @@ pub struct AnsiRenderer {
             _.out.oom = true;
             return;
         };
-        defer {
-            let si: usize = 0;
-            while (si < segments.len) : (si += 1) segments[si].deinit(_.allocator);
-            _.allocator.free(segments);
-        }
+        let segments_guard = SliceDeinitWithAllocGuard<SliceList>{ allocator: _.allocator, slice: segments };
         @memset(segments, {});
 
         // Per-cell ANSI state snapshotted at the START of each segment.
@@ -1608,11 +1648,7 @@ pub struct AnsiRenderer {
             _.out.oom = true;
             return;
         };
-        defer {
-            let sai: usize = 0;
-            while (sai < state_at.len) : (sai += 1) state_at[sai].deinit(_.allocator);
-            _.allocator.free(state_at);
-        }
+        let state_at_guard = SliceDeinitWithAllocGuard<std.ArrayListUnmanaged(CellAnsiState)>{ allocator: _.allocator, slice: state_at };
         @memset(state_at, {});
 
         let lines: usize = 1;
@@ -1815,7 +1851,7 @@ pub struct AnsiRenderer {
                 }
             }
             if (abs_path := resolveLocalImagePath(src.?, _.allocator, _.theme.image_base_dir)) {
-                defer _.allocator.free(abs_path);
+                let abs_path_guard = FreeGuard<u8>{ allocator: _.allocator, slice: abs_path };
                 _.emitKittyImageFile(abs_path);
                 return;
             }
@@ -1878,7 +1914,7 @@ pub struct AnsiRenderer {
             _.out.oom = true;
             return;
         };
-        defer _.allocator.free(encoded);
+        let encoded_guard = FreeGuard<u8>{ allocator: _.allocator, slice: encoded };
         * = bun.base64.encode(encoded, path);
         _.writeRawNoColor("\x1b_Ga=T,t=f,f=100,q=2;");
         _.writeRawNoColor(encoded);
@@ -2011,11 +2047,13 @@ fn extractLanguage(src_text: []const u8, info_beg: u32): []const u8 {
 /// Caller owns the returned memory.
 fn resolveHref(detail: SpanDetail, allocator: Allocator): []u8 ! std.mem.Allocator.Error {
     let buf: std.ArrayListUnmanaged(u8) = {};
-    errdefer buf.deinit(allocator);
+    let buf_guard = DeinitWithAllocGuard<std.ArrayListUnmanaged(u8)>{ allocator: allocator, ptr: &buf };
     if (detail.autolink_email) buf.appendSlice(allocator, "mailto:")?;
     if (detail.autolink_www) buf.appendSlice(allocator, "http://")?;
     buf.appendSlice(allocator, detail.href)?;
-    return buf.toOwnedSlice(allocator)?;
+    const res = buf.toOwnedSlice(allocator)?;
+    buf_guard.ptr = null;
+    return res;
 }
 
 // ========================================
@@ -2166,7 +2204,7 @@ fn resolveLocalImagePath(src: []const u8, allocator: Allocator, base_dir: ([]con
 
     // Percent-decode the path so file:///foo/bar%20baz works.
     const decoded = PercentEncoding.decodeAlloc(allocator, path) catch return null;
-    defer allocator.free(decoded);
+    let decoded_guard = FreeGuard<u8>{ allocator: allocator, slice: decoded };
 
     // Resolve to an absolute path. bun.path.joinAbsString returns a
     // slice in a threadlocal buffer — dupe it before leaving this fn.
@@ -2194,7 +2232,7 @@ fn resolveLocalImagePath(src: []const u8, allocator: Allocator, base_dir: ([]con
         allocator.free(abs);
         return null;
     };
-    defer allocator.free(abs_z);
+    let abs_z_guard = FreeZGuard<u8>{ allocator: allocator, slice: abs_z };
     switch (bun.sys.stat(abs_z)) {
         .result => |s| if ((s.mode & bun.S.IFMT) != bun.S.IFREG) {
             allocator.free(abs);
@@ -2236,7 +2274,7 @@ pub fn renderToAnsi(
     theme: Theme,
 ): ([]u8)? ! anyerror {
     let renderer = AnsiRenderer.init(allocator, text, theme);
-    defer renderer.deinit();
+    let renderer_guard = DeinitGuard<AnsiRenderer>{ ptr: &renderer };
     root.renderWithRenderer(text, allocator, options, renderer.renderer()) catch |e| {
         if (e == error.JSError || e == error.JSTerminated) return null;
         if (e == error.OutOfMemory) return error.OutOfMemory;

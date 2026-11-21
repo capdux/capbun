@@ -2,6 +2,71 @@ import bun from "bun";
 import std from "std";
 import protocol_jsc from "../runtime/valkey_jsc/protocol_jsc.zig";
 
+pub struct DeinitWithAllocGuard<T> {
+    ptr: *T!,
+    alloc: std.mem.Allocator,
+    ~init() {
+        unsafe { _.ptr.deinit(_.alloc); }
+    }
+}
+
+pub struct OptDeinitWithAllocGuard<T> {
+    ptr: (*T!)? = null,
+    alloc: std.mem.Allocator = undefined,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deinit(_.alloc); }
+        }
+    }
+}
+
+pub struct OptValDeinitWithAllocGuard<T> {
+    val: T? = null,
+    alloc: std.mem.Allocator = undefined,
+    ~init() {
+        if (v := _.val) {
+            let mut_v = v;
+            mut_v.deinit(_.alloc);
+        }
+    }
+}
+
+pub struct OptDestroyGuard<T> {
+    ptr: (*T!)? = null,
+    alloc: std.mem.Allocator = undefined,
+    ~init() {
+        if (p := _.ptr) {
+            _.alloc.destroy(p);
+        }
+    }
+}
+
+pub struct OptFreeGuard<T> {
+    slice: ([]T)? = null,
+    alloc: std.mem.Allocator = undefined,
+    ~init() {
+        if (s := _.slice) {
+            _.alloc.free(s);
+        }
+    }
+}
+
+pub struct SliceDeinitGuard<T> {
+    slice: ([]T)? = null,
+    count: *usize! = undefined,
+    alloc: std.mem.Allocator = undefined,
+    ~init() {
+        if (s := _.slice) {
+            let j: usize = 0;
+            const n = unsafe { _.count.* };
+            while (j < n) : (j += 1) {
+                s[j].deinit(_.alloc);
+            }
+            _.alloc.free(s);
+        }
+    }
+}
+
 pub err RedisError {
     AuthenticationFailed,
     ConnectionClosed,
@@ -359,18 +424,13 @@ pub struct ValkeyReader {
                 const len = this.readInteger()?;
                 if (len < 0) return RESPValue{ Array: empty_resp_array };
                 let array = allocator.alloc(RESPValue, len as usize)?;
-                errdefer allocator.free(array);
                 let i: usize = 0;
-                errdefer {
-                    let j: usize = 0;
-                    while (j < i) : (j += 1) {
-                        array[j].deinit(allocator);
-                    }
-                }
+                let _array_guard = SliceDeinitGuard<RESPValue>{ slice: array, count: unsafe { &i }, alloc: allocator };
                 const ulen = len as usize;
                 while (i < ulen) : (i += 1) {
                     array[i] = this.readValueWithDepth(allocator, depth + 1)?;
                 }
+                _array_guard.slice = null;
                 return RESPValue{ Array: array };
             },
 
@@ -409,21 +469,17 @@ pub struct ValkeyReader {
 
                 const ulen = len as usize;
                 let entries = allocator.alloc(MapEntry, ulen)?;
-                errdefer allocator.free(entries);
                 let i: usize = 0;
-                errdefer {
-                    let j: usize = 0;
-                    while (j < i) : (j += 1) {
-                        entries[j].deinit(allocator);
-                    }
-                }
+                let _entries_guard = SliceDeinitGuard<MapEntry>{ slice: entries, count: unsafe { &i }, alloc: allocator };
 
                 while (i < ulen) : (i += 1) {
                     let key = this.readValueWithDepth(allocator, depth + 1)?;
-                    errdefer key.deinit(allocator);
+                    let _key_guard = OptValDeinitWithAllocGuard<RESPValue>{ val: key, alloc: allocator };
                     const value = this.readValueWithDepth(allocator, depth + 1)?;
                     entries[i] = MapEntry{ key: key, value: value };
+                    _key_guard.val = null;
                 }
+                _entries_guard.slice = null;
                 return RESPValue{ Map: entries };
             },
             .Set => {
@@ -433,17 +489,12 @@ pub struct ValkeyReader {
 
                 const ulen = len as usize;
                 let set = allocator.alloc(RESPValue, ulen)?;
-                errdefer allocator.free(set);
                 let i: usize = 0;
-                errdefer {
-                    let j: usize = 0;
-                    while (j < i) : (j += 1) {
-                        set[j].deinit(allocator);
-                    }
-                }
+                let _set_guard = SliceDeinitGuard<RESPValue>{ slice: set, count: unsafe { &i }, alloc: allocator };
                 while (i < ulen) : (i += 1) {
                     set[i] = this.readValueWithDepth(allocator, depth + 1)?;
                 }
+                _set_guard.slice = null;
                 return RESPValue{ Set: set };
             },
             .Attribute => {
@@ -453,30 +504,25 @@ pub struct ValkeyReader {
 
                 const ulen = len as usize;
                 let attrs = allocator.alloc(MapEntry, ulen)?;
-                errdefer allocator.free(attrs);
                 let i: usize = 0;
-                errdefer {
-                    let j: usize = 0;
-                    while (j < i) : (j += 1) {
-                        attrs[j].deinit(allocator);
-                    }
-                }
+                let _attrs_guard = SliceDeinitGuard<MapEntry>{ slice: attrs, count: unsafe { &i }, alloc: allocator };
                 while (i < ulen) : (i += 1) {
                     let key = this.readValueWithDepth(allocator, depth + 1)?;
-                    errdefer key.deinit(allocator);
+                    let _key_guard = OptValDeinitWithAllocGuard<RESPValue>{ val: key, alloc: allocator };
                     const value = this.readValueWithDepth(allocator, depth + 1)?;
                     attrs[i] = MapEntry{ key: key, value: value };
+                    _key_guard.val = null;
                 }
 
                 // Read the actual value that follows the attributes
                 let value_ptr = allocator.create(RESPValue)?;
-                errdefer {
-                    allocator.destroy(value_ptr);
-                }
+                let _val_guard = OptDestroyGuard<RESPValue>{ ptr: value_ptr, alloc: allocator };
                 unsafe {
                     value_ptr.* = this.readValueWithDepth(allocator, depth + 1)?;
                 }
 
+                _val_guard.ptr = null;
+                _attrs_guard.slice = null;
                 return RESPValue{ Attribute: Attribute{
                     attributes: attrs,
                     value: value_ptr,
@@ -489,7 +535,7 @@ pub struct ValkeyReader {
 
                 // First element is the push type
                 let push_type = this.readValueWithDepth(allocator, depth + 1)?;
-                defer push_type.deinit(allocator);
+                const _push_type_guard = OptValDeinitWithAllocGuard<RESPValue>{ val: push_type, alloc: allocator };
                 let push_type_str: []const u8 = "";
 
                 switch (push_type) {
@@ -506,23 +552,19 @@ pub struct ValkeyReader {
 
                 // Copy the push type string since the original will be freed
                 const push_type_dup = allocator.dupe(u8, push_type_str)?;
-                errdefer allocator.free(push_type_dup);
+                let _push_dup_guard = OptFreeGuard<u8>{ slice: push_type_dup, alloc: allocator };
 
                 // Read the rest of the data
                 const ulen = (len - 1) as usize;
                 let data = allocator.alloc(RESPValue, ulen)?;
-                errdefer allocator.free(data);
                 let i: usize = 0;
-                errdefer {
-                    let j: usize = 0;
-                    while (j < i) : (j += 1) {
-                        data[j].deinit(allocator);
-                    }
-                }
+                let _data_guard = SliceDeinitGuard<RESPValue>{ slice: data, count: unsafe { &i }, alloc: allocator };
                 while (i < ulen) : (i += 1) {
                     data[i] = this.readValueWithDepth(allocator, depth + 1)?;
                 }
 
+                _data_guard.slice = null;
+                _push_dup_guard.slice = null;
                 return RESPValue{ Push: Push{
                     kind: push_type_dup,
                     data: data,
