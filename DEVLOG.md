@@ -1493,3 +1493,5 @@
   - `RuntimeTranspilerCache.cp` `Metadata.size` 块内 `for (...) |name|` 被 `cpc` 丢弃循环体导致 `size == 0` 缓存全失效；`visit.cp` `for (*dec of st.decls.slice())` 被丢弃导致 `Scope mismatch` panic；`lexer.cp` `switch (name[0])` 在泛型参数下被吞导致 `isLatin1Identifier` 恒 false；改写为显式索引/范围 `if` 后全部实测 100% 通关。
 - **[2026-11-21] `InvalidWorkspaceObject` / `gzipSync Z_STREAM_ERROR` / `pm view` 偏移根治**：
   - `bun.lock.cp` 中 `orelse` 赋值吞右值导致所有含 `"name"` 的 `bun.lock` 报 `InvalidWorkspaceObject`；`node_zlib_binding.cp` 中 `@"in"` 局部变量赋值与传参被 `cpc` 静默丢弃导致 `z_stream` 全零报错 `Z_STREAM_ERROR`；`package_manager_command.cp` `getSubcommand` 多切一位参数导致 `bun pm view` 偏移；三项修复后 `tarball-integrity` 13/13 全绿、`audit` 12/13、`info` 12/13。
+- **[2026-11-21] `.npmrc` 静默丢弃、`exports` 索引丢失与 `sourceMappingURL` `@typeName` 修复**：
+  - `ini.cp` 遗留 `try parser.parse(...)` 与未转义 `arena` 导致整句被 `cpc` 吞掉，全量替换 102 处 `try` 为 `?` 后 `.npmrc` 全部恢复；`package_json.cp` 4 处 `let i = 0; for (key of keys)` 遗漏 `i += 1;` 改用 `while (i < keys.len) : (i += 1)` 彻底修复条件导出错位；`writeOutputFilesToDisk.cp` 去掉 `string("")` 消除 `sourceMappingURL=*const [0:0]u8`。

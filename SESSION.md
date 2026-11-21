@@ -132,3 +132,7 @@
   - 修复 `src/runtime/node/node_zlib_binding.cp` 中 `@"in"` 局部切片变量名被 `cpc` 吞掉赋值与 `setBuffers` 调用的缺陷（重命名为 `in_slice`），`bun-install-tarball-integrity.test.ts` **13/13 100% 全绿**；
   - 修复 `src/cli/package_manager_command.cp:108-126` `getSubcommand` 多切一位参数的缺陷，`bun-info.test.ts` `bun pm view` 从全败跃升至 **12/13 通过**；
   - `test/cli/install` 第二批在前序已跑出 **425 pass / 0 crash**。
+- **[2026-11-21 23:07] `ini` / `package_json` / `writeOutputFilesToDisk` 3 大模块修复里程碑（15/15 100% 全绿、`zig:check` 5/5）**：
+  - 修复 `src/ini/ini.cp` 全量 102 处 `try expr` → `expr?`（包括关键 `loadNpmrc` `parser.parse(parser.@"arena".allocator())?;` 被静默丢弃导致 `.npmrc` 解析失效）、`E.Null`/`E.Array`/`E.Object` 空结构体字面量及 `commitRopePart` `*((*Rope)?)` 参数，`zig:check` **5/5**、`redacted-config-logs.test.ts` **11/11 全绿**、`minimum-release-age.test.ts` `basic filtering` **3/3 全绿**；
+  - 修复 `src/resolver/package_json.cp` 4 处（`valueForKey`/`resolveTarget`/`resolveReverse`/`resolveTargetReverse`）`for` 循环遗漏 `i += 1;` 导致条件导出永远只取第 0 项（`"types"` `.d.ts`）的严重缺陷；
+  - 修复 `src/bundler/linker_context/writeOutputFilesToDisk.cp:169-172` `string("")` 触发 `cp_string_from` 退化返回 `@typeName(*const [0:0]u8)` 问题，`bun-build-api.test.ts` `sourcemap: true with outdir` 通过。

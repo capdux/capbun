@@ -1080,8 +1080,8 @@ pub fn parse(allocator: std.mem.Allocator, source: *const logger.Source, log: *l
                 const keys = slice.items(.key);
                 var i: usize = 0;
                 _ = &i;
-                for (cp_iter_slice(keys)) |key| {
-                    _ = &key;
+                while ((i < keys.len)) : (i = (i + 1)) {
+                    const key = keys[@as(usize, @intCast(i))];
                     if (strings.eql(key, key_)) {
                         return slice.items(.value)[@as(usize, @intCast(i))];
                     }
@@ -1403,8 +1403,8 @@ var did_find_map_entry = false;
             const keys = slice.items(.key);
             var i: usize = 0;
             _ = &i;
-            for (cp_iter_slice(keys)) |key| {
-                _ = &key;
+            while ((i < keys.len)) : (i = (i + 1)) {
+                const key = keys[@as(usize, @intCast(i))];
                 if (r.conditions.contains(key)) {
                     if (r.debug_logs) |log| {
                         _ = &log;
@@ -1516,8 +1516,8 @@ pub fn resolveImportsExportsReverse(r: *const ESModule, query: []const u8, match
                 const values = slices.items(.value);
                 var i: usize = 0;
                 _ = &i;
-                for (cp_iter_slice(keys)) |key| {
-                    _ = &key;
+                while ((i < keys.len)) : (i = (i + 1)) {
+                    const key = keys[@as(usize, @intCast(i))];
                     if (r.resolveTargetReverse(query, key, values[@as(usize, @intCast(i))], .exact)) |result| {
                         _ = &result;
                         return result;
@@ -1582,8 +1582,8 @@ const slice = map.list.slice();
             const keys = slice.items(.key);
             var i: usize = 0;
             _ = &i;
-            for (cp_iter_slice(keys)) |map_key| {
-                _ = &map_key;
+            while ((i < keys.len)) : (i = (i + 1)) {
+                const map_key = keys[@as(usize, @intCast(i))];
                 if (r.conditions.contains(map_key)) {
                     if (r.resolveTargetReverse(query, key, slice.items(.value)[@as(usize, @intCast(i))], kind)) |result| {
                         _ = &result;

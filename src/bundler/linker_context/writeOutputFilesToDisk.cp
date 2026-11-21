@@ -166,10 +166,10 @@ pub fn writeOutputFilesToDisk(
                 ]) catch @panic("Failed to allocate memory for external source map path");
 
                 if (sm_mode == .linked) {
-                    const pair = if (public_path.len > 0)
+                    const pair: [2][]const u8 = if (public_path.len > 0)
                         cheapPrefixNormalizer(public_path, source_map_final_rel_path)
                     else
-                        [string(""), std.fs.path.basename(source_map_final_rel_path)];
+                        @as([2][]const u8, [ "", std.fs.path.basename(source_map_final_rel_path) ]);
 
                     const a = pair[0];
                     const b = pair[1];

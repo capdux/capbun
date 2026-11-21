@@ -60,611 +60,601 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_array_lit(comptime __Elem: type, __init_slice: []const __Elem) []const __Elem { const __buf = std.heap.page_allocator.alloc(__Elem, __init_slice.len) catch unreachable; if (__init_slice.len > 0) @memcpy(__buf, __init_slice); return __buf; }
+fn CpArrayElemType(comptime __PtrT: type) type { const __S0 = @typeInfo(__PtrT).pointer.child; const __S1 = if (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one) @typeInfo(__S0).pointer.child else __S0; return @typeInfo(__S1).pointer.child; }
+fn cp_array_push(__arr_ptr: anytype, __item: anytype) void { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __SliceT = @TypeOf(__target_ptr.*); const __Elem = @typeInfo(__SliceT).pointer.child; const __old_slice = __target_ptr.*; const __new_slice = std.heap.page_allocator.alloc(__Elem, __old_slice.len + 1) catch unreachable; if (__old_slice.len > 0) @memcpy(__new_slice[0..__old_slice.len], __old_slice); __new_slice[__old_slice.len] = @as(__Elem, cp_val(__item)); __target_ptr.* = __new_slice; }
+fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __s = __target_ptr.*; if (__s.len == 0) return null; const __last = __s[__s.len - 1]; __target_ptr.* = __s[0 .. __s.len - 1]; return __last; }
+fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const bun = @import("bun");
 pub const ini_jsc = @import("../install_jsc/ini_jsc.zig");
-const Str = []const u8;
-const StrZ = [:0]const u8;
-const Allocator = std.mem.Allocator;
-const Global = bun.Global;
-const OOM = bun.OOM;
-const Output = bun.Output;
-const Loc = bun.logger.Loc;
-const Registry = bun.install.Npm.Registry;
-const js_ast = bun.ast;
-const E = bun.ast.E;
-const Expr = bun.ast.Expr;
-const Rope = js_ast.E.Object.Rope;
-pub const IniTestingAPIs = ini_jsc.IniTestingAPIs;
+pub const PrepareUsage = enum {
+    section,
+    key,
+    value,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const Parser = struct {
-        opts: Options = .{},
-        source: bun.logger.Source,
-        src: []const u8,
-        out: Expr,
-        logger: bun.logger.Log,
-        arena: std.heap.ArenaAllocator,
-        env: *bun.DotEnv.Loader,
+    opts: Options = .{},
+    source: bun.logger.Source,
+    src: []const u8,
+    out: Expr,
+    logger: bun.logger.Log,
+    @"arena": std.heap.ArenaAllocator,
+    env: *bun.DotEnv.Loader,
 
-        const Options = struct {
-            bracked_array: bool = true,
-        };
+pub fn init(allocator: Allocator, path: []const u8, src: []const u8, env: *bun.DotEnv.Loader) Parser {
+            return .{ .logger = bun.logger.Log.init(allocator), .src = src, .out = Expr.init(E.Object, (if (comptime @typeInfo(E.Object) == .@"enum") @as(E.Object, @enumFromInt(.{})) else @as(E.Object, .{})), Loc.Empty), .source = bun.logger.Source.initPathString(path, src), .@"arena" = std.heap.ArenaAllocator.init(allocator), .env = env };
+    }
 
-        pub fn init(allocator: Allocator, path: []const u8, src: []const u8, env: *bun.DotEnv.Loader) Parser {
-            return .{
-                .logger = bun.logger.Log.init(allocator),
-                .src = src,
-                .out = Expr.init(E.Object, E.Object{}, Loc.Empty),
-                .source = bun.logger.Source.initPathString(path, src),
-                .arena = std.heap.ArenaAllocator.init(allocator),
-                .env = env,
-            };
-        }
+pub fn deinit(self: *Parser) void {
+            _ = self.logger.deinit();
+            _ = self.@"arena".deinit();
+    }
 
-        pub fn deinit(this: *Parser) void {
-            this.logger.deinit();
-            this.arena.deinit();
-        }
-
-        inline fn shouldSkipLine(line: []const u8) bool {
-            if (line.len == 0 or
-                // comments
-                line[0] == ';' or
-                line[0] == '#') return true;
-
-            // check the rest is whitespace
-            for (line) |c| {
+pub inline fn shouldSkipLine(line: []const u8) bool {
+            if ((((line.len == 0) or (line[0] == 59)) or (line[0] == 35))) {
+                return true;
+            }
+            for (cp_iter_slice(line)) |c| {
+                _ = &c;
                 switch (c) {
-                    ' ', '\t', '\n', '\r' => {},
-                    '#', ';' => return true,
-                    else => return false,
-                }
+' ', 9, 10, 13 => {
+
+},
+'#', ';' => {
+return true;
+},
+else => {
+return false;
+},
+}
             }
             return true;
-        }
+    }
 
-        pub fn parse(this: *Parser, arena_allocator: Allocator) OOM!void {
-            var iter = std.mem.splitScalar(u8, this.src, '\n');
-            var head: *E.Object = this.out.data.e_object;
-
-            // var duplicates = bun.StringArrayHashMapUnmanaged(u32){};
-            // defer duplicates.deinit(allocator);
-
-            var rope_stack = std.heap.stackFallback(@sizeOf(Rope) * 6, arena_allocator);
+pub fn parse(self: *Parser, arena_allocator: Allocator) OOM!void {
+            var iter = std.mem.splitScalar(u8, self.src, 10);
+            _ = &iter;
+            var head: *E.Object = self.out.data.e_object;
+            _ = &head;
+            var rope_stack = std.heap.stackFallback((@sizeOf(Rope) * 6), arena_allocator);
+            _ = &rope_stack;
             const ropealloc = rope_stack.get();
-
             var skip_until_next_section: bool = false;
-
+            _ = &skip_until_next_section;
             while (iter.next()) |line_| {
-                const line = if (line_.len > 0 and line_[line_.len - 1] == '\r') line_[0 .. line_.len - 1] else line_;
-                if (shouldSkipLine(line)) continue;
-
-                // Section
-                // [foo]
-                if (line[0] == '[') treat_as_key: {
-                    skip_until_next_section = false;
-                    const close_bracket_idx = std.mem.indexOfScalar(u8, line[0..], ']') orelse continue;
-                    // Make sure the rest is just whitespace
-                    if (close_bracket_idx + 1 < line.len) {
-                        for (line[close_bracket_idx + 1 ..]) |c| if (switch (c) {
-                            ' ', '\t' => false,
-                            else => true,
-                        }) break :treat_as_key;
-                    }
-                    const section: *Rope = try this.prepareStr(arena_allocator, ropealloc, line[1..close_bracket_idx], @as(i32, @intCast(@intFromPtr(line.ptr) - @intFromPtr(this.src.ptr))) + 1, .section);
-                    defer rope_stack.fixed_buffer_allocator.reset();
-                    const parent_object = this.out.data.e_object.getOrPutObject(section, arena_allocator) catch |e| switch (e) {
-                        error.OutOfMemory => |oom| return oom,
-                        error.Clobber => {
-                            // We're in here if key exists but it is not an object
-                            //
-                            // This is possible if someone did:
-                            //
-                            // ```ini
-                            // foo = 'bar'
-                            //
-                            // [foo]
-                            // hello = 420
-                            // ```
-                            //
-                            // In the above case, `this.out[section]` would be a string.
-                            // So what should we do in that case?
-                            //
-                            // npm/ini's will chug along happily trying to assign keys to the string.
-                            //
-                            // In JS assigning keys to string does nothing.
-                            //
-                            // Technically, this would have an effect if the value was an array:
-                            //
-                            // ```ini
-                            // foo[] = 0
-                            // foo[] = 1
-                            //
-                            // [foo]
-                            // 0 = 420
-                            // ```
-                            //
-                            // This would result in `foo` being `[420, 1]`.
-                            //
-                            // To be honest this is kind of crazy behavior so we're just going to skip this for now.
-                            skip_until_next_section = true;
-                            continue;
-                        },
-                    };
-                    head = parent_object.data.e_object;
+                const line = (if (((line_.len > 0) and (line_[@as(usize, @intCast((line_.len - 1)))] == 13))) line_[0..(line_.len - 1)] else line_);
+                if (Parser.shouldSkipLine(line)) {
                     continue;
                 }
-                if (skip_until_next_section) continue;
-
-                // Otherwise it's a key val here
-
-                const line_offset: i32 = @intCast(@intFromPtr(line.ptr) - @intFromPtr(this.src.ptr));
-
-                const maybe_eq_sign_idx = std.mem.indexOfScalar(u8, line, '=');
-
-                const key_raw: []const u8 = try this.prepareStr(arena_allocator, ropealloc, line[0 .. maybe_eq_sign_idx orelse line.len], line_offset, .key);
-                const is_array: bool = brk: {
-                    break :brk key_raw.len > 2 and bun.strings.endsWith(key_raw, "[]");
-                    // Commenting out because options are not supported but we might
-                    // support them.
-                    // if (this.opts.bracked_array) {
-                    //     break :brk key_raw.len > 2 and bun.strings.endsWith(key_raw, "[]");
-                    // } else {
-                    //     // const gop = try duplicates.getOrPut(allocator, key_raw);
-                    //     // if (gop.found_existing) {
-                    //     //     gop.value_ptr.* = 1;
-                    //     // } else gop.value_ptr.* += 1;
-                    //     // break :brk gop.value_ptr.* > 1;
-                    //     @panic("We don't support this right now");
-                    // }
-                };
-
-                const key = if (is_array and bun.strings.endsWith(key_raw, "[]"))
-                    key_raw[0 .. key_raw.len - 2]
-                else
-                    key_raw;
-
-                if (bun.strings.eqlComptime(key, "__proto__")) continue;
-
-                const value_raw: Expr = brk: {
-                    if (maybe_eq_sign_idx) |eq_sign_idx| {
-                        if (eq_sign_idx + 1 < line.len) break :brk try this.prepareStr(
-                            arena_allocator,
-                            ropealloc,
-                            line[eq_sign_idx + 1 ..],
-                            @intCast(line_offset + @as(i32, @intCast(eq_sign_idx)) + 1),
-                            .value,
-                        );
-                        break :brk Expr.init(E.String, E.String{ .data = "" }, Loc.Empty);
+                if ((line[0] == 91)) {
+                    _ = treat_as_key: {
+                    skip_until_next_section = false;
+                    const close_bracket_idx = ((std.mem.indexOfScalar(u8, line[0..], 93)) orelse continue);
+                    if (((close_bracket_idx + 1) < line.len)) {
+                        for (cp_iter_slice(line[(close_bracket_idx + 1)..])) |c| {
+                            _ = &c;
+                            if ((switch (c) {
+' ', 9 => false,
+else => true,
+})) {
+                                break :treat_as_key;
+                            }
+                        }
                     }
-                    break :brk Expr.init(E.Boolean, E.Boolean{ .value = true }, Loc.Empty);
-                };
-
-                const value: Expr = switch (value_raw.data) {
-                    .e_string => |s| if (bun.strings.eqlComptime(s.data, "true"))
-                        Expr.init(E.Boolean, E.Boolean{ .value = true }, Loc.Empty)
-                    else if (bun.strings.eqlComptime(s.data, "false"))
-                        Expr.init(E.Boolean, E.Boolean{ .value = false }, Loc.Empty)
-                    else if (bun.strings.eqlComptime(s.data, "null"))
-                        Expr.init(E.Null, E.Null{}, Loc.Empty)
-                    else
-                        value_raw,
-                    else => value_raw,
-                };
-
+                    const section: *Rope = try self.prepareStr(arena_allocator, ropealloc, line[1..close_bracket_idx], (@as(i32, @intCast((@intFromPtr(line.ptr) - @intFromPtr(self.src.ptr)))) + 1), .section);
+                    defer {
+                    _ = rope_stack.fixed_buffer_allocator.reset();
+                    }
+                    const parent_object = (blk_catch_0: { break :blk_catch_0 ((self.out.data.e_object.getOrPutObject(section, arena_allocator)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+                        return error.OutOfMemory;
+                    }
+                    if ((e == error.Clobber)) {
+                        skip_until_next_section = true;
+                        continue;
+                    }
+                    unreachable; }); });
+                    head = parent_object.data.e_object;
+                    continue;
+};
+                }
+                if (skip_until_next_section) {
+                    continue;
+                }
+                const line_offset: i32 = @intCast((@intFromPtr(line.ptr) - @intFromPtr(self.src.ptr)));
+                const maybe_eq_sign_idx = std.mem.indexOfScalar(u8, line, 61);
+                const key_raw: []const u8 = try self.prepareStr(arena_allocator, ropealloc, line[0..((maybe_eq_sign_idx) orelse (line.len))], line_offset, .key);
+                const is_array: bool = brk: {
+                break :brk ((key_raw.len > 2) and bun.strings.endsWith(key_raw, "[]"));
+};
+                const key = (if ((is_array and bun.strings.endsWith(key_raw, "[]"))) key_raw[0..(key_raw.len - 2)] else key_raw);
+                if (bun.strings.eqlComptime(key, "__proto__")) {
+                    continue;
+                }
+                const value_raw: Expr = brk: {
+                if (maybe_eq_sign_idx) |eq_sign_idx| {
+                    _ = &eq_sign_idx;
+                    if (((eq_sign_idx + 1) < line.len)) {
+                        break :brk try self.prepareStr(arena_allocator, ropealloc, line[(eq_sign_idx + 1)..], @intCast(((line_offset + @as(i32, @intCast(eq_sign_idx))) + 1)), .value);
+                    }
+                    break :brk Expr.init(E.String, E.String{ .data = "" }, Loc.Empty);
+                }
+                break :brk Expr.init(E.Boolean, E.Boolean{ .value = true }, Loc.Empty);
+};
+                const value: Expr = (switch (value_raw.data) {
+.e_string => |s| (if (bun.strings.eqlComptime(s.data, "true")) Expr.init(E.Boolean, E.Boolean{ .value = true }, Loc.Empty) else (if (bun.strings.eqlComptime(s.data, "false")) Expr.init(E.Boolean, E.Boolean{ .value = false }, Loc.Empty) else (if (bun.strings.eqlComptime(s.data, "null")) Expr.init(E.Null, (if (comptime @typeInfo(E.Null) == .@"enum") @as(E.Null, @enumFromInt(.{})) else @as(E.Null, .{})), Loc.Empty) else value_raw))),
+else => value_raw,
+});
                 if (is_array) {
                     if (head.get(key)) |val| {
-                        if (val.data != .e_array) {
-                            var arr = E.Array{};
-                            try arr.push(arena_allocator, val);
-                            try head.put(arena_allocator, key, Expr.init(E.Array, arr, Loc.Empty));
+                        _ = &val;
+                        if ((val.data != .e_array)) {
+                            var arr: E.Array = .{};
+                            _ = &arr;
+                            _ = try arr.push(arena_allocator, val);
+                            _ = try head.put(arena_allocator, key, Expr.init(E.Array, arr, Loc.Empty));
                         }
                     } else {
-                        try head.put(arena_allocator, key, Expr.init(E.Array, E.Array{}, Loc.Empty));
+                        _ = try head.put(arena_allocator, key, Expr.init(E.Array, (if (comptime @typeInfo(E.Array) == .@"enum") @as(E.Array, @enumFromInt(.{})) else @as(E.Array, .{})), Loc.Empty));
                     }
                 }
-
-                // safeguard against resetting a previously defined
-                // array by accidentally forgetting the brackets
                 var was_already_array = false;
+                _ = &was_already_array;
                 if (head.get(key)) |val| {
-                    if (val.data == .e_array) {
+                    _ = &val;
+                    if ((val.data == .e_array)) {
                         was_already_array = true;
-                        try val.data.e_array.push(arena_allocator, value);
-                        try head.put(arena_allocator, key, val);
+                        _ = try val.data.e_array.push(arena_allocator, value);
+                        _ = try head.put(arena_allocator, key, val);
                     }
                 }
-                if (!was_already_array) {
-                    try head.put(arena_allocator, key, value);
+                if ((!was_already_array)) {
+                    _ = try head.put(arena_allocator, key, value);
                 }
             }
-        }
+    }
 
-        fn prepareStr(
-            this: *Parser,
-            arena_allocator: Allocator,
-            ropealloc: Allocator,
-            val_: []const u8,
-            offset_: i32,
-            comptime usage: enum { section, key, value },
-        ) OOM!switch (usage) {
+pub fn prepareStr(self: *Parser, arena_allocator: Allocator, ropealloc: Allocator, val_: []const u8, offset_: i32, comptime usage: PrepareUsage) OOM!switch (usage) {
             .value => Expr,
             .section => *Rope,
             .key => []const u8,
         } {
             var offset = offset_;
+            _ = &offset;
             var val = std.mem.trim(u8, val_, " \n\r\t");
-
-            if (isQuoted(val)) out: {
-                // remove single quotes before calling JSON.parse
-                if (val.len > 0 and val[0] == '\'') {
-                    val = if (val.len > 1) val[1 .. val.len - 1] else val[1..];
-                    offset += 1;
+            _ = &val;
+            if (Parser.isQuoted(val)) {
+                _ = out: {
+                if (((val.len > 0) and (val[0] == 39))) {
+                    val = (if ((val.len > 1)) val[1..(val.len - 1)] else val[1..]);
+                    offset = (offset + 1);
                 }
-                const src = bun.logger.Source.initPathString(this.source.path.text, val);
+                const json_src = bun.logger.Source.initPathString(self.source.path.text, val);
                 var log = bun.logger.Log.init(arena_allocator);
-                defer log.deinit();
-                // Try to parse it and if it fails will just treat it as a string
-                const json_val: Expr = bun.json.parseUTF8Impl(&src, &log, arena_allocator, true) catch {
-                    // JSON parse failed (e.g., single-quoted string like '${VAR}')
-                    // Still need to expand env vars in the content
-                    if (comptime usage == .value) {
-                        const expanded = try this.expandEnvVars(arena_allocator, val);
+                _ = &log;
+                defer {
+                _ = log.deinit();
+                }
+                const maybe_json_val: ?Expr = (blk_catch_1: { break :blk_catch_1 ((bun.json.parseUTF8Impl((&json_src), (&log), arena_allocator, true)) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 null; }); });
+                if ((maybe_json_val == null)) {
+                    if (comptime (usage == .value)) {
+                        const expanded = try self.expandEnvVars(arena_allocator, val);
                         return Expr.init(E.String, E.String.init(expanded), Loc{ .start = @intCast(offset) });
                     }
                     break :out;
-                };
-
+                }
+                const json_val: Expr = maybe_json_val.?;
                 if (json_val.asString(arena_allocator)) |str| {
-                    // Expand env vars in the JSON-parsed string
-                    const expanded = if (comptime usage == .value) try this.expandEnvVars(arena_allocator, str) else str;
-                    if (comptime usage == .value) return Expr.init(E.String, E.String.init(expanded), Loc{ .start = @intCast(offset) });
-                    if (comptime usage == .section) return strToRope(ropealloc, expanded);
+                    _ = &str;
+                    const expanded = (if (comptime (usage == .value)) try self.expandEnvVars(arena_allocator, str) else str);
+                    if (comptime (usage == .value)) {
+                        return Expr.init(E.String, E.String.init(expanded), Loc{ .start = @intCast(offset) });
+                    }
+                    if (comptime (usage == .section)) {
+                        return Parser.strToRope(ropealloc, expanded);
+                    }
                     return expanded;
                 }
-
-                if (comptime usage == .value) return json_val;
-
-                // unfortunately, we need to match npm/ini behavior here,
-                // which requires us to turn these into a string,
-                // same behavior as doing this:
-                // ```
-                // let foo = {}
-                // const json_val = { hi: 'hello' }
-                // foo[json_val] = 'nice'
-                // ```
-                switch (json_val.data) {
-                    .e_object => {
-                        if (comptime usage == .section) return singleStrRope(ropealloc, "[Object object]");
-                        return "[Object object]";
-                    },
-                    else => {
-                        const str = try std.fmt.allocPrint(arena_allocator, "{f}", .{ToStringFormatter{ .d = json_val.data }});
-                        if (comptime usage == .section) return singleStrRope(ropealloc, str);
-                        return str;
-                    },
+                if (comptime (usage == .value)) {
+                    return json_val;
                 }
+                break :out (switch (json_val.data) {
+.e_object => {
+{
+                    if (comptime (usage == .section)) {
+                        return Parser.singleStrRope(ropealloc, "[Object object]");
+                    }
+                    return "[Object object]";
+                }
+},
+else => {
+{
+                    const str = try std.fmt.allocPrint(arena_allocator, "{f}", .{ ToStringFormatter{ .d = json_val.data } });
+                    if (comptime (usage == .section)) {
+                        return Parser.singleStrRope(ropealloc, str);
+                    }
+                    return str;
+                }
+},
+});
+
+};
             } else {
-                const STACK_BUF_SIZE = 1024;
-                // walk the val to find the first non-escaped comment character (; or #)
+                const STACK_BUF_SIZE: i32 = 1024;
                 var did_any_escape: bool = false;
+                _ = &did_any_escape;
                 var esc = false;
+                _ = &esc;
                 var sfb = std.heap.stackFallback(STACK_BUF_SIZE, arena_allocator);
+                _ = &sfb;
                 var unesc = try std.array_list.Managed(u8).initCapacity(sfb.get(), STACK_BUF_SIZE);
-
-                const RopeT = if (comptime usage == .section) *Rope else struct {};
-                var rope: ?RopeT = if (comptime usage == .section) null else undefined;
-
+                _ = &unesc;
+                const RopeT = (if (comptime (usage == .section)) *Rope else struct {
+});
+                var rope: ?RopeT = (if (comptime (usage == .section)) null else undefined);
+                _ = &rope;
                 var i: usize = 0;
-                while (i < val.len) : (i += 1) {
-                    const c = val[i];
+                _ = &i;
+                while ((i < val.len)) : (i = (i + 1)) {
+                    const c = val[@as(usize, @intCast(i))];
                     if (esc) {
                         switch (c) {
-                            '\\' => try unesc.appendSlice(&[_]u8{'\\'}),
-                            ';', '#', '$' => try unesc.append(c),
-                            '.' => {
-                                if (comptime usage == .section) {
-                                    try unesc.append('.');
-                                } else {
-                                    try unesc.appendSlice("\\.");
-                                }
-                            },
-                            else => {
-                                switch (bun.strings.utf8ByteSequenceLength(c)) {
-                                    0, 1 => try unesc.appendSlice(&[_]u8{ '\\', c }),
-                                    2 => if (val.len - i >= 2) {
-                                        try unesc.appendSlice(&[_]u8{ '\\', c, val[i + 1] });
-                                        i += 1;
-                                    } else {
-                                        try unesc.appendSlice(&[_]u8{ '\\', c });
-                                    },
-                                    3 => if (val.len - i >= 3) {
-                                        try unesc.appendSlice(&[_]u8{ '\\', c, val[i + 1], val[i + 2] });
-                                        i += 2;
-                                    } else {
-                                        try unesc.append('\\');
-                                        try unesc.appendSlice(val[i..val.len]);
-                                        i = val.len - 1;
-                                    },
-                                    4 => if (val.len - i >= 4) {
-                                        try unesc.appendSlice(&[_]u8{ '\\', c, val[i + 1], val[i + 2], val[i + 3] });
-                                        i += 3;
-                                    } else {
-                                        try unesc.append('\\');
-                                        try unesc.appendSlice(val[i..val.len]);
-                                        i = val.len - 1;
-                                    },
-                                    else => unreachable,
-                                }
-                            },
+'\\' => {
+_ = try unesc.append(92);
+},
+';', '#', '$' => {
+_ = try unesc.append(c);
+},
+'.' => {
+if (comptime (usage == .section)) {
+                            _ = try unesc.append(46);
+                        } else {
+                            _ = try unesc.appendSlice("\\.");
                         }
-
+},
+else => {
+switch (bun.strings.utf8ByteSequenceLength(c)) {
+0, 1 => {
+const tmp: [2]u8 = .{ 92, c };
+                        _ = try unesc.appendSlice((&tmp));
+},
+2 => {
+if (((val.len - i) >= 2)) {
+                            const tmp: [3]u8 = .{ 92, c, val[@as(usize, @intCast((i + 1)))] };
+                            _ = try unesc.appendSlice((&tmp));
+                            i = (i + 1);
+                        } else {
+                            const tmp: [2]u8 = .{ 92, c };
+                            _ = try unesc.appendSlice((&tmp));
+                        }
+},
+3 => {
+if (((val.len - i) >= 3)) {
+                            const tmp: [4]u8 = .{ 92, c, val[@as(usize, @intCast((i + 1)))], val[@as(usize, @intCast((i + 2)))] };
+                            _ = try unesc.appendSlice((&tmp));
+                            i = (i + 2);
+                        } else {
+                            _ = try unesc.append(92);
+                            _ = try unesc.appendSlice(val[i..val.len]);
+                            i = (val.len - 1);
+                        }
+},
+4 => {
+if (((val.len - i) >= 4)) {
+                            const tmp: [5]u8 = .{ 92, c, val[@as(usize, @intCast((i + 1)))], val[@as(usize, @intCast((i + 2)))], val[@as(usize, @intCast((i + 3)))] };
+                            _ = try unesc.appendSlice((&tmp));
+                            i = (i + 3);
+                        } else {
+                            _ = try unesc.append(92);
+                            _ = try unesc.appendSlice(val[i..val.len]);
+                            i = (val.len - 1);
+                        }
+},
+else => {
+_ = unreachable;
+},
+}
+},
+}
                         esc = false;
-                    } else switch (c) {
-                        '$' => {
-                            not_env_substitution: {
-                                if (comptime usage != .value) break :not_env_substitution;
-
-                                if (try this.parseEnvSubstitution(val, i, i, &unesc)) |new_i| {
-                                    // set to true so we heap alloc
-                                    did_any_escape = true;
-                                    i = new_i;
-                                    continue;
-                                }
-
-                                break :not_env_substitution;
-                            }
-                            try unesc.append('$');
-                        },
-                        ';', '#' => break,
-                        '\\' => {
-                            esc = true;
+                    } else {
+                        switch (c) {
+'$' => {
+_ = not_env_substitution: {
+                        if (comptime (usage != .value)) {
+                            break :not_env_substitution;
+                        }
+                        if (try self.parseEnvSubstitution(val, i, i, (&unesc))) |new_i| {
+                            _ = &new_i;
                             did_any_escape = true;
-                        },
-                        '.' => {
-                            if (comptime usage == .section) {
-                                try this.commitRopePart(arena_allocator, ropealloc, &unesc, &rope);
-                            } else {
-                                try unesc.append('.');
-                            }
-                        },
-                        else => switch (bun.strings.utf8ByteSequenceLength(c)) {
-                            0, 1 => try unesc.append(c),
-                            2 => if (val.len - i >= 2) {
-                                try unesc.appendSlice(&[_]u8{ c, val[i + 1] });
-                                i += 1;
-                            } else {
-                                try unesc.append(c);
-                            },
-                            3 => if (val.len - i >= 3) {
-                                try unesc.appendSlice(&[_]u8{ c, val[i + 1], val[i + 2] });
-                                i += 2;
-                            } else {
-                                try unesc.appendSlice(val[i..val.len]);
-                                i = val.len - 1;
-                            },
-                            4 => if (val.len - i >= 4) {
-                                try unesc.appendSlice(&[_]u8{ c, val[i + 1], val[i + 2], val[i + 3] });
-                                i += 3;
-                            } else {
-                                try unesc.appendSlice(val[i..val.len]);
-                                i = val.len - 1;
-                            },
-                            else => unreachable,
-                        },
+                            i = new_i;
+                            continue;
+                        }
+                        break :not_env_substitution;
+};
+                        _ = try unesc.append(36);
+},
+';', '#' => {
+break;
+},
+'\\' => {
+esc = true;
+                        did_any_escape = true;
+},
+'.' => {
+if (comptime (usage == .section)) {
+                            _ = try self.commitRopePart(arena_allocator, ropealloc, (&unesc), (&rope));
+                        } else {
+                            _ = try unesc.append(46);
+                        }
+},
+else => {
+switch (bun.strings.utf8ByteSequenceLength(c)) {
+0, 1 => {
+_ = try unesc.append(c);
+},
+2 => {
+if (((val.len - i) >= 2)) {
+                            const tmp: [2]u8 = .{ c, val[@as(usize, @intCast((i + 1)))] };
+                            _ = try unesc.appendSlice((&tmp));
+                            i = (i + 1);
+                        } else {
+                            _ = try unesc.append(c);
+                        }
+},
+3 => {
+if (((val.len - i) >= 3)) {
+                            const tmp: [3]u8 = .{ c, val[@as(usize, @intCast((i + 1)))], val[@as(usize, @intCast((i + 2)))] };
+                            _ = try unesc.appendSlice((&tmp));
+                            i = (i + 2);
+                        } else {
+                            _ = try unesc.appendSlice(val[i..val.len]);
+                            i = (val.len - 1);
+                        }
+},
+4 => {
+if (((val.len - i) >= 4)) {
+                            const tmp: [4]u8 = .{ c, val[@as(usize, @intCast((i + 1)))], val[@as(usize, @intCast((i + 2)))], val[@as(usize, @intCast((i + 3)))] };
+                            _ = try unesc.appendSlice((&tmp));
+                            i = (i + 3);
+                        } else {
+                            _ = try unesc.appendSlice(val[i..val.len]);
+                            i = (val.len - 1);
+                        }
+},
+else => {
+_ = unreachable;
+},
+}
+},
+}
                     }
                 }
-
-                if (esc)
-                    try unesc.append('\\');
-
-                switch (usage) {
-                    .section => {
-                        try this.commitRopePart(arena_allocator, ropealloc, &unesc, &rope);
-                        return rope.?;
-                    },
-                    .value => {
-                        if (!did_any_escape) return Expr.init(E.String, E.String.init(val[0..]), Loc{ .start = offset });
-                        if (unesc.items.len <= STACK_BUF_SIZE) return Expr.init(
-                            E.String,
-                            E.String.init(try arena_allocator.dupe(u8, unesc.items[0..])),
-                            Loc{ .start = offset },
-                        );
-                        return Expr.init(E.String, E.String.init(unesc.items[0..]), Loc{ .start = offset });
-                    },
-                    .key => {
-                        const thestr: []const u8 = thestr: {
-                            if (!did_any_escape) break :thestr try arena_allocator.dupe(u8, val[0..]);
-                            if (unesc.items.len <= STACK_BUF_SIZE) break :thestr try arena_allocator.dupe(u8, unesc.items[0..]);
-                            break :thestr unesc.items[0..];
-                        };
-                        return thestr;
-                    },
+                if (esc) {
+                    _ = try unesc.append(92);
                 }
+                switch (usage) {
+.section => {
+_ = try self.commitRopePart(arena_allocator, ropealloc, (&unesc), (&rope));
+                return rope.?;
+},
+.value => {
+if ((!did_any_escape)) {
+                    return Expr.init(E.String, E.String.init(val[0..]), Loc{ .start = offset });
+                }
+                if ((unesc.items.len <= STACK_BUF_SIZE)) {
+                    return Expr.init(E.String, E.String.init(try arena_allocator.dupe(u8, unesc.items[0..])), Loc{ .start = offset });
+                }
+                return Expr.init(E.String, E.String.init(unesc.items[0..]), Loc{ .start = offset });
+},
+.key => {
+const thestr: []const u8 = thestr: {
+                if ((!did_any_escape)) {
+                    break :thestr try arena_allocator.dupe(u8, val[0..]);
+                }
+                if ((unesc.items.len <= STACK_BUF_SIZE)) {
+                    break :thestr try arena_allocator.dupe(u8, unesc.items[0..]);
+                }
+                break :thestr unesc.items[0..];
+};
+                return thestr;
+},
+}
             }
-            if (comptime usage == .value) return Expr.init(E.String, E.String.init(val[0..]), Loc{ .start = offset });
-            if (comptime usage == .key) return val[0..];
-            return strToRope(ropealloc, val[0..]);
-        }
+            if (comptime (usage == .value)) {
+                return Expr.init(E.String, E.String.init(val[0..]), Loc{ .start = offset });
+            }
+            if (comptime (usage == .key)) {
+                return val[0..];
+            }
+            return Parser.strToRope(ropealloc, val[0..]);
+    }
 
-        /// Expands ${VAR} and ${VAR?} environment variable substitutions in a string.
-        /// Used for quoted values after JSON parsing has already handled escape sequences.
-        ///
-        /// Behavior (same as unquoted):
-        /// - ${VAR} - if VAR is undefined, leave as "${VAR}" (no expansion)
-        /// - ${VAR?} - if VAR is undefined, expand to empty string
-        /// - Backslash escaping is already handled by JSON parsing
-        fn expandEnvVars(this: *Parser, allocator: Allocator, val: []const u8) OOM![]const u8 {
-            // Quick check if there are any env vars to expand
-            if (std.mem.indexOf(u8, val, "${") == null) {
+pub fn expandEnvVars(self: *Parser, allocator: Allocator, val: []const u8) OOM![]const u8 {
+            if ((std.mem.indexOf(u8, val, "${") == null)) {
                 return val;
             }
-
             var result = try std.array_list.Managed(u8).initCapacity(allocator, val.len);
+            _ = &result;
             var i: usize = 0;
-            while (i < val.len) {
-                if (val[i] == '$' and i + 2 < val.len and val[i + 1] == '{') {
-                    // Find the closing brace
-                    var j = i + 2;
+            _ = &i;
+            while ((i < val.len)) {
+                if ((((val[@as(usize, @intCast(i))] == 36) and ((i + 2) < val.len)) and (val[@as(usize, @intCast((i + 1)))] == 123))) {
+                    var j = (i + 2);
+                    _ = &j;
                     var depth: usize = 1;
-                    while (j < val.len and depth > 0) {
-                        if (val[j] == '{') {
-                            depth += 1;
-                        } else if (val[j] == '}') {
-                            depth -= 1;
+                    _ = &depth;
+                    while (((j < val.len) and (depth > 0))) {
+                        if ((val[@as(usize, @intCast(j))] == 123)) {
+                            depth = (depth + 1);
+                        } else {
+                            if ((val[@as(usize, @intCast(j))] == 125)) {
+                                depth = (depth - 1);
+                            }
                         }
-                        if (depth > 0) j += 1;
+                        if ((depth > 0)) {
+                            j = (j + 1);
+                        }
                     }
-                    if (depth == 0) {
-                        const env_var_raw = val[i + 2 .. j];
-                        const optional = env_var_raw.len > 0 and env_var_raw[env_var_raw.len - 1] == '?';
-                        const env_var = if (optional) env_var_raw[0 .. env_var_raw.len - 1] else env_var_raw;
-
-                        if (this.env.get(env_var)) |expanded| {
-                            try result.appendSlice(expanded);
-                        } else if (!optional) {
-                            // Not found and not optional: leave as-is
-                            try result.appendSlice(val[i .. j + 1]);
+                    if ((depth == 0)) {
+                        const env_var_raw = val[(i + 2)..j];
+                        const optional = ((env_var_raw.len > 0) and (env_var_raw[@as(usize, @intCast((env_var_raw.len - 1)))] == 63));
+                        const env_var = (if (optional) env_var_raw[0..(env_var_raw.len - 1)] else env_var_raw);
+                        if (self.env.get(env_var)) |expanded| {
+                            _ = &expanded;
+                            _ = try result.appendSlice(expanded);
+                        } else {
+                            if ((!optional)) {
+                                _ = try result.appendSlice(val[i..(j + 1)]);
+                            }
                         }
-                        // If optional and not found: expand to empty string (append nothing)
-                        i = j + 1;
+                        i = (j + 1);
                         continue;
                     }
                 }
-                try result.append(val[i]);
-                i += 1;
+                _ = try result.append(val[@as(usize, @intCast(i))]);
+                i = (i + 1);
             }
             return result.items;
-        }
+    }
 
-        /// Returns index to skip or null if not an env substitution
-        /// Invariants:
-        /// - `i` must be an index into `val` that points to a '$' char
-        ///
-        /// npm/ini uses a regex pattern that will select the inner most ${...}
-        /// Supports ${VAR} and ${VAR?} syntax:
-        /// - ${VAR} - if undefined, returns null (leaves as-is)
-        /// - ${VAR?} - if undefined, expands to empty string
-        fn parseEnvSubstitution(this: *Parser, val: []const u8, start: usize, i: usize, unesc: *std.array_list.Managed(u8)) OOM!?usize {
-            bun.debugAssert(val[i] == '$');
+pub fn parseEnvSubstitution(self: *Parser, val: []const u8, start: usize, i: usize, unesc: *std.array_list.Managed(u8)) OOM!?usize {
+            _ = bun.debugAssert((val[@as(usize, @intCast(i))] == 36));
             var esc = false;
-            if (i + "{}".len < val.len and val[i + 1] == '{') {
+            _ = &esc;
+            if ((((i + "{}".len) < val.len) and (val[@as(usize, @intCast((i + 1)))] == 123))) {
                 var found_closing = false;
-                var j = i + 2;
-                while (j < val.len) : (j += 1) {
-                    switch (val[j]) {
-                        '\\' => esc = !esc,
-                        '$' => if (!esc) return this.parseEnvSubstitution(val, start, j, unesc),
-                        '{' => if (!esc) return null,
-                        '}' => if (!esc) {
-                            found_closing = true;
-                            break;
-                        },
-                        else => {},
+                _ = &found_closing;
+                var j = (i + 2);
+                _ = &j;
+                while ((j < val.len)) : (j = (j + 1)) {
+                    switch (val[@as(usize, @intCast(j))]) {
+'\\' => {
+esc = (!esc);
+},
+'$' => {
+if ((!esc)) {
+                        return self.parseEnvSubstitution(val, start, j, unesc);
                     }
+},
+'{' => {
+if ((!esc)) {
+                        return null;
+                    }
+},
+'}' => {
+if ((!esc)) {
+                        found_closing = true;
+                        break;
+                    }
+},
+else => {
+
+},
+}
                 }
-
-                if (!found_closing) return null;
-
-                if (start != i) {
-                    const missed = val[start..i];
-                    try unesc.appendSlice(missed);
-                }
-
-                const env_var_raw = val[i + 2 .. j];
-                const optional = env_var_raw.len > 0 and env_var_raw[env_var_raw.len - 1] == '?';
-                const env_var = if (optional) env_var_raw[0 .. env_var_raw.len - 1] else env_var_raw;
-
-                // https://github.com/npm/cli/blob/534ad7789e5c61f579f44d782bdd18ea3ff1ee20/workspaces/config/lib/env-replace.js#L6
-                if (this.env.get(env_var)) |expanded| {
-                    try unesc.appendSlice(expanded);
-                } else if (!optional) {
-                    // Not found and not optional: return null to leave as-is
+                if ((!found_closing)) {
                     return null;
                 }
-                // If optional and not found: expand to empty string (append nothing)
-
+                if ((start != i)) {
+                    const missed = val[start..i];
+                    _ = try unesc.appendSlice(missed);
+                }
+                const env_var_raw = val[(i + 2)..j];
+                const optional = ((env_var_raw.len > 0) and (env_var_raw[@as(usize, @intCast((env_var_raw.len - 1)))] == 63));
+                const env_var = (if (optional) env_var_raw[0..(env_var_raw.len - 1)] else env_var_raw);
+                if (self.env.get(env_var)) |expanded| {
+                    _ = &expanded;
+                    _ = try unesc.appendSlice(expanded);
+                } else {
+                    if ((!optional)) {
+                        return null;
+                    }
+                }
                 return j;
             }
             return null;
-        }
+    }
 
-        fn singleStrRope(ropealloc: Allocator, str: []const u8) OOM!*Rope {
+pub fn singleStrRope(ropealloc: Allocator, str: []const u8) OOM!*Rope {
             const rope = try ropealloc.create(Rope);
-            rope.* = .{
-                .head = Expr.init(E.String, E.String.init(str), Loc.Empty),
-            };
+            rope.* = .{ .head = Expr.init(E.String, E.String.init(str), Loc.Empty) };
             return rope;
-        }
+    }
 
-        fn nextDot(key: []const u8) ?usize {
-            return std.mem.indexOfScalar(u8, key, '.');
-        }
+pub fn nextDot(key: []const u8) ?usize {
+            return std.mem.indexOfScalar(u8, key, 46);
+    }
 
-        fn commitRopePart(this: *Parser, arena_allocator: Allocator, ropealloc: Allocator, unesc: *std.array_list.Managed(u8), existing_rope: *?*Rope) OOM!void {
-            _ = this; // autofix
+pub fn commitRopePart(self: *Parser, arena_allocator: Allocator, ropealloc: Allocator, unesc: *std.array_list.Managed(u8), existing_rope: *?*Rope) OOM!void {
+        _ = self;
             const slice = try arena_allocator.dupe(u8, unesc.items[0..]);
             const expr = Expr.init(E.String, E.String{ .data = slice }, Loc.Empty);
             if (existing_rope.*) |_r| {
+                _ = &_r;
                 const r: *Rope = _r;
                 _ = try r.append(expr, ropealloc);
             } else {
                 existing_rope.* = try ropealloc.create(Rope);
-                existing_rope.*.?.* = Rope{
-                    .head = expr,
-                };
+                (existing_rope.*.?).* = Rope{ .head = expr };
             }
-            unesc.clearRetainingCapacity();
-        }
+            _ = unesc.clearRetainingCapacity();
+    }
 
-        fn strToRope(ropealloc: Allocator, key: []const u8) OOM!*Rope {
-            var dot_idx = nextDot(key) orelse {
-                const rope = try ropealloc.create(Rope);
-                rope.* = .{
-                    .head = Expr.init(E.String, E.String.init(key), Loc.Empty),
-                };
-                return rope;
-            };
+pub fn strToRope(ropealloc: Allocator, key: []const u8) OOM!*Rope {
+            var dot_idx = ((nextDot(key)) orelse {
+            const rope = try ropealloc.create(Rope);
+            rope.* = .{ .head = Expr.init(E.String, E.String.init(key), Loc.Empty) };
+            return rope;
+});
+            _ = &dot_idx;
             var rope = try ropealloc.create(Rope);
+            _ = &rope;
             const head = rope;
-            rope.* = .{
-                .head = Expr.init(E.String, E.String.init(key[0..dot_idx]), Loc.Empty),
-                .next = null,
-            };
-
-            while (dot_idx + 1 < key.len) {
-                const next_dot_idx = dot_idx + 1 + (nextDot(key[dot_idx + 1 ..]) orelse {
-                    const rest = key[dot_idx + 1 ..];
-                    rope = try rope.append(Expr.init(E.String, E.String.init(rest), Loc.Empty), ropealloc);
-                    break;
-                });
-                const part = key[dot_idx + 1 .. next_dot_idx];
+            rope.* = .{ .head = Expr.init(E.String, E.String.init(key[0..dot_idx]), Loc.Empty), .next = null };
+            while (((dot_idx + 1) < key.len)) {
+                const next_dot_idx = ((dot_idx + 1) + ((nextDot(key[(dot_idx + 1)..])) orelse {
+                const rest = key[(dot_idx + 1)..];
+                rope = try rope.append(Expr.init(E.String, E.String.init(rest), Loc.Empty), ropealloc);
+                break;
+}));
+                const part = key[(dot_idx + 1)..next_dot_idx];
                 rope = try rope.append(Expr.init(E.String, E.String.init(part), Loc.Empty), ropealloc);
                 dot_idx = next_dot_idx;
             }
-
             return head;
-        }
+    }
 
-        fn isQuoted(val: []const u8) bool {
-            return (bun.strings.startsWithChar(val, '"') and bun.strings.endsWithChar(val, '"')) or
-                (bun.strings.startsWithChar(val, '\'') and bun.strings.endsWithChar(val, '\''));
-        }
+pub fn isQuoted(val: []const u8) bool {
+            return ((bun.strings.startsWithChar(val, 34) and bun.strings.endsWithChar(val, 34)) or (bun.strings.startsWithChar(val, 39) and bun.strings.endsWithChar(val, 39)));
+    }
+    const Options = struct {
+        bracked_array: bool = true,
     };
+};
+
 pub const ToStringFormatter = struct {
     d: js_ast.Expr.Data,
 
-pub fn format(self: *const @This(), writer: *std.Io.Writer) !void {
+pub fn format(self: ToStringFormatter, writer: *std.Io.Writer) !void {
             switch (self.d) {
 .e_array => {
 const last = (self.d.e_array.items.len -| 1);
-            for (self.d.e_array.items.slice(), 0..) |*e, i| {
+            var i: usize = 0;
+            _ = &i;
+            for (cp_mut_slice(&self.d.e_array.items.slice())) |*e| {
                 _ = &e;
-                _ = &i;
                 const is_last = (i == last);
-                _ = try writer.print("{f}{s}", .{ ToStringFormatter{ .d = e.data }, (if (is_last) "" else ",") });
+                _ = try writer.print("{f}{s}", .{ ToStringFormatter{ .d = (e.*).data }, (if (is_last) "" else ",") });
+                i = (i + 1);
             }
 },
 .e_object => {
@@ -691,6 +681,7 @@ _ = (if (bun.Environment.isDebug) blk: {
 }
     }
 };
+
 pub const ConfigIterator = struct {
     allocator: Allocator,
     config: *E.Object,
@@ -698,7 +689,7 @@ pub const ConfigIterator = struct {
     log: *bun.logger.Log,
     prop_idx: usize = 0,
 
-pub fn next(self: *@This()) ?Option(Item) {
+pub fn next(self: *ConfigIterator) ?Option(Item) {
             if ((self.prop_idx >= self.config.properties.len)) {
                 return null;
             }
@@ -716,14 +707,17 @@ pub fn next(self: *@This()) ?Option(Item) {
                         const names_len = names.len;
                         var names2: [names_len]StrZ = undefined;
                         _ = &names2;
-                        for (0..names.len) |i| {
+                        {
+                            var i: i32 = 0;
                             _ = &i;
-                            names2[cp_cast_int(usize, ((names2.len - i) - 1))] = names[@as(usize, @intCast(i))];
+                            const __end_3 = names.len;
+                            while (i < __end_3) : (i += 1) {
+                                names2[cp_cast_int(usize, ((names2.len - i) - 1))] = names[@as(usize, @intCast(i))];
+                            }
                         }
                         break :brk names2;
 });
                         inline for (optnames) |name| {
-                            _ = &name;
                             const buf_len = (name.len + 1);
                             _ = &buf_len;
                             var buf: [buf_len]u8 = undefined;
@@ -813,7 +807,7 @@ pub fn next(self: *@This()) ?Option(Item) {
                     };
     };
 };
-const NodeLinkerMap = bun.ComptimeStringMap(bun.install.PackageManager.Options.NodeLinker, .{ .{ "pnpm", .isolated }, .{ "node-modules", .hoisted }, .{ "isolated", .isolated }, .{ "hoisted", .hoisted } });
+
 pub const ScopeIterator = struct {
     allocator: Allocator,
     config: *E.Object,
@@ -822,7 +816,7 @@ pub const ScopeIterator = struct {
     prop_idx: usize = 0,
     count: bool = false,
 
-pub fn next(self: *@This()) OOM!?Option(Item) {
+pub fn next(self: *ScopeIterator) OOM!?Option(Item) {
             if ((self.prop_idx >= self.config.properties.len)) {
                 return null;
             }
@@ -862,6 +856,21 @@ pub fn next(self: *@This()) OOM!?Option(Item) {
         registry: bun.schema.api.NpmRegistry,
     };
 };
+
+const Str = []const u8;
+const StrZ = [:0]const u8;
+const Allocator = std.mem.Allocator;
+const Global = bun.Global;
+const OOM = bun.OOM;
+const Output = bun.Output;
+const Loc = bun.logger.Loc;
+const Registry = bun.install.Npm.Registry;
+const js_ast = bun.ast;
+const E = bun.ast.E;
+const Expr = bun.ast.Expr;
+const Rope = js_ast.E.Object.Rope;
+pub const IniTestingAPIs = ini_jsc.IniTestingAPIs;
+const NodeLinkerMap = bun.ComptimeStringMap(bun.install.PackageManager.Options.NodeLinker, .{ .{ "pnpm", .isolated }, .{ "node-modules", .hoisted }, .{ "isolated", .isolated }, .{ "hoisted", .hoisted } });
 const _Internal = struct {
 
 pub fn loadNpmrcConfig(allocator: std.mem.Allocator, install: *bun.schema.api.BunInstall, env: *bun.DotEnv.Loader, auto_loaded: bool, npmrc_paths: []const [:0]const u8) void {
@@ -910,6 +919,7 @@ pub fn loadNpmrc(allocator: std.mem.Allocator, install: *bun.schema.api.BunInsta
             defer {
             _ = parser.deinit();
             }
+            _ = try parser.parse(parser.@"arena".allocator());
             const out = parser.out;
             if (out.asProperty("registry")) |query| {
                 _ = &query;

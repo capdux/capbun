@@ -1258,7 +1258,8 @@ pub struct ExportsMap {
                     let slice = _.data.map.list.slice();
                     const keys = slice.items(.key);
                     let i: usize = 0;
-for (key of keys) {
+                    while (i < keys.len) : (i += 1) {
+                        const key = keys[i];
                         if (strings.eql(key, key_)) {
                             return slice.items(.value)[i];
                         }
@@ -1825,7 +1826,8 @@ pub struct ESModule {
                 const slice = object.list.slice();
                 const keys = slice.items(.key);
                 let i: usize = 0;
-for (key of keys) {
+                while (i < keys.len) : (i += 1) {
+                    const key = keys[i];
                     if (r.conditions.contains(key)) {
                         if (log := r.debug_logs) {
                             log.addNoteFmt("The key \"{s}\" matched", .{key});
@@ -1993,7 +1995,8 @@ for (key of keys) {
             const keys = slices.items(.key);
             const values = slices.items(.value);
             let i: usize = 0;
-for (key of keys) {
+            while (i < keys.len) : (i += 1) {
+                const key = keys[i];
                 if (result := r.resolveTargetReverse(query, key, values[i], .exact)) {
                     return result;
                 }
@@ -2077,7 +2080,8 @@ for (key of keys) {
                 const slice = map.list.slice();
                 const keys = slice.items(.key);
                 let i: usize = 0;
-for (map_key of keys) {
+                while (i < keys.len) : (i += 1) {
+                    const map_key = keys[i];
                     if (r.conditions.contains(map_key)) {
                         if (result := r.resolveTargetReverse(query, key, slice.items(.value)[i], kind)) {
                             if (strings.eqlComptime(map_key, "import")) {

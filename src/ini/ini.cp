@@ -18,43 +18,49 @@ const Rope = js_ast.E.Object.Rope;
 
 pub const IniTestingAPIs = ini_jsc.IniTestingAPIs;
 
-pub const Parser = struct {
+enum PrepareUsage {
+    section,
+    key,
+    value,
+}
+
+pub struct Parser {
         opts: Options = .{},
         source: bun.logger.Source,
         src: []const u8,
         out: Expr,
         logger: bun.logger.Log,
-        arena: std.heap.ArenaAllocator,
+        @"arena": std.heap.ArenaAllocator,
         env: *bun.DotEnv.Loader,
 
         const Options = struct {
             bracked_array: bool = true,
         };
 
-        pub fn init(allocator: Allocator, path: []const u8, src: []const u8, env: *bun.DotEnv.Loader) Parser {
+        pub fn init(allocator: Allocator, path: []const u8, src: []const u8, env: *bun.DotEnv.Loader): Parser {
             return .{
                 .logger = bun.logger.Log.init(allocator),
                 .src = src,
-                .out = Expr.init(E.Object, E.Object{}, Loc.Empty),
+                .out = Expr.init(E.Object, @as(E.Object, {}), Loc.Empty),
                 .source = bun.logger.Source.initPathString(path, src),
-                .arena = std.heap.ArenaAllocator.init(allocator),
+                .@"arena" = std.heap.ArenaAllocator.init(allocator),
                 .env = env,
             };
         }
 
-        pub fn deinit(this: *Parser) void {
-            this.logger.deinit();
-            this.arena.deinit();
+        pub fn deinit(*_) {
+            _.logger.deinit();
+            _.@"arena".deinit();
         }
 
-        inline fn shouldSkipLine(line: []const u8) bool {
+        inline fn shouldSkipLine(line: []const u8): bool {
             if (line.len == 0 or
                 // comments
                 line[0] == ';' or
                 line[0] == '#') return true;
 
             // check the rest is whitespace
-            for (line) |c| {
+            for (c of line) {
                 switch (c) {
                     ' ', '\t', '\n', '\r' => {},
                     '#', ';' => return true,
@@ -64,9 +70,9 @@ pub const Parser = struct {
             return true;
         }
 
-        pub fn parse(this: *Parser, arena_allocator: Allocator) OOM!void {
-            let iter = std.mem.splitScalar(u8, this.src, '\n');
-            let head: *E.Object = this.out.data.e_object;
+        pub fn parse(*_: *Parser, arena_allocator: Allocator): OOM!void {
+            let iter = std.mem.splitScalar(u8, _.src, '\n');
+            let head: *E.Object = _.out.data.e_object;
 
             // var duplicates = bun.StringArrayHashMapUnmanaged(u32){};
             // defer duplicates.deinit(allocator);
@@ -76,7 +82,7 @@ pub const Parser = struct {
 
             let skip_until_next_section: bool = false;
 
-            while (iter.next()) |line_| {
+            while (line_ := iter.next()) {
                 const line = if (line_.len > 0 and line_[line_.len - 1] == '\r') line_[0 .. line_.len - 1] else line_;
                 if (shouldSkipLine(line)) continue;
 
@@ -87,50 +93,20 @@ pub const Parser = struct {
                     const close_bracket_idx = std.mem.indexOfScalar(u8, line[0..], ']') orelse continue;
                     // Make sure the rest is just whitespace
                     if (close_bracket_idx + 1 < line.len) {
-                        for (line[close_bracket_idx + 1 ..]) |c| if (switch (c) {
+                        for (c of line[close_bracket_idx + 1 ..]) if (switch (c) {
                             ' ', '\t' => false,
                             else => true,
                         }) break :treat_as_key;
                     }
-                    const section: *Rope = try this.prepareStr(arena_allocator, ropealloc, line[1..close_bracket_idx], @as(i32, @intCast(@intFromPtr(line.ptr) - @intFromPtr(this.src.ptr))) + 1, .section);
+                    const section: *Rope = _.prepareStr(arena_allocator, ropealloc, line[1..close_bracket_idx], @as(i32, @intCast(@intFromPtr(line.ptr) - @intFromPtr(_.src.ptr))) + 1, .section)?;
                     defer rope_stack.fixed_buffer_allocator.reset();
-                    const parent_object = this.out.data.e_object.getOrPutObject(section, arena_allocator) catch |e| switch (e) {
-                        error.OutOfMemory => |oom| return oom,
-                        error.Clobber => {
-                            // We're in here if key exists but it is not an object
-                            //
-                            // This is possible if someone did:
-                            //
-                            // ```ini
-                            // foo = 'bar'
-                            //
-                            // [foo]
-                            // hello = 420
-                            // ```
-                            //
-                            // In the above case, `this.out[section]` would be a string.
-                            // So what should we do in that case?
-                            //
-                            // npm/ini's will chug along happily trying to assign keys to the string.
-                            //
-                            // In JS assigning keys to string does nothing.
-                            //
-                            // Technically, this would have an effect if the value was an array:
-                            //
-                            // ```ini
-                            // foo[] = 0
-                            // foo[] = 1
-                            //
-                            // [foo]
-                            // 0 = 420
-                            // ```
-                            //
-                            // This would result in `foo` being `[420, 1]`.
-                            //
-                            // To be honest this is kind of crazy behavior so we're just going to skip this for now.
+                    const parent_object = _.out.data.e_object.getOrPutObject(section, arena_allocator) catch |e| {
+                        if (e == error.OutOfMemory) return error.OutOfMemory;
+                        if (e == error.Clobber) {
                             skip_until_next_section = true;
                             continue;
-                        },
+                        }
+                        unreachable;
                     };
                     head = parent_object.data.e_object;
                     continue;
@@ -139,11 +115,11 @@ pub const Parser = struct {
 
                 // Otherwise it's a key val here
 
-                const line_offset: i32 = @intCast(@intFromPtr(line.ptr) - @intFromPtr(this.src.ptr));
+                const line_offset: i32 = @intCast(@intFromPtr(line.ptr) - @intFromPtr(_.src.ptr));
 
                 const maybe_eq_sign_idx = std.mem.indexOfScalar(u8, line, '=');
 
-                const key_raw: []const u8 = try this.prepareStr(arena_allocator, ropealloc, line[0 .. maybe_eq_sign_idx orelse line.len], line_offset, .key);
+                const key_raw: []const u8 = _.prepareStr(arena_allocator, ropealloc, line[0 .. maybe_eq_sign_idx orelse line.len], line_offset, .key)?;
                 const is_array: bool = brk: {
                     break :brk key_raw.len > 2 and bun.strings.endsWith(key_raw, "[]");
                     // Commenting out because options are not supported but we might
@@ -168,14 +144,14 @@ pub const Parser = struct {
                 if (bun.strings.eqlComptime(key, "__proto__")) continue;
 
                 const value_raw: Expr = brk: {
-                    if (maybe_eq_sign_idx) |eq_sign_idx| {
-                        if (eq_sign_idx + 1 < line.len) break :brk try this.prepareStr(
+                    if (eq_sign_idx := maybe_eq_sign_idx) {
+                        if (eq_sign_idx + 1 < line.len) break :brk _.prepareStr(
                             arena_allocator,
                             ropealloc,
                             line[eq_sign_idx + 1 ..],
                             @intCast(line_offset + @as(i32, @intCast(eq_sign_idx)) + 1),
                             .value,
-                        );
+                        )?;
                         break :brk Expr.init(E.String, E.String{ .data = "" }, Loc.Empty);
                     }
                     break :brk Expr.init(E.Boolean, E.Boolean{ .value = true }, Loc.Empty);
@@ -187,48 +163,48 @@ pub const Parser = struct {
                     else if (bun.strings.eqlComptime(s.data, "false"))
                         Expr.init(E.Boolean, E.Boolean{ .value = false }, Loc.Empty)
                     else if (bun.strings.eqlComptime(s.data, "null"))
-                        Expr.init(E.Null, E.Null{}, Loc.Empty)
+                        Expr.init(E.Null, @as(E.Null, {}), Loc.Empty)
                     else
                         value_raw,
                     else => value_raw,
                 };
 
                 if (is_array) {
-                    if (head.get(key)) |val| {
+                    if (val := head.get(key)) {
                         if (val.data != .e_array) {
-                            let arr = E.Array{};
-                            try arr.push(arena_allocator, val);
-                            try head.put(arena_allocator, key, Expr.init(E.Array, arr, Loc.Empty));
+                            let arr: E.Array = {};
+                            arr.push(arena_allocator, val)?;
+                            head.put(arena_allocator, key, Expr.init(E.Array, arr, Loc.Empty))?;
                         }
                     } else {
-                        try head.put(arena_allocator, key, Expr.init(E.Array, E.Array{}, Loc.Empty));
+                        head.put(arena_allocator, key, Expr.init(E.Array, @as(E.Array, {}), Loc.Empty))?;
                     }
                 }
 
                 // safeguard against resetting a previously defined
                 // array by accidentally forgetting the brackets
                 let was_already_array = false;
-                if (head.get(key)) |val| {
+                if (val := head.get(key)) {
                     if (val.data == .e_array) {
                         was_already_array = true;
-                        try val.data.e_array.push(arena_allocator, value);
-                        try head.put(arena_allocator, key, val);
+                        val.data.e_array.push(arena_allocator, value)?;
+                        head.put(arena_allocator, key, val)?;
                     }
                 }
                 if (!was_already_array) {
-                    try head.put(arena_allocator, key, value);
+                    head.put(arena_allocator, key, value)?;
                 }
             }
         }
 
         fn prepareStr(
-            this: *Parser,
+            *_,
             arena_allocator: Allocator,
             ropealloc: Allocator,
             val_: []const u8,
             offset_: i32,
-            comptime usage: enum { section, key, value },
-        ) OOM!switch (usage) {
+            comptime usage: PrepareUsage,
+        ): OOM!switch (usage) {
             .value => Expr,
             .section => *Rope,
             .key => []const u8,
@@ -242,23 +218,25 @@ pub const Parser = struct {
                     val = if (val.len > 1) val[1 .. val.len - 1] else val[1..];
                     offset += 1;
                 }
-                const src = bun.logger.Source.initPathString(this.source.path.text, val);
+                const json_src = bun.logger.Source.initPathString(_.source.path.text, val);
                 let log = bun.logger.Log.init(arena_allocator);
                 defer log.deinit();
                 // Try to parse it and if it fails will just treat it as a string
-                const json_val: Expr = bun.json.parseUTF8Impl(&src, &log, arena_allocator, true) catch {
+                const maybe_json_val: Expr? = bun.json.parseUTF8Impl(&json_src, &log, arena_allocator, true) catch null;
+                if (maybe_json_val == null) {
                     // JSON parse failed (e.g., single-quoted string like '${VAR}')
                     // Still need to expand env vars in the content
                     if (comptime usage == .value) {
-                        const expanded = try this.expandEnvVars(arena_allocator, val);
+                        const expanded = _.expandEnvVars(arena_allocator, val)?;
                         return Expr.init(E.String, E.String.init(expanded), Loc{ .start = @intCast(offset) });
                     }
                     break :out;
-                };
+                }
+                const json_val: Expr = maybe_json_val.?;
 
-                if (json_val.asString(arena_allocator)) |str| {
+                if (str := json_val.asString(arena_allocator)) {
                     // Expand env vars in the JSON-parsed string
-                    const expanded = if (comptime usage == .value) try this.expandEnvVars(arena_allocator, str) else str;
+                    const expanded = if (comptime usage == .value) _.expandEnvVars(arena_allocator, str)? else str;
                     if (comptime usage == .value) return Expr.init(E.String, E.String.init(expanded), Loc{ .start = @intCast(offset) });
                     if (comptime usage == .section) return strToRope(ropealloc, expanded);
                     return expanded;
@@ -280,7 +258,7 @@ pub const Parser = struct {
                         return "[Object object]";
                     },
                     else => {
-                        const str = try std.fmt.allocPrint(arena_allocator, "{f}", .{ToStringFormatter{ .d = json_val.data }});
+                        const str = std.fmt.allocPrint(arena_allocator, "{f}", .{ToStringFormatter{ .d = json_val.data }})?;
                         if (comptime usage == .section) return singleStrRope(ropealloc, str);
                         return str;
                     },
@@ -291,49 +269,62 @@ pub const Parser = struct {
                 let did_any_escape: bool = false;
                 let esc = false;
                 let sfb = std.heap.stackFallback(STACK_BUF_SIZE, arena_allocator);
-                let unesc = try std.array_list.Managed(u8).initCapacity(sfb.get(), STACK_BUF_SIZE);
+                let unesc = std.array_list.Managed(u8).initCapacity(sfb.get(), STACK_BUF_SIZE)?;
 
                 const RopeT = if (comptime usage == .section) *Rope else struct {};
-                let rope: ?RopeT = if (comptime usage == .section) null else undefined;
+                let rope: RopeT? = if (comptime usage == .section) null else undefined;
 
                 let i: usize = 0;
                 while (i < val.len) : (i += 1) {
                     const c = val[i];
                     if (esc) {
                         switch (c) {
-                            '\\' => try unesc.appendSlice(&[_]u8{'\\'}),
-                            ';', '#', '$' => try unesc.append(c),
+                            '\\' => unesc.append('\\')?,
+                            ';', '#', '$' => unesc.append(c)?,
                             '.' => {
                                 if (comptime usage == .section) {
-                                    try unesc.append('.');
+                                    unesc.append('.')?;
                                 } else {
-                                    try unesc.appendSlice("\\.");
+                                    unesc.appendSlice("\\.")?;
                                 }
                             },
                             else => {
                                 switch (bun.strings.utf8ByteSequenceLength(c)) {
-                                    0, 1 => try unesc.appendSlice(&[_]u8{ '\\', c }),
-                                    2 => if (val.len - i >= 2) {
-                                        try unesc.appendSlice(&[_]u8{ '\\', c, val[i + 1] });
-                                        i += 1;
-                                    } else {
-                                        try unesc.appendSlice(&[_]u8{ '\\', c });
+                                    0, 1 => {
+                                        const tmp: [2]u8 = [ '\\', c ];
+                                        unesc.appendSlice(&tmp)?;
                                     },
-                                    3 => if (val.len - i >= 3) {
-                                        try unesc.appendSlice(&[_]u8{ '\\', c, val[i + 1], val[i + 2] });
-                                        i += 2;
-                                    } else {
-                                        try unesc.append('\\');
-                                        try unesc.appendSlice(val[i..val.len]);
-                                        i = val.len - 1;
+                                    2 => {
+                                        if (val.len - i >= 2) {
+                                            const tmp: [3]u8 = [ '\\', c, val[i + 1] ];
+                                            unesc.appendSlice(&tmp)?;
+                                            i += 1;
+                                        } else {
+                                            const tmp: [2]u8 = [ '\\', c ];
+                                            unesc.appendSlice(&tmp)?;
+                                        }
                                     },
-                                    4 => if (val.len - i >= 4) {
-                                        try unesc.appendSlice(&[_]u8{ '\\', c, val[i + 1], val[i + 2], val[i + 3] });
-                                        i += 3;
-                                    } else {
-                                        try unesc.append('\\');
-                                        try unesc.appendSlice(val[i..val.len]);
-                                        i = val.len - 1;
+                                    3 => {
+                                        if (val.len - i >= 3) {
+                                            const tmp: [4]u8 = [ '\\', c, val[i + 1], val[i + 2] ];
+                                            unesc.appendSlice(&tmp)?;
+                                            i += 2;
+                                        } else {
+                                            unesc.append('\\')?;
+                                            unesc.appendSlice(val[i..val.len])?;
+                                            i = val.len - 1;
+                                        }
+                                    },
+                                    4 => {
+                                        if (val.len - i >= 4) {
+                                            const tmp: [5]u8 = [ '\\', c, val[i + 1], val[i + 2], val[i + 3] ];
+                                            unesc.appendSlice(&tmp)?;
+                                            i += 3;
+                                        } else {
+                                            unesc.append('\\')?;
+                                            unesc.appendSlice(val[i..val.len])?;
+                                            i = val.len - 1;
+                                        }
                                     },
                                     else => unreachable,
                                 }
@@ -346,7 +337,7 @@ pub const Parser = struct {
                             not_env_substitution: {
                                 if (comptime usage != .value) break :not_env_substitution;
 
-                                if (try this.parseEnvSubstitution(val, i, i, &unesc)) |new_i| {
+                                if (new_i := _.parseEnvSubstitution(val, i, i, &unesc)?) {
                                     // set to true so we heap alloc
                                     did_any_escape = true;
                                     i = new_i;
@@ -355,7 +346,7 @@ pub const Parser = struct {
 
                                 break :not_env_substitution;
                             }
-                            try unesc.append('$');
+                            unesc.append('$')?;
                         },
                         ';', '#' => break,
                         '\\' => {
@@ -364,32 +355,41 @@ pub const Parser = struct {
                         },
                         '.' => {
                             if (comptime usage == .section) {
-                                try this.commitRopePart(arena_allocator, ropealloc, &unesc, &rope);
+                                _.commitRopePart(arena_allocator, ropealloc, &unesc, &rope)?;
                             } else {
-                                try unesc.append('.');
+                                unesc.append('.')?;
                             }
                         },
                         else => switch (bun.strings.utf8ByteSequenceLength(c)) {
-                            0, 1 => try unesc.append(c),
-                            2 => if (val.len - i >= 2) {
-                                try unesc.appendSlice(&[_]u8{ c, val[i + 1] });
-                                i += 1;
-                            } else {
-                                try unesc.append(c);
+                            0, 1 => unesc.append(c)?,
+                            2 => {
+                                if (val.len - i >= 2) {
+                                    const tmp: [2]u8 = [ c, val[i + 1] ];
+                                    unesc.appendSlice(&tmp)?;
+                                    i += 1;
+                                } else {
+                                    unesc.append(c)?;
+                                }
                             },
-                            3 => if (val.len - i >= 3) {
-                                try unesc.appendSlice(&[_]u8{ c, val[i + 1], val[i + 2] });
-                                i += 2;
-                            } else {
-                                try unesc.appendSlice(val[i..val.len]);
-                                i = val.len - 1;
+                            3 => {
+                                if (val.len - i >= 3) {
+                                    const tmp: [3]u8 = [ c, val[i + 1], val[i + 2] ];
+                                    unesc.appendSlice(&tmp)?;
+                                    i += 2;
+                                } else {
+                                    unesc.appendSlice(val[i..val.len])?;
+                                    i = val.len - 1;
+                                }
                             },
-                            4 => if (val.len - i >= 4) {
-                                try unesc.appendSlice(&[_]u8{ c, val[i + 1], val[i + 2], val[i + 3] });
-                                i += 3;
-                            } else {
-                                try unesc.appendSlice(val[i..val.len]);
-                                i = val.len - 1;
+                            4 => {
+                                if (val.len - i >= 4) {
+                                    const tmp: [4]u8 = [ c, val[i + 1], val[i + 2], val[i + 3] ];
+                                    unesc.appendSlice(&tmp)?;
+                                    i += 3;
+                                } else {
+                                    unesc.appendSlice(val[i..val.len])?;
+                                    i = val.len - 1;
+                                }
                             },
                             else => unreachable,
                         },
@@ -397,26 +397,26 @@ pub const Parser = struct {
                 }
 
                 if (esc)
-                    try unesc.append('\\');
+                    unesc.append('\\')?;
 
                 switch (usage) {
                     .section => {
-                        try this.commitRopePart(arena_allocator, ropealloc, &unesc, &rope);
+                        _.commitRopePart(arena_allocator, ropealloc, &unesc, &rope)?;
                         return rope.?;
                     },
                     .value => {
                         if (!did_any_escape) return Expr.init(E.String, E.String.init(val[0..]), Loc{ .start = offset });
                         if (unesc.items.len <= STACK_BUF_SIZE) return Expr.init(
                             E.String,
-                            E.String.init(try arena_allocator.dupe(u8, unesc.items[0..])),
+                            E.String.init(arena_allocator.dupe(u8, unesc.items[0..])?),
                             Loc{ .start = offset },
                         );
                         return Expr.init(E.String, E.String.init(unesc.items[0..]), Loc{ .start = offset });
                     },
                     .key => {
                         const thestr: []const u8 = thestr: {
-                            if (!did_any_escape) break :thestr try arena_allocator.dupe(u8, val[0..]);
-                            if (unesc.items.len <= STACK_BUF_SIZE) break :thestr try arena_allocator.dupe(u8, unesc.items[0..]);
+                            if (!did_any_escape) break :thestr arena_allocator.dupe(u8, val[0..])?;
+                            if (unesc.items.len <= STACK_BUF_SIZE) break :thestr arena_allocator.dupe(u8, unesc.items[0..])?;
                             break :thestr unesc.items[0..];
                         };
                         return thestr;
@@ -435,13 +435,13 @@ pub const Parser = struct {
         /// - ${VAR} - if VAR is undefined, leave as "${VAR}" (no expansion)
         /// - ${VAR?} - if VAR is undefined, expand to empty string
         /// - Backslash escaping is already handled by JSON parsing
-        fn expandEnvVars(this: *Parser, allocator: Allocator, val: []const u8) OOM![]const u8 {
+        fn expandEnvVars(*_: *Parser, allocator: Allocator, val: []const u8): OOM![]const u8 {
             // Quick check if there are any env vars to expand
             if (std.mem.indexOf(u8, val, "${") == null) {
                 return val;
             }
 
-            let result = try std.array_list.Managed(u8).initCapacity(allocator, val.len);
+            let result = std.array_list.Managed(u8).initCapacity(allocator, val.len)?;
             let i: usize = 0;
             while (i < val.len) {
                 if (val[i] == '$' and i + 2 < val.len and val[i + 1] == '{') {
@@ -461,18 +461,18 @@ pub const Parser = struct {
                         const optional = env_var_raw.len > 0 and env_var_raw[env_var_raw.len - 1] == '?';
                         const env_var = if (optional) env_var_raw[0 .. env_var_raw.len - 1] else env_var_raw;
 
-                        if (this.env.get(env_var)) |expanded| {
-                            try result.appendSlice(expanded);
+                        if (expanded := _.env.get(env_var)) {
+                            result.appendSlice(expanded)?;
                         } else if (!optional) {
                             // Not found and not optional: leave as-is
-                            try result.appendSlice(val[i .. j + 1]);
+                            result.appendSlice(val[i .. j + 1])?;
                         }
                         // If optional and not found: expand to empty string (append nothing)
                         i = j + 1;
                         continue;
                     }
                 }
-                try result.append(val[i]);
+                result.append(val[i])?;
                 i += 1;
             }
             return result.items;
@@ -486,7 +486,7 @@ pub const Parser = struct {
         /// Supports ${VAR} and ${VAR?} syntax:
         /// - ${VAR} - if undefined, returns null (leaves as-is)
         /// - ${VAR?} - if undefined, expands to empty string
-        fn parseEnvSubstitution(this: *Parser, val: []const u8, start: usize, i: usize, unesc: *std.array_list.Managed(u8)) OOM!?usize {
+        fn parseEnvSubstitution(*_, val: []const u8, start: usize, i: usize, unesc: *std.array_list.Managed(u8)): OOM!usize? {
             bun.debugAssert(val[i] == '$');
             let esc = false;
             if (i + "{}".len < val.len and val[i + 1] == '{') {
@@ -495,11 +495,13 @@ pub const Parser = struct {
                 while (j < val.len) : (j += 1) {
                     switch (val[j]) {
                         '\\' => esc = !esc,
-                        '$' => if (!esc) return this.parseEnvSubstitution(val, start, j, unesc),
-                        '{' => if (!esc) return null,
-                        '}' => if (!esc) {
-                            found_closing = true;
-                            break;
+                        '$' => { if (!esc) return _.parseEnvSubstitution(val, start, j, unesc); },
+                        '{' => { if (!esc) return null; },
+                        '}' => {
+                            if (!esc) {
+                                found_closing = true;
+                                break;
+                            }
                         },
                         else => {},
                     }
@@ -509,7 +511,7 @@ pub const Parser = struct {
 
                 if (start != i) {
                     const missed = val[start..i];
-                    try unesc.appendSlice(missed);
+                    unesc.appendSlice(missed)?;
                 }
 
                 const env_var_raw = val[i + 2 .. j];
@@ -517,8 +519,8 @@ pub const Parser = struct {
                 const env_var = if (optional) env_var_raw[0 .. env_var_raw.len - 1] else env_var_raw;
 
                 // https://github.com/npm/cli/blob/534ad7789e5c61f579f44d782bdd18ea3ff1ee20/workspaces/config/lib/env-replace.js#L6
-                if (this.env.get(env_var)) |expanded| {
-                    try unesc.appendSlice(expanded);
+                if (expanded := _.env.get(env_var)) {
+                    unesc.appendSlice(expanded)?;
                 } else if (!optional) {
                     // Not found and not optional: return null to leave as-is
                     return null;
@@ -530,27 +532,26 @@ pub const Parser = struct {
             return null;
         }
 
-        fn singleStrRope(ropealloc: Allocator, str: []const u8) OOM!*Rope {
-            const rope = try ropealloc.create(Rope);
+        fn singleStrRope(ropealloc: Allocator, str: []const u8): OOM!*Rope {
+            const rope = ropealloc.create(Rope)?;
             rope.* = .{
                 .head = Expr.init(E.String, E.String.init(str), Loc.Empty),
             };
             return rope;
         }
 
-        fn nextDot(key: []const u8) ?usize {
+        fn nextDot(key: []const u8): usize? {
             return std.mem.indexOfScalar(u8, key, '.');
         }
 
-        fn commitRopePart(this: *Parser, arena_allocator: Allocator, ropealloc: Allocator, unesc: *std.array_list.Managed(u8), existing_rope: *?*Rope) OOM!void {
-            _ = this; // autofix
-            const slice = try arena_allocator.dupe(u8, unesc.items[0..]);
+        fn commitRopePart(*_, arena_allocator: Allocator, ropealloc: Allocator, unesc: *std.array_list.Managed(u8), existing_rope: *((*Rope)?)): OOM!void {
+            const slice = arena_allocator.dupe(u8, unesc.items[0..])?;
             const expr = Expr.init(E.String, E.String{ .data = slice }, Loc.Empty);
-            if (existing_rope.*) |_r| {
+            if (_r := existing_rope.*) {
                 const r: *Rope = _r;
-                _ = try r.append(expr, ropealloc);
+                * = r.append(expr, ropealloc)?;
             } else {
-                existing_rope.* = try ropealloc.create(Rope);
+                existing_rope.* = ropealloc.create(Rope)?;
                 existing_rope.*.?.* = Rope{
                     .head = expr,
                 };
@@ -558,15 +559,15 @@ pub const Parser = struct {
             unesc.clearRetainingCapacity();
         }
 
-        fn strToRope(ropealloc: Allocator, key: []const u8) OOM!*Rope {
+        fn strToRope(ropealloc: Allocator, key: []const u8): OOM!*Rope {
             let dot_idx = nextDot(key) orelse {
-                const rope = try ropealloc.create(Rope);
+                const rope = ropealloc.create(Rope)?;
                 rope.* = .{
                     .head = Expr.init(E.String, E.String.init(key), Loc.Empty),
                 };
                 return rope;
             };
-            let rope = try ropealloc.create(Rope);
+            let rope = ropealloc.create(Rope)?;
             const head = rope;
             rope.* = .{
                 .head = Expr.init(E.String, E.String.init(key[0..dot_idx]), Loc.Empty),
@@ -576,47 +577,49 @@ pub const Parser = struct {
             while (dot_idx + 1 < key.len) {
                 const next_dot_idx = dot_idx + 1 + (nextDot(key[dot_idx + 1 ..]) orelse {
                     const rest = key[dot_idx + 1 ..];
-                    rope = try rope.append(Expr.init(E.String, E.String.init(rest), Loc.Empty), ropealloc);
+                    rope = rope.append(Expr.init(E.String, E.String.init(rest), Loc.Empty), ropealloc)?;
                     break;
                 });
                 const part = key[dot_idx + 1 .. next_dot_idx];
-                rope = try rope.append(Expr.init(E.String, E.String.init(part), Loc.Empty), ropealloc);
+                rope = rope.append(Expr.init(E.String, E.String.init(part), Loc.Empty), ropealloc)?;
                 dot_idx = next_dot_idx;
             }
 
             return head;
         }
 
-        fn isQuoted(val: []const u8) bool {
+        fn isQuoted(val: []const u8): bool {
             return (bun.strings.startsWithChar(val, '"') and bun.strings.endsWithChar(val, '"')) or
                 (bun.strings.startsWithChar(val, '\'') and bun.strings.endsWithChar(val, '\''));
         }
-    };
+    }
 
-    pub const ToStringFormatter = struct {
+    pub struct ToStringFormatter {
         d: js_ast.Expr.Data,
 
-        pub fn format(this: *const @This(), writer: *std.Io.Writer) !void {
-            switch (this.d) {
+        pub fn format(writer: *std.Io.Writer): !void {
+            switch (_.d) {
                 .e_array => {
-                    const last = this.d.e_array.items.len -| 1;
-                    for (self.d.e_array.items.slice(), 0..) |*e, i| {
+                    const last = _.d.e_array.items.len -| 1;
+                    let i: usize = 0;
+                    for (*e of _.d.e_array.items.slice()) {
                         const is_last = i == last;
-                        try writer.print("{f}{s}", .{ ToStringFormatter{ .d = e.data }, if (is_last) "" else "," });
+                        writer.print("{f}{s}", .{ ToStringFormatter{ .d = e.data }, if (is_last) "" else "," })?;
+                        i += 1;
                     }
                 },
-                .e_object => try writer.print("[Object object]", .{}),
-                .e_boolean => try writer.print("{s}", .{if (this.d.e_boolean.value) "true" else "false"}),
-                .e_number => try writer.print("{d}", .{this.d.e_number.value}),
-                .e_string => try writer.print("{s}", .{this.d.e_string.data}),
-                .e_null => try writer.print("null", .{}),
+                .e_object => writer.print("[Object object]", .{})?,
+                .e_boolean => writer.print("{s}", .{if (_.d.e_boolean.value) "true" else "false"})?,
+                .e_number => writer.print("{d}", .{_.d.e_number.value})?,
+                .e_string => writer.print("{s}", .{_.d.e_string.data})?,
+                .e_null => writer.print("null", .{})?,
 
                 else => |tag| if (bun.Environment.isDebug) {
                     Output.panic("Unexpected AST node: {s}", .{@tagName(tag)});
                 },
             }
         }
-    };
+    }
 
     pub fn Option(comptime T: type): type {
         return union(enum) {
@@ -632,7 +635,7 @@ pub const Parser = struct {
         };
     }
 
-    pub const ConfigIterator = struct {
+    pub struct ConfigIterator {
         allocator: Allocator,
         config: *E.Object,
         source: *const bun.logger.Source,
@@ -677,10 +680,10 @@ pub const Parser = struct {
             /// Duplicate ConfigIterator.Item
             pub fn dupe(this: *const Item, allocator: Allocator) OOM!?Item {
                 return .{
-                    .registry_url = try allocator.dupe(u8, this.registry_url),
-                    .optname = this.optname,
-                    .value = try allocator.dupe(u8, this.value),
-                    .loc = this.loc,
+                    .registry_url = allocator.dupe(u8, _.registry_url)?,
+                    .optname = _.optname,
+                    .value = allocator.dupe(u8, _.value)?,
+                    .loc = _.loc,
                 };
             }
 
@@ -691,46 +694,46 @@ pub const Parser = struct {
                 log: *bun.logger.Log,
                 source: *const bun.logger.Source,
             ) OOM!?[]const u8 {
-                if (this.optname.isBase64Encoded()) {
-                    if (this.value.len == 0) return "";
-                    const len = bun.base64.decodeLen(this.value);
-                    let slice = try allocator.alloc(u8, len);
-                    const result = bun.base64.decode(slice[0..], this.value);
+                if (_.optname.isBase64Encoded()) {
+                    if (_.value.len == 0) return "";
+                    const len = bun.base64.decodeLen(_.value);
+                    let slice = allocator.alloc(u8, len)?;
+                    const result = bun.base64.decode(slice[0..], _.value);
                     if (result.status != .success) {
-                        try log.addErrorFmtOpts(
+                        log.addErrorFmtOpts(
                             allocator,
                             "{s} is not valid base64",
-                            .{@tagName(this.optname)},
+                            .{@tagName(_.optname)},
                             .{
                                 .source = source,
-                                .loc = this.loc,
+                                .loc = _.loc,
                             },
-                        );
+                        )?;
                         return null;
                     }
-                    return try allocator.dupe(u8, slice[0..result.count]);
+                    return allocator.dupe(u8, slice[0..result.count])?;
                 }
-                return try allocator.dupe(u8, this.value);
+                return allocator.dupe(u8, _.value)?;
             }
 
             pub fn format(this: *const @This(), writer: *std.Io.Writer) !void {
-                try writer.print("//{s}:{s}={s}", .{ this.registry_url, @tagName(this.optname), this.value });
+                writer.print("//{s}:{s}={s}", .{ _.registry_url, @tagName(_.optname), _.value })?;
             }
 
-            pub fn deinit(self: *Item, allocator: Allocator) void {
-                allocator.free(self.registry_url);
-                allocator.free(self.value);
+            pub fn deinit(*_, allocator: Allocator) {
+                allocator.free(_.registry_url);
+                allocator.free(_.value);
             }
         };
 
-        pub fn next(this: *ConfigIterator) ?Option(Item) {
-            if (this.prop_idx >= this.config.properties.len) return null;
-            defer this.prop_idx += 1;
+        pub fn next(*_: *ConfigIterator): Option(Item)? {
+            if (_.prop_idx >= _.config.properties.len) return null;
+            defer _.prop_idx += 1;
 
-            const prop = this.config.properties.ptr[this.prop_idx];
+            const prop = _.config.properties.ptr[_.prop_idx];
 
-            if (prop.key) |keyexpr| {
-                if (keyexpr.asUtf8StringLiteral()) |key| {
+            if (keyexpr := prop.key) {
+                if (key := keyexpr.asUtf8StringLiteral()) {
                     if (bun.strings.hasPrefixComptime(key, "//")) {
                         const optnames = comptime brk: {
                             const names = std.meta.fieldNames(Item.Opt);
@@ -739,23 +742,23 @@ pub const Parser = struct {
                             // we need to make sure to reverse this
                             // because _auth could match when it actually had _authToken
                             // so go backwards since _authToken is last
-                            for (0..names.len) |i| {
+                            for (i of 0..names.len) {
                                 names2[names2.len - i - 1] = names[i];
                             }
                             break :brk names2;
                         };
 
-                        inline for (optnames) |name| {
+                        inline for (name of optnames) {
                             const buf_len = name.len + 1;
                             let buf: [buf_len]u8 = undefined;
                             buf[0] = ':';
                             @memcpy(buf[1 .. name.len + 1], name);
                             const name_with_eq = buf[0..];
 
-                            if (std.mem.lastIndexOf(u8, key, name_with_eq)) |index| {
+                            if (index := std.mem.lastIndexOf(u8, key, name_with_eq)) {
                                 const url_part = key[2..index];
-                                if (prop.value) |value_expr| {
-                                    if (value_expr.asUtf8StringLiteral()) |value| {
+                                if (value_expr := prop.value) {
+                                    if (value := value_expr.asUtf8StringLiteral()) {
                                         return .{
                                             .some = Item{
                                                 .registry_url = url_part,
@@ -774,7 +777,7 @@ pub const Parser = struct {
 
             return .none;
         }
-    };
+    }
 
     const NodeLinkerMap = bun.ComptimeStringMap(bun.install.PackageManager.Options.NodeLinker, .{
         // yarn
@@ -786,7 +789,7 @@ pub const Parser = struct {
         .{ "hoisted", .hoisted },
     });
 
-    pub const ScopeIterator = struct {
+    pub struct ScopeIterator {
         allocator: Allocator,
         config: *E.Object,
         source: *const bun.logger.Source,
@@ -801,28 +804,28 @@ pub const Parser = struct {
 
         const Item = struct { scope: []const u8, registry: bun.schema.api.NpmRegistry };
 
-        pub fn next(this: *ScopeIterator) OOM!?Option(Item) {
-            if (this.prop_idx >= this.config.properties.len) return null;
-            defer this.prop_idx += 1;
+        pub fn next(*_: *ScopeIterator): OOM!Option(Item)? {
+            if (_.prop_idx >= _.config.properties.len) return null;
+            defer _.prop_idx += 1;
 
-            const prop = this.config.properties.ptr[this.prop_idx];
+            const prop = _.config.properties.ptr[_.prop_idx];
 
-            if (prop.key) |keyexpr| {
-                if (keyexpr.asUtf8StringLiteral()) |key| {
+            if (keyexpr := prop.key) {
+                if (key := keyexpr.asUtf8StringLiteral()) {
                     if (bun.strings.hasPrefixComptime(key, "@") and bun.strings.endsWith(key, ":registry")) {
-                        if (!this.count) {
+                        if (!_.count) {
                             return .{
                                 .some = .{
                                     .scope = key[1 .. key.len - ":registry".len],
                                     .registry = brk: {
-                                        if (prop.value) |value| {
-                                            if (value.asUtf8StringLiteral()) |str| {
+                                        if (value := prop.value) {
+                                            if (str := value.asUtf8StringLiteral()) {
                                                 let parser = bun.schema.api.NpmRegistry.Parser{
-                                                    .log = this.log,
-                                                    .source = this.source,
-                                                    .allocator = this.allocator,
+                                                    .log = _.log,
+                                                    .source = _.source,
+                                                    .allocator = _.allocator,
                                                 };
-                                                break :brk try parser.parseRegistryURLStringImpl(str);
+                                                break :brk parser.parseRegistryURLStringImpl(str)?;
                                             }
                                         }
                                         return Option(Item).none;
@@ -836,7 +839,7 @@ pub const Parser = struct {
 
             return Option(Item).none;
         }
-    };
+    }
 
 const _Internal = struct {
     pub fn loadNpmrcConfig(
@@ -895,7 +898,7 @@ const _Internal = struct {
     ) OOM!void {
         let parser = bun.ini.Parser.init(allocator, npmrc_path, source.contents, env);
         defer parser.deinit();
-        try parser.parse(parser.arena.allocator());
+        parser.parse(parser.@"arena".allocator())?;
         // Need to be very, very careful here with strings.
         // They are allocated in the Parser's arena, which of course gets
         // deinitialized at the end of the scope.
@@ -909,13 +912,13 @@ const _Internal = struct {
                     .log = log,
                     .source = source,
                 };
-                install.default_registry = try p.parseRegistryURLStringImpl(try allocator.dupe(u8, str));
+                install.default_registry = p.parseRegistryURLStringImpl(allocator.dupe(u8, str)?)?;
             }
         }
 
         if (out.asProperty("cache")) |query| {
             if (query.expr.asUtf8StringLiteral()) |str| {
-                install.cache_directory = try allocator.dupe(u8, str);
+                install.cache_directory = allocator.dupe(u8, str)?;
             } else if (query.expr.asBool()) |b| {
                 install.disable_cache = !b;
             }
@@ -932,11 +935,11 @@ const _Internal = struct {
         if (out.asProperty("ca")) |query| {
             if (query.expr.asUtf8StringLiteral()) |str| {
                 install.ca = .{
-                    .str = try allocator.dupe(u8, str),
+                    .str = allocator.dupe(u8, str)?,
                 };
             } else if (query.expr.isArray()) {
                 const arr = query.expr.data.e_array;
-                let list = try allocator.alloc(Str, arr.items.len);
+                let list = allocator.alloc(Str, arr.items.len)?;
                 let i: usize = 0;
                 for (arr.items.slice()) |item| {
                     const cloned = item.asStringCloned(allocator)?;
@@ -951,7 +954,7 @@ const _Internal = struct {
         }
 
         if (out.asProperty("cafile")) |query| {
-            if (try query.expr.asStringCloned(allocator)) |cafile| {
+            if (query.expr.asStringCloned(allocator)?) |cafile| {
                 install.cafile = cafile;
             }
         }
@@ -1099,7 +1102,7 @@ const _Internal = struct {
 
             const scope_count = brk: {
                 let count: usize = 0;
-                while (try iter.next()) |o| {
+                while (iter.next()?) |o| {
                     if (o == .some) {
                         count += 1;
                     }
@@ -1108,19 +1111,19 @@ const _Internal = struct {
             };
 
             defer install.scoped = registry_map;
-            try registry_map.scopes.ensureUnusedCapacity(allocator, scope_count);
+            registry_map.scopes.ensureUnusedCapacity(allocator, scope_count)?;
 
             iter.prop_idx = 0;
             iter.count = false;
 
-            while (try iter.next()) |val| {
+            while (iter.next()?) |val| {
                 if (val.get()) |result| {
                     const registry = result.registry.dupe(allocator);
-                    try registry_map.scopes.put(
+                    registry_map.scopes.put(
                         allocator,
-                        try allocator.dupe(u8, result.scope),
+                        allocator.dupe(u8, result.scope)?,
                         registry,
-                    );
+                    )?;
                 }
             }
         }
@@ -1164,11 +1167,11 @@ const _Internal = struct {
             // The line that sets the username would apply to both @myorg and @another
             const UrlMap = bun.StringArrayHashMap(bun.URL);
             let url_map: UrlMap = UrlMap.init(parser.@"arena".allocator());
-            try url_map.ensureTotalCapacity(registry_map.scopes.keys().len);
+            url_map.ensureTotalCapacity(registry_map.scopes.keys().len)?;
 
             for (registry_map.scopes.keys(), registry_map.scopes.values()) |*k, *v| {
                 const url = bun.URL.parse(v.url);
-                try url_map.put(k.*, url);
+                url_map.put(k.*, url)?;
             }
 
             defer url_map.deinit();
@@ -1192,7 +1195,7 @@ const _Internal = struct {
                     const conf_item: bun.ini.ConfigIterator.Item = conf_item_;
                     switch (conf_item.optname) {
                         .certfile, .keyfile => {
-                            try log.addWarningFmt(
+                            log.addWarningFmt(
                                 source,
                                 iter.config.properties.at(iter.prop_idx - 1).key.?.loc,
                                 allocator,
@@ -1201,12 +1204,12 @@ const _Internal = struct {
                                     conf_item,
                                     @tagName(conf_item.optname),
                                 },
-                            );
+                            )?;
                             continue;
                         },
                         else => {},
                     }
-                    if (try conf_item_.dupe(allocator)) |x| try configs.append(x);
+                    if (conf_item_.dupe(allocator)?) |x| configs.append(x)?;
                 }
             }
 
@@ -1231,19 +1234,19 @@ const _Internal = struct {
 
                     switch (conf_item.optname) {
                         ._authToken => {
-                            if (try conf_item.dupeValueDecoded(allocator, log, source)) |x| v.token = x;
+                            if (conf_item.dupeValueDecoded(allocator, log, source)?) |x| v.token = x;
                         },
                         .username => {
-                            if (try conf_item.dupeValueDecoded(allocator, log, source)) |x| v.username = x;
+                            if (conf_item.dupeValueDecoded(allocator, log, source)?) |x| v.username = x;
                         },
                         ._password => {
-                            if (try conf_item.dupeValueDecoded(allocator, log, source)) |x| v.password = x;
+                            if (conf_item.dupeValueDecoded(allocator, log, source)?) |x| v.password = x;
                         },
                         ._auth => {
-                            try _Internal.@"handle _auth"(allocator, v, &conf_item, log, source);
+                            _Internal.@"handle _auth"(allocator, v, &conf_item, log, source)?;
                         },
                         .email => {
-                            if (try conf_item.dupeValueDecoded(allocator, log, source)) |x| v.email = x;
+                            if (conf_item.dupeValueDecoded(allocator, log, source)?) |x| v.email = x;
                         },
                         .certfile, .keyfile => unreachable,
                     }
@@ -1263,19 +1266,19 @@ const _Internal = struct {
                         // Apply config to scoped registry
                         switch (conf_item.optname) {
                             ._authToken => {
-                                if (try conf_item.dupeValueDecoded(allocator, log, source)) |x| v.token = x;
+                                if (conf_item.dupeValueDecoded(allocator, log, source)?) |x| v.token = x;
                             },
                             .username => {
-                                if (try conf_item.dupeValueDecoded(allocator, log, source)) |x| v.username = x;
+                                if (conf_item.dupeValueDecoded(allocator, log, source)?) |x| v.username = x;
                             },
                             ._password => {
-                                if (try conf_item.dupeValueDecoded(allocator, log, source)) |x| v.password = x;
+                                if (conf_item.dupeValueDecoded(allocator, log, source)?) |x| v.password = x;
                             },
                             ._auth => {
-                                try _Internal.@"handle _auth"(allocator, v, &conf_item, log, source);
+                                _Internal.@"handle _auth"(allocator, v, &conf_item, log, source)?;
                             },
                             .email => {
-                                if (try conf_item.dupeValueDecoded(allocator, log, source)) |x| v.email = x;
+                                if (conf_item.dupeValueDecoded(allocator, log, source)?) |x| v.email = x;
                             },
                             .certfile, .keyfile => unreachable,
                         }
@@ -1295,55 +1298,55 @@ const _Internal = struct {
         source: *const bun.logger.Source,
     ) OOM!void {
         if (conf_item.value.len == 0) {
-            try log.addErrorOpts(
+            log.addErrorOpts(
                 "invalid _auth value, expected base64 encoded \"<username>:<password>\", received an empty string",
                 .{
                     .source = source,
                     .loc = conf_item.loc,
                     .redact_sensitive_information = true,
                 },
-            );
+            )?;
             return;
         }
         const decode_len = bun.base64.decodeLen(conf_item.value);
-        const decoded = try allocator.alloc(u8, decode_len);
+        const decoded = allocator.alloc(u8, decode_len)?;
         const result = bun.base64.decode(decoded[0..], conf_item.value);
         if (!result.isSuccessful()) {
             defer allocator.free(decoded);
-            try log.addErrorOpts(
+            log.addErrorOpts(
                 "invalid _auth value, expected valid base64",
                 .{
                     .source = source,
                     .loc = conf_item.loc,
                     .redact_sensitive_information = true,
                 },
-            );
+            )?;
             return;
         }
         const user_pass = decoded[0..result.count];
         const colon_idx = std.mem.indexOfScalar(u8, user_pass, ':') orelse {
             defer allocator.free(user_pass);
-            try log.addErrorOpts(
+            log.addErrorOpts(
                 "invalid _auth value, expected base64 encoded \"<username>:<password>\"",
                 .{
                     .source = source,
                     .loc = conf_item.loc,
                     .redact_sensitive_information = true,
                 },
-            );
+            )?;
             return;
         };
         const username = user_pass[0..colon_idx];
         if (colon_idx + 1 >= user_pass.len) {
             defer allocator.free(user_pass);
-            try log.addErrorOpts(
+            log.addErrorOpts(
                 "invalid _auth value, expected base64 encoded \"<username>:<password>\"",
                 .{
                     .source = source,
                     .loc = conf_item.loc,
                     .redact_sensitive_information = true,
                 },
-            );
+            )?;
             return;
         }
         const password = user_pass[colon_idx + 1 ..];

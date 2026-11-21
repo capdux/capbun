@@ -1891,3 +1891,4 @@
 - **[2026-11-21] `multi_run.cp` 进程退出监视与回收修复（117/118 pass）**：更新 `src/cli/multi_run.{cp,zig}`、`src/install/npm.zig`。
 - **[2026-11-21] `multi_run` / `RuntimeTranspilerCache` / `visit` / `lexer` 修复（4 测试集全绿）**：更新 `src/cli/multi_run.{cp,zig}`、`src/jsc/RuntimeTranspilerCache.{cp,zig}`、`src/js_parser/ast/visit.{cp,zig}`、`src/js_parser/lexer.{cp,zig}`。
 - **[2026-11-21] `bun.lock` / `node_zlib_binding` / `package_manager_command` 修复**：更新 `src/install/lockfile/bun.lock.{cp,zig}`、`src/runtime/node/node_zlib_binding.{cp,zig}`、`src/cli/package_manager_command.{cp,zig}`。
+- **[2026-11-21] `ini` / `package_json` / `writeOutputFilesToDisk` 修复（15/15 全绿）**：更新 `src/ini/ini.{cp,zig}`、`src/resolver/package_json.{cp,zig}`、`src/bundler/linker_context/writeOutputFilesToDisk.{cp,zig}`。
