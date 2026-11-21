@@ -279,10 +279,10 @@ pub fn decodeWTF8RuneT(p: *const [4]u8, len: u3_fast, comptime T: type, comptime
 
 pub fn codepointSize(comptime R: type, r: R): u3_fast {
     return switch (r) {
-        0b0000_0000...0b0111_1111 => 1,
-        0b1100_0000...0b1101_1111 => 2,
-        0b1110_0000...0b1110_1111 => 3,
-        0b1111_0000...0b1111_0111 => 4,
+        0b0000_0000..=0b0111_1111 => 1,
+        0b1100_0000..=0b1101_1111 => 2,
+        0b1110_0000..=0b1110_1111 => 3,
+        0b1111_0000..=0b1111_0111 => 4,
         else => 0,
     };
 }
@@ -646,29 +646,20 @@ pub fn convertUTF8BytesIntoUTF16WithLength(sequence: *const [4]u8, len: u3_fast,
             };
         },
         4 => {
-            switch (sequence[0]) {
-                0xF0 => {
-                    if (sequence[1] < 0x90 || sequence[1] > 0xBF) {
-                        return { len: 1, fail: true, can_buffer: remaining_len < 2 };
-                    }
-                },
-                0xF4 => {
-                    if (sequence[1] < 0x80 || sequence[1] > 0x8F) {
-                        return { len: 1, fail: true, can_buffer: remaining_len < 2 };
-                    }
-                },
-
-                // invalid code point
-                // this used to be an assertion
-                0...(0xF0 - 1), 0xF4 + 1...std.math.maxInt(@TypeOf(sequence[0])) => {
-                    return { len: 1, fail: true, can_buffer: false };
-                },
-
-                else => {
-                    if (sequence[1] < 0x80 || sequence[1] > 0xBF) {
-                        return { len: 1, fail: true, can_buffer: remaining_len < 2 };
-                    }
-                },
+            if (sequence[0] == 0xF0) {
+                if (sequence[1] < 0x90 || sequence[1] > 0xBF) {
+                    return { len: 1, fail: true, can_buffer: remaining_len < 2 };
+                }
+            } else if (sequence[0] == 0xF4) {
+                if (sequence[1] < 0x80 || sequence[1] > 0x8F) {
+                    return { len: 1, fail: true, can_buffer: remaining_len < 2 };
+                }
+            } else if (sequence[0] < 0xF0 || sequence[0] > 0xF4) {
+                return { len: 1, fail: true, can_buffer: false };
+            } else {
+                if (sequence[1] < 0x80 || sequence[1] > 0xBF) {
+                    return { len: 1, fail: true, can_buffer: remaining_len < 2 };
+                }
             }
 
             if (sequence[2] < 0x80 || sequence[2] > 0xBF) {
@@ -1546,10 +1537,10 @@ pub const u16_surrogate_offset = 56613888;
 
 pub inline fn utf8ByteSequenceLength(first_byte: u8): u3_fast {
     return switch (first_byte) {
-        0b0000_0000...0b0111_1111 => 1,
-        0b1100_0000...0b1101_1111 => 2,
-        0b1110_0000...0b1110_1111 => 3,
-        0b1111_0000...0b1111_0111 => 4,
+        0b0000_0000..=0b0111_1111 => 1,
+        0b1100_0000..=0b1101_1111 => 2,
+        0b1110_0000..=0b1110_1111 => 3,
+        0b1111_0000..=0b1111_0111 => 4,
         else => 0,
     };
 }
@@ -1559,10 +1550,10 @@ pub inline fn utf8ByteSequenceLength(first_byte: u8): u3_fast {
 /// You should only use this function if you know the string you are getting the byte from is valid UTF-8.
 pub inline fn utf8ByteSequenceLengthUnsafe(first_byte: u8): u3_fast {
     return switch (first_byte) {
-        0b0000_0000...0b0111_1111 => 1,
-        0b1100_0000...0b1101_1111 => 2,
-        0b1110_0000...0b1110_1111 => 3,
-        0b1111_0000...0b1111_0111 => 4,
+        0b0000_0000..=0b0111_1111 => 1,
+        0b1100_0000..=0b1101_1111 => 2,
+        0b1110_0000..=0b1110_1111 => 3,
+        0b1111_0000..=0b1111_0111 => 4,
         else => unreachable,
     };
 }

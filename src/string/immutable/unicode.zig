@@ -38,7 +38,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -711,10 +711,76 @@ pub fn convertUTF8BytesIntoUTF16WithLength(sequence: *const [4]u8, len: u3_fast,
         if (comptime Environment.allow_assert) {
             _ = assert((sequence[0] > 127));
         }
+        switch (len) {
+2 => {
+if (comptime Environment.allow_assert) {
+            _ = bun.assert((sequence[0] >= 192));
+            _ = bun.assert((sequence[0] <= 223));
+        }
+        if (((sequence[1] < 128) or (sequence[1] > 191))) {
+            return .{ .len = 1, .fail = true, .can_buffer = (remaining_len < 2) };
+        }
+        return .{ .len = len, .code_point = ((cp_shl((if (comptime @typeInfo(@TypeOf(sequence[0])) == .@"enum") cp_cast_int(u32, @intFromEnum(sequence[0])) else cp_cast_int(u32, sequence[0])), 6) + (if (comptime @typeInfo(@TypeOf(sequence[1])) == .@"enum") cp_cast_int(u32, @intFromEnum(sequence[1])) else cp_cast_int(u32, sequence[1]))) - 12416) };
+},
+3 => {
+if (comptime Environment.allow_assert) {
+            _ = bun.assert((sequence[0] >= 224));
+            _ = bun.assert((sequence[0] <= 239));
+        }
+        switch (sequence[0]) {
+224 => {
+if (((sequence[1] < 160) or (sequence[1] > 191))) {
+            return .{ .len = 1, .fail = true, .can_buffer = (remaining_len < 2) };
+        }
+},
+237 => {
+if (((sequence[1] < 128) or (sequence[1] > 159))) {
+            return .{ .len = 1, .fail = true, .can_buffer = (remaining_len < 2) };
+        }
+},
+else => {
+if (((sequence[1] < 128) or (sequence[1] > 191))) {
+            return .{ .len = 1, .fail = true, .can_buffer = (remaining_len < 2) };
+        }
+},
+}
+        if (((sequence[2] < 128) or (sequence[2] > 191))) {
+            return .{ .len = 2, .fail = true, .can_buffer = (remaining_len < 3) };
+        }
+        return .{ .len = len, .code_point = (((cp_shl((if (comptime @typeInfo(@TypeOf(sequence[0])) == .@"enum") cp_cast_int(u32, @intFromEnum(sequence[0])) else cp_cast_int(u32, sequence[0])), 12) + cp_shl((if (comptime @typeInfo(@TypeOf(sequence[1])) == .@"enum") cp_cast_int(u32, @intFromEnum(sequence[1])) else cp_cast_int(u32, sequence[1])), 6)) + (if (comptime @typeInfo(@TypeOf(sequence[2])) == .@"enum") cp_cast_int(u32, @intFromEnum(sequence[2])) else cp_cast_int(u32, sequence[2]))) - 925824) };
+},
+4 => {
+if ((sequence[0] == 240)) {
+            if (((sequence[1] < 144) or (sequence[1] > 191))) {
+                return .{ .len = 1, .fail = true, .can_buffer = (remaining_len < 2) };
+            }
+        } else {
+            if ((sequence[0] == 244)) {
+                if (((sequence[1] < 128) or (sequence[1] > 143))) {
+                    return .{ .len = 1, .fail = true, .can_buffer = (remaining_len < 2) };
+                }
+            } else {
+                if (((sequence[0] < 240) or (sequence[0] > 244))) {
+                    return .{ .len = 1, .fail = true, .can_buffer = false };
+                } else {
+                    if (((sequence[1] < 128) or (sequence[1] > 191))) {
+                        return .{ .len = 1, .fail = true, .can_buffer = (remaining_len < 2) };
+                    }
+                }
+            }
+        }
+        if (((sequence[2] < 128) or (sequence[2] > 191))) {
+            return .{ .len = 2, .fail = true, .can_buffer = (remaining_len < 3) };
+        }
         if (((sequence[3] < 128) or (sequence[3] > 191))) {
             return .{ .len = 3, .fail = true, .can_buffer = (remaining_len < 4) };
         }
         return .{ .len = len, .code_point = ((((cp_shl((if (comptime @typeInfo(@TypeOf(sequence[0])) == .@"enum") cp_cast_int(u32, @intFromEnum(sequence[0])) else cp_cast_int(u32, sequence[0])), 18) + cp_shl((if (comptime @typeInfo(@TypeOf(sequence[1])) == .@"enum") cp_cast_int(u32, @intFromEnum(sequence[1])) else cp_cast_int(u32, sequence[1])), 12)) + cp_shl((if (comptime @typeInfo(@TypeOf(sequence[2])) == .@"enum") cp_cast_int(u32, @intFromEnum(sequence[2])) else cp_cast_int(u32, sequence[2])), 6)) + (if (comptime @typeInfo(@TypeOf(sequence[3])) == .@"enum") cp_cast_int(u32, @intFromEnum(sequence[3])) else cp_cast_int(u32, sequence[3]))) - 63447168) };
+},
+else => {
+return UTF16Replacement{ .len = 1, .fail = true };
+},
+}
 }
 
 pub fn convertUTF8BytesIntoUTF16(bytes: []const u8) UTF16Replacement {
@@ -886,6 +952,11 @@ pub fn copyCP1252IntoUTF16(buf_: []u16, latin1_: []const u8) EncodeIntoResult {
 
 pub fn copyLatin1IntoUTF16(comptime Buffer: type, buf_: Buffer, latin1_: []const u8) EncodeIntoResult {
         const len = @min(buf_.len, latin1_.len);
+        for (buf_[0..len], latin1_[0..len]) |*out, @"in"| {
+            _ = &out;
+            _ = &@"in";
+            out.* = @"in";
+        }
         return .{ .read = @as(u32, @truncate(len)), .written = @as(u32, @truncate(len)) };
 }
 

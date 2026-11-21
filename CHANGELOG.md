@@ -1877,3 +1877,4 @@
 - **[2026-11-21] `PasswordObject` RAII 提前释放修复 (`password.test.ts` 74 pass / 0 fail)**：更新 `src/runtime/crypto/PasswordObject.{cp,zig}`。
 - **[2026-11-21] `ServerConfig` RAII 提前释放修复 (`wildcard static routes` 通过)**：更新 `src/runtime/server/ServerConfig.{cp,zig}`。
 - **[2026-11-21] `Sink.cp` `SinkSignal.init` 修复 (`serve-response-stream-sink-leak` 通过)**：更新 `src/runtime/webcore/Sink.{cp,zig}`。
+- **[2026-11-21] `unicode.cp` `...` 范围语法修复 (`css-fuzz` 崩溃清零)**：更新 `src/string/immutable/unicode.{cp,zig}`。
