@@ -61,7 +61,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const util = @import("./util.zig");
 pub const bun = @import("bun");
@@ -74,6 +74,74 @@ pub const StdioKind = enum {
     pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
+
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    _ = p.deinit();
+                }
+        }
+    };
+}
+
+pub fn DerefGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    _ = p.deref();
+                }
+        }
+    };
+}
+
+pub fn DetachGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    _ = p.detach();
+                }
+        }
+    };
+}
+
+pub fn StdioCleanupGuard(comptime T: type) type {
+    return struct {
+        spawn_args: ?*T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.spawn_args) |args| {
+                    _ = &args;
+                    var s_idx: usize = 0;
+                    _ = &s_idx;
+                    while ((s_idx < args.stdio.len)) : (s_idx = (s_idx + 1)) {
+                        _ = args.stdio[@as(usize, @intCast(s_idx))].deinit();
+                    }
+                }
+        }
+    };
+}
 
 pub const ShellIO = struct {
     stdout: ?*sh.IOWriter = null,
@@ -271,7 +339,9 @@ pub fn doWrite(self: *SubprocCapturedWriter, chunk: []const u8) void {
             if ((self.dead or (self.@"err" != null))) {
                 return;
             }
-            _ = log("CapturedWriter(0x{x}, {s}) doWrite len={d} parent_amount={d}", .{ @intFromPtr(self), @tagName(self.parent().out_type), chunk.len, self.parent().buffered_output.len() });
+            {
+                _ = log("CapturedWriter(0x{x}, {s}) doWrite len={d} parent_amount={d}", .{ @intFromPtr(self), @tagName(self.parent().out_type), chunk.len, self.parent().buffered_output.len() });
+            }
             var enqueue_yield = self.writer.enqueue(self, null, chunk);
             _ = &enqueue_yield;
             _ = enqueue_yield.run();
@@ -302,7 +372,9 @@ pub fn eventLoop(self: *SubprocCapturedWriter) jsc.EventLoopHandle {
     }
 
 pub fn isDone(self: *SubprocCapturedWriter, just_written: usize) bool {
-            _ = log("CapturedWriter(0x{x}, {s}) isDone(has_err={}, parent_state={s}, written={d}, parent_amount={d})", .{ @intFromPtr(self), @tagName(self.parent().out_type), (self.@"err" != null), @tagName(self.parent().state), self.written, self.parent().buffered_output.len() });
+            {
+                _ = log("CapturedWriter(0x{x}, {s}) isDone(has_err={}, parent_state={s}, written={d}, parent_amount={d})", .{ @intFromPtr(self), @tagName(self.parent().out_type), (self.@"err" != null), @tagName(self.parent().state), self.written, self.parent().buffered_output.len() });
+            }
             if ((self.dead or (self.@"err" != null))) {
                 return true;
             }
@@ -314,11 +386,15 @@ pub fn isDone(self: *SubprocCapturedWriter, just_written: usize) bool {
     }
 
 pub fn onIOWriterChunk(self: *SubprocCapturedWriter, amount: usize, e: ?jsc.SystemError) Yield {
-            _ = log("CapturedWriter({x}, {s}) onWrite({d}, has_err={}) total_written={d} total_to_write={d}", .{ @intFromPtr(self), @tagName(self.parent().out_type), amount, (e != null), (self.written + amount), self.parent().buffered_output.len() });
+            {
+                _ = log("CapturedWriter({x}, {s}) onWrite({d}, has_err={}) total_written={d} total_to_write={d}", .{ @intFromPtr(self), @tagName(self.parent().out_type), amount, (e != null), (self.written + amount), self.parent().buffered_output.len() });
+            }
             self.written = (self.written + amount);
             if (e) |err_sys| {
                 _ = &err_sys;
-                _ = log("CapturedWriter(0x{x}, {s}) onWrite errno={d} errmsg={f} errfd={} syscall={f}", .{ @intFromPtr(self), @tagName(self.parent().out_type), err_sys.errno, err_sys.message, err_sys.fd, err_sys.syscall });
+                {
+                    _ = log("CapturedWriter(0x{x}, {s}) onWrite errno={d} errmsg={f} errfd={} syscall={f}", .{ @intFromPtr(self), @tagName(self.parent().out_type), err_sys.errno, err_sys.message, err_sys.fd, err_sys.syscall });
+                }
                 self.@"err" = err_sys;
                 return self.parent().trySignalDoneToCmd();
             } else {
@@ -334,7 +410,9 @@ pub fn onError(self: *SubprocCapturedWriter, e: bun.sys.Error) void {
     }
 
 pub fn onClose(self: *SubprocCapturedWriter) void {
-            _ = log("CapturedWriter({x}, {s}) onClose()", .{ @intFromPtr(self), @tagName(self.parent().out_type) });
+            {
+                _ = log("CapturedWriter({x}, {s}) onClose()", .{ @intFromPtr(self), @tagName(self.parent().out_type) });
+            }
             _ = self.parent().onCapturedWriterDone();
     }
 
@@ -355,12 +433,14 @@ pub const ShellSubprocess = struct {
     stdout: Readable = undefined,
     stderr: Readable = undefined,
     event_loop: jsc.EventLoopHandle,
-    closed: std.enums.EnumSet(enum{stdin,stdout,stderr,}) = .{},
+    closed: std.enums.EnumSet(enum { stdin, stdout, stderr, }) = .{},
     this_jsvalue: jsc.JSValue = .zero,
     flags: Flags = .{},
 
 pub fn onStaticPipeWriterDone(self: *ShellSubprocess) void {
-            _ = log("Subproc(0x{x}) onStaticPipeWriterDone(cmd=0x{x}))", .{ @intFromPtr(self), @intFromPtr(self.cmd_parent) });
+            {
+                _ = log("Subproc(0x{x}) onStaticPipeWriterDone(cmd=0x{x}))", .{ @intFromPtr(self), @intFromPtr(self.cmd_parent) });
+            }
             _ = self.cmd_parent.bufferedInputClose();
     }
 
@@ -511,9 +591,10 @@ pub fn abortAfterFailedStart(self: *ShellSubprocess) void {
 pub fn spawnAsync(event_loop: jsc.EventLoopHandle, shellio: *ShellIO, spawn_args_: SpawnArgs, out: *SelfPtr, notify_caller_process_already_exited: *bool) bun.shell.Result(void) {
             var arena_ = bun.ArenaAllocator.init(bun.default_allocator);
             _ = &arena_;
-            defer {
-            _ = arena_.deinit();
-            }
+            var _arena_guard = DeinitGuard(bun.ArenaAllocator){ .ptr = (&arena_) };
+            _ = &_arena_guard;
+            var ___arena_guard_moved = false; _ = &___arena_guard_moved;
+            defer if (!___arena_guard_moved) { ___arena_guard_moved = true; const __T = @TypeOf(_arena_guard); if (@typeInfo(__T) == .optional) { if (_arena_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _arena_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _arena_guard; _drop_val.__cp_deinit(); } };
             var spawn_args = spawn_args_;
             _ = &spawn_args;
             return (switch (spawnMaybeSyncImpl(event_loop, arena_.allocator(), (&spawn_args), shellio, out, notify_caller_process_already_exited)) {
@@ -530,19 +611,10 @@ pub fn spawnMaybeSyncImpl(event_loop: jsc.EventLoopHandle, allocator: Allocator,
                 spawn_args.env_array.items = bun.handleOom(event_loop.createNullDelimitedEnvMap(allocator));
                 spawn_args.env_array.capacity = spawn_args.env_array.items.len;
             }
-            var stdio_consumed = false;
-            _ = &stdio_consumed;
-            defer {
-            {
-                if ((!stdio_consumed)) {
-                    var s_idx: usize = 0;
-                    _ = &s_idx;
-                    while ((s_idx < spawn_args.stdio.len)) : (s_idx = (s_idx + 1)) {
-                        _ = spawn_args.stdio[@as(usize, @intCast(s_idx))].deinit();
-                    }
-                }
-            }
-            }
+            var stdio_guard = StdioCleanupGuard(SpawnArgs){ .spawn_args = spawn_args };
+            _ = &stdio_guard;
+            var __stdio_guard_moved = false; _ = &__stdio_guard_moved;
+            defer if (!__stdio_guard_moved) { __stdio_guard_moved = true; const __T = @TypeOf(stdio_guard); if (@typeInfo(__T) == .optional) { if (stdio_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { stdio_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = stdio_guard; _drop_val.__cp_deinit(); } };
             var no_sigpipe = true;
             _ = &no_sigpipe;
             if (shellio.stdout) |iowriter| {
@@ -587,7 +659,10 @@ return .{ .err = .{ .custom = bun.handleOom(bun.default_allocator.dupe(u8, e.toS
             return .{ .err = .{ .custom = bun.handleOom(bun.default_allocator.dupe(u8, "out of memory")) } }; }); });
             _ = (blk_catch_1: { break :blk_catch_1 ((spawn_args.env_array.append(allocator, null)) catch |__ce_1| { _ = &__ce_1; _ = spawn_options.deinit();
             return .{ .err = .{ .custom = bun.handleOom(bun.default_allocator.dupe(u8, "out of memory")) } }; }); });
-            var spawn_result = (switch ((blk_catch_2: { break :blk_catch_2 ((bun.spawn.spawnProcess((&spawn_options), @ptrCast(spawn_args.cmd_parent.args.items.ptr), @ptrCast(spawn_args.env_array.items.ptr))) catch |e| { _ = &e; _ = spawn_options.deinit();
+            var spawn_result = (switch ((blk_catch_2: { break :blk_catch_2 (((blk: {
+            break :blk bun.spawn.spawnProcess((&spawn_options), @ptrCast(spawn_args.cmd_parent.args.items.ptr), @ptrCast(spawn_args.env_array.items.ptr));
+
+})) catch |e| { _ = &e; _ = spawn_options.deinit();
             return .{ .err = .{ .custom = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, "Failed to spawn process: {s}", .{ @errorName(e) })) } }; }); })) {
 .err => |e| {
 {
@@ -603,7 +678,7 @@ return .{ .err = .{ .custom = bun.handleOom(bun.default_allocator.dupe(u8, e.toS
             out_subproc.* = subprocess;
             subprocess.* = Subprocess{ .event_loop = event_loop, .process = spawn_result.toProcess(event_loop, is_sync), .stdin = (blk_catch_3: { break :blk_catch_3 ((Subprocess.Writable.init(spawn_args.stdio[0], event_loop, subprocess, spawn_result.stdin)) catch |e| { _ = &e; break :blk_catch_3 (__sw_blk_0: { const __disc_0 = e; _ = &__disc_0; if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .UnexpectedCreatingStdin)) {  break :__sw_blk_0 cp_val(std.debug.panic("unexpected error while creating stdin", .{})); } }  unreachable; }); }); }), .stdout = Subprocess.Readable.init(.stdout, spawn_args.stdio[1], shellio.stdout, event_loop, subprocess, spawn_result.stdout, event_loop.allocator(), ShellSubprocess.default_max_buffer_size, true), .stderr = Subprocess.Readable.init(.stderr, spawn_args.stdio[2], shellio.stderr, event_loop, subprocess, spawn_result.stderr, event_loop.allocator(), ShellSubprocess.default_max_buffer_size, true), .flags = .{ .is_sync = is_sync }, .cmd_parent = spawn_args.cmd_parent };
             _ = subprocess.process.setExitHandler(subprocess);
-            stdio_consumed = true;
+            stdio_guard.spawn_args = null;
             if ((subprocess.stdin == .pipe)) {
                 subprocess.stdin.pipe.signal = bun.webcore.streams.Signal.init((&subprocess.stdin));
             }
@@ -658,7 +733,9 @@ pub fn wait(self: *ShellSubprocess, sync: bool) void {
     }
 
 pub fn onProcessExit(self: *ShellSubprocess, _: *Process, status: bun.spawn.Status, _: *const bun.spawn.Rusage) void {
-            _ = log("onProcessExit({x}, {f})", .{ @intFromPtr(self), status });
+            {
+                _ = log("onProcessExit({x}, {f})", .{ @intFromPtr(self), status });
+            }
             const exit_code: ?u8 = brk: {
             if ((status == .exited)) {
                 break :brk status.exited.code;
@@ -1041,9 +1118,10 @@ pub fn onProcessExit(self: *ShellSubprocess, _: *Process, status: bun.spawn.Stat
     self.* = .closed;
     },
     .pipe => |pipe| {
-    defer {
-                _ = pipe.detach();
-                }
+    var _detach_guard = DetachGuard(PipeReader){ .ptr = pipe };
+                _ = &_detach_guard;
+                var ___detach_guard_moved = false; _ = &___detach_guard_moved;
+                defer if (!___detach_guard_moved) { ___detach_guard_moved = true; const __T = @TypeOf(_detach_guard); if (@typeInfo(__T) == .optional) { if (_detach_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _detach_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _detach_guard; _drop_val.__cp_deinit(); } };
                 self.* = .closed;
     },
     else => {
@@ -1088,13 +1166,17 @@ pub const PipeReader = struct {
     ref_count: RefCount,
 
 pub fn detach(self: *@This()) void {
-            _ = log("PipeReader(0x{x}, {s}) detach()", .{ @intFromPtr(self), @tagName(self.out_type) });
+            {
+                _ = log("PipeReader(0x{x}, {s}) detach()", .{ @intFromPtr(self), @tagName(self.out_type) });
+            }
             self.process = null;
             _ = self.deref();
     }
 
 pub fn isDone(self: *@This()) bool {
-            _ = log("PipeReader(0x{x}, {s}) isDone() state={s} captured_writer_done={}", .{ @intFromPtr(self), @tagName(self.out_type), @tagName(self.state), self.captured_writer.isDone(0) });
+            {
+                _ = log("PipeReader(0x{x}, {s}) isDone() state={s} captured_writer_done={}", .{ @intFromPtr(self), @tagName(self.out_type), @tagName(self.state), self.captured_writer.isDone(0) });
+            }
             if ((self.state == .pending)) {
                 return false;
             }
@@ -1110,7 +1192,9 @@ pub fn onCapturedWriterDone(self: *@This()) void {
 pub fn create(event_loop: jsc.EventLoopHandle, process: *ShellSubprocess, result: StdioResult, capture: ?*sh.IOWriter, out_type: bun.shell.Subprocess.OutKind) *PipeReader {
             var pipe_reader: *PipeReader = bun.new(PipeReader, .{ .ref_count = .init(), .process = process, .reader = IOReader.init(@This()), .event_loop = event_loop, .stdio_result = result, .out_type = out_type });
             _ = &pipe_reader;
-            _ = log("PipeReader(0x{x}, {s}) create()", .{ @intFromPtr(pipe_reader), @tagName(pipe_reader.out_type) });
+            {
+                _ = log("PipeReader(0x{x}, {s}) create()", .{ @intFromPtr(pipe_reader), @tagName(pipe_reader.out_type) });
+            }
             if (capture) |cap| {
                 _ = &cap;
                 pipe_reader.captured_writer.writer = cap.dupeRef();
@@ -1155,10 +1239,15 @@ if (comptime Environment.isPosix) {
     }
 
 pub fn onReadChunk(ptr: *anyopaque, chunk: []const u8, has_more: bun.io.ReadState) bool {
-            var reader: *PipeReader = @ptrCast(@alignCast(ptr));
+            var reader: *PipeReader = (blk: {
+            break :blk @ptrCast(@alignCast(ptr));
+
+});
             _ = &reader;
             _ = reader.buffered_output.append(chunk);
-            _ = log("PipeReader(0x{x}, {s}) onReadChunk(chunk_len={d}, has_more={s})", .{ @intFromPtr(reader), @tagName(reader.out_type), chunk.len, @tagName(has_more) });
+            {
+                _ = log("PipeReader(0x{x}, {s}) onReadChunk(chunk_len={d}, has_more={s})", .{ @intFromPtr(reader), @tagName(reader.out_type), chunk.len, @tagName(has_more) });
+            }
             _ = reader.captured_writer.doWrite(chunk);
             const should_continue = (has_more != .eof);
             if (should_continue) {
@@ -1179,16 +1268,19 @@ else => {
     }
 
 pub fn onReaderDone(self: *@This()) void {
-            _ = log("onReaderDone(0x{x}, {s})", .{ @intFromPtr(self), @tagName(self.out_type) });
+            {
+                _ = log("onReaderDone(0x{x}, {s})", .{ @intFromPtr(self), @tagName(self.out_type) });
+            }
             const owned = self.toOwnedSlice();
             self.state = .{ .done = owned };
             if ((!self.isDone())) {
                 return;
             }
             _ = self.ref();
-            defer {
-            _ = self.deref();
-            }
+            var _deref_guard = DerefGuard(PipeReader){ .ptr = self };
+            _ = &_deref_guard;
+            var ___deref_guard_moved = false; _ = &___deref_guard_moved;
+            defer if (!___deref_guard_moved) { ___deref_guard_moved = true; const __T = @TypeOf(_deref_guard); if (@typeInfo(__T) == .optional) { if (_deref_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _deref_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _deref_guard; _drop_val.__cp_deinit(); } };
             var done_yield = self.trySignalDoneToCmd();
             _ = &done_yield;
             _ = done_yield.run();
@@ -1203,7 +1295,9 @@ pub fn trySignalDoneToCmd(self: *@This()) Yield {
             if ((!self.isDone())) {
                 return .suspended;
             }
-            _ = log("signalDoneToCmd ({x}: {s}) isDone={}", .{ @intFromPtr(self), @tagName(self.out_type), self.isDone() });
+            {
+                _ = log("signalDoneToCmd ({x}: {s}) isDone={}", .{ @intFromPtr(self), @tagName(self.out_type), self.isDone() });
+            }
             if (bun.Environment.allow_assert) {
                 _ = assert((self.process != null));
             }
@@ -1282,9 +1376,10 @@ pub fn watch(self: *@This()) void {
     }
 
 pub fn toReadableStream(self: *@This(), globalObject: *jsc.JSGlobalObject) jsc.JSValue {
-            defer {
-            _ = self.deinit();
-            }
+            var _deinit_guard = DeinitGuard(PipeReader){ .ptr = self };
+            _ = &_deinit_guard;
+            var ___deinit_guard_moved = false; _ = &___deinit_guard_moved;
+            defer if (!___deinit_guard_moved) { ___deinit_guard_moved = true; const __T = @TypeOf(_deinit_guard); if (@typeInfo(__T) == .optional) { if (_deinit_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _deinit_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _deinit_guard; _drop_val.__cp_deinit(); } };
             switch (self.state) {
 .pending => {
 const stream = jsc.WebCore.ReadableStream.fromPipe(globalObject, self, (&self.reader));
@@ -1319,15 +1414,18 @@ return .js_undefined;
     }
 
 pub fn onReaderError(self: *@This(), e: bun.sys.Error) void {
-            _ = log("PipeReader(0x{x}) onReaderError {f}", .{ @intFromPtr(self), e });
+            {
+                _ = log("PipeReader(0x{x}) onReaderError {f}", .{ @intFromPtr(self), e });
+            }
             if ((self.state == .done)) {
                 _ = bun.default_allocator.free(self.state.done);
             }
             self.state = .{ .err = e.toSystemError() };
             _ = self.ref();
-            defer {
-            _ = self.deref();
-            }
+            var _deref_guard = DerefGuard(PipeReader){ .ptr = self };
+            _ = &_deref_guard;
+            var ___deref_guard_moved = false; _ = &___deref_guard_moved;
+            defer if (!___deref_guard_moved) { ___deref_guard_moved = true; const __T = @TypeOf(_deref_guard); if (@typeInfo(__T) == .optional) { if (_deref_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _deref_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _deref_guard; _drop_val.__cp_deinit(); } };
             var done_yield = self.trySignalDoneToCmd();
             _ = &done_yield;
             _ = done_yield.run();
@@ -1365,7 +1463,9 @@ pub fn loop(self: *@This()) *bun.Async.Loop {
     }
 
 pub fn deinit(self: *@This()) void {
-            _ = log("PipeReader(0x{x}, {s}) deinit()", .{ @intFromPtr(self), @tagName(self.out_type) });
+            {
+                _ = log("PipeReader(0x{x}, {s}) deinit()", .{ @intFromPtr(self), @tagName(self.out_type) });
+            }
             if (comptime Environment.isPosix) {
                 _ = assert((self.reader.isDone() or (self.state == .err)));
             }

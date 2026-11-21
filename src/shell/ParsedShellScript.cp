@@ -1,6 +1,39 @@
 import interpreter from "./interpreter.zig";
 import bun from "bun";
 
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() { _.val.deinit(); }
+}
+
+pub struct OptDeinitGuard<T> {
+    val: T?,
+    fn take(*_): T {
+        const v = _.val.?;
+        _.val = null;
+        return v;
+    }
+    ~init() { if (*v := _.val) v.deinit(); }
+}
+
+pub struct DerefGuard<T> {
+    val: T,
+    ~init() { _.val.deref(); }
+}
+
+pub struct FreeGuard<T> {
+    val: T?,
+    ~init() { if (v := _.val) bun.default_allocator.free(v); }
+}
+
+pub struct StringListGuard {
+    val: std.array_list.Managed(bun.String),
+    ~init() {
+        for (*item of _.val.items) item.deref();
+        _.val.deinit();
+    }
+}
+
 @root struct ParsedShellScript {
 
 pub const js = jsc.Codegen.JSParsedShellScript;
@@ -100,47 +133,43 @@ pub fn setEnv(client: *ParsedShellScript, globalThis: *JSGlobalObject, callframe
     }
     const value1 = value1_opt.?;
 
-    let object_iter = jsc.JSPropertyIterator({
+    const iter_init = jsc.JSPropertyIterator({
         skip_empty_name: false,
         include_value: true,
     }).init(globalThis, value1)?;
-    defer object_iter.deinit();
+    let object_iter = DeinitGuard<@TypeOf(iter_init)>{ val: iter_init };
 
-    let env: EnvMap = EnvMap.init(bun.default_allocator);
-    errdefer env.deinit();
-    env.ensureTotalCapacity(object_iter.len);
+    let env_guard = OptDeinitGuard<EnvMap>{ val: EnvMap.init(bun.default_allocator) };
+    if (*e := env_guard.val) e.ensureTotalCapacity(object_iter.val.len);
 
     // If the env object does not include a $PATH, it must disable path lookup for argv[0]
     // PATH = "";
 
-    while (key := (object_iter.next()?)) {
-        let value = object_iter.value;
+    while (key := (object_iter.val.next()?)) {
+        let value = object_iter.val.value;
         if (value.isUndefined()) continue;
 
         const keyslice = bun.handleOom(key.toOwnedSlice(bun.default_allocator));
-        errdefer bun.default_allocator.free(keyslice);
+        let keyslice_guard = FreeGuard<[]u8>{ val: keyslice };
         const value_str = value.getZigString(globalThis)?;
         const slice = bun.handleOom(value_str.toOwnedSlice(bun.default_allocator));
-        const keyref = EnvStr.initRefCounted(keyslice);
-        defer keyref.deref();
-        const valueref = EnvStr.initRefCounted(slice);
-        defer valueref.deref();
+        keyslice_guard.val = null;
+        const keyref = DerefGuard<EnvStr>{ val: EnvStr.initRefCounted(keyslice) };
+        const valueref = DerefGuard<EnvStr>{ val: EnvStr.initRefCounted(slice) };
 
-        env.insert(keyref, valueref);
+        if (*e := env_guard.val) e.insert(keyref.val, valueref.val);
     }
     if (*previous := client.export_env) {
         previous.deinit();
     }
-    client.export_env = env;
+    client.export_env = env_guard.take();
     return jsc.JSValue.js_undefined;
 }
 
 pub const createParsedShellScript = jsc.MarkedArgumentBuffer.wrap(createParsedShellScriptImpl);
 
 fn createParsedShellScriptImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, marked_argument_buffer: *jsc.MarkedArgumentBuffer): bun.JSError!JSValue {
-    let shargs = ShellArgs.init();
-    let needs_to_free_shargs = true;
-    defer if (needs_to_free_shargs) shargs.deinit();
+    let shargs_guard = OptDeinitGuard<*ShellArgs>{ val: ShellArgs.init() };
 
     const arguments_ = callframe.arguments_old(2);
     const arguments = arguments_.slice();
@@ -151,31 +180,26 @@ fn createParsedShellScriptImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.
     const template_args_js = arguments[1];
     let template_args = template_args_js.arrayIterator(globalThis)?;
 
-    let stack_alloc = std.heap.stackFallback(@sizeOf(bun.String) * 4, shargs.arena_allocator());
-    let jsstrings = std.array_list.Managed(bun.String).initCapacity(stack_alloc.get(), 4)?;
-    defer {
-        let i: usize = 0;
-        while (i < jsstrings.items.len) : (i += 1) {
-            jsstrings.items[i].deref();
-        }
-        jsstrings.deinit();
-    }
-    let jsobjs = std.array_list.Managed(JSValue).init(shargs.arena_allocator());
-    let script = std.array_list.Managed(u8).init(shargs.arena_allocator());
-    bun.shell.shellCmdFromJS(globalThis, string_args, &template_args, &jsobjs, &jsstrings, &script, marked_argument_buffer)?;
+    let stack_alloc = std.heap.stackFallback(@sizeOf(bun.String) * 4, shargs_guard.val.?.arena_allocator());
+    let jsstrings = StringListGuard{
+        val: std.array_list.Managed(bun.String).initCapacity(stack_alloc.get(), 4)?,
+    };
+    let jsobjs = std.array_list.Managed(JSValue).init(shargs_guard.val.?.arena_allocator());
+    let script = std.array_list.Managed(u8).init(shargs_guard.val.?.arena_allocator());
+    bun.shell.shellCmdFromJS(globalThis, string_args, &template_args, &jsobjs, &jsstrings.val, &script, marked_argument_buffer)?;
 
     let parser: bun.shell.Parser? = null;
     let lex_result: shell.LexResult? = null;
     const script_ast = Interpreter.parse(
-        shargs.arena_allocator(),
+        shargs_guard.val.?.arena_allocator(),
         script.items[0..],
         jsobjs.items[0..],
-        jsstrings.items[0..],
+        jsstrings.val.items[0..],
         &parser,
         &lex_result,
     ) catch |e| {
         if (e == shell.ParseError.Lex) {
-            const str = lex_result.combineErrors(shargs.arena_allocator());
+            const str = lex_result.combineErrors(shargs_guard.val.?.arena_allocator());
             return globalThis.throwPretty("{s}", .{str});
         }
 
@@ -187,6 +211,7 @@ fn createParsedShellScriptImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.
         return globalThis.throwError(e, "failed to lex/parse shell");
     };
 
+    const shargs = shargs_guard.take();
     shargs.script_ast = script_ast;
 
     const parsed_shell_script = bun.new(ParsedShellScript, {
@@ -198,7 +223,6 @@ fn createParsedShellScriptImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.
     parsed_shell_script.this_jsvalue = this_jsvalue;
 
     bun.analytics.Features.shell += 1;
-    needs_to_free_shargs = false;
     return this_jsvalue;
 }
 

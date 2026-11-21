@@ -9,6 +9,25 @@ const jsc = bun.jsc;
 const picohttp = bun.picohttp;
 const strings = bun.strings;
 
+struct DeinitGuard<T> {
+    ptr: (*T!)?,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deinit(); }
+        }
+    }
+}
+
+struct SliceFreeGuard {
+    slice: ([]const u8)?,
+    allocator: std.mem.Allocator,
+    ~init() {
+        if (s := _.slice) {
+            _.allocator.free(s);
+        }
+    }
+}
+
 pub const S3Credentials = struct {
     ref_count: RefCount,
     accessKeyId: string,
@@ -114,7 +133,7 @@ pub const S3Credentials = struct {
             date: []const u8,
         };
 
-        fn getAMZDate(allocator: std.mem.Allocator) DateResult {
+        pub fn getAMZDate(allocator: std.mem.Allocator) DateResult {
             // We can also use Date.now() but would be slower and would add jsc dependency
             // var buffer: [28]u8 = undefined;
             // the code bellow is the same as new Date(Date.now()).toISOString()
@@ -151,7 +170,7 @@ pub const S3Credentials = struct {
             };
         }
 
-        const DIGESTED_HMAC_256_LEN = 32;
+        pub const DIGESTED_HMAC_256_LEN = 32;
         pub const SignResult = struct {
             amz_date: []const u8,
             host: []const u8,
@@ -189,8 +208,9 @@ pub const S3Credentials = struct {
             pub fn mixWithHeader(this: *const @This(), headers_buffer: []picohttp.Header, header: picohttp.Header) []const picohttp.Header {
                 // copy the headers to buffer
                 const len = this._headers_len;
-                for (this._headers[0..len], 0..len) |existing_header, i| {
-                    headers_buffer[i] = existing_header;
+                let i: usize = 0;
+                while (i < len) : (i += 1) {
+                    headers_buffer[i] = this._headers[i];
                 }
                 headers_buffer[len] = header;
                 return headers_buffer[0 .. len + 1];
@@ -330,457 +350,417 @@ pub const S3Credentials = struct {
             return buffer[0..written];
         }
 
-        fn normalizeName(name: []const u8) []const u8 {
+        pub fn normalizeName(name: []const u8) []const u8 {
             if (name.len == 0) return name;
             return std.mem.trim(u8, name, "/\\");
         }
 
-        pub fn signRequest(this: *const @This(), signOptions: SignOptions, comptime allow_empty_path: bool, signQueryOption: ?SignQueryOptions) !SignResult {
-            const method = signOptions.method;
-            const request_path = signOptions.path;
-            const content_hash = signOptions.content_hash;
-            let content_md5 = signOptions.content_md5;
-
-            if (content_md5) |content_md5_val| {
-                const len = bun.base64.encodeLen(content_md5_val);
-                const content_md5_as_base64 = bun.handleOom(bun.default_allocator.alloc(u8, len));
-                content_md5 = content_md5_as_base64[0..bun.base64.encode(content_md5_as_base64, content_md5_val)];
-            }
-
-            const search_params = signOptions.search_params;
-
-            let content_disposition = signOptions.content_disposition;
-            if (content_disposition != null and content_disposition.?.len == 0) {
-                content_disposition = null;
-            }
-            let content_type = signOptions.content_type;
-            if (content_type != null and content_type.?.len == 0) {
-                content_type = null;
-            }
-            let content_encoding = signOptions.content_encoding;
-            if (content_encoding != null and content_encoding.?.len == 0) {
-                content_encoding = null;
-            }
-            const session_token: ?[]const u8 = if (this.sessionToken.len == 0) null else this.sessionToken;
-
-            let acl: ?[]const u8 = null;
-            if (signOptions.acl != null) {
-                acl = signOptions.acl.?.toString();
-            }
-
-            let storage_class: ?[]const u8 = null;
-            if (signOptions.storage_class != null) {
-                storage_class = signOptions.storage_class.?.toString();
-            }
-
-            if (this.accessKeyId.len == 0 or this.secretAccessKey.len == 0) return error.MissingCredentials;
-            const signQuery = signQueryOption != null;
-            let expires: @TypeOf(signQueryOption.?.expires) = 0;
-            if (signQueryOption != null) {
-                expires = signQueryOption.?.expires;
-            }
-            const method_name = switch (method) {
-                .GET => "GET",
-                .POST => "POST",
-                .PUT => "PUT",
-                .DELETE => "DELETE",
-                .HEAD => "HEAD",
-                else => return error.InvalidMethod,
-            };
-
-            const region = if (this.region.len > 0) this.region else guessRegion(this.endpoint);
-            let full_path = request_path;
-            // handle \\ on bucket name
-            if (strings.startsWith(full_path, "/")) {
-                full_path = full_path[1..];
-            } else if (strings.startsWith(full_path, "\\")) {
-                full_path = full_path[1..];
-            }
-
-            let path: []const u8 = full_path;
-            let bucket: []const u8 = this.bucket;
-
-            if (!this.virtual_hosted_style) {
-                if (bucket.len == 0) {
-                    // guess bucket using path
-                    if (strings.indexOf(full_path, "/")) |end| {
-                        if (strings.indexOf(full_path, "\\")) |backslash_index| {
-                            if (backslash_index < end) {
-                                bucket = full_path[0..backslash_index];
-                                path = full_path[backslash_index + 1 ..];
-                            }
-                        }
-                        bucket = full_path[0..end];
-                        path = full_path[end + 1 ..];
-                    } else if (strings.indexOf(full_path, "\\")) |backslash_index| {
-                        bucket = full_path[0..backslash_index];
-                        path = full_path[backslash_index + 1 ..];
-                    } else {
-                        return error.InvalidPath;
-                    }
-                }
-            }
-
-            path = normalizeName(path);
-            bucket = normalizeName(bucket);
-
-            // if we allow path.len == 0 it will list the bucket for now we disallow
-            if (!allow_empty_path and path.len == 0) return error.InvalidPath;
-
-            let normalized_path_buffer: [1024 + 63 + 2]u8 = undefined; // 1024 max key size and 63 max bucket name
-            let path_buffer: [1024]u8 = undefined;
-            let bucket_buffer: [63]u8 = undefined;
-            bucket = encodeURIComponent(bucket, &bucket_buffer, false) catch return error.InvalidPath;
-            path = encodeURIComponent(path, &path_buffer, false) catch return error.InvalidPath;
-            // Default to https. Only use http if they explicit pass "http://" as the endpoint.
-            const protocol = if (this.insecure_http) "http" else "https";
-
-            // detect service name and host from region or endpoint
-            let endpoint = this.endpoint;
-            let extra_path: []const u8 = "";
-            const host = brk_host: {
-                if (this.endpoint.len > 0) {
-                    if (this.endpoint.len >= 2048) return error.InvalidEndpoint;
-                    let host = this.endpoint;
-                    if (bun.strings.indexOf(this.endpoint, "/")) |index| {
-                        host = this.endpoint[0..index];
-                        extra_path = this.endpoint[index..];
-                    }
-                    // only the host part is needed here
-                    break :brk_host try bun.default_allocator.dupe(u8, host);
-                } else {
-                    if (this.virtual_hosted_style) {
-                        // virtual hosted style requires a bucket name if an endpoint is not provided
-                        if (bucket.len == 0) {
-                            return error.InvalidEndpoint;
-                        }
-                        // default to https://<BUCKET_NAME>.s3.<REGION>.amazonaws.com/
-                        endpoint = try std.fmt.allocPrint(bun.default_allocator, "{s}.s3.{s}.amazonaws.com", .{ bucket, region });
-                        break :brk_host endpoint;
-                    }
-                    endpoint = try std.fmt.allocPrint(bun.default_allocator, "s3.{s}.amazonaws.com", .{region});
-                    break :brk_host endpoint;
-                }
-            };
-            errdefer bun.default_allocator.free(host);
-            const normalizedPath = brk: {
-                if (this.virtual_hosted_style) {
-                    break :brk std.fmt.bufPrint(&normalized_path_buffer, "{s}/{s}", .{ extra_path, path }) catch return error.InvalidPath;
-                } else {
-                    break :brk std.fmt.bufPrint(&normalized_path_buffer, "{s}/{s}/{s}", .{ extra_path, bucket, path }) catch return error.InvalidPath;
-                }
-            };
-
-            const date_result = getAMZDate(bun.default_allocator);
-            const amz_date = date_result.date;
-            errdefer bun.default_allocator.free(amz_date);
-
-            const amz_day = amz_date[0..8];
-            const request_payer = signOptions.request_payer;
-            const header_key = SignedHeaders.Key{
-                .content_disposition = content_disposition != null,
-                .content_encoding = content_encoding != null,
-                .content_md5 = content_md5 != null,
-                .acl = acl != null,
-                .request_payer = request_payer,
-                .session_token = session_token != null,
-                .storage_class = storage_class != null,
-            };
-            const signed_headers = if (signQuery) "host" else SignedHeaders.get(header_key);
-
-            const service_name = "s3";
-
-            let aws_content_hash: []const u8 = "UNSIGNED-PAYLOAD";
-            if (content_hash != null) {
-                aws_content_hash = content_hash.?;
-            }
-            let tmp_buffer: [4096]u8 = undefined;
-
-            const authorization = brk: {
-                // we hash the hash so we need 2 buffers
-                let hmac_sig_service: [bun.BoringSSL.c.EVP_MAX_MD_SIZE]u8 = undefined;
-                let hmac_sig_service2: [bun.BoringSSL.c.EVP_MAX_MD_SIZE]u8 = undefined;
-
-                const sigDateRegionServiceReq = brk_sign: {
-                    const key = try std.fmt.bufPrint(&tmp_buffer, "{s}{s}{s}", .{ region, service_name, this.secretAccessKey });
-                    let cache = (jsc.VirtualMachine.getMainThreadVM() orelse jsc.VirtualMachine.get()).rareData().awsCache();
-                    if (cache.get(date_result.numeric_day, key)) |cached| {
-                        break :brk_sign cached;
-                    }
-                    // not cached yet lets generate a new one
-                    const sigDate = bun.hmac.generate(try std.fmt.bufPrint(&tmp_buffer, "AWS4{s}", .{this.secretAccessKey}), amz_day, .sha256, &hmac_sig_service) orelse return error.FailedToGenerateSignature;
-                    const sigDateRegion = bun.hmac.generate(sigDate, region, .sha256, &hmac_sig_service2) orelse return error.FailedToGenerateSignature;
-                    const sigDateRegionService = bun.hmac.generate(sigDateRegion, service_name, .sha256, &hmac_sig_service) orelse return error.FailedToGenerateSignature;
-                    const result = bun.hmac.generate(sigDateRegionService, "aws4_request", .sha256, &hmac_sig_service2) orelse return error.FailedToGenerateSignature;
-
-                    cache.set(date_result.numeric_day, key, hmac_sig_service2[0..DIGESTED_HMAC_256_LEN].*);
-                    break :brk_sign result;
-                };
-                if (signQuery) {
-                    let token_encoded_buffer: [2048]u8 = undefined; // token is normaly like 600-700 but can be up to 2k
-                    let encoded_session_token: ?[]const u8 = null;
-                    if (session_token) |token| {
-                        encoded_session_token = encodeURIComponent(token, &token_encoded_buffer, true) catch return error.InvalidSessionToken;
-                    }
-
-                    let content_md5_encoded_buffer: [128]u8 = undefined; // MD5 as base64 (which is required for AWS SigV4) is always 44, when encoded its always 46 (44 + ==)
-                    let encoded_content_md5: ?[]const u8 = null;
-
-                    if (content_md5) |content_md5_value| {
-                        encoded_content_md5 = encodeURIComponent(content_md5_value, &content_md5_encoded_buffer, true) catch return error.FailedToGenerateSignature;
-                    }
-
-                    // Encode response override parameters for presigned URLs
-                    let content_disposition_encoded_buffer: [512]u8 = undefined;
-                    let encoded_content_disposition: ?[]const u8 = null;
-                    if (content_disposition) |cd| {
-                        encoded_content_disposition = encodeURIComponent(cd, &content_disposition_encoded_buffer, true) catch return error.FailedToGenerateSignature;
-                    }
-
-                    let content_type_encoded_buffer: [256]u8 = undefined;
-                    let encoded_content_type: ?[]const u8 = null;
-                    if (content_type) |ct| {
-                        encoded_content_type = encodeURIComponent(ct, &content_type_encoded_buffer, true) catch return error.FailedToGenerateSignature;
-                    }
-
-                    // Build query parameters in alphabetical order for AWS Signature V4 canonical request
-                    const canonical = brk_canonical: {
-                        let stack_fallback = std.heap.stackFallback(512, bun.default_allocator);
-                        const allocator = stack_fallback.get();
-                        let query_parts: bun.BoundedArray([]const u8, 13) = .{};
-
-                        // Add parameters in alphabetical order: Content-MD5, X-Amz-Acl, X-Amz-Algorithm, X-Amz-Credential, X-Amz-Date, X-Amz-Expires, X-Amz-Security-Token, X-Amz-SignedHeaders, response-content-disposition, response-content-type, x-amz-request-payer, x-amz-storage-class
-
-                        if (encoded_content_md5) |encoded_content_md5_value| {
-                            try query_parts.append(try std.fmt.allocPrint(allocator, "Content-MD5={s}", .{encoded_content_md5_value}));
-                        }
-
-                        if (acl) |acl_value| {
-                            try query_parts.append(try std.fmt.allocPrint(allocator, "X-Amz-Acl={s}", .{acl_value}));
-                        }
-
-                        try query_parts.append(try std.fmt.allocPrint(allocator, "X-Amz-Algorithm=AWS4-HMAC-SHA256", .{}));
-
-                        try query_parts.append(try std.fmt.allocPrint(allocator, "X-Amz-Credential={s}%2F{s}%2F{s}%2F{s}%2Faws4_request", .{ this.accessKeyId, amz_day, region, service_name }));
-
-                        try query_parts.append(try std.fmt.allocPrint(allocator, "X-Amz-Date={s}", .{amz_date}));
-
-                        try query_parts.append(try std.fmt.allocPrint(allocator, "X-Amz-Expires={}", .{expires}));
-
-                        if (encoded_session_token) |token| {
-                            try query_parts.append(try std.fmt.allocPrint(allocator, "X-Amz-Security-Token={s}", .{token}));
-                        }
-
-                        try query_parts.append(try std.fmt.allocPrint(allocator, "X-Amz-SignedHeaders=host", .{}));
-
-                        if (encoded_content_disposition) |cd| {
-                            try query_parts.append(try std.fmt.allocPrint(allocator, "response-content-disposition={s}", .{cd}));
-                        }
-
-                        if (encoded_content_type) |ct| {
-                            try query_parts.append(try std.fmt.allocPrint(allocator, "response-content-type={s}", .{ct}));
-                        }
-
-                        if (request_payer) {
-                            try query_parts.append(try std.fmt.allocPrint(allocator, "x-amz-request-payer=requester", .{}));
-                        }
-
-                        if (storage_class) |storage_class_value| {
-                            try query_parts.append(try std.fmt.allocPrint(allocator, "x-amz-storage-class={s}", .{storage_class_value}));
-                        }
-
-                        // Join query parameters with &
-                        let query_string = std.array_list.Managed(u8).init(allocator);
-                        defer query_string.deinit();
-                        for (query_parts.slice(), 0..) |part, i| {
-                            if (i > 0) try query_string.append('&');
-                            try query_string.appendSlice(part);
-                            allocator.free(part);
-                        }
-
-                        break :brk_canonical try std.fmt.bufPrint(&tmp_buffer, "{s}\n{s}\n{s}\nhost:{s}\n\nhost\n{s}", .{ method_name, normalizedPath, query_string.items, host, aws_content_hash });
-                    };
-                    let sha_digest = std.mem.zeroes(bun.sha.SHA256.Digest);
-                    bun.sha.SHA256.hash(canonical, &sha_digest, jsc.VirtualMachine.get().rareData().boringEngine());
-
-                    const signValue = try std.fmt.bufPrint(&tmp_buffer, "AWS4-HMAC-SHA256\n{s}\n{s}/{s}/{s}/aws4_request\n{s}", .{ amz_date, amz_day, region, service_name, std.fmt.bytesToHex(sha_digest[0..bun.sha.SHA256.digest], .lower) });
-
-                    const signature = bun.hmac.generate(sigDateRegionServiceReq, signValue, .sha256, &hmac_sig_service) orelse return error.FailedToGenerateSignature;
-
-                    // Build final URL with query parameters in alphabetical order to match canonical request
-                    let url_stack_fallback = std.heap.stackFallback(512, bun.default_allocator);
-                    const url_allocator = url_stack_fallback.get();
-                    let url_query_parts: bun.BoundedArray([]const u8, 14) = .{};
-
-                    // Add parameters in alphabetical order: Content-MD5, X-Amz-Acl, X-Amz-Algorithm, X-Amz-Credential, X-Amz-Date, X-Amz-Expires, X-Amz-Security-Token, X-Amz-Signature, X-Amz-SignedHeaders, response-content-disposition, response-content-type, x-amz-request-payer, x-amz-storage-class
-
-                    if (encoded_content_md5) |encoded_content_md5_value| {
-                        try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "Content-MD5={s}", .{encoded_content_md5_value}));
-                    }
-
-                    if (acl) |acl_value| {
-                        try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "X-Amz-Acl={s}", .{acl_value}));
-                    }
-
-                    try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "X-Amz-Algorithm=AWS4-HMAC-SHA256", .{}));
-
-                    try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "X-Amz-Credential={s}%2F{s}%2F{s}%2F{s}%2Faws4_request", .{ this.accessKeyId, amz_day, region, service_name }));
-
-                    try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "X-Amz-Date={s}", .{amz_date}));
-
-                    try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "X-Amz-Expires={}", .{expires}));
-
-                    if (encoded_session_token) |token| {
-                        try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "X-Amz-Security-Token={s}", .{token}));
-                    }
-
-                    try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "X-Amz-Signature={s}", .{std.fmt.bytesToHex(signature[0..DIGESTED_HMAC_256_LEN], .lower)}));
-
-                    try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "X-Amz-SignedHeaders=host", .{}));
-
-                    if (encoded_content_disposition) |cd| {
-                        try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "response-content-disposition={s}", .{cd}));
-                    }
-
-                    if (encoded_content_type) |ct| {
-                        try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "response-content-type={s}", .{ct}));
-                    }
-
-                    if (request_payer) {
-                        try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "x-amz-request-payer=requester", .{}));
-                    }
-
-                    if (storage_class) |storage_class_value| {
-                        try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "x-amz-storage-class={s}", .{storage_class_value}));
-                    }
-
-                    // Join URL query parameters with &
-                    let url_query_string = std.array_list.Managed(u8).init(url_allocator);
-                    defer url_query_string.deinit();
-                    for (url_query_parts.slice(), 0..) |part, i| {
-                        if (i > 0) try url_query_string.append('&');
-                        try url_query_string.appendSlice(part);
-                        url_allocator.free(part);
-                    }
-
-                    break :brk try std.fmt.allocPrint(bun.default_allocator, "{s}://{s}{s}?{s}", .{ protocol, host, normalizedPath, url_query_string.items });
-                } else {
-                    const canonical = try CanonicalRequest.format(
-                        &tmp_buffer,
-                        header_key,
-                        method_name,
-                        normalizedPath,
-                        if (search_params) |p| p[1..] else "",
-                        content_disposition,
-                        content_encoding,
-                        content_md5,
-                        host,
-                        acl,
-                        aws_content_hash,
-                        amz_date,
-                        session_token,
-                        storage_class,
-                        signed_headers,
-                    );
-                    let sha_digest = std.mem.zeroes(bun.sha.SHA256.Digest);
-                    bun.sha.SHA256.hash(canonical, &sha_digest, jsc.VirtualMachine.get().rareData().boringEngine());
-
-                    const signValue = try std.fmt.bufPrint(&tmp_buffer, "AWS4-HMAC-SHA256\n{s}\n{s}/{s}/{s}/aws4_request\n{s}", .{ amz_date, amz_day, region, service_name, std.fmt.bytesToHex(sha_digest[0..bun.sha.SHA256.digest], .lower) });
-
-                    const signature = bun.hmac.generate(sigDateRegionServiceReq, signValue, .sha256, &hmac_sig_service) orelse return error.FailedToGenerateSignature;
-
-                    break :brk try std.fmt.allocPrint(
-                        bun.default_allocator,
-                        "AWS4-HMAC-SHA256 Credential={s}/{s}/{s}/{s}/aws4_request, SignedHeaders={s}, Signature={s}",
-                        .{ this.accessKeyId, amz_day, region, service_name, signed_headers, std.fmt.bytesToHex(signature[0..DIGESTED_HMAC_256_LEN], .lower) },
-                    );
-                }
-            };
-            errdefer bun.default_allocator.free(authorization);
-
-            if (signQuery) {
-                defer bun.default_allocator.free(host);
-                defer bun.default_allocator.free(amz_date);
-
-                return SignResult{
-                    .amz_date = "",
-                    .host = "",
-                    .authorization = "",
-                    .acl = signOptions.acl,
-                    .url = authorization,
-                    .storage_class = signOptions.storage_class,
-                };
-            }
-
-            let result = SignResult{
-                .amz_date = amz_date,
-                .host = host,
-                .authorization = authorization,
-                .acl = signOptions.acl,
-                .storage_class = signOptions.storage_class,
-                .request_payer = request_payer,
-                .url = try std.fmt.allocPrint(bun.default_allocator, "{s}://{s}{s}{s}", .{ protocol, host, normalizedPath, if (search_params) |s| s else "" }),
-                ._headers = [_]picohttp.Header{
-                    .{ .name = "x-amz-content-sha256", .value = aws_content_hash },
-                    .{ .name = "x-amz-date", .value = amz_date },
-                    .{ .name = "Host", .value = host },
-                    .{ .name = "Authorization", .value = authorization[0..] },
-                    .{ .name = "", .value = "" },
-                    .{ .name = "", .value = "" },
-                    .{ .name = "", .value = "" },
-                    .{ .name = "", .value = "" },
-                    .{ .name = "", .value = "" },
-                    .{ .name = "", .value = "" },
-                    .{ .name = "", .value = "" },
-                },
-                ._headers_len = 4,
-            };
-
-            if (acl) |acl_value| {
-                result._headers[result._headers_len] = .{ .name = "x-amz-acl", .value = acl_value };
-                result._headers_len += 1;
-            }
-
-            if (session_token) |token| {
-                const session_token_value = bun.handleOom(bun.default_allocator.dupe(u8, token));
-                result.session_token = session_token_value;
-                result._headers[result._headers_len] = .{ .name = "x-amz-security-token", .value = session_token_value };
-                result._headers_len += 1;
-            }
-            if (storage_class) |storage_class_value| {
-                result._headers[result._headers_len] = .{ .name = "x-amz-storage-class", .value = storage_class_value };
-                result._headers_len += 1;
-            }
-
-            if (content_disposition) |cd| {
-                const content_disposition_value = bun.handleOom(bun.default_allocator.dupe(u8, cd));
-                result.content_disposition = content_disposition_value;
-                result._headers[result._headers_len] = .{ .name = "content-disposition", .value = content_disposition_value };
-                result._headers_len += 1;
-            }
-
-            if (content_encoding) |ce| {
-                const content_encoding_value = bun.handleOom(bun.default_allocator.dupe(u8, ce));
-                result.content_encoding = content_encoding_value;
-                result._headers[result._headers_len] = .{ .name = "content-encoding", .value = content_encoding_value };
-                result._headers_len += 1;
-            }
-
-            if (content_md5) |c_md5| {
-                const content_md5_value = bun.handleOom(bun.default_allocator.dupe(u8, c_md5));
-                result.content_md5 = content_md5_value;
-                result._headers[result._headers_len] = .{ .name = "content-md5", .value = content_md5_value };
-                result._headers_len += 1;
-            }
-
-            if (request_payer) {
-                result._headers[result._headers_len] = .{ .name = "x-amz-request-payer", .value = "requester" };
-                result._headers_len += 1;
-            }
-
-            return result;
+        pub fn signRequest(this: *const @This(), signOptions: SignOptions, comptime allow_empty_path: bool, signQueryOption: ?SignQueryOptions): !SignResult {
+            return s3CredentialsSignRequest(this, signOptions, allow_empty_path, signQueryOption);
         }
     };
+
+fn s3CredentialsSignRequest(creds: *const S3Credentials!, signOptions: S3Credentials.SignOptions, comptime allow_empty_path: bool, signQueryOption: S3Credentials.SignQueryOptions?): !S3Credentials.SignResult {
+    const method = signOptions.method;
+    const request_path = signOptions.path;
+    const content_hash = signOptions.content_hash;
+    let content_md5 = signOptions.content_md5;
+
+    if (content_md5_val := content_md5) {
+        const len = bun.base64.encodeLen(content_md5_val);
+        const content_md5_as_base64 = bun.handleOom(bun.default_allocator.alloc(u8, len));
+        content_md5 = content_md5_as_base64[0..bun.base64.encode(content_md5_as_base64, content_md5_val)];
+    }
+
+    const search_params = signOptions.search_params;
+
+    let content_disposition = signOptions.content_disposition;
+    if (cd_val := content_disposition) {
+        if (cd_val.len == 0) content_disposition = null;
+    }
+    let content_type = signOptions.content_type;
+    if (ct_val := content_type) {
+        if (ct_val.len == 0) content_type = null;
+    }
+    let content_encoding = signOptions.content_encoding;
+    if (ce_val := content_encoding) {
+        if (ce_val.len == 0) content_encoding = null;
+    }
+    const session_token: ([]const u8)? = if (creds.sessionToken.len == 0) null else creds.sessionToken;
+
+    let acl: ([]const u8)? = null;
+    if (acl_opt := signOptions.acl) {
+        acl = acl_opt.toString();
+    }
+
+    let storage_class: ([]const u8)? = null;
+    if (sc_opt := signOptions.storage_class) {
+        storage_class = sc_opt.toString();
+    }
+
+    if (creds.accessKeyId.len == 0 || creds.secretAccessKey.len == 0) return error.MissingCredentials;
+    const signQuery = signQueryOption != null;
+    let expires: usize = 0;
+    if (sqo := signQueryOption) {
+        expires = sqo.expires;
+    }
+    const method_name = switch (method) {
+        .GET => "GET",
+        .POST => "POST",
+        .PUT => "PUT",
+        .DELETE => "DELETE",
+        .HEAD => "HEAD",
+        else => return error.InvalidMethod,
+    };
+
+    const region = if (creds.region.len > 0) creds.region else S3Credentials.guessRegion(creds.endpoint);
+    let full_path = request_path;
+    if (strings.startsWith(full_path, "/")) {
+        full_path = full_path[1..];
+    } else if (strings.startsWith(full_path, "\\")) {
+        full_path = full_path[1..];
+    }
+
+    let path: []const u8 = full_path;
+    let bucket: []const u8 = creds.bucket;
+
+    if (!creds.virtual_hosted_style) {
+        if (bucket.len == 0) {
+            if (end := strings.indexOf(full_path, "/")) {
+                if (backslash_index := strings.indexOf(full_path, "\\")) {
+                    if (backslash_index < end) {
+                        bucket = full_path[0..backslash_index];
+                        path = full_path[backslash_index + 1 ..];
+                    }
+                }
+                bucket = full_path[0..end];
+                path = full_path[end + 1 ..];
+            } else if (backslash_index := strings.indexOf(full_path, "\\")) {
+                bucket = full_path[0..backslash_index];
+                path = full_path[backslash_index + 1 ..];
+            } else {
+                return error.InvalidPath;
+            }
+        }
+    }
+
+    path = S3Credentials.normalizeName(path);
+    bucket = S3Credentials.normalizeName(bucket);
+
+    if (!allow_empty_path && path.len == 0) return error.InvalidPath;
+
+    let normalized_path_buffer: [1089]u8 = undefined;
+    let path_buffer: [1024]u8 = undefined;
+    let bucket_buffer: [63]u8 = undefined;
+    bucket = S3Credentials.encodeURIComponent(bucket, &bucket_buffer, false) catch return error.InvalidPath;
+    path = S3Credentials.encodeURIComponent(path, &path_buffer, false) catch return error.InvalidPath;
+    const protocol = if (creds.insecure_http) "http" else "https";
+
+    let endpoint = creds.endpoint;
+    let extra_path: []const u8 = "";
+    let host: []const u8 = "";
+    if (creds.endpoint.len > 0) {
+        if (creds.endpoint.len >= 2048) return error.InvalidEndpoint;
+        let h = creds.endpoint;
+        if (index := bun.strings.indexOf(creds.endpoint, "/")) {
+            h = creds.endpoint[0..index];
+            extra_path = creds.endpoint[index..];
+        }
+        host = bun.default_allocator.dupe(u8, h)?;
+    } else if (creds.virtual_hosted_style) {
+        if (bucket.len == 0) {
+            return error.InvalidEndpoint;
+        }
+        endpoint = std.fmt.allocPrint(bun.default_allocator, "{s}.s3.{s}.amazonaws.com", .{ bucket, region })?;
+        host = endpoint;
+    } else {
+        endpoint = std.fmt.allocPrint(bun.default_allocator, "s3.{s}.amazonaws.com", .{region})?;
+        host = endpoint;
+    }
+    let host_guard = SliceFreeGuard{ slice: host, allocator: bun.default_allocator };
+
+    let normalizedPath: []const u8 = "";
+    if (creds.virtual_hosted_style) {
+        normalizedPath = std.fmt.bufPrint(&normalized_path_buffer, "{s}/{s}", .{ extra_path, path }) catch return error.InvalidPath;
+    } else {
+        normalizedPath = std.fmt.bufPrint(&normalized_path_buffer, "{s}/{s}/{s}", .{ extra_path, bucket, path }) catch return error.InvalidPath;
+    }
+
+    const date_result = S3Credentials.getAMZDate(bun.default_allocator);
+    const amz_date = date_result.date;
+    let amz_date_guard = SliceFreeGuard{ slice: amz_date, allocator: bun.default_allocator };
+
+    const amz_day = amz_date[0..8];
+    const request_payer = signOptions.request_payer;
+    const header_key = SignedHeaders.Key{
+        content_disposition: content_disposition != null,
+        content_encoding: content_encoding != null,
+        content_md5: content_md5 != null,
+        acl: acl != null,
+        request_payer: request_payer,
+        session_token: session_token != null,
+        storage_class: storage_class != null,
+    };
+    const signed_headers = if (signQuery) "host" else SignedHeaders.get(header_key);
+
+    const service_name = "s3";
+
+    let aws_content_hash: []const u8 = "UNSIGNED-PAYLOAD";
+    if (ch := content_hash) {
+        aws_content_hash = ch;
+    }
+    let tmp_buffer: [4096]u8 = undefined;
+
+    const MAX_MD_SIZE = bun.BoringSSL.c.EVP_MAX_MD_SIZE;
+    let hmac_sig_service: [MAX_MD_SIZE]u8 = undefined;
+    let hmac_sig_service2: [MAX_MD_SIZE]u8 = undefined;
+
+    let sigDateRegionServiceReq: []const u8 = "";
+    const cache_key = std.fmt.bufPrint(&tmp_buffer, "{s}{s}{s}", .{ region, service_name, creds.secretAccessKey })?;
+    let cache = (jsc.VirtualMachine.getMainThreadVM() ?? jsc.VirtualMachine.get()).rareData().awsCache();
+    if (cached := cache.get(date_result.numeric_day, cache_key)) {
+        sigDateRegionServiceReq = cached;
+    } else {
+        const sigDate = bun.hmac.generate(std.fmt.bufPrint(&tmp_buffer, "AWS4{s}", .{creds.secretAccessKey})?, amz_day, .sha256, &hmac_sig_service) ?? return error.FailedToGenerateSignature;
+        const sigDateRegion = bun.hmac.generate(sigDate, region, .sha256, &hmac_sig_service2) ?? return error.FailedToGenerateSignature;
+        const sigDateRegionService = bun.hmac.generate(sigDateRegion, service_name, .sha256, &hmac_sig_service) ?? return error.FailedToGenerateSignature;
+        const hmac_res = bun.hmac.generate(sigDateRegionService, "aws4_request", .sha256, &hmac_sig_service2) ?? return error.FailedToGenerateSignature;
+        cache.set(date_result.numeric_day, cache_key, hmac_sig_service2[0..S3Credentials.DIGESTED_HMAC_256_LEN].*);
+        sigDateRegionServiceReq = hmac_res;
+    }
+
+    let authorization: []const u8 = "";
+    if (signQuery) {
+        let token_encoded_buffer: [2048]u8 = undefined;
+        let encoded_session_token: ([]const u8)? = null;
+        if (token := session_token) {
+            encoded_session_token = S3Credentials.encodeURIComponent(token, &token_encoded_buffer, true) catch return error.InvalidSessionToken;
+        }
+
+        let content_md5_encoded_buffer: [128]u8 = undefined;
+        let encoded_content_md5: ([]const u8)? = null;
+        if (content_md5_value := content_md5) {
+            encoded_content_md5 = S3Credentials.encodeURIComponent(content_md5_value, &content_md5_encoded_buffer, true) catch return error.FailedToGenerateSignature;
+        }
+
+        let content_disposition_encoded_buffer: [512]u8 = undefined;
+        let encoded_content_disposition: ([]const u8)? = null;
+        if (cd := content_disposition) {
+            encoded_content_disposition = S3Credentials.encodeURIComponent(cd, &content_disposition_encoded_buffer, true) catch return error.FailedToGenerateSignature;
+        }
+
+        let content_type_encoded_buffer: [256]u8 = undefined;
+        let encoded_content_type: ([]const u8)? = null;
+        if (ct := content_type) {
+            encoded_content_type = S3Credentials.encodeURIComponent(ct, &content_type_encoded_buffer, true) catch return error.FailedToGenerateSignature;
+        }
+
+        let canonical: []const u8 = "";
+        {
+            let stack_fallback = std.heap.stackFallback(512, bun.default_allocator);
+            const allocator = stack_fallback.get();
+            let query_parts: bun.BoundedArray([]const u8, 13) = .{};
+
+            if (encoded_content_md5_value := encoded_content_md5) {
+                query_parts.append(std.fmt.allocPrint(allocator, "Content-MD5={s}", .{encoded_content_md5_value})?)?;
+            }
+            if (acl_value := acl) {
+                query_parts.append(std.fmt.allocPrint(allocator, "X-Amz-Acl={s}", .{acl_value})?)?;
+            }
+            query_parts.append(std.fmt.allocPrint(allocator, "X-Amz-Algorithm=AWS4-HMAC-SHA256", .{})?)?;
+            query_parts.append(std.fmt.allocPrint(allocator, "X-Amz-Credential={s}%2F{s}%2F{s}%2F{s}%2Faws4_request", .{ creds.accessKeyId, amz_day, region, service_name })?)?;
+            query_parts.append(std.fmt.allocPrint(allocator, "X-Amz-Date={s}", .{amz_date})?)?;
+            query_parts.append(std.fmt.allocPrint(allocator, "X-Amz-Expires={}", .{expires})?)?;
+            if (token := encoded_session_token) {
+                query_parts.append(std.fmt.allocPrint(allocator, "X-Amz-Security-Token={s}", .{token})?)?;
+            }
+            query_parts.append(std.fmt.allocPrint(allocator, "X-Amz-SignedHeaders=host", .{})?)?;
+            if (cd := encoded_content_disposition) {
+                query_parts.append(std.fmt.allocPrint(allocator, "response-content-disposition={s}", .{cd})?)?;
+            }
+            if (ct := encoded_content_type) {
+                query_parts.append(std.fmt.allocPrint(allocator, "response-content-type={s}", .{ct})?)?;
+            }
+            if (request_payer) {
+                query_parts.append(std.fmt.allocPrint(allocator, "x-amz-request-payer=requester", .{})?)?;
+            }
+            if (storage_class_value := storage_class) {
+                query_parts.append(std.fmt.allocPrint(allocator, "x-amz-storage-class={s}", .{storage_class_value})?)?;
+            }
+
+            let query_string = std.array_list.Managed(u8).init(allocator);
+            const _query_guard = DeinitGuard<std.array_list.Managed(u8)>{ ptr: unsafe { &query_string } };
+            let qi: usize = 0;
+            for (part of query_parts.slice()) {
+                if (qi > 0) query_string.append('&')?;
+                query_string.appendSlice(part)?;
+                allocator.free(part);
+                qi += 1;
+            }
+
+            canonical = std.fmt.bufPrint(&tmp_buffer, "{s}\n{s}\n{s}\nhost:{s}\n\nhost\n{s}", .{ method_name, normalizedPath, query_string.items, host, aws_content_hash })?;
+        }
+
+        let sha_digest = std.mem.zeroes(bun.sha.SHA256.Digest);
+        bun.sha.SHA256.hash(canonical, &sha_digest, jsc.VirtualMachine.get().rareData().boringEngine());
+
+        const signValue = std.fmt.bufPrint(&tmp_buffer, "AWS4-HMAC-SHA256\n{s}\n{s}/{s}/{s}/aws4_request\n{s}", .{ amz_date, amz_day, region, service_name, std.fmt.bytesToHex(sha_digest[0..bun.sha.SHA256.digest], .lower) })?;
+        const signature = bun.hmac.generate(sigDateRegionServiceReq, signValue, .sha256, &hmac_sig_service) ?? return error.FailedToGenerateSignature;
+
+        let url_stack_fallback = std.heap.stackFallback(512, bun.default_allocator);
+        const url_allocator = url_stack_fallback.get();
+        let url_query_parts: bun.BoundedArray([]const u8, 14) = .{};
+
+        if (encoded_content_md5_value := encoded_content_md5) {
+            url_query_parts.append(std.fmt.allocPrint(url_allocator, "Content-MD5={s}", .{encoded_content_md5_value})?)?;
+        }
+        if (acl_value := acl) {
+            url_query_parts.append(std.fmt.allocPrint(url_allocator, "X-Amz-Acl={s}", .{acl_value})?)?;
+        }
+        url_query_parts.append(std.fmt.allocPrint(url_allocator, "X-Amz-Algorithm=AWS4-HMAC-SHA256", .{})?)?;
+        url_query_parts.append(std.fmt.allocPrint(url_allocator, "X-Amz-Credential={s}%2F{s}%2F{s}%2F{s}%2Faws4_request", .{ creds.accessKeyId, amz_day, region, service_name })?)?;
+        url_query_parts.append(std.fmt.allocPrint(url_allocator, "X-Amz-Date={s}", .{amz_date})?)?;
+        url_query_parts.append(std.fmt.allocPrint(url_allocator, "X-Amz-Expires={}", .{expires})?)?;
+        if (token := encoded_session_token) {
+            url_query_parts.append(std.fmt.allocPrint(url_allocator, "X-Amz-Security-Token={s}", .{token})?)?;
+        }
+        url_query_parts.append(std.fmt.allocPrint(url_allocator, "X-Amz-Signature={s}", .{std.fmt.bytesToHex(signature[0..S3Credentials.DIGESTED_HMAC_256_LEN], .lower)})?)?;
+        url_query_parts.append(std.fmt.allocPrint(url_allocator, "X-Amz-SignedHeaders=host", .{})?)?;
+        if (cd := encoded_content_disposition) {
+            url_query_parts.append(std.fmt.allocPrint(url_allocator, "response-content-disposition={s}", .{cd})?)?;
+        }
+        if (ct := encoded_content_type) {
+            url_query_parts.append(std.fmt.allocPrint(url_allocator, "response-content-type={s}", .{ct})?)?;
+        }
+        if (request_payer) {
+            url_query_parts.append(std.fmt.allocPrint(url_allocator, "x-amz-request-payer=requester", .{})?)?;
+        }
+        if (storage_class_value := storage_class) {
+            url_query_parts.append(std.fmt.allocPrint(url_allocator, "x-amz-storage-class={s}", .{storage_class_value})?)?;
+        }
+
+        let url_query_string = std.array_list.Managed(u8).init(url_allocator);
+        const _url_query_guard = DeinitGuard<std.array_list.Managed(u8)>{ ptr: unsafe { &url_query_string } };
+        let uqi: usize = 0;
+        for (part of url_query_parts.slice()) {
+            if (uqi > 0) url_query_string.append('&')?;
+            url_query_string.appendSlice(part)?;
+            url_allocator.free(part);
+            uqi += 1;
+        }
+
+        authorization = std.fmt.allocPrint(bun.default_allocator, "{s}://{s}{s}?{s}", .{ protocol, host, normalizedPath, url_query_string.items })?;
+    } else {
+        const canonical = CanonicalRequest.format(
+            &tmp_buffer,
+            header_key,
+            method_name,
+            normalizedPath,
+            if (p := search_params) p[1..] else "",
+            content_disposition,
+            content_encoding,
+            content_md5,
+            host,
+            acl,
+            aws_content_hash,
+            amz_date,
+            session_token,
+            storage_class,
+            signed_headers,
+        )?;
+        let sha_digest = std.mem.zeroes(bun.sha.SHA256.Digest);
+        bun.sha.SHA256.hash(canonical, &sha_digest, jsc.VirtualMachine.get().rareData().boringEngine());
+
+        const signValue = std.fmt.bufPrint(&tmp_buffer, "AWS4-HMAC-SHA256\n{s}\n{s}/{s}/{s}/aws4_request\n{s}", .{ amz_date, amz_day, region, service_name, std.fmt.bytesToHex(sha_digest[0..bun.sha.SHA256.digest], .lower) })?;
+        const signature = bun.hmac.generate(sigDateRegionServiceReq, signValue, .sha256, &hmac_sig_service) ?? return error.FailedToGenerateSignature;
+
+        authorization = std.fmt.allocPrint(
+            bun.default_allocator,
+            "AWS4-HMAC-SHA256 Credential={s}/{s}/{s}/{s}/aws4_request, SignedHeaders={s}, Signature={s}",
+            .{ creds.accessKeyId, amz_day, region, service_name, signed_headers, std.fmt.bytesToHex(signature[0..S3Credentials.DIGESTED_HMAC_256_LEN], .lower) },
+        )?;
+    }
+
+    let auth_guard = SliceFreeGuard{ slice: authorization, allocator: bun.default_allocator };
+
+    if (signQuery) {
+        auth_guard.slice = null;
+        return S3Credentials.SignResult{
+            amz_date: "",
+            host: "",
+            authorization: "",
+            acl: signOptions.acl,
+            url: authorization,
+            storage_class: signOptions.storage_class,
+        };
+    }
+
+    let result = S3Credentials.SignResult{
+        amz_date: amz_date,
+        host: host,
+        authorization: authorization,
+        acl: signOptions.acl,
+        storage_class: signOptions.storage_class,
+        request_payer: request_payer,
+        url: std.fmt.allocPrint(bun.default_allocator, "{s}://{s}{s}{s}", .{ protocol, host, normalizedPath, if (s := search_params) s else "" })?,
+        _headers: @as([11]picohttp.Header, [
+            picohttp.Header{ name: "x-amz-content-sha256", value: aws_content_hash },
+            picohttp.Header{ name: "x-amz-date", value: amz_date },
+            picohttp.Header{ name: "Host", value: host },
+            picohttp.Header{ name: "Authorization", value: authorization[0..] },
+            picohttp.Header{ name: "", value: "" },
+            picohttp.Header{ name: "", value: "" },
+            picohttp.Header{ name: "", value: "" },
+            picohttp.Header{ name: "", value: "" },
+            picohttp.Header{ name: "", value: "" },
+            picohttp.Header{ name: "", value: "" },
+            picohttp.Header{ name: "", value: "" },
+        ]),
+        _headers_len: 4,
+    };
+    host_guard.slice = null;
+    amz_date_guard.slice = null;
+    auth_guard.slice = null;
+
+    if (acl_value := acl) {
+        result._headers[result._headers_len] = picohttp.Header{ name: "x-amz-acl", value: acl_value };
+        result._headers_len += 1;
+    }
+    if (token := session_token) {
+        const session_token_value = bun.handleOom(bun.default_allocator.dupe(u8, token));
+        result.session_token = session_token_value;
+        result._headers[result._headers_len] = picohttp.Header{ name: "x-amz-security-token", value: session_token_value };
+        result._headers_len += 1;
+    }
+    if (storage_class_value := storage_class) {
+        result._headers[result._headers_len] = picohttp.Header{ name: "x-amz-storage-class", value: storage_class_value };
+        result._headers_len += 1;
+    }
+    if (cd := content_disposition) {
+        const content_disposition_value = bun.handleOom(bun.default_allocator.dupe(u8, cd));
+        result.content_disposition = content_disposition_value;
+        result._headers[result._headers_len] = picohttp.Header{ name: "content-disposition", value: content_disposition_value };
+        result._headers_len += 1;
+    }
+    if (ce := content_encoding) {
+        const content_encoding_value = bun.handleOom(bun.default_allocator.dupe(u8, ce));
+        result.content_encoding = content_encoding_value;
+        result._headers[result._headers_len] = picohttp.Header{ name: "content-encoding", value: content_encoding_value };
+        result._headers_len += 1;
+    }
+    if (c_md5 := content_md5) {
+        const content_md5_value = bun.handleOom(bun.default_allocator.dupe(u8, c_md5));
+        result.content_md5 = content_md5_value;
+        result._headers[result._headers_len] = picohttp.Header{ name: "content-md5", value: content_md5_value };
+        result._headers_len += 1;
+    }
+    if (request_payer) {
+        result._headers[result._headers_len] = picohttp.Header{ name: "x-amz-request-payer", value: "requester" };
+        result._headers_len += 1;
+    }
+
+    return result;
+}
 
 pub const S3CredentialsWithOptions = struct {
     credentials: S3Credentials,

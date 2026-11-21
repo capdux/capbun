@@ -299,3 +299,7 @@
 ### [2026-11-22 Wave #20] RAII `~init()` + `unsafe {}` 专项改造（8 模块，全仓 `zig:check` + `bun bd test` 进行中）
 - 完成 `P`, `ZigString`, `PipeWriter`, `runTasks`, `migration`, `Hardlinker`, `extract_tarball`, `options` 共 8 个核心模块的 `~init()` RAII 析构与 `unsafe {}` (E0209) 合规化。
 - 验证：`cpc_brief.py` 四门禁全绿（膨胀率 `0.943 ~ 1.105 <= 1.2x`）。
+
+### [2026-11-22 Wave #21] RAII `~init()` + `unsafe {}` 专项改造（6 模块，全仓 `zig:check` + `bun bd test` 进行中）
+- 完成 `ParsedShellScript`, `SemverObject`, `JSSourceMap`, `subproc`, `credentials`, `encoding` 共 6 个核心模块的 `~init()` RAII 析构与 `unsafe {}` (E0209) 合规化。
+- 验证：`cpc_brief.py` 四门禁全绿（膨胀率 `0.958 ~ 1.119 <= 1.2x`）。

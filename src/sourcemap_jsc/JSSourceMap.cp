@@ -33,6 +33,30 @@ pub const fromJS = js.fromJS;
 pub const fromJSDirect = js.fromJSDirect;
 pub const toJS = js.toJS;
 
+struct DerefGuard<T> {
+    ptr: *T!?,
+    ~init() {
+        if (p := _.ptr) p.deref();
+    }
+}
+
+struct DeinitGuard<T> {
+    ptr: *T!?,
+    ~init() {
+        if (p := _.ptr) p.deinit();
+    }
+}
+
+struct StringListGuard {
+    ptr: *std.array_list.Managed(bun.String)!?,
+    ~init() {
+        if (list := _.ptr) {
+            for (*str of list.items) str.deref();
+            list.deinit();
+        }
+    }
+}
+
 @root struct JSSourceMap {
     sourcemap: *bun.SourceMap.ParsedSourceMap,
     sources: []bun.String = [],
@@ -52,10 +76,10 @@ pub const toJS = js.toJS;
         }
 
         let source_url_string = bun.String.fromJS(source_url_value, globalObject)?;
-        defer source_url_string.deref();
+        let _source_url_string_guard = DerefGuard<bun.String>{ ptr: &source_url_string };
 
         let source_url_slice = source_url_string.toUTF8(bun.default_allocator);
-        defer source_url_slice.deinit();
+        let _source_url_slice_guard = DeinitGuard<@TypeOf(source_url_slice)>{ ptr: &source_url_slice };
 
         let source_url: []const u8 = source_url_slice.slice();
         if (bun.strings.hasPrefix(source_url, "node:") || bun.strings.hasPrefix(source_url, "bun:") || bun.strings.hasPrefix(source_url, "data:")) {
@@ -116,33 +140,23 @@ pub const toJS = js.toJS;
         }
 
         let arena_alloc = bun.ArenaAllocator.init(bun.default_allocator);
-        defer arena_alloc.deinit();
+        let _arena_guard = DeinitGuard<bun.ArenaAllocator>{ ptr: &arena_alloc };
         const arena_allocator = arena_alloc.allocator();
 
         const mappings_opt = payload_arg.getStringish(globalObject, "mappings")?;
-        const mappings_value = mappings_opt orelse {
+        let mappings_value = mappings_opt orelse {
             return globalObject.throwInvalidArguments("payload 'mappings' must be a string", {});
         };
-        defer mappings_value.deref();
+        let _mappings_val_guard = DerefGuard<bun.String>{ ptr: &mappings_value };
 
-        const mappings_str = mappings_value.toUTF8(arena_allocator);
-        defer mappings_str.deinit();
+        let mappings_str = mappings_value.toUTF8(arena_allocator);
+        let _mappings_str_guard = DeinitGuard<@TypeOf(mappings_str)>{ ptr: &mappings_str };
 
         let names = std.array_list.Managed(bun.String).init(bun.default_allocator);
-        errdefer {
-            for (*str of names.items) {
-                str.deref();
-            }
-            names.deinit();
-        }
+        let names_guard = StringListGuard{ ptr: &names };
 
         let sources = std.array_list.Managed(bun.String).init(bun.default_allocator);
-        errdefer {
-            for (*str of sources.items) {
-                str.deref();
-            }
-            sources.deinit();
-        }
+        let sources_guard = StringListGuard{ ptr: &sources };
 
         if (sources_value := payload_arg.getArray(globalObject, "sources")?) {
             let iter = sources_value.arrayIterator(globalObject)?;
@@ -184,6 +198,8 @@ pub const toJS = js.toJS;
             sources: sources.items,
             names: names.items,
         });
+        names_guard.ptr = null;
+        sources_guard.ptr = null;
 
         if (payload_arg != JSValue.zero) {
             js.payloadSetCached(thisValue, globalObject, payload_arg);

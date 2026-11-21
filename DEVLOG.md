@@ -1575,3 +1575,7 @@
 ## [2026-11-22 Wave #20] RAII 改造与 `unsafe {}` 经验
 - `PipeWriter.cp`：CRTP mixin `PosixPipeWriter` 中的 `tryWrite` / `tryWriteWithWriteFn` 显式标记 `static fn` 且首参命名为 `parent: *This`，避免 `this: *This` 被降级为 `*@This()`。
 - `ZigString.cp` / `options.cp`：`ZigString.cp` 集中补齐 33 处 E0209 `unsafe {}`；`options.cp` 全部 `errdefer` 转为 `DeinitGuard<T>` 并在返回前显式置空撤防。
+
+## [2026-11-22 Wave #21] RAII 改造与 `unsafe {}` 经验
+- `credentials.cp`：将 `signRequest` 逻辑提取至顶层纯 CP 函数 `s3CredentialsSignRequest` 以确保 `cpc` 完整注入 `defer __cp_deinit()`，所有权移交前显式置空切片 Guard。
+- `encoding.cp`：集中将 43 处裸指针切片与 `@alignCast`/`@intFromPtr` 收窄入 `unsafe {}`。

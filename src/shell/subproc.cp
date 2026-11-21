@@ -8,6 +8,39 @@ pub type OptFD = bun.FD?;
 pub type EnvStrZ = ([*:0]const u8)?;
 type SelfPtr = *ShellSubprocess;
 
+struct DeinitGuard<T> {
+    ptr: *T!?,
+    ~init() {
+        if (p := _.ptr) p.deinit();
+    }
+}
+
+struct DerefGuard<T> {
+    ptr: *T!?,
+    ~init() {
+        if (p := _.ptr) p.deref();
+    }
+}
+
+struct DetachGuard<T> {
+    ptr: *T!?,
+    ~init() {
+        if (p := _.ptr) p.detach();
+    }
+}
+
+struct StdioCleanupGuard<T> {
+    spawn_args: *T!?,
+    ~init() {
+        if (args := _.spawn_args) {
+            let s_idx: usize = 0;
+            while (s_idx < args.stdio.len) : (s_idx += 1) {
+                args.stdio[s_idx].deinit();
+            }
+        }
+    }
+}
+
 const StdioResult = if (Environment.isWindows) bun.spawn.WindowsSpawnResult.StdioResult else OptFD;
 
 /// Used for captured writer
@@ -235,7 +268,7 @@ pub struct SubprocCapturedWriter {
     fn doWrite(*_, chunk: []const u8) {
         if (_.dead || _.@"err" != null) return;
 
-        log("CapturedWriter(0x{x}, {s}) doWrite len={d} parent_amount={d}", .{ @intFromPtr(_), @tagName(_.parent().out_type), chunk.len, _.parent().buffered_output.len() });
+        unsafe { log("CapturedWriter(0x{x}, {s}) doWrite len={d} parent_amount={d}", .{ @intFromPtr(_), @tagName(_.parent().out_type), chunk.len, _.parent().buffered_output.len() }); }
         let enqueue_yield = _.writer.enqueue(_, null, chunk);
         enqueue_yield.run();
     }
@@ -263,7 +296,7 @@ pub struct SubprocCapturedWriter {
     }
 
     fn isDone(*_, just_written: usize): bool {
-        log("CapturedWriter(0x{x}, {s}) isDone(has_err={}, parent_state={s}, written={d}, parent_amount={d})", .{ @intFromPtr(_), @tagName(_.parent().out_type), _.@"err" != null, @tagName(_.parent().state), _.written, _.parent().buffered_output.len() });
+        unsafe { log("CapturedWriter(0x{x}, {s}) isDone(has_err={}, parent_state={s}, written={d}, parent_amount={d})", .{ @intFromPtr(_), @tagName(_.parent().out_type), _.@"err" != null, @tagName(_.parent().state), _.written, _.parent().buffered_output.len() }); }
         if (_.dead || _.@"err" != null) return true;
         const p = _.parent();
         if (p.state == .pending) return false;
@@ -271,10 +304,10 @@ pub struct SubprocCapturedWriter {
     }
 
     fn onIOWriterChunk(*_, amount: usize, e: jsc.SystemError?): Yield {
-        log("CapturedWriter({x}, {s}) onWrite({d}, has_err={}) total_written={d} total_to_write={d}", .{ @intFromPtr(_), @tagName(_.parent().out_type), amount, e != null, _.written + amount, _.parent().buffered_output.len() });
+        unsafe { log("CapturedWriter({x}, {s}) onWrite({d}, has_err={}) total_written={d} total_to_write={d}", .{ @intFromPtr(_), @tagName(_.parent().out_type), amount, e != null, _.written + amount, _.parent().buffered_output.len() }); }
         _.written += amount;
         if (err_sys := e) {
-            log("CapturedWriter(0x{x}, {s}) onWrite errno={d} errmsg={f} errfd={} syscall={f}", .{ @intFromPtr(_), @tagName(_.parent().out_type), err_sys.errno, err_sys.message, err_sys.fd, err_sys.syscall });
+            unsafe { log("CapturedWriter(0x{x}, {s}) onWrite errno={d} errmsg={f} errfd={} syscall={f}", .{ @intFromPtr(_), @tagName(_.parent().out_type), err_sys.errno, err_sys.message, err_sys.fd, err_sys.syscall }); }
             _.@"err" = err_sys;
             return _.parent().trySignalDoneToCmd();
         } else if (_.written >= _.parent().buffered_output.len() && !(_.parent().state == .pending)) {
@@ -288,7 +321,7 @@ pub struct SubprocCapturedWriter {
     }
 
     fn onClose(*_) {
-        log("CapturedWriter({x}, {s}) onClose()", .{ @intFromPtr(_), @tagName(_.parent().out_type) });
+        unsafe { log("CapturedWriter({x}, {s}) onClose()", .{ @intFromPtr(_), @tagName(_.parent().out_type) }); }
         _.parent().onCapturedWriterDone();
     }
 
@@ -329,7 +362,7 @@ pub struct ShellSubprocess {
     pub const OutKind = util.OutKind;
 
     fn onStaticPipeWriterDone(*_) {
-        log("Subproc(0x{x}) onStaticPipeWriterDone(cmd=0x{x}))", .{ @intFromPtr(_), @intFromPtr(_.cmd_parent) });
+        unsafe { log("Subproc(0x{x}) onStaticPipeWriterDone(cmd=0x{x}))", .{ @intFromPtr(_), @intFromPtr(_.cmd_parent) }); }
         _.cmd_parent.bufferedInputClose();
     }
 
@@ -696,7 +729,7 @@ pub struct ShellSubprocess {
                     _.* = .closed;
                 },
                 .pipe => |pipe| {
-                    defer pipe.detach();
+                    let _detach_guard = DetachGuard<PipeReader>{ ptr: pipe };
                     _.* = .closed;
                 },
                 else => {},
@@ -896,7 +929,7 @@ pub struct ShellSubprocess {
         notify_caller_process_already_exited: *bool,
     ): bun.shell.Result(void) {
         let arena_ = bun.ArenaAllocator.init(bun.default_allocator);
-        defer arena_.deinit();
+        let _arena_guard = DeinitGuard<bun.ArenaAllocator>{ ptr: &arena_ };
 
         let spawn_args = spawn_args_;
 
@@ -935,15 +968,7 @@ pub struct ShellSubprocess {
         // Until ownership transfers into Writable/Readable, deinit any caller-provided
         // stdio resources (memfd, ArrayBuffer.Strong, Blob) on early return so they
         // aren't leaked.
-        let stdio_consumed = false;
-        defer {
-            if (!stdio_consumed) {
-                let s_idx: usize = 0;
-                while (s_idx < spawn_args.stdio.len) : (s_idx += 1) {
-                    spawn_args.stdio[s_idx].deinit();
-                }
-            }
-        }
+        let stdio_guard = StdioCleanupGuard<SpawnArgs>{ spawn_args: spawn_args };
 
         let no_sigpipe = true;
         if (iowriter := shellio.stdout) {
@@ -998,11 +1023,13 @@ pub struct ShellSubprocess {
             return { err: { custom: bun.handleOom(bun.default_allocator.dupe(u8, "out of memory")) } };
         };
 
-        let spawn_result = switch (bun.spawn.spawnProcess(
-            &spawn_options,
-            @ptrCast(spawn_args.cmd_parent.args.items.ptr),
-            @ptrCast(spawn_args.env_array.items.ptr),
-        ) catch |e| {
+        let spawn_result = switch (unsafe {
+            bun.spawn.spawnProcess(
+                &spawn_options,
+                @ptrCast(spawn_args.cmd_parent.args.items.ptr),
+                @ptrCast(spawn_args.env_array.items.ptr),
+            )
+        } catch |e| {
             spawn_options.deinit();
             return { err: { custom: bun.handleOom(std.fmt.allocPrint(bun.default_allocator, "Failed to spawn process: {s}", .{@errorName(e)})) } };
         }) {
@@ -1042,7 +1069,7 @@ pub struct ShellSubprocess {
             cmd_parent: spawn_args.cmd_parent,
         };
         subprocess.process.setExitHandler(subprocess);
-        stdio_consumed = true;
+        stdio_guard.spawn_args = null;
 
         if (subprocess.stdin == .pipe) {
             subprocess.stdin.pipe.signal = bun.webcore.streams.Signal.init(&subprocess.stdin);
@@ -1100,7 +1127,7 @@ pub struct ShellSubprocess {
     }
 
     fn onProcessExit(*_, _: *Process, status: bun.spawn.Status, _: *const bun.spawn.Rusage) {
-        log("onProcessExit({x}, {f})", .{ @intFromPtr(this), status });
+        unsafe { log("onProcessExit({x}, {f})", .{ @intFromPtr(this), status }); }
         const exit_code: u8? = brk: {
             if (status == .exited) {
                 break :brk status.exited.code;
@@ -1156,13 +1183,13 @@ pub const PipeReader = struct {
     pub const Poll = IOReader;
 
     fn detach(*_) {
-        log("PipeReader(0x{x}, {s}) detach()", .{ @intFromPtr(_), @tagName(_.out_type) });
+        unsafe { log("PipeReader(0x{x}, {s}) detach()", .{ @intFromPtr(_), @tagName(_.out_type) }); }
         _.process = null;
         _.deref();
     }
 
     fn isDone(*_): bool {
-        log("PipeReader(0x{x}, {s}) isDone() state={s} captured_writer_done={}", .{ @intFromPtr(_), @tagName(_.out_type), @tagName(_.state), _.captured_writer.isDone(0) });
+        unsafe { log("PipeReader(0x{x}, {s}) isDone() state={s} captured_writer_done={}", .{ @intFromPtr(_), @tagName(_.out_type), @tagName(_.state), _.captured_writer.isDone(0) }); }
         if (_.state == .pending) return false;
         return _.captured_writer.isDone(0);
     }
@@ -1181,7 +1208,7 @@ pub const PipeReader = struct {
             stdio_result: result,
             out_type: out_type,
         });
-        log("PipeReader(0x{x}, {s}) create()", .{ @intFromPtr(pipe_reader), @tagName(pipe_reader.out_type) });
+        unsafe { log("PipeReader(0x{x}, {s}) create()", .{ @intFromPtr(pipe_reader), @tagName(pipe_reader.out_type) }); }
 
         if (cap := capture) {
             pipe_reader.captured_writer.writer = cap.dupeRef();
@@ -1234,9 +1261,9 @@ pub const PipeReader = struct {
     pub const toJS = toReadableStream;
 
     static fn onReadChunk(ptr: *!, chunk: []const u8, has_more: bun.io.ReadState): bool {
-        let reader: *PipeReader = @ptrCast(@alignCast(ptr));
+        let reader: *PipeReader = unsafe { @ptrCast(@alignCast(ptr)) };
         reader.buffered_output.append(chunk);
-        log("PipeReader(0x{x}, {s}) onReadChunk(chunk_len={d}, has_more={s})", .{ @intFromPtr(reader), @tagName(reader.out_type), chunk.len, @tagName(has_more) });
+        unsafe { log("PipeReader(0x{x}, {s}) onReadChunk(chunk_len={d}, has_more={s})", .{ @intFromPtr(reader), @tagName(reader.out_type), chunk.len, @tagName(has_more) }); }
 
         reader.captured_writer.doWrite(chunk);
 
@@ -1255,13 +1282,13 @@ pub const PipeReader = struct {
     }
 
     fn onReaderDone(*_) {
-        log("onReaderDone(0x{x}, {s})", .{ @intFromPtr(_), @tagName(_.out_type) });
+        unsafe { log("onReaderDone(0x{x}, {s})", .{ @intFromPtr(_), @tagName(_.out_type) }); }
         const owned = _.toOwnedSlice();
         _.state = { done: owned };
         if (!_.isDone()) return;
         // we need to ref because the process might be done and deref inside signalDoneToCmd and we wanna to keep it alive to check this.process
         _.ref();
-        defer _.deref();
+        let _deref_guard = DerefGuard<PipeReader>{ ptr: _ };
         let done_yield = _.trySignalDoneToCmd();
         done_yield.run();
 
@@ -1276,7 +1303,7 @@ pub const PipeReader = struct {
         *_,
     ): Yield {
         if (!_.isDone()) return .suspended;
-        log("signalDoneToCmd ({x}: {s}) isDone={}", .{ @intFromPtr(_), @tagName(_.out_type), _.isDone() });
+        unsafe { log("signalDoneToCmd ({x}: {s}) isDone={}", .{ @intFromPtr(_), @tagName(_.out_type), _.isDone() }); }
         if (bun.Environment.allow_assert) assert(_.process != null);
         if (proc := _.process) {
             const cmd = proc.cmd_parent;
@@ -1351,7 +1378,7 @@ pub const PipeReader = struct {
     }
 
     fn toReadableStream(*_, globalObject: *jsc.JSGlobalObject): jsc.JSValue {
-        defer _.deinit();
+        let _deinit_guard = DeinitGuard<PipeReader>{ ptr: _ };
 
         switch (_.state) {
             .pending => {
@@ -1385,14 +1412,14 @@ pub const PipeReader = struct {
     }
 
     fn onReaderError(*_, e: bun.sys.Error) {
-        log("PipeReader(0x{x}) onReaderError {f}", .{ @intFromPtr(_), e });
+        unsafe { log("PipeReader(0x{x}) onReaderError {f}", .{ @intFromPtr(_), e }); }
         if (_.state == .done) {
             bun.default_allocator.free(_.state.done);
         }
         _.state = { err: e.toSystemError() };
         // we need to ref because the process might be done and deref inside signalDoneToCmd and we wanna to keep it alive to check this.process
         _.ref();
-        defer _.deref();
+        let _deref_guard = DerefGuard<PipeReader>{ ptr: _ };
         let done_yield = _.trySignalDoneToCmd();
         done_yield.run();
         if (process := _.process) {
@@ -1425,7 +1452,7 @@ pub const PipeReader = struct {
     }
 
     fn deinit(*_) {
-        log("PipeReader(0x{x}, {s}) deinit()", .{ @intFromPtr(_), @tagName(_.out_type) });
+        unsafe { log("PipeReader(0x{x}, {s}) deinit()", .{ @intFromPtr(_), @tagName(_.out_type) }); }
         if (comptime Environment.isPosix) {
             assert(_.reader.isDone() || _.state == .err);
         }

@@ -4,787 +4,384 @@
 const std = @import("std");
 const string = []const u8;
 
+pub fn CpResult(comptime __T: type, comptime __E: type) type {
+    return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
+}
+const __CpErr = struct {
+    code: i32 = 0,
+    msg: []const u8 = "",
+    cause: ?*const anyopaque = null,
+    cause_type_id: u64 = 0,
+    pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
+    pub fn init(__cp_code: i32, __cp_msg: []const u8) __CpErr { return __CpErr{ .code = __cp_code, .msg = __cp_msg }; }
+    pub fn with_cause(__cp_self: __CpErr, __cp_cause: anytype) __CpErr { const __CpCType = @TypeOf(__cp_cause); var __cp_ptr: ?*const anyopaque = null; var __cp_tid: u64 = 0; if (comptime @typeInfo(__CpCType) == .pointer) { __cp_ptr = @ptrCast(__cp_cause); const __CpChild = @typeInfo(__CpCType).pointer.child; if (comptime @hasDecl(__CpChild, "__TYPE_ID")) { __cp_tid = __CpChild.__TYPE_ID; } } else if (comptime (@typeInfo(__CpCType) == .@"struct" or @typeInfo(__CpCType) == .@"union") and @hasField(__CpCType, "ptr")) { __cp_ptr = @ptrCast(__cp_cause.ptr); if (comptime @hasField(__CpCType, "vtable")) { __cp_tid = __cp_cause.vtable.__type_id; } } else if (comptime @typeInfo(__CpCType) == .optional) { if (__cp_cause) |__cp_c| return __cp_self.with_cause(__cp_c); } else { if (comptime @hasDecl(__CpCType, "__TYPE_ID")) { __cp_tid = __CpCType.__TYPE_ID; } __cp_ptr = @ptrCast(&__cp_cause); } return __CpErr{ .code = __cp_self.code, .msg = __cp_self.msg, .cause = __cp_ptr, .cause_type_id = __cp_tid }; }
+    pub fn downcast(__cp_self: __CpErr, comptime __CpTarget: type) ?*const __CpTarget {
+        if (__cp_self.cause) |__cp_c| {
+            if (comptime @hasDecl(__CpTarget, "__TYPE_ID")) {
+                if (__cp_self.cause_type_id != 0 and __cp_self.cause_type_id != __CpTarget.__TYPE_ID) {
+                    return null;
+                }
+            }
+            return @ptrCast(@alignCast(__cp_c));
+        }
+        return null;
+    }
+};
+pub const Err = __CpErr;
+pub const Error = __CpErr;
+fn is_cp_result(comptime __T: type) bool {
+    return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
+}
 fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
+fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
+fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
+fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
+fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
+fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == __CpErr) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return __CpErr{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return __CpErr{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return __CpErr{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return __CpErr.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return __CpErr.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return __CpErr{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
+fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
+fn cp_fmt(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == bool) { return if (v) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{v}) catch unreachable; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{v}) catch unreachable; } else if (comptime @typeInfo(__T) == .@"enum") { return @tagName(v); } else if (comptime @typeInfo(__T) == .optional) { if (v) |unwrapped| { return cp_fmt(unwrapped); } else { return "null"; } } else { return std.fmt.allocPrint(std.heap.page_allocator, "{any}", .{v}) catch unreachable; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+fn cp_shl(val: anytype, shift: anytype) @TypeOf(val) {
+    const __T = @TypeOf(val);
+    if (comptime @typeInfo(__T) == .comptime_int) return val << shift;
+    if (comptime @typeInfo(__T) == .int) {
+        const ShiftType = std.math.Log2Int(__T);
+        const u_shift: usize = if (@typeInfo(@TypeOf(shift)) == .int and @typeInfo(@TypeOf(shift)).int.signedness == .signed) @intCast(@max(0, shift)) else @intCast(shift);
+        return val << @as(ShiftType, @truncate(u_shift));
+    }
+    return val << shift;
+}
+fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
+    const __T = @TypeOf(val);
+    if (comptime @typeInfo(__T) == .comptime_int) return val >> shift;
+    if (comptime @typeInfo(__T) == .int) {
+        const ShiftType = std.math.Log2Int(__T);
+        const u_shift: usize = if (@typeInfo(@TypeOf(shift)) == .int and @typeInfo(@TypeOf(shift)).int.signedness == .signed) @intCast(@max(0, shift)) else @intCast(shift);
+        return val >> @as(ShiftType, @truncate(u_shift));
+    }
+    return val >> shift;
+}
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
+
 const ACL = @import("./acl.zig").ACL;
 const StorageClass = @import("./storage_class.zig").StorageClass;
 pub const bun = @import("bun");
 pub const multipart_options = @import("../runtime/webcore/s3/multipart_options.zig");
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    {
+                        _ = p.deinit();
+                    }
+                }
+        }
+    };
+}
+
+pub const SliceFreeGuard = struct {
+    slice: ?[]const u8,
+    allocator: std.mem.Allocator,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *SliceFreeGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (self.slice) |s| {
+                _ = &s;
+                _ = self.allocator.free(s);
+            }
+    }
+};
+
 const MultiPartUploadOptions = multipart_options.MultiPartUploadOptions;
 const jsc = bun.jsc;
 const picohttp = bun.picohttp;
 const strings = bun.strings;
 pub const S3Credentials = struct {
     ref_count: RefCount,
-    accessKeyId: string,
-    secretAccessKey: string,
-    region: string,
-    endpoint: string,
-    bucket: string,
-    sessionToken: string,
+    accessKeyId: []const u8,
+    secretAccessKey: []const u8,
+    region: []const u8,
+    endpoint: []const u8,
+    bucket: []const u8,
+    sessionToken: []const u8,
     storage_class: ?StorageClass = null,
     insecure_http: bool = false,
     virtual_hosted_style: bool = false,
 
-    const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, .{});
-    pub const ref = RefCount.ref;
-    pub const deref = RefCount.deref;
+pub fn estimatedSize(self: *const @This()) usize {
+            return (((((@sizeOf(S3Credentials) + self.accessKeyId.len) + self.region.len) + self.secretAccessKey.len) + self.endpoint.len) + self.bucket.len);
+    }
 
-        pub fn estimatedSize(this: *const @This()) usize {
-            return @sizeOf(S3Credentials) + this.accessKeyId.len + this.region.len + this.secretAccessKey.len + this.endpoint.len + this.bucket.len;
-        }
-
-        fn hashConst(acl: []const u8) u64 {
+pub fn hashConst(acl: []const u8) u64 {
             var hasher = std.hash.Wyhash.init(0);
+            _ = &hasher;
             var remain = acl;
-
-            var buf: [@sizeOf(@TypeOf(hasher.buf))]u8 = undefined;
-
-            while (remain.len > 0) {
+            _ = &remain;
+            var buf: struct { @sizeOf(@TypeOf(hasher.buf)) } = undefined;
+            _ = &buf;
+            u8 = undefined;
+            while ((remain.len > 0)) {
                 const end = @min(hasher.buf.len, remain.len);
-
-                hasher.update(strings.copyLowercaseIfNeeded(remain[0..end], &buf));
+                _ = hasher.update(strings.copyLowercaseIfNeeded(remain[0..end], (&buf)));
                 remain = remain[end..];
             }
-
             return hasher.final();
-        }
+    }
 
-        pub const getCredentialsWithOptions = @import("../runtime/webcore/s3/credentials_jsc.zig").getCredentialsWithOptions;
+pub fn dupe(self: *const @This()) *S3Credentials {
+            return bun.new(S3Credentials, .{ .ref_count = .init(), .accessKeyId = (if ((self.accessKeyId.len > 0)) bun.handleOom(bun.default_allocator.dupe(u8, self.accessKeyId)) else ""), .secretAccessKey = (if ((self.secretAccessKey.len > 0)) bun.handleOom(bun.default_allocator.dupe(u8, self.secretAccessKey)) else ""), .region = (if ((self.region.len > 0)) bun.handleOom(bun.default_allocator.dupe(u8, self.region)) else ""), .endpoint = (if ((self.endpoint.len > 0)) bun.handleOom(bun.default_allocator.dupe(u8, self.endpoint)) else ""), .bucket = (if ((self.bucket.len > 0)) bun.handleOom(bun.default_allocator.dupe(u8, self.bucket)) else ""), .sessionToken = (if ((self.sessionToken.len > 0)) bun.handleOom(bun.default_allocator.dupe(u8, self.sessionToken)) else ""), .insecure_http = self.insecure_http, .virtual_hosted_style = self.virtual_hosted_style });
+    }
 
-        pub fn dupe(this: *const @This()) *S3Credentials {
-            return bun.new(S3Credentials, .{
-                .ref_count = .init(),
-                .accessKeyId = if (this.accessKeyId.len > 0)
-                    bun.handleOom(bun.default_allocator.dupe(u8, this.accessKeyId))
-                else
-                    "",
-
-                .secretAccessKey = if (this.secretAccessKey.len > 0)
-                    bun.handleOom(bun.default_allocator.dupe(u8, this.secretAccessKey))
-                else
-                    "",
-
-                .region = if (this.region.len > 0)
-                    bun.handleOom(bun.default_allocator.dupe(u8, this.region))
-                else
-                    "",
-
-                .endpoint = if (this.endpoint.len > 0)
-                    bun.handleOom(bun.default_allocator.dupe(u8, this.endpoint))
-                else
-                    "",
-
-                .bucket = if (this.bucket.len > 0)
-                    bun.handleOom(bun.default_allocator.dupe(u8, this.bucket))
-                else
-                    "",
-
-                .sessionToken = if (this.sessionToken.len > 0)
-                    bun.handleOom(bun.default_allocator.dupe(u8, this.sessionToken))
-                else
-                    "",
-
-                .insecure_http = this.insecure_http,
-                .virtual_hosted_style = this.virtual_hosted_style,
-            });
-        }
-        fn deinit(this: *@This()) void {
-            if (this.accessKeyId.len > 0) {
-                bun.default_allocator.free(this.accessKeyId);
+pub fn deinit(self: *@This()) void {
+            if ((self.accessKeyId.len > 0)) {
+                _ = bun.default_allocator.free(self.accessKeyId);
             }
-            if (this.secretAccessKey.len > 0) {
-                bun.default_allocator.free(this.secretAccessKey);
+            if ((self.secretAccessKey.len > 0)) {
+                _ = bun.default_allocator.free(self.secretAccessKey);
             }
-            if (this.region.len > 0) {
-                bun.default_allocator.free(this.region);
+            if ((self.region.len > 0)) {
+                _ = bun.default_allocator.free(self.region);
             }
-            if (this.endpoint.len > 0) {
-                bun.default_allocator.free(this.endpoint);
+            if ((self.endpoint.len > 0)) {
+                _ = bun.default_allocator.free(self.endpoint);
             }
-            if (this.bucket.len > 0) {
-                bun.default_allocator.free(this.bucket);
+            if ((self.bucket.len > 0)) {
+                _ = bun.default_allocator.free(self.bucket);
             }
-            if (this.sessionToken.len > 0) {
-                bun.default_allocator.free(this.sessionToken);
+            if ((self.sessionToken.len > 0)) {
+                _ = bun.default_allocator.free(self.sessionToken);
             }
-            bun.destroy(this);
-        }
+            _ = bun.destroy(self);
+    }
 
-        const log = bun.Output.scoped(.AWS, .visible);
-
-        const DateResult = struct {
-            // numeric representation of year, month and day (excluding time components)
-            numeric_day: u64,
-            date: []const u8,
-        };
-
-        fn getAMZDate(allocator: std.mem.Allocator) DateResult {
-            // We can also use Date.now() but would be slower and would add jsc dependency
-            // var buffer: [28]u8 = undefined;
-            // the code bellow is the same as new Date(Date.now()).toISOString()
-            // Date.now() ISO string via JS removed; uses libc gmtime_r
-
-            // Create UTC timestamp
+pub fn getAMZDate(allocator: std.mem.Allocator) DateResult {
             const secs: u64 = @intCast(@divFloor(std.time.milliTimestamp(), 1000));
             const utc_seconds = std.time.epoch.EpochSeconds{ .secs = secs };
             const utc_day = utc_seconds.getEpochDay();
             const year_and_day = utc_day.calculateYearDay();
             const month_and_day = year_and_day.calculateMonthDay();
-            // Get UTC date components
             const year = year_and_day.year;
-            const day = @as(u32, month_and_day.day_index) + 1; // this starts in 0
-            const month = month_and_day.month.numeric(); // starts in 1
-
-            // Get UTC time components
+            const day = ((if (comptime @typeInfo(@TypeOf(month_and_day.day_index)) == .@"enum") cp_cast_int(u32, @intFromEnum(month_and_day.day_index)) else cp_cast_int(u32, month_and_day.day_index)) + 1);
+            const month = month_and_day.month.numeric();
             const time = utc_seconds.getDaySeconds();
             const hours = time.getHoursIntoDay();
             const minutes = time.getMinutesIntoHour();
             const seconds = time.getSecondsIntoMinute();
+            return .{ .numeric_day = (secs - time.secs), .date = (blk_catch_0: { break :blk_catch_0 ((std.fmt.allocPrint(allocator, "{d:0>4}{d:0>2}{d:0>2}T{d:0>2}{d:0>2}{d:0>2}Z", .{ year, month, day, hours, minutes, seconds })) catch |err| { _ = &err; break :blk_catch_0 bun.handleOom(err); }); }) };
+    }
 
-            // Format the date
-            return .{
-                .numeric_day = secs - time.secs,
-                .date = std.fmt.allocPrint(allocator, "{d:0>4}{d:0>2}{d:0>2}T{d:0>2}{d:0>2}{d:0>2}Z", .{
-                    year,
-                    month,
-                    day,
-                    hours,
-                    minutes,
-                    seconds,
-                }) catch |err| bun.handleOom(err),
-            };
-        }
-
-        const DIGESTED_HMAC_256_LEN = 32;
-        pub const SignResult = struct {
-            amz_date: []const u8,
-            host: []const u8,
-            authorization: []const u8,
-            url: []const u8,
-
-            content_disposition: []const u8 = "",
-            content_encoding: []const u8 = "",
-            content_md5: []const u8 = "",
-            session_token: []const u8 = "",
-            acl: ?ACL = null,
-            storage_class: ?StorageClass = null,
-            request_payer: bool = false,
-            _headers: [MAX_HEADERS]picohttp.Header = .{
-                .{ .name = "", .value = "" },
-                .{ .name = "", .value = "" },
-                .{ .name = "", .value = "" },
-                .{ .name = "", .value = "" },
-                .{ .name = "", .value = "" },
-                .{ .name = "", .value = "" },
-                .{ .name = "", .value = "" },
-                .{ .name = "", .value = "" },
-                .{ .name = "", .value = "" },
-                .{ .name = "", .value = "" },
-                .{ .name = "", .value = "" },
-            },
-            _headers_len: u8 = 0,
-
-            pub const MAX_HEADERS = 11;
-
-            pub fn headers(this: *const @This()) []const picohttp.Header {
-                return this._headers[0..this._headers_len];
-            }
-
-            pub fn mixWithHeader(this: *const @This(), headers_buffer: []picohttp.Header, header: picohttp.Header) []const picohttp.Header {
-                // copy the headers to buffer
-                const len = this._headers_len;
-                for (this._headers[0..len], 0..len) |existing_header, i| {
-                    headers_buffer[i] = existing_header;
-                }
-                headers_buffer[len] = header;
-                return headers_buffer[0 .. len + 1];
-            }
-
-            pub fn deinit(this: *const @This()) void {
-                if (this.amz_date.len > 0) {
-                    bun.freeSensitive(bun.default_allocator, this.amz_date);
-                }
-
-                if (this.session_token.len > 0) {
-                    bun.freeSensitive(bun.default_allocator, this.session_token);
-                }
-
-                if (this.content_disposition.len > 0) {
-                    bun.freeSensitive(bun.default_allocator, this.content_disposition);
-                }
-
-                if (this.content_encoding.len > 0) {
-                    bun.freeSensitive(bun.default_allocator, this.content_encoding);
-                }
-
-                if (this.host.len > 0) {
-                    bun.freeSensitive(bun.default_allocator, this.host);
-                }
-
-                if (this.authorization.len > 0) {
-                    bun.freeSensitive(bun.default_allocator, this.authorization);
-                }
-
-                if (this.url.len > 0) {
-                    bun.freeSensitive(bun.default_allocator, this.url);
-                }
-
-                if (this.content_md5.len > 0) {
-                    bun.default_allocator.free(this.content_md5);
-                }
-            }
-        };
-
-        pub const SignQueryOptions = struct {
-            expires: usize = 86400,
-        };
-        pub const SignOptions = struct {
-            path: []const u8,
-            method: bun.http.Method,
-            content_hash: ?[]const u8 = null,
-            content_md5: ?[]const u8 = null,
-            search_params: ?[]const u8 = null,
-            content_disposition: ?[]const u8 = null,
-            content_type: ?[]const u8 = null,
-            content_encoding: ?[]const u8 = null,
-            acl: ?ACL = null,
-            storage_class: ?StorageClass = null,
-            request_payer: bool = false,
-        };
-        /// This is not used for signing but for console.log output, is just nice to have
-        pub fn guessBucket(endpoint: []const u8) ?[]const u8 {
-            // check if is amazonaws.com
+pub fn guessBucket(endpoint: []const u8) ?[]const u8 {
             if (strings.indexOf(endpoint, ".amazonaws.com")) |_| {
-                // check if is .s3. virtual host style
                 if (strings.indexOf(endpoint, ".s3.")) |end| {
-                    // its https://bucket-name.s3.region-code.amazonaws.com/key-name
-                    const start = strings.indexOf(endpoint, "/") orelse {
-                        return endpoint[0..end];
-                    };
-                    return endpoint[start + 1 .. end];
-                }
-            } else if (strings.indexOf(endpoint, ".r2.cloudflarestorage.com")) |r2_start| {
-                // check if is <BUCKET>.<ACCOUNT_ID>.r2.cloudflarestorage.com
-                const end = strings.indexOf(endpoint, ".") orelse return null; // actually unreachable
-                if (end > 0 and r2_start == end) {
-                    // its https://<ACCOUNT_ID>.r2.cloudflarestorage.com
-                    return null;
-                }
-                // ok its virtual host style
-                const start = strings.indexOf(endpoint, "/") orelse {
+                    _ = &end;
+                    const start = ((strings.indexOf(endpoint, "/")) orelse {
                     return endpoint[0..end];
-                };
-                return endpoint[start + 1 .. end];
+});
+                    return endpoint[(start + 1)..end];
+                }
+            } else {
+                if (strings.indexOf(endpoint, ".r2.cloudflarestorage.com")) |r2_start| {
+                    _ = &r2_start;
+                    const end = ((strings.indexOf(endpoint, ".")) orelse { return null; });
+                    if (((end > 0) and (r2_start == end))) {
+                        return null;
+                    }
+                    const start = ((strings.indexOf(endpoint, "/")) orelse {
+                    return endpoint[0..end];
+});
+                    return endpoint[(start + 1)..end];
+                }
             }
             return null;
-        }
-        pub fn guessRegion(endpoint: []const u8) []const u8 {
-            if (endpoint.len > 0) {
-                if (strings.endsWith(endpoint, ".r2.cloudflarestorage.com")) return "auto";
+    }
+
+pub fn guessRegion(endpoint: []const u8) []const u8 {
+            if ((endpoint.len > 0)) {
+                if (strings.endsWith(endpoint, ".r2.cloudflarestorage.com")) {
+                    return "auto";
+                }
                 if (strings.indexOf(endpoint, ".amazonaws.com")) |end| {
+                    _ = &end;
                     if (strings.indexOf(endpoint, "s3.")) |start| {
-                        return endpoint[start + 3 .. end];
+                        _ = &start;
+                        return endpoint[(start + 3)..end];
                     }
                 }
-                // endpoint is informed but is not s3 so auto detect
                 return "auto";
             }
-
-            // no endpoint so we default to us-east-1 because s3.us-east-1.amazonaws.com is the default endpoint
             return "us-east-1";
-        }
-        fn toHexChar(value: u8) !u8 {
-            return switch (value) {
-                0...9 => value + '0',
-                10...15 => (value - 10) + 'A',
-                else => error.InvalidHexChar,
-            };
-        }
-        pub fn encodeURIComponent(input: []const u8, buffer: []u8, comptime encode_slash: bool) ![]const u8 {
+    }
+
+pub fn toHexChar(value: u8) !u8 {
+            return (switch (value) {
+0...9 => (value + 48),
+10...15 => ((value - 10) + 65),
+else => error.InvalidHexChar,
+});
+    }
+
+pub fn encodeURIComponent(input: []const u8, buffer: []u8, comptime encode_slash: bool) ![]const u8 {
             var written: usize = 0;
-
+            _ = &written;
             for (input) |c| {
+                _ = &c;
                 switch (c) {
-                    // RFC 3986 Unreserved Characters (do not encode)
-                    'A'...'Z', 'a'...'z', '0'...'9', '-', '_', '.', '~' => {
-                        if (written >= buffer.len) return error.BufferTooSmall;
-                        buffer[written] = c;
-                        written += 1;
-                    },
-                    // All other characters need to be percent-encoded
-                    else => {
-                        if (!encode_slash and (c == '/' or c == '\\')) {
-                            if (written >= buffer.len) return error.BufferTooSmall;
-                            buffer[written] = if (c == '\\') '/' else c;
-                            written += 1;
-                            continue;
-                        }
-                        if (written + 3 > buffer.len) return error.BufferTooSmall;
-                        buffer[written] = '%';
-                        // Convert byte to hex
-                        const high_nibble: u8 = (c >> 4) & 0xF;
-                        const low_nibble: u8 = c & 0xF;
-                        buffer[written + 1] = try toHexChar(high_nibble);
-                        buffer[written + 2] = try toHexChar(low_nibble);
-                        written += 3;
-                    },
+65...90, 97...122, 48...57, '-', '_', '.', '~' => {
+if ((written >= buffer.len)) {
+                    return error.BufferTooSmall;
                 }
+                buffer[cp_cast_int(usize, written)] = c;
+                written = (written + 1);
+},
+else => {
+if (((!encode_slash) and ((c == 47) or (c == 92)))) {
+                    if ((written >= buffer.len)) {
+                        return error.BufferTooSmall;
+                    }
+                    buffer[cp_cast_int(usize, written)] = (if ((c == 92)) 47 else c);
+                    written = (written + 1);
+                    continue;
+                }
+                if (((written + 3) > buffer.len)) {
+                    return error.BufferTooSmall;
+                }
+                buffer[cp_cast_int(usize, written)] = 37;
+                const high_nibble: u8 = (cp_shr(c, 4) & 15);
+                const low_nibble: u8 = (c & 15);
+                buffer[cp_cast_int(usize, (written + 1))] = try toHexChar(high_nibble);
+                buffer[cp_cast_int(usize, (written + 2))] = try toHexChar(low_nibble);
+                written = (written + 3);
+},
+}
             }
-
             return buffer[0..written];
-        }
+    }
 
-        fn normalizeName(name: []const u8) []const u8 {
-            if (name.len == 0) return name;
+pub fn normalizeName(name: []const u8) []const u8 {
+            if ((name.len == 0)) {
+                return name;
+            }
             return std.mem.trim(u8, name, "/\\");
-        }
-
-        pub fn signRequest(this: *const @This(), signOptions: SignOptions, comptime allow_empty_path: bool, signQueryOption: ?SignQueryOptions) !SignResult {
-            const method = signOptions.method;
-            const request_path = signOptions.path;
-            const content_hash = signOptions.content_hash;
-            var content_md5 = signOptions.content_md5;
-
-            if (content_md5) |content_md5_val| {
-                const len = bun.base64.encodeLen(content_md5_val);
-                const content_md5_as_base64 = bun.handleOom(bun.default_allocator.alloc(u8, len));
-                content_md5 = content_md5_as_base64[0..bun.base64.encode(content_md5_as_base64, content_md5_val)];
-            }
-
-            const search_params = signOptions.search_params;
-
-            var content_disposition = signOptions.content_disposition;
-            if (content_disposition != null and content_disposition.?.len == 0) {
-                content_disposition = null;
-            }
-            var content_type = signOptions.content_type;
-            if (content_type != null and content_type.?.len == 0) {
-                content_type = null;
-            }
-            var content_encoding = signOptions.content_encoding;
-            if (content_encoding != null and content_encoding.?.len == 0) {
-                content_encoding = null;
-            }
-            const session_token: ?[]const u8 = if (this.sessionToken.len == 0) null else this.sessionToken;
-
-            var acl: ?[]const u8 = null;
-            if (signOptions.acl != null) {
-                acl = signOptions.acl.?.toString();
-            }
-
-            var storage_class: ?[]const u8 = null;
-            if (signOptions.storage_class != null) {
-                storage_class = signOptions.storage_class.?.toString();
-            }
-
-            if (this.accessKeyId.len == 0 or this.secretAccessKey.len == 0) return error.MissingCredentials;
-            const signQuery = signQueryOption != null;
-            var expires: @TypeOf(signQueryOption.?.expires) = 0;
-            if (signQueryOption != null) {
-                expires = signQueryOption.?.expires;
-            }
-            const method_name = switch (method) {
-                .GET => "GET",
-                .POST => "POST",
-                .PUT => "PUT",
-                .DELETE => "DELETE",
-                .HEAD => "HEAD",
-                else => return error.InvalidMethod,
-            };
-
-            const region = if (this.region.len > 0) this.region else guessRegion(this.endpoint);
-            var full_path = request_path;
-            // handle \\ on bucket name
-            if (strings.startsWith(full_path, "/")) {
-                full_path = full_path[1..];
-            } else if (strings.startsWith(full_path, "\\")) {
-                full_path = full_path[1..];
-            }
-
-            var path: []const u8 = full_path;
-            var bucket: []const u8 = this.bucket;
-
-            if (!this.virtual_hosted_style) {
-                if (bucket.len == 0) {
-                    // guess bucket using path
-                    if (strings.indexOf(full_path, "/")) |end| {
-                        if (strings.indexOf(full_path, "\\")) |backslash_index| {
-                            if (backslash_index < end) {
-                                bucket = full_path[0..backslash_index];
-                                path = full_path[backslash_index + 1 ..];
-                            }
-                        }
-                        bucket = full_path[0..end];
-                        path = full_path[end + 1 ..];
-                    } else if (strings.indexOf(full_path, "\\")) |backslash_index| {
-                        bucket = full_path[0..backslash_index];
-                        path = full_path[backslash_index + 1 ..];
-                    } else {
-                        return error.InvalidPath;
-                    }
-                }
-            }
-
-            path = normalizeName(path);
-            bucket = normalizeName(bucket);
-
-            // if we allow path.len == 0 it will list the bucket for now we disallow
-            if (!allow_empty_path and path.len == 0) return error.InvalidPath;
-
-            var normalized_path_buffer: [1024 + 63 + 2]u8 = undefined; // 1024 max key size and 63 max bucket name
-            var path_buffer: [1024]u8 = undefined;
-            var bucket_buffer: [63]u8 = undefined;
-            bucket = encodeURIComponent(bucket, &bucket_buffer, false) catch return error.InvalidPath;
-            path = encodeURIComponent(path, &path_buffer, false) catch return error.InvalidPath;
-            // Default to https. Only use http if they explicit pass "http://" as the endpoint.
-            const protocol = if (this.insecure_http) "http" else "https";
-
-            // detect service name and host from region or endpoint
-            var endpoint = this.endpoint;
-            var extra_path: []const u8 = "";
-            const host = brk_host: {
-                if (this.endpoint.len > 0) {
-                    if (this.endpoint.len >= 2048) return error.InvalidEndpoint;
-                    var host = this.endpoint;
-                    if (bun.strings.indexOf(this.endpoint, "/")) |index| {
-                        host = this.endpoint[0..index];
-                        extra_path = this.endpoint[index..];
-                    }
-                    // only the host part is needed here
-                    break :brk_host try bun.default_allocator.dupe(u8, host);
-                } else {
-                    if (this.virtual_hosted_style) {
-                        // virtual hosted style requires a bucket name if an endpoint is not provided
-                        if (bucket.len == 0) {
-                            return error.InvalidEndpoint;
-                        }
-                        // default to https://<BUCKET_NAME>.s3.<REGION>.amazonaws.com/
-                        endpoint = try std.fmt.allocPrint(bun.default_allocator, "{s}.s3.{s}.amazonaws.com", .{ bucket, region });
-                        break :brk_host endpoint;
-                    }
-                    endpoint = try std.fmt.allocPrint(bun.default_allocator, "s3.{s}.amazonaws.com", .{region});
-                    break :brk_host endpoint;
-                }
-            };
-            errdefer bun.default_allocator.free(host);
-            const normalizedPath = brk: {
-                if (this.virtual_hosted_style) {
-                    break :brk std.fmt.bufPrint(&normalized_path_buffer, "{s}/{s}", .{ extra_path, path }) catch return error.InvalidPath;
-                } else {
-                    break :brk std.fmt.bufPrint(&normalized_path_buffer, "{s}/{s}/{s}", .{ extra_path, bucket, path }) catch return error.InvalidPath;
-                }
-            };
-
-            const date_result = getAMZDate(bun.default_allocator);
-            const amz_date = date_result.date;
-            errdefer bun.default_allocator.free(amz_date);
-
-            const amz_day = amz_date[0..8];
-            const request_payer = signOptions.request_payer;
-            const header_key = SignedHeaders.Key{
-                .content_disposition = content_disposition != null,
-                .content_encoding = content_encoding != null,
-                .content_md5 = content_md5 != null,
-                .acl = acl != null,
-                .request_payer = request_payer,
-                .session_token = session_token != null,
-                .storage_class = storage_class != null,
-            };
-            const signed_headers = if (signQuery) "host" else SignedHeaders.get(header_key);
-
-            const service_name = "s3";
-
-            var aws_content_hash: []const u8 = "UNSIGNED-PAYLOAD";
-            if (content_hash != null) {
-                aws_content_hash = content_hash.?;
-            }
-            var tmp_buffer: [4096]u8 = undefined;
-
-            const authorization = brk: {
-                // we hash the hash so we need 2 buffers
-                var hmac_sig_service: [bun.BoringSSL.c.EVP_MAX_MD_SIZE]u8 = undefined;
-                var hmac_sig_service2: [bun.BoringSSL.c.EVP_MAX_MD_SIZE]u8 = undefined;
-
-                const sigDateRegionServiceReq = brk_sign: {
-                    const key = try std.fmt.bufPrint(&tmp_buffer, "{s}{s}{s}", .{ region, service_name, this.secretAccessKey });
-                    var cache = (jsc.VirtualMachine.getMainThreadVM() orelse jsc.VirtualMachine.get()).rareData().awsCache();
-                    if (cache.get(date_result.numeric_day, key)) |cached| {
-                        break :brk_sign cached;
-                    }
-                    // not cached yet lets generate a new one
-                    const sigDate = bun.hmac.generate(try std.fmt.bufPrint(&tmp_buffer, "AWS4{s}", .{this.secretAccessKey}), amz_day, .sha256, &hmac_sig_service) orelse return error.FailedToGenerateSignature;
-                    const sigDateRegion = bun.hmac.generate(sigDate, region, .sha256, &hmac_sig_service2) orelse return error.FailedToGenerateSignature;
-                    const sigDateRegionService = bun.hmac.generate(sigDateRegion, service_name, .sha256, &hmac_sig_service) orelse return error.FailedToGenerateSignature;
-                    const result = bun.hmac.generate(sigDateRegionService, "aws4_request", .sha256, &hmac_sig_service2) orelse return error.FailedToGenerateSignature;
-
-                    cache.set(date_result.numeric_day, key, hmac_sig_service2[0..DIGESTED_HMAC_256_LEN].*);
-                    break :brk_sign result;
-                };
-                if (signQuery) {
-                    var token_encoded_buffer: [2048]u8 = undefined; // token is normaly like 600-700 but can be up to 2k
-                    var encoded_session_token: ?[]const u8 = null;
-                    if (session_token) |token| {
-                        encoded_session_token = encodeURIComponent(token, &token_encoded_buffer, true) catch return error.InvalidSessionToken;
-                    }
-
-                    var content_md5_encoded_buffer: [128]u8 = undefined; // MD5 as base64 (which is required for AWS SigV4) is always 44, when encoded its always 46 (44 + ==)
-                    var encoded_content_md5: ?[]const u8 = null;
-
-                    if (content_md5) |content_md5_value| {
-                        encoded_content_md5 = encodeURIComponent(content_md5_value, &content_md5_encoded_buffer, true) catch return error.FailedToGenerateSignature;
-                    }
-
-                    // Encode response override parameters for presigned URLs
-                    var content_disposition_encoded_buffer: [512]u8 = undefined;
-                    var encoded_content_disposition: ?[]const u8 = null;
-                    if (content_disposition) |cd| {
-                        encoded_content_disposition = encodeURIComponent(cd, &content_disposition_encoded_buffer, true) catch return error.FailedToGenerateSignature;
-                    }
-
-                    var content_type_encoded_buffer: [256]u8 = undefined;
-                    var encoded_content_type: ?[]const u8 = null;
-                    if (content_type) |ct| {
-                        encoded_content_type = encodeURIComponent(ct, &content_type_encoded_buffer, true) catch return error.FailedToGenerateSignature;
-                    }
-
-                    // Build query parameters in alphabetical order for AWS Signature V4 canonical request
-                    const canonical = brk_canonical: {
-                        var stack_fallback = std.heap.stackFallback(512, bun.default_allocator);
-                        const allocator = stack_fallback.get();
-                        var query_parts: bun.BoundedArray([]const u8, 13) = .{};
-
-                        // Add parameters in alphabetical order: Content-MD5, X-Amz-Acl, X-Amz-Algorithm, X-Amz-Credential, X-Amz-Date, X-Amz-Expires, X-Amz-Security-Token, X-Amz-SignedHeaders, response-content-disposition, response-content-type, x-amz-request-payer, x-amz-storage-class
-
-                        if (encoded_content_md5) |encoded_content_md5_value| {
-                            try query_parts.append(try std.fmt.allocPrint(allocator, "Content-MD5={s}", .{encoded_content_md5_value}));
-                        }
-
-                        if (acl) |acl_value| {
-                            try query_parts.append(try std.fmt.allocPrint(allocator, "X-Amz-Acl={s}", .{acl_value}));
-                        }
-
-                        try query_parts.append(try std.fmt.allocPrint(allocator, "X-Amz-Algorithm=AWS4-HMAC-SHA256", .{}));
-
-                        try query_parts.append(try std.fmt.allocPrint(allocator, "X-Amz-Credential={s}%2F{s}%2F{s}%2F{s}%2Faws4_request", .{ this.accessKeyId, amz_day, region, service_name }));
-
-                        try query_parts.append(try std.fmt.allocPrint(allocator, "X-Amz-Date={s}", .{amz_date}));
-
-                        try query_parts.append(try std.fmt.allocPrint(allocator, "X-Amz-Expires={}", .{expires}));
-
-                        if (encoded_session_token) |token| {
-                            try query_parts.append(try std.fmt.allocPrint(allocator, "X-Amz-Security-Token={s}", .{token}));
-                        }
-
-                        try query_parts.append(try std.fmt.allocPrint(allocator, "X-Amz-SignedHeaders=host", .{}));
-
-                        if (encoded_content_disposition) |cd| {
-                            try query_parts.append(try std.fmt.allocPrint(allocator, "response-content-disposition={s}", .{cd}));
-                        }
-
-                        if (encoded_content_type) |ct| {
-                            try query_parts.append(try std.fmt.allocPrint(allocator, "response-content-type={s}", .{ct}));
-                        }
-
-                        if (request_payer) {
-                            try query_parts.append(try std.fmt.allocPrint(allocator, "x-amz-request-payer=requester", .{}));
-                        }
-
-                        if (storage_class) |storage_class_value| {
-                            try query_parts.append(try std.fmt.allocPrint(allocator, "x-amz-storage-class={s}", .{storage_class_value}));
-                        }
-
-                        // Join query parameters with &
-                        var query_string = std.array_list.Managed(u8).init(allocator);
-                        defer query_string.deinit();
-                        for (query_parts.slice(), 0..) |part, i| {
-                            if (i > 0) try query_string.append('&');
-                            try query_string.appendSlice(part);
-                            allocator.free(part);
-                        }
-
-                        break :brk_canonical try std.fmt.bufPrint(&tmp_buffer, "{s}\n{s}\n{s}\nhost:{s}\n\nhost\n{s}", .{ method_name, normalizedPath, query_string.items, host, aws_content_hash });
-                    };
-                    var sha_digest = std.mem.zeroes(bun.sha.SHA256.Digest);
-                    bun.sha.SHA256.hash(canonical, &sha_digest, jsc.VirtualMachine.get().rareData().boringEngine());
-
-                    const signValue = try std.fmt.bufPrint(&tmp_buffer, "AWS4-HMAC-SHA256\n{s}\n{s}/{s}/{s}/aws4_request\n{s}", .{ amz_date, amz_day, region, service_name, std.fmt.bytesToHex(sha_digest[0..bun.sha.SHA256.digest], .lower) });
-
-                    const signature = bun.hmac.generate(sigDateRegionServiceReq, signValue, .sha256, &hmac_sig_service) orelse return error.FailedToGenerateSignature;
-
-                    // Build final URL with query parameters in alphabetical order to match canonical request
-                    var url_stack_fallback = std.heap.stackFallback(512, bun.default_allocator);
-                    const url_allocator = url_stack_fallback.get();
-                    var url_query_parts: bun.BoundedArray([]const u8, 14) = .{};
-
-                    // Add parameters in alphabetical order: Content-MD5, X-Amz-Acl, X-Amz-Algorithm, X-Amz-Credential, X-Amz-Date, X-Amz-Expires, X-Amz-Security-Token, X-Amz-Signature, X-Amz-SignedHeaders, response-content-disposition, response-content-type, x-amz-request-payer, x-amz-storage-class
-
-                    if (encoded_content_md5) |encoded_content_md5_value| {
-                        try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "Content-MD5={s}", .{encoded_content_md5_value}));
-                    }
-
-                    if (acl) |acl_value| {
-                        try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "X-Amz-Acl={s}", .{acl_value}));
-                    }
-
-                    try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "X-Amz-Algorithm=AWS4-HMAC-SHA256", .{}));
-
-                    try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "X-Amz-Credential={s}%2F{s}%2F{s}%2F{s}%2Faws4_request", .{ this.accessKeyId, amz_day, region, service_name }));
-
-                    try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "X-Amz-Date={s}", .{amz_date}));
-
-                    try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "X-Amz-Expires={}", .{expires}));
-
-                    if (encoded_session_token) |token| {
-                        try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "X-Amz-Security-Token={s}", .{token}));
-                    }
-
-                    try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "X-Amz-Signature={s}", .{std.fmt.bytesToHex(signature[0..DIGESTED_HMAC_256_LEN], .lower)}));
-
-                    try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "X-Amz-SignedHeaders=host", .{}));
-
-                    if (encoded_content_disposition) |cd| {
-                        try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "response-content-disposition={s}", .{cd}));
-                    }
-
-                    if (encoded_content_type) |ct| {
-                        try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "response-content-type={s}", .{ct}));
-                    }
-
-                    if (request_payer) {
-                        try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "x-amz-request-payer=requester", .{}));
-                    }
-
-                    if (storage_class) |storage_class_value| {
-                        try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "x-amz-storage-class={s}", .{storage_class_value}));
-                    }
-
-                    // Join URL query parameters with &
-                    var url_query_string = std.array_list.Managed(u8).init(url_allocator);
-                    defer url_query_string.deinit();
-                    for (url_query_parts.slice(), 0..) |part, i| {
-                        if (i > 0) try url_query_string.append('&');
-                        try url_query_string.appendSlice(part);
-                        url_allocator.free(part);
-                    }
-
-                    break :brk try std.fmt.allocPrint(bun.default_allocator, "{s}://{s}{s}?{s}", .{ protocol, host, normalizedPath, url_query_string.items });
-                } else {
-                    const canonical = try CanonicalRequest.format(
-                        &tmp_buffer,
-                        header_key,
-                        method_name,
-                        normalizedPath,
-                        if (search_params) |p| p[1..] else "",
-                        content_disposition,
-                        content_encoding,
-                        content_md5,
-                        host,
-                        acl,
-                        aws_content_hash,
-                        amz_date,
-                        session_token,
-                        storage_class,
-                        signed_headers,
-                    );
-                    var sha_digest = std.mem.zeroes(bun.sha.SHA256.Digest);
-                    bun.sha.SHA256.hash(canonical, &sha_digest, jsc.VirtualMachine.get().rareData().boringEngine());
-
-                    const signValue = try std.fmt.bufPrint(&tmp_buffer, "AWS4-HMAC-SHA256\n{s}\n{s}/{s}/{s}/aws4_request\n{s}", .{ amz_date, amz_day, region, service_name, std.fmt.bytesToHex(sha_digest[0..bun.sha.SHA256.digest], .lower) });
-
-                    const signature = bun.hmac.generate(sigDateRegionServiceReq, signValue, .sha256, &hmac_sig_service) orelse return error.FailedToGenerateSignature;
-
-                    break :brk try std.fmt.allocPrint(
-                        bun.default_allocator,
-                        "AWS4-HMAC-SHA256 Credential={s}/{s}/{s}/{s}/aws4_request, SignedHeaders={s}, Signature={s}",
-                        .{ this.accessKeyId, amz_day, region, service_name, signed_headers, std.fmt.bytesToHex(signature[0..DIGESTED_HMAC_256_LEN], .lower) },
-                    );
-                }
-            };
-            errdefer bun.default_allocator.free(authorization);
-
-            if (signQuery) {
-                defer bun.default_allocator.free(host);
-                defer bun.default_allocator.free(amz_date);
-
-                return SignResult{
-                    .amz_date = "",
-                    .host = "",
-                    .authorization = "",
-                    .acl = signOptions.acl,
-                    .url = authorization,
-                    .storage_class = signOptions.storage_class,
-                };
-            }
-
-            var result = SignResult{
-                .amz_date = amz_date,
-                .host = host,
-                .authorization = authorization,
-                .acl = signOptions.acl,
-                .storage_class = signOptions.storage_class,
-                .request_payer = request_payer,
-                .url = try std.fmt.allocPrint(bun.default_allocator, "{s}://{s}{s}{s}", .{ protocol, host, normalizedPath, if (search_params) |s| s else "" }),
-                ._headers = [_]picohttp.Header{
-                    .{ .name = "x-amz-content-sha256", .value = aws_content_hash },
-                    .{ .name = "x-amz-date", .value = amz_date },
-                    .{ .name = "Host", .value = host },
-                    .{ .name = "Authorization", .value = authorization[0..] },
-                    .{ .name = "", .value = "" },
-                    .{ .name = "", .value = "" },
-                    .{ .name = "", .value = "" },
-                    .{ .name = "", .value = "" },
-                    .{ .name = "", .value = "" },
-                    .{ .name = "", .value = "" },
-                    .{ .name = "", .value = "" },
-                },
-                ._headers_len = 4,
-            };
-
-            if (acl) |acl_value| {
-                result._headers[result._headers_len] = .{ .name = "x-amz-acl", .value = acl_value };
-                result._headers_len += 1;
-            }
-
-            if (session_token) |token| {
-                const session_token_value = bun.handleOom(bun.default_allocator.dupe(u8, token));
-                result.session_token = session_token_value;
-                result._headers[result._headers_len] = .{ .name = "x-amz-security-token", .value = session_token_value };
-                result._headers_len += 1;
-            }
-            if (storage_class) |storage_class_value| {
-                result._headers[result._headers_len] = .{ .name = "x-amz-storage-class", .value = storage_class_value };
-                result._headers_len += 1;
-            }
-
-            if (content_disposition) |cd| {
-                const content_disposition_value = bun.handleOom(bun.default_allocator.dupe(u8, cd));
-                result.content_disposition = content_disposition_value;
-                result._headers[result._headers_len] = .{ .name = "content-disposition", .value = content_disposition_value };
-                result._headers_len += 1;
-            }
-
-            if (content_encoding) |ce| {
-                const content_encoding_value = bun.handleOom(bun.default_allocator.dupe(u8, ce));
-                result.content_encoding = content_encoding_value;
-                result._headers[result._headers_len] = .{ .name = "content-encoding", .value = content_encoding_value };
-                result._headers_len += 1;
-            }
-
-            if (content_md5) |c_md5| {
-                const content_md5_value = bun.handleOom(bun.default_allocator.dupe(u8, c_md5));
-                result.content_md5 = content_md5_value;
-                result._headers[result._headers_len] = .{ .name = "content-md5", .value = content_md5_value };
-                result._headers_len += 1;
-            }
-
-            if (request_payer) {
-                result._headers[result._headers_len] = .{ .name = "x-amz-request-payer", .value = "requester" };
-                result._headers_len += 1;
-            }
-
-            return result;
-        }
+    }
+
+pub fn signRequest(self: *const @This(), signOptions: SignOptions, comptime allow_empty_path: bool, signQueryOption: ?SignQueryOptions) !SignResult {
+            return s3CredentialsSignRequest(self, signOptions, allow_empty_path, signQueryOption);
+    }
+    const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, .{});
+    pub const ref = RefCount.ref;
+    pub const deref = RefCount.deref;
+    pub const getCredentialsWithOptions = @import("../runtime/webcore/s3/credentials_jsc.zig").getCredentialsWithOptions;
+    const log = bun.Output.scoped(.AWS, .visible);
+    const DateResult = struct {
+        numeric_day: u64,
+        date: []const u8,
     };
+    pub const DIGESTED_HMAC_256_LEN = 32;
+    pub const SignResult = struct {
+        amz_date: []const u8,
+        host: []const u8,
+        authorization: []const u8,
+        url: []const u8,
+        content_disposition: []const u8 = "",
+        content_encoding: []const u8 = "",
+        content_md5: []const u8 = "",
+        session_token: []const u8 = "",
+        acl: ?ACL = null,
+        storage_class: ?StorageClass = null,
+        request_payer: bool = false,
+        _headers: [MAX_HEADERS]picohttp.Header = .{ .{ .name = "", .value = "" }, .{ .name = "", .value = "" }, .{ .name = "", .value = "" }, .{ .name = "", .value = "" }, .{ .name = "", .value = "" }, .{ .name = "", .value = "" }, .{ .name = "", .value = "" }, .{ .name = "", .value = "" }, .{ .name = "", .value = "" }, .{ .name = "", .value = "" }, .{ .name = "", .value = "" } },
+        _headers_len: u8 = 0,
+    
+    pub fn headers(self: *const @This()) []const picohttp.Header {
+                return self._headers[0..self._headers_len];
+        }
+    
+    pub fn mixWithHeader(self: *const @This(), headers_buffer: []picohttp.Header, header: picohttp.Header) []const picohttp.Header {
+                const len = self._headers_len;
+                var i: usize = 0;
+                _ = &i;
+                while ((i < len)) : (i = (i + 1)) {
+                    headers_buffer[cp_cast_int(usize, i)] = self._headers[@as(usize, @intCast(i))];
+                }
+                headers_buffer[cp_cast_int(usize, len)] = header;
+                return headers_buffer[0..(len + 1)];
+        }
+    
+    pub fn deinit(self: *const @This()) void {
+                if ((self.amz_date.len > 0)) {
+                    _ = bun.freeSensitive(bun.default_allocator, self.amz_date);
+                }
+                if ((self.session_token.len > 0)) {
+                    _ = bun.freeSensitive(bun.default_allocator, self.session_token);
+                }
+                if ((self.content_disposition.len > 0)) {
+                    _ = bun.freeSensitive(bun.default_allocator, self.content_disposition);
+                }
+                if ((self.content_encoding.len > 0)) {
+                    _ = bun.freeSensitive(bun.default_allocator, self.content_encoding);
+                }
+                if ((self.host.len > 0)) {
+                    _ = bun.freeSensitive(bun.default_allocator, self.host);
+                }
+                if ((self.authorization.len > 0)) {
+                    _ = bun.freeSensitive(bun.default_allocator, self.authorization);
+                }
+                if ((self.url.len > 0)) {
+                    _ = bun.freeSensitive(bun.default_allocator, self.url);
+                }
+                if ((self.content_md5.len > 0)) {
+                    _ = bun.default_allocator.free(self.content_md5);
+                }
+        }
+        pub const MAX_HEADERS = 11;
+    };
+    pub const SignQueryOptions = struct {
+        expires: usize = 86400,
+    };
+    pub const SignOptions = struct {
+        path: []const u8,
+        method: bun.http.Method,
+        content_hash: ?[]const u8 = null,
+        content_md5: ?[]const u8 = null,
+        search_params: ?[]const u8 = null,
+        content_disposition: ?[]const u8 = null,
+        content_type: ?[]const u8 = null,
+        content_encoding: ?[]const u8 = null,
+        acl: ?ACL = null,
+        storage_class: ?StorageClass = null,
+        request_payer: bool = false,
+    };
+};
 pub const S3CredentialsWithOptions = struct {
     credentials: S3Credentials,
     options: MultiPartUploadOptions = .{},
@@ -956,6 +553,438 @@ const CanonicalRequest = struct {
             };
         }
     };
+
+pub fn s3CredentialsSignRequest(creds: *const S3Credentials, signOptions: S3Credentials.SignOptions, comptime allow_empty_path: bool, signQueryOption: ?S3Credentials.SignQueryOptions) !S3Credentials.SignResult {
+        const method = signOptions.method;
+        const request_path = signOptions.path;
+        const content_hash = signOptions.content_hash;
+        var content_md5 = signOptions.content_md5;
+        _ = &content_md5;
+        if (content_md5) |content_md5_val| {
+            _ = &content_md5_val;
+            const len = bun.base64.encodeLen(content_md5_val);
+            const content_md5_as_base64 = bun.handleOom(bun.default_allocator.alloc(u8, len));
+            content_md5 = content_md5_as_base64[0..bun.base64.encode(content_md5_as_base64, content_md5_val)];
+        }
+        const search_params = signOptions.search_params;
+        var content_disposition = signOptions.content_disposition;
+        _ = &content_disposition;
+        if (content_disposition) |cd_val| {
+            _ = &cd_val;
+            if ((cd_val.len == 0)) {
+                content_disposition = null;
+            }
+        }
+        var content_type = signOptions.content_type;
+        _ = &content_type;
+        if (content_type) |ct_val| {
+            _ = &ct_val;
+            if ((ct_val.len == 0)) {
+                content_type = null;
+            }
+        }
+        var content_encoding = signOptions.content_encoding;
+        _ = &content_encoding;
+        if (content_encoding) |ce_val| {
+            _ = &ce_val;
+            if ((ce_val.len == 0)) {
+                content_encoding = null;
+            }
+        }
+        const session_token: ?[]const u8 = (if ((creds.sessionToken.len == 0)) null else creds.sessionToken);
+        var acl: ?[]const u8 = null;
+        _ = &acl;
+        if (signOptions.acl) |acl_opt| {
+            _ = &acl_opt;
+            acl = cp_string_from(acl_opt);
+        }
+        var storage_class: ?[]const u8 = null;
+        _ = &storage_class;
+        if (signOptions.storage_class) |sc_opt| {
+            _ = &sc_opt;
+            storage_class = cp_string_from(sc_opt);
+        }
+        if (((creds.accessKeyId.len == 0) or (creds.secretAccessKey.len == 0))) {
+            return error.MissingCredentials;
+        }
+        const signQuery = (signQueryOption != null);
+        var expires: usize = 0;
+        _ = &expires;
+        if (signQueryOption) |sqo| {
+            _ = &sqo;
+            expires = sqo.expires;
+        }
+        const method_name = (switch (method) {
+.GET => "GET",
+.POST => "POST",
+.PUT => "PUT",
+.DELETE => "DELETE",
+.HEAD => "HEAD",
+else => {
+return error.InvalidMethod;
+},
+});
+        const region = (if ((creds.region.len > 0)) creds.region else S3Credentials.guessRegion(creds.endpoint));
+        var full_path = request_path;
+        _ = &full_path;
+        if (strings.startsWith(full_path, "/")) {
+            full_path = full_path[1..];
+        } else {
+            if (strings.startsWith(full_path, "\\")) {
+                full_path = full_path[1..];
+            }
+        }
+        var path: []const u8 = full_path;
+        _ = &path;
+        var bucket: []const u8 = creds.bucket;
+        _ = &bucket;
+        if ((!creds.virtual_hosted_style)) {
+            if ((bucket.len == 0)) {
+                if (strings.indexOf(full_path, "/")) |end| {
+                    _ = &end;
+                    if (strings.indexOf(full_path, "\\")) |backslash_index| {
+                        _ = &backslash_index;
+                        if ((backslash_index < end)) {
+                            bucket = full_path[0..backslash_index];
+                            path = full_path[(backslash_index + 1)..];
+                        }
+                    }
+                    bucket = full_path[0..end];
+                    path = full_path[(end + 1)..];
+                } else {
+                    if (strings.indexOf(full_path, "\\")) |backslash_index| {
+                        _ = &backslash_index;
+                        bucket = full_path[0..backslash_index];
+                        path = full_path[(backslash_index + 1)..];
+                    } else {
+                        return error.InvalidPath;
+                    }
+                }
+            }
+        }
+        path = S3Credentials.normalizeName(path);
+        bucket = S3Credentials.normalizeName(bucket);
+        if (((!allow_empty_path) and (path.len == 0))) {
+            return error.InvalidPath;
+        }
+        var normalized_path_buffer: [1089]u8 = undefined;
+        _ = &normalized_path_buffer;
+        var path_buffer: [1024]u8 = undefined;
+        _ = &path_buffer;
+        var bucket_buffer: [63]u8 = undefined;
+        _ = &bucket_buffer;
+        bucket = (blk_catch_0: { break :blk_catch_0 ((S3Credentials.encodeURIComponent(bucket, (&bucket_buffer), false)) catch |__ce_0| { _ = &__ce_0; return error.InvalidPath; }); });
+        path = (blk_catch_1: { break :blk_catch_1 ((S3Credentials.encodeURIComponent(path, (&path_buffer), false)) catch |__ce_1| { _ = &__ce_1; return error.InvalidPath; }); });
+        const protocol = (if (creds.insecure_http) "http" else "https");
+        var endpoint = creds.endpoint;
+        _ = &endpoint;
+        var extra_path: []const u8 = "";
+        _ = &extra_path;
+        var host: []const u8 = "";
+        _ = &host;
+        if ((creds.endpoint.len > 0)) {
+            if ((creds.endpoint.len >= 2048)) {
+                return error.InvalidEndpoint;
+            }
+            var h = creds.endpoint;
+            _ = &h;
+            if (bun.strings.indexOf(creds.endpoint, "/")) |index| {
+                _ = &index;
+                h = creds.endpoint[0..index];
+                extra_path = creds.endpoint[index..];
+            }
+            host = try bun.default_allocator.dupe(u8, h);
+        } else {
+            if (creds.virtual_hosted_style) {
+                if ((bucket.len == 0)) {
+                    return error.InvalidEndpoint;
+                }
+                endpoint = try std.fmt.allocPrint(bun.default_allocator, "{s}.s3.{s}.amazonaws.com", .{ bucket, region });
+                host = endpoint;
+            } else {
+                endpoint = try std.fmt.allocPrint(bun.default_allocator, "s3.{s}.amazonaws.com", .{ region });
+                host = endpoint;
+            }
+        }
+        var host_guard = SliceFreeGuard{ .slice = host, .allocator = bun.default_allocator };
+        _ = &host_guard;
+        var __host_guard_moved = false; _ = &__host_guard_moved;
+        defer if (!__host_guard_moved) { __host_guard_moved = true; const __T = @TypeOf(host_guard); if (@typeInfo(__T) == .optional) { if (host_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { host_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = host_guard; _drop_val.__cp_deinit(); } };
+        var normalizedPath: []const u8 = "";
+        _ = &normalizedPath;
+        if (creds.virtual_hosted_style) {
+            normalizedPath = (blk_catch_2: { break :blk_catch_2 ((std.fmt.bufPrint((&normalized_path_buffer), "{s}/{s}", .{ extra_path, path })) catch |__ce_2| { _ = &__ce_2; return error.InvalidPath; }); });
+        } else {
+            normalizedPath = (blk_catch_3: { break :blk_catch_3 ((std.fmt.bufPrint((&normalized_path_buffer), "{s}/{s}/{s}", .{ extra_path, bucket, path })) catch |__ce_3| { _ = &__ce_3; return error.InvalidPath; }); });
+        }
+        const date_result = S3Credentials.getAMZDate(bun.default_allocator);
+        const amz_date = date_result.date;
+        var amz_date_guard = SliceFreeGuard{ .slice = amz_date, .allocator = bun.default_allocator };
+        _ = &amz_date_guard;
+        var __amz_date_guard_moved = false; _ = &__amz_date_guard_moved;
+        defer if (!__amz_date_guard_moved) { __amz_date_guard_moved = true; const __T = @TypeOf(amz_date_guard); if (@typeInfo(__T) == .optional) { if (amz_date_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { amz_date_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = amz_date_guard; _drop_val.__cp_deinit(); } };
+        const amz_day = amz_date[0..8];
+        const request_payer = signOptions.request_payer;
+        const header_key = SignedHeaders.Key{ .content_disposition = (content_disposition != null), .content_encoding = (content_encoding != null), .content_md5 = (content_md5 != null), .acl = (acl != null), .request_payer = request_payer, .session_token = (session_token != null), .storage_class = (storage_class != null) };
+        const signed_headers = (if (signQuery) "host" else SignedHeaders.get(header_key));
+        const service_name: []const u8 = "s3";
+        var aws_content_hash: []const u8 = "UNSIGNED-PAYLOAD";
+        _ = &aws_content_hash;
+        if (content_hash) |ch| {
+            _ = &ch;
+            aws_content_hash = ch;
+        }
+        var tmp_buffer: [4096]u8 = undefined;
+        _ = &tmp_buffer;
+        const MAX_MD_SIZE = bun.BoringSSL.c.EVP_MAX_MD_SIZE;
+        _ = &MAX_MD_SIZE;
+        var hmac_sig_service: [MAX_MD_SIZE]u8 = undefined;
+        _ = &hmac_sig_service;
+        var hmac_sig_service2: [MAX_MD_SIZE]u8 = undefined;
+        _ = &hmac_sig_service2;
+        var sigDateRegionServiceReq: []const u8 = "";
+        _ = &sigDateRegionServiceReq;
+        const cache_key = try std.fmt.bufPrint((&tmp_buffer), "{s}{s}{s}", .{ region, service_name, creds.secretAccessKey });
+        var cache = ((jsc.VirtualMachine.getMainThreadVM()) orelse (jsc.VirtualMachine.get())).rareData().awsCache();
+        _ = &cache;
+        if (cache.get(date_result.numeric_day, cache_key)) |cached| {
+            _ = &cached;
+            sigDateRegionServiceReq = cached;
+        } else {
+            const sigDate = ((bun.hmac.generate(try std.fmt.bufPrint((&tmp_buffer), "AWS4{s}", .{ creds.secretAccessKey }), amz_day, .sha256, (&hmac_sig_service))) orelse { return error.FailedToGenerateSignature; });
+            const sigDateRegion = ((bun.hmac.generate(sigDate, region, .sha256, (&hmac_sig_service2))) orelse { return error.FailedToGenerateSignature; });
+            const sigDateRegionService = ((bun.hmac.generate(sigDateRegion, service_name, .sha256, (&hmac_sig_service))) orelse { return error.FailedToGenerateSignature; });
+            const hmac_res = ((bun.hmac.generate(sigDateRegionService, "aws4_request", .sha256, (&hmac_sig_service2))) orelse { return error.FailedToGenerateSignature; });
+            _ = cache.set(date_result.numeric_day, cache_key, (hmac_sig_service2[0..S3Credentials.DIGESTED_HMAC_256_LEN]).*);
+            sigDateRegionServiceReq = hmac_res;
+        }
+        var authorization: []const u8 = "";
+        _ = &authorization;
+        if (signQuery) {
+            var token_encoded_buffer: [2048]u8 = undefined;
+            _ = &token_encoded_buffer;
+            var encoded_session_token: ?[]const u8 = null;
+            _ = &encoded_session_token;
+            if (session_token) |token| {
+                _ = &token;
+                encoded_session_token = (blk_catch_4: { break :blk_catch_4 ((S3Credentials.encodeURIComponent(token, (&token_encoded_buffer), true)) catch |__ce_4| { _ = &__ce_4; return error.InvalidSessionToken; }); });
+            }
+            var content_md5_encoded_buffer: [128]u8 = undefined;
+            _ = &content_md5_encoded_buffer;
+            var encoded_content_md5: ?[]const u8 = null;
+            _ = &encoded_content_md5;
+            if (content_md5) |content_md5_value| {
+                _ = &content_md5_value;
+                encoded_content_md5 = (blk_catch_5: { break :blk_catch_5 ((S3Credentials.encodeURIComponent(content_md5_value, (&content_md5_encoded_buffer), true)) catch |__ce_5| { _ = &__ce_5; return error.FailedToGenerateSignature; }); });
+            }
+            var content_disposition_encoded_buffer: [512]u8 = undefined;
+            _ = &content_disposition_encoded_buffer;
+            var encoded_content_disposition: ?[]const u8 = null;
+            _ = &encoded_content_disposition;
+            if (content_disposition) |cd| {
+                _ = &cd;
+                encoded_content_disposition = (blk_catch_6: { break :blk_catch_6 ((S3Credentials.encodeURIComponent(cd, (&content_disposition_encoded_buffer), true)) catch |__ce_6| { _ = &__ce_6; return error.FailedToGenerateSignature; }); });
+            }
+            var content_type_encoded_buffer: [256]u8 = undefined;
+            _ = &content_type_encoded_buffer;
+            var encoded_content_type: ?[]const u8 = null;
+            _ = &encoded_content_type;
+            if (content_type) |ct| {
+                _ = &ct;
+                encoded_content_type = (blk_catch_7: { break :blk_catch_7 ((S3Credentials.encodeURIComponent(ct, (&content_type_encoded_buffer), true)) catch |__ce_7| { _ = &__ce_7; return error.FailedToGenerateSignature; }); });
+            }
+            var canonical: []const u8 = "";
+            _ = &canonical;
+            {
+                var stack_fallback = std.heap.stackFallback(512, bun.default_allocator);
+                _ = &stack_fallback;
+                const allocator = stack_fallback.get();
+                var query_parts: bun.BoundedArray([]const u8, 13) = .{};
+                _ = &query_parts;
+                if (encoded_content_md5) |encoded_content_md5_value| {
+                    _ = &encoded_content_md5_value;
+                    _ = try query_parts.append(try std.fmt.allocPrint(allocator, "Content-MD5={s}", .{ encoded_content_md5_value }));
+                }
+                if (acl) |acl_value| {
+                    _ = &acl_value;
+                    _ = try query_parts.append(try std.fmt.allocPrint(allocator, "X-Amz-Acl={s}", .{ acl_value }));
+                }
+                _ = try query_parts.append(try std.fmt.allocPrint(allocator, "X-Amz-Algorithm=AWS4-HMAC-SHA256", .{}));
+                _ = try query_parts.append(try std.fmt.allocPrint(allocator, "X-Amz-Credential={s}%2F{s}%2F{s}%2F{s}%2Faws4_request", .{ creds.accessKeyId, amz_day, region, service_name }));
+                _ = try query_parts.append(try std.fmt.allocPrint(allocator, "X-Amz-Date={s}", .{ amz_date }));
+                _ = try query_parts.append(try std.fmt.allocPrint(allocator, "X-Amz-Expires={}", .{ expires }));
+                if (encoded_session_token) |token| {
+                    _ = &token;
+                    _ = try query_parts.append(try std.fmt.allocPrint(allocator, "X-Amz-Security-Token={s}", .{ token }));
+                }
+                _ = try query_parts.append(try std.fmt.allocPrint(allocator, "X-Amz-SignedHeaders=host", .{}));
+                if (encoded_content_disposition) |cd| {
+                    _ = &cd;
+                    _ = try query_parts.append(try std.fmt.allocPrint(allocator, "response-content-disposition={s}", .{ cd }));
+                }
+                if (encoded_content_type) |ct| {
+                    _ = &ct;
+                    _ = try query_parts.append(try std.fmt.allocPrint(allocator, "response-content-type={s}", .{ ct }));
+                }
+                if (request_payer) {
+                    _ = try query_parts.append(try std.fmt.allocPrint(allocator, "x-amz-request-payer=requester", .{}));
+                }
+                if (storage_class) |storage_class_value| {
+                    _ = &storage_class_value;
+                    _ = try query_parts.append(try std.fmt.allocPrint(allocator, "x-amz-storage-class={s}", .{ storage_class_value }));
+                }
+                var query_string = std.array_list.Managed(u8).init(allocator);
+                _ = &query_string;
+                var _query_guard = DeinitGuard(std.array_list.Managed(u8)){ .ptr = (blk: {
+                break :blk (&query_string);
+
+}) };
+                _ = &_query_guard;
+                var ___query_guard_moved = false; _ = &___query_guard_moved;
+                defer if (!___query_guard_moved) { ___query_guard_moved = true; const __T = @TypeOf(_query_guard); if (@typeInfo(__T) == .optional) { if (_query_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _query_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _query_guard; _drop_val.__cp_deinit(); } };
+                var qi: usize = 0;
+                _ = &qi;
+                for (cp_iter_slice(query_parts.slice())) |part| {
+                    _ = &part;
+                    if ((qi > 0)) {
+                        _ = try query_string.append(38);
+                    }
+                    _ = try query_string.appendSlice(part);
+                    _ = allocator.free(part);
+                    qi = (qi + 1);
+                }
+                canonical = try std.fmt.bufPrint((&tmp_buffer), "{s}\n{s}\n{s}\nhost:{s}\n\nhost\n{s}", .{ method_name, normalizedPath, query_string.items, host, aws_content_hash });
+            }
+            var sha_digest = std.mem.zeroes(bun.sha.SHA256.Digest);
+            _ = &sha_digest;
+            _ = bun.sha.SHA256.hash(canonical, (&sha_digest), jsc.VirtualMachine.get().rareData().boringEngine());
+            const signValue = try std.fmt.bufPrint((&tmp_buffer), "AWS4-HMAC-SHA256\n{s}\n{s}/{s}/{s}/aws4_request\n{s}", .{ amz_date, amz_day, region, service_name, std.fmt.bytesToHex(sha_digest[0..bun.sha.SHA256.digest], .lower) });
+            const signature = ((bun.hmac.generate(sigDateRegionServiceReq, signValue, .sha256, (&hmac_sig_service))) orelse { return error.FailedToGenerateSignature; });
+            var url_stack_fallback = std.heap.stackFallback(512, bun.default_allocator);
+            _ = &url_stack_fallback;
+            const url_allocator = url_stack_fallback.get();
+            var url_query_parts: bun.BoundedArray([]const u8, 14) = .{};
+            _ = &url_query_parts;
+            if (encoded_content_md5) |encoded_content_md5_value| {
+                _ = &encoded_content_md5_value;
+                _ = try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "Content-MD5={s}", .{ encoded_content_md5_value }));
+            }
+            if (acl) |acl_value| {
+                _ = &acl_value;
+                _ = try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "X-Amz-Acl={s}", .{ acl_value }));
+            }
+            _ = try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "X-Amz-Algorithm=AWS4-HMAC-SHA256", .{}));
+            _ = try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "X-Amz-Credential={s}%2F{s}%2F{s}%2F{s}%2Faws4_request", .{ creds.accessKeyId, amz_day, region, service_name }));
+            _ = try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "X-Amz-Date={s}", .{ amz_date }));
+            _ = try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "X-Amz-Expires={}", .{ expires }));
+            if (encoded_session_token) |token| {
+                _ = &token;
+                _ = try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "X-Amz-Security-Token={s}", .{ token }));
+            }
+            _ = try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "X-Amz-Signature={s}", .{ std.fmt.bytesToHex(signature[0..S3Credentials.DIGESTED_HMAC_256_LEN], .lower) }));
+            _ = try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "X-Amz-SignedHeaders=host", .{}));
+            if (encoded_content_disposition) |cd| {
+                _ = &cd;
+                _ = try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "response-content-disposition={s}", .{ cd }));
+            }
+            if (encoded_content_type) |ct| {
+                _ = &ct;
+                _ = try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "response-content-type={s}", .{ ct }));
+            }
+            if (request_payer) {
+                _ = try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "x-amz-request-payer=requester", .{}));
+            }
+            if (storage_class) |storage_class_value| {
+                _ = &storage_class_value;
+                _ = try url_query_parts.append(try std.fmt.allocPrint(url_allocator, "x-amz-storage-class={s}", .{ storage_class_value }));
+            }
+            var url_query_string = std.array_list.Managed(u8).init(url_allocator);
+            _ = &url_query_string;
+            var _url_query_guard = DeinitGuard(std.array_list.Managed(u8)){ .ptr = (blk: {
+            break :blk (&url_query_string);
+
+}) };
+            _ = &_url_query_guard;
+            var ___url_query_guard_moved = false; _ = &___url_query_guard_moved;
+            defer if (!___url_query_guard_moved) { ___url_query_guard_moved = true; const __T = @TypeOf(_url_query_guard); if (@typeInfo(__T) == .optional) { if (_url_query_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _url_query_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _url_query_guard; _drop_val.__cp_deinit(); } };
+            var uqi: usize = 0;
+            _ = &uqi;
+            for (cp_iter_slice(url_query_parts.slice())) |part| {
+                _ = &part;
+                if ((uqi > 0)) {
+                    _ = try url_query_string.append(38);
+                }
+                _ = try url_query_string.appendSlice(part);
+                _ = url_allocator.free(part);
+                uqi = (uqi + 1);
+            }
+            authorization = try std.fmt.allocPrint(bun.default_allocator, "{s}://{s}{s}?{s}", .{ protocol, host, normalizedPath, url_query_string.items });
+        } else {
+            const canonical = try CanonicalRequest.format((&tmp_buffer), header_key, method_name, normalizedPath, (if (search_params) |p| p[1..] else ""), content_disposition, content_encoding, content_md5, host, acl, aws_content_hash, amz_date, session_token, storage_class, signed_headers);
+            var sha_digest = std.mem.zeroes(bun.sha.SHA256.Digest);
+            _ = &sha_digest;
+            _ = bun.sha.SHA256.hash(canonical, (&sha_digest), jsc.VirtualMachine.get().rareData().boringEngine());
+            const signValue = try std.fmt.bufPrint((&tmp_buffer), "AWS4-HMAC-SHA256\n{s}\n{s}/{s}/{s}/aws4_request\n{s}", .{ amz_date, amz_day, region, service_name, std.fmt.bytesToHex(sha_digest[0..bun.sha.SHA256.digest], .lower) });
+            const signature = ((bun.hmac.generate(sigDateRegionServiceReq, signValue, .sha256, (&hmac_sig_service))) orelse { return error.FailedToGenerateSignature; });
+            authorization = try std.fmt.allocPrint(bun.default_allocator, "AWS4-HMAC-SHA256 Credential={s}/{s}/{s}/{s}/aws4_request, SignedHeaders={s}, Signature={s}", .{ creds.accessKeyId, amz_day, region, service_name, signed_headers, std.fmt.bytesToHex(signature[0..S3Credentials.DIGESTED_HMAC_256_LEN], .lower) });
+        }
+        var auth_guard = SliceFreeGuard{ .slice = authorization, .allocator = bun.default_allocator };
+        _ = &auth_guard;
+        var __auth_guard_moved = false; _ = &__auth_guard_moved;
+        defer if (!__auth_guard_moved) { __auth_guard_moved = true; const __T = @TypeOf(auth_guard); if (@typeInfo(__T) == .optional) { if (auth_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { auth_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = auth_guard; _drop_val.__cp_deinit(); } };
+        if (signQuery) {
+            auth_guard.slice = null;
+            return S3Credentials.SignResult{ .amz_date = "", .host = "", .authorization = "", .acl = signOptions.acl, .url = authorization, .storage_class = signOptions.storage_class };
+        }
+        var result = S3Credentials.SignResult{ .amz_date = amz_date, .host = host, .authorization = authorization, .acl = signOptions.acl, .storage_class = signOptions.storage_class, .request_payer = request_payer, .url = try std.fmt.allocPrint(bun.default_allocator, "{s}://{s}{s}{s}", .{ protocol, host, normalizedPath, (if (search_params) |s| s else "") }), ._headers = @as([11]picohttp.Header, .{ picohttp.Header{ .name = "x-amz-content-sha256", .value = aws_content_hash }, picohttp.Header{ .name = "x-amz-date", .value = amz_date }, picohttp.Header{ .name = "Host", .value = host }, picohttp.Header{ .name = "Authorization", .value = authorization[0..] }, picohttp.Header{ .name = "", .value = "" }, picohttp.Header{ .name = "", .value = "" }, picohttp.Header{ .name = "", .value = "" }, picohttp.Header{ .name = "", .value = "" }, picohttp.Header{ .name = "", .value = "" }, picohttp.Header{ .name = "", .value = "" }, picohttp.Header{ .name = "", .value = "" } }), ._headers_len = 4 };
+        _ = &result;
+        host_guard.slice = null;
+        amz_date_guard.slice = null;
+        auth_guard.slice = null;
+        if (acl) |acl_value| {
+            _ = &acl_value;
+            result._headers[cp_cast_int(usize, result._headers_len)] = picohttp.Header{ .name = "x-amz-acl", .value = acl_value };
+            result._headers_len = (result._headers_len + 1);
+        }
+        if (session_token) |token| {
+            _ = &token;
+            const session_token_value = bun.handleOom(bun.default_allocator.dupe(u8, token));
+            result.session_token = session_token_value;
+            result._headers[cp_cast_int(usize, result._headers_len)] = picohttp.Header{ .name = "x-amz-security-token", .value = session_token_value };
+            result._headers_len = (result._headers_len + 1);
+        }
+        if (storage_class) |storage_class_value| {
+            _ = &storage_class_value;
+            result._headers[cp_cast_int(usize, result._headers_len)] = picohttp.Header{ .name = "x-amz-storage-class", .value = storage_class_value };
+            result._headers_len = (result._headers_len + 1);
+        }
+        if (content_disposition) |cd| {
+            _ = &cd;
+            const content_disposition_value = bun.handleOom(bun.default_allocator.dupe(u8, cd));
+            result.content_disposition = content_disposition_value;
+            result._headers[cp_cast_int(usize, result._headers_len)] = picohttp.Header{ .name = "content-disposition", .value = content_disposition_value };
+            result._headers_len = (result._headers_len + 1);
+        }
+        if (content_encoding) |ce| {
+            _ = &ce;
+            const content_encoding_value = bun.handleOom(bun.default_allocator.dupe(u8, ce));
+            result.content_encoding = content_encoding_value;
+            result._headers[cp_cast_int(usize, result._headers_len)] = picohttp.Header{ .name = "content-encoding", .value = content_encoding_value };
+            result._headers_len = (result._headers_len + 1);
+        }
+        if (content_md5) |c_md5| {
+            _ = &c_md5;
+            const content_md5_value = bun.handleOom(bun.default_allocator.dupe(u8, c_md5));
+            result.content_md5 = content_md5_value;
+            result._headers[cp_cast_int(usize, result._headers_len)] = picohttp.Header{ .name = "content-md5", .value = content_md5_value };
+            result._headers_len = (result._headers_len + 1);
+        }
+        if (request_payer) {
+            result._headers[cp_cast_int(usize, result._headers_len)] = picohttp.Header{ .name = "x-amz-request-payer", .value = "requester" };
+            result._headers_len = (result._headers_len + 1);
+        }
+        return result;
+}
 
 pub fn containsNewlineOrCR(value: []const u8) bool {
         return (strings.indexOfAny(value, "\r\n") != null);

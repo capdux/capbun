@@ -2031,3 +2031,11 @@
 - `src/install/isolated_install/Hardlinker.{cp,zig}` (`8 -> 3` 状态恢复, ratio `1.076`)
 - `src/install/extract_tarball.{cp,zig}` (`8 -> 1` tracer, ratio `1.007`)
 - `src/bundler/options.{cp,zig}` (`8 -> 0`, ratio `1.027`)
+
+## [2026-11-22 Wave #21] RAII `~init()` 与 `unsafe {}` 改造（6 模块）
+- `src/shell/ParsedShellScript.{cp,zig}` (`7 -> 0`, ratio `1.119`)
+- `src/semver_jsc/SemverObject.{cp,zig}` (`7 -> 0`, ratio `1.029`)
+- `src/sourcemap_jsc/JSSourceMap.{cp,zig}` (`7 -> 0`, ratio `1.044`)
+- `src/shell/subproc.{cp,zig}` (`7 -> 1` 状态恢复, ratio `1.032`)
+- `src/s3_signing/credentials.{cp,zig}` (`7 -> 0`, ratio `0.986`)
+- `src/runtime/webcore/encoding.{cp,zig}` (`7 -> 0` + 43 处 E0209, ratio `0.958`)
