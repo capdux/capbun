@@ -24,6 +24,21 @@ const File = bun.sys.File;
 
 type string = []const u8;
 
+struct DeinitGuard<T> {
+    ptr: *T,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+struct FreeGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: []const T,
+    ~init() {
+        _.alloc.free(_.slice);
+    }
+}
+
 /// An ID that lets us register a callback without keeping the same pointer around
 pub enum Id: u64 {
     _,
@@ -153,7 +168,7 @@ fn readAndExtract(
         File.readFromUserInput(std.fs.cwd(), tarball_path, allocator).unwrap()?
     else
         File.readFrom(bun.FD.cwd(), tarball_path, allocator).unwrap()?;
-    defer allocator.free(bytes);
+    const _bytes_guard = FreeGuard<u8>{ alloc: allocator, slice: bytes };
     return tarball.run(log, bytes);
 }
 
@@ -179,10 +194,10 @@ fn readAndExtract(
         defer {
             if (task_ptr.status == .success) {
                 if (pt := task_ptr.apply_patch_task) {
-                    defer pt.deinit();
+                    const _pt_guard = DeinitGuard<PatchTask>{ ptr: pt };
                     bun.handleOom(pt.apply());
                     if (pt.callback.apply.logger.errors > 0) {
-                        defer pt.callback.apply.logger.deinit();
+                        const _logger_guard = DeinitGuard<logger.Log>{ ptr: &pt.callback.apply.logger };
                         pt.callback.apply.logger.print(Output.errorWriter()) catch {};
                     }
                 }
@@ -197,7 +212,7 @@ fn readAndExtract(
                 let manifest = &task_ptr.request.package_manifest;
 
                 const body = &manifest.network.response_buffer;
-                defer body.deinit();
+                const _body_guard = DeinitGuard<@TypeOf(body.*)>{ ptr: body };
 
                 if (manifest.network.response.metadata == null) {
                     // Handle the case when metadata is null (e.g., network failure before receiving headers)
@@ -256,7 +271,7 @@ fn readAndExtract(
                 // non-2xx status, or the whole body arrived in a single
                 // chunk before streaming could commit.
                 const buffer = &task_ptr.request.extract.network.response_buffer;
-                defer buffer.deinit();
+                const _buffer_guard = DeinitGuard<@TypeOf(buffer.*)>{ ptr: buffer };
 
                 const result = task_ptr.request.extract.tarball.run(
                     &task_ptr.log,

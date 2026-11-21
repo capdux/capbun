@@ -1583,3 +1583,7 @@
 ## [2026-11-22 Wave #22] RAII 改造与 `unsafe {}` 经验
 - `node_fs_watcher.cp` / `AsyncModule.cp`：拆出复合 `defer { ... }` 内的资源释放动作至独立 Guard，确保异常路径不泄漏。
 - `main_wasm.cp` / `ref_count.cp`：补齐 `@intFromPtr`/`@ptrFromInt`/`@ptrCast` 的 `unsafe {}` 包裹。
+
+## [2026-11-22 Wave #23] RAII 改造与 `unsafe {}` 经验
+- `ProxyTunnel.cp`：`TunnelFlushGuard` 与 `DerefGuard<T>`/`FreeGuard<T>` 接管隧道缓冲刷新与引用释放，膨胀率压降至 `0.94`。
+- `repository.cp` / `PackageManagerTask.cp`：`CloseGuard<T>`、`DeinitGuard<T>`、`FreeGuard<u8>` 消除全部文件/内存清理型 `defer`。

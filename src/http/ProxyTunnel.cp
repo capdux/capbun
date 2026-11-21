@@ -17,6 +17,39 @@ export enum ProxyTunnelSocket {
     none: void,
 }
 
+pub struct DerefGuard<T> {
+    ptr: *T!? = null,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe {
+                p.deref();
+            }
+        }
+    }
+}
+
+pub struct FreeGuard<T> {
+    val: T? = null,
+    ~init() {
+        if (v := _.val) {
+            bun.default_allocator.free(v);
+        }
+    }
+}
+
+pub struct TunnelFlushGuard {
+    ptr: *ProxyTunnel!? = null,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe {
+                if (*wrapper := p.wrapper) {
+                    * = wrapper.flush();
+                }
+            }
+        }
+    }
+}
+
 export @root @value struct ProxyTunnel {
     pub const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, .{});
     pub const ref = RefCount.ref;
@@ -39,14 +72,14 @@ export @root @value struct ProxyTunnel {
         const proxy_opt = client.proxy_tunnel;
         if (proxy := proxy_opt) {
             proxy.ref();
-            defer proxy.deref();
+            const _proxy_guard = DerefGuard<ProxyTunnel>{ ptr: unsafe { proxy as *ProxyTunnel! } };
 
             if (*wrapper := proxy.wrapper) {
                 const ssl_ptr = wrapper.ssl ?? return;
                 const _hostname = client.hostname ?? client.url.hostname;
 
                 let hostname: [:0]const u8 = "";
-                let hostname_needs_free = false;
+                let hostname_guard = FreeGuard<[:0]const u8>{};
                 if (!bun.strings.isIPAddress(_hostname)) {
                     if (_hostname.len < bun.http.temp_hostname.len) {
                         bun.copy(u8, bun.http.temp_hostname[0.._hostname.len], _hostname);
@@ -54,15 +87,10 @@ export @root @value struct ProxyTunnel {
                         hostname = bun.http.temp_hostname[0.._hostname.len:0];
                     } else {
                         hostname = bun.handleOom(bun.default_allocator.dupeZ(u8, _hostname));
-                        hostname_needs_free = true;
+                        hostname_guard.val = hostname;
                     }
                 }
 
-                defer {
-                    if (hostname_needs_free) {
-                        bun.default_allocator.free(hostname);
-                    }
-                }
                 ssl_ptr.configureHTTPClient(hostname);
             }
         }
@@ -82,7 +110,7 @@ export @root @value struct ProxyTunnel {
         const proxy_opt = client.proxy_tunnel;
         if (proxy := proxy_opt) {
             proxy.ref();
-            defer proxy.deref();
+            const _proxy_guard = DerefGuard<ProxyTunnel>{ ptr: unsafe { proxy as *ProxyTunnel! } };
 
             switch (client.state.response_stage) {
                 .body => {
@@ -134,7 +162,7 @@ export @root @value struct ProxyTunnel {
         const proxy_opt = client.proxy_tunnel;
         if (proxy := proxy_opt) {
             proxy.ref();
-            defer proxy.deref();
+            const _proxy_guard = DerefGuard<ProxyTunnel>{ ptr: unsafe { proxy as *ProxyTunnel! } };
 
             client.state.response_stage = .proxy_headers;
             client.state.request_stage = .proxy_headers;
@@ -317,13 +345,8 @@ export @root @value struct ProxyTunnel {
     fn onWritable(*_, comptime is_ssl: bool, socket: auto) {
         * = is_ssl;
         this.ref();
-        defer this.deref();
-
-        defer {
-            if (*wrapper := this.wrapper) {
-                * = wrapper.flush();
-            }
-        }
+        const _deref_guard = DerefGuard<ProxyTunnel>{ ptr: unsafe { _ as *ProxyTunnel! } };
+        const _flush_guard = TunnelFlushGuard{ ptr: unsafe { _ as *ProxyTunnel! } };
 
         const encoded_data = this.write_buffer.slice();
         if (encoded_data.len == 0) {
@@ -341,7 +364,7 @@ export @root @value struct ProxyTunnel {
 
     fn receive(*_, buf: string) {
         this.ref();
-        defer this.deref();
+        const _deref_guard = DerefGuard<ProxyTunnel>{ ptr: unsafe { _ as *ProxyTunnel! } };
 
         if (*wrapper := this.wrapper) {
             wrapper.receiveData(buf);

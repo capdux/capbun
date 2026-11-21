@@ -2047,3 +2047,9 @@
 - `src/jsc/rare_data.{cp,zig}` (`7 -> 5` 锁恢复, ratio `0.959`)
 - `src/jsc/event_loop.{cp,zig}` (`7 -> 6` 状态恢复, ratio `0.937`)
 - `src/jsc/AsyncModule.{cp,zig}` (`7 -> 3` 状态恢复, ratio `1.069`)
+
+## [2026-11-22 Wave #23] RAII `~init()` 与 `unsafe {}` 改造（3 改造 + 1 复核）
+- `src/install/repository.{cp,zig}` (`7 -> 0`, ratio `1.074`)
+- `src/install/PackageManagerTask.{cp,zig}` (`7 -> 2` flush/wake, ratio `1.049`)
+- `src/http/ProxyTunnel.{cp,zig}` (`7 -> 0`, ratio `0.94`)
+- 复核达标：`src/install/PackageInstaller.cp` (`7` 处全为计数器/状态恢复)

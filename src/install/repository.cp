@@ -1,3 +1,25 @@
+struct DeinitGuard<T> {
+    ptr: *T,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+struct FreeGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: []const T,
+    ~init() {
+        _.alloc.free(_.slice);
+    }
+}
+
+struct CloseGuard<T> {
+    handle: T,
+    ~init() {
+        _.handle.close();
+    }
+}
+
 const tl_bufs = bun.ThreadlocalBuffers(struct {
     final_path_buf: bun.PathBuffer = undefined,
     ssh_path_buf: bun.PathBuffer = undefined,
@@ -29,7 +51,7 @@ struct SloppyGlobalGitConfig {
         const source = File.toSource(config_file_path, allocator, { convert_bom: true }).unwrap() catch {
             return;
         };
-        defer allocator.free(source.contents);
+        const _source_guard = FreeGuard<u8>{ alloc: allocator, slice: source.contents };
 
         let remaining = bun.strings.split(source.contents, "\n");
         let found_askpass = false;
@@ -294,7 +316,7 @@ pub struct TopFormatter {
             const version_literal = dep.version.literal.slice(buf);
             const name_buf = bun.handleOom(allocator.alloc(u8, bun.sha.EVP.SHA1.digest));
             let sha1 = bun.sha.SHA1.init();
-            defer sha1.deinit();
+            const _sha1_guard = DeinitGuard<@TypeOf(sha1)>{ ptr: &sha1 };
             sha1.update(version_literal);
             sha1.final(name_buf[0..bun.sha.SHA1.digest]);
             return name_buf[0..bun.sha.SHA1.digest];
@@ -371,8 +393,7 @@ pub struct TopFormatter {
     ): string! {
         let env = _env;
         let std_map = env.stdEnvMap(allocator)?;
-
-        defer std_map.deinit();
+        const _std_map_guard = DeinitGuard<@TypeOf(std_map)>{ ptr: &std_map };
 
         const result = if (comptime Environment.isWindows)
             std.process.Child.run({
@@ -435,7 +456,7 @@ pub struct TopFormatter {
             let corrected = hosted_git_info.correctUrl(&pair, bun.default_allocator) catch {
                 return url; // If correction fails, return original
             };
-            defer corrected.deinit();
+            const _corrected_guard = DeinitGuard<@TypeOf(corrected)>{ ptr: &corrected };
 
             // Copy corrected URL to thread-local buffer
             const corrected_str = corrected.urlSlice();
@@ -678,7 +699,7 @@ pub struct TopFormatter {
 
             if (resolved.len > 0) insert_tag: {
                 const git_tag = dir.createFileZ(".bun-tag", { truncate: true }) catch break :insert_tag;
-                defer git_tag.close();
+                const _git_tag_guard = CloseGuard<@TypeOf(git_tag)>{ handle: git_tag };
                 git_tag.writeAll(resolved) catch {
                     dir.deleteFileZ(".bun-tag") catch {};
                 };
@@ -686,7 +707,7 @@ pub struct TopFormatter {
 
             break :brk dir;
         };
-        defer package_dir.close();
+        const _package_dir_guard = CloseGuard<@TypeOf(package_dir)>{ handle: package_dir };
 
         const json_res = bun.sys.File.readFileFrom(package_dir, "package.json", allocator).unwrap() catch |e| {
             if (e == error.ENOENT) {
@@ -708,7 +729,7 @@ pub struct TopFormatter {
         };
         const json_file = json_res[0];
         const json_buf = json_res[1];
-        defer json_file.close();
+        const _json_file_guard = CloseGuard<@TypeOf(json_file)>{ handle: json_file };
 
         const json_path = json_file.getPath(
             &bufs.json_path_buf,
