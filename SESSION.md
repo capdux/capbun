@@ -126,3 +126,9 @@
   - 修复 `src/cli/multi_run.cp:624-648` workspace 包路径过滤与无 `name` 回退 `relativePlatform` 逻辑，`multi-run.test.ts` **118 pass / 0 fail (527 expect())** 100% 全绿通关；
   - 修复 `src/jsc/RuntimeTranspilerCache.cp:63-70`（提升 `CacheMetadata` 并改写 `while` 索引循环恢复 `Metadata.size` 非零计算）、`src/js_parser/lexer.cp:3209-3226`（`isLatin1Identifier` 改用 `c0` + `while` + 范围 `if`）、`src/js_parser/ast/visit.cp:381-392`（`visitForLoopInit` 改用 `while` 索引遍历恢复 `visitBinding`），`transpiler-cache.test.ts` + `run-unicode.test.ts` **11/11 全绿 (130 expect())**，`syntax.test.ts` `#225` **2/2 全绿**；
   - `test/cli/run` 第二批 22 文件扫出 666 pass / 0 crash（上述关键模块已修复）。
+- **[2026-11-21 22:38] 收到 `cp_agy` 重大语法变更广播 `syntax-raii-20261121-v2` 并验收 ack**：`cpc` (Release) 与本仓库 `CP_PITFALLS.md` 已同步更新：(1) `release` 无论无参或多参彻底退回普通业务方法，永不作为析构函数、永不注入自动 `defer`、永不截断实参；(2) `init(...)` 为 `class` 构造函数，`~init() { ... }` 为 `struct`/`class` 唯一双重幂等析构函数，提前释放使用 `drop(x)` 或 `x.~init()`；(3) 全面补全三态赋值、五态解构、成员分离借用、`&v` 取址直赋、`struct`/`class`/`ref struct` 边界与四层转换法则。
+- **[2026-11-21 22:42] `bun.lock` / `node_zlib_binding` / `package_manager_command` 3 大模块修复里程碑（57/65 通过、0 崩溃）**：
+  - 修复 `src/install/lockfile/bun.lock.cp:1485-1488` `maybe_name = name.asString(...) orelse { ... }` 被 `cpc` 误编译为 `if (maybe_name == null)` 吞掉 `asString` 的缺陷，`bun-audit.test.ts` 从 0/13 跃升至 **12/13 通过**；
+  - 修复 `src/runtime/node/node_zlib_binding.cp` 中 `@"in"` 局部切片变量名被 `cpc` 吞掉赋值与 `setBuffers` 调用的缺陷（重命名为 `in_slice`），`bun-install-tarball-integrity.test.ts` **13/13 100% 全绿**；
+  - 修复 `src/cli/package_manager_command.cp:108-126` `getSubcommand` 多切一位参数的缺陷，`bun-info.test.ts` `bun pm view` 从全败跃升至 **12/13 通过**；
+  - `test/cli/install` 第二批在前序已跑出 **425 pass / 0 crash**。

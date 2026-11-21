@@ -144,11 +144,8 @@ pub fn getSubcommand(args_ptr: *[]const []const u8) []const u8 {
                 subcommand = "";
                 if ((args.len > 1)) {
                     args = args[1..];
-                    subcommand = args[0];
+                    return args[0];
                 }
-            }
-            if ((subcommand.len > 0)) {
-                args = args[1..];
             }
             return subcommand;
     }

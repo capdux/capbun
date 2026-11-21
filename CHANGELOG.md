@@ -1890,3 +1890,4 @@
 - **[2026-11-21] `node_fs.cp` 与 5 个次级 `release()` 清雷**：更新 `src/runtime/node/node_fs.{cp,zig}`、`src/runtime/webcore/S3Stat.{cp,zig}`、`src/runtime/webcore/ObjectURLRegistry.{cp,zig}`、`src/runtime/webcore/s3/error_jsc.{cp,zig}`、`src/runtime/socket/SocketAddress.{cp,zig}`、`src/uws_sys/us_socket_t.{cp,zig}`。
 - **[2026-11-21] `multi_run.cp` 进程退出监视与回收修复（117/118 pass）**：更新 `src/cli/multi_run.{cp,zig}`、`src/install/npm.zig`。
 - **[2026-11-21] `multi_run` / `RuntimeTranspilerCache` / `visit` / `lexer` 修复（4 测试集全绿）**：更新 `src/cli/multi_run.{cp,zig}`、`src/jsc/RuntimeTranspilerCache.{cp,zig}`、`src/js_parser/ast/visit.{cp,zig}`、`src/js_parser/lexer.{cp,zig}`。
+- **[2026-11-21] `bun.lock` / `node_zlib_binding` / `package_manager_command` 修复**：更新 `src/install/lockfile/bun.lock.{cp,zig}`、`src/runtime/node/node_zlib_binding.{cp,zig}`、`src/cli/package_manager_command.{cp,zig}`。

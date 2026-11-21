@@ -38,7 +38,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -163,8 +163,8 @@ pub fn write(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFr
             _ = &out_len;
             var flush: u32 = 0;
             _ = &flush;
-            var @"in": ?[]const u8 = null;
-            _ = &@"in";
+            var in_slice: ?[]const u8 = null;
+            _ = &in_slice;
             var out: ?[]u8 = null;
             _ = &out;
             const this_value = callframe.this();
@@ -174,6 +174,7 @@ pub fn write(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFr
             flush = arguments[0].toU32();
             _ = (blk_catch_0: { break :blk_catch_0 ((std.@"meta".intToEnum(bun.zlib.FlushValue, flush)) catch |__ce_0| { _ = &__ce_0; return globalThis.ERR(.INVALID_ARG_VALUE, "Invalid flush value", .{}).throw(); }); });
             if (arguments[1].isNull()) {
+                in_slice = null;
                 in_len = 0;
                 in_off = 0;
             } else {
@@ -185,6 +186,7 @@ pub fn write(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFr
                 if ((in_buf.byte_len < ((if (comptime @typeInfo(@TypeOf(in_off)) == .@"enum") cp_cast_int(usize, @intFromEnum(in_off)) else cp_cast_int(usize, in_off)) + (if (comptime @typeInfo(@TypeOf(in_len)) == .@"enum") cp_cast_int(usize, @intFromEnum(in_len)) else cp_cast_int(usize, in_len))))) {
                     return globalThis.ERR(.OUT_OF_RANGE, "in_off + in_len ({d}) exceeds input buffer length ({d})", .{ ((if (comptime @typeInfo(@TypeOf(in_off)) == .@"enum") cp_cast_int(usize, @intFromEnum(in_off)) else cp_cast_int(usize, in_off)) + (if (comptime @typeInfo(@TypeOf(in_len)) == .@"enum") cp_cast_int(usize, @intFromEnum(in_len)) else cp_cast_int(usize, in_len))), in_buf.byte_len }).throw();
                 }
+                in_slice = in_buf.byteSlice()[in_off..][0..in_len];
             }
             const out_buf = ((arguments[4].asArrayBuffer(globalThis)) orelse {
             return globalThis.ERR(.INVALID_ARG_TYPE, "The \"out\" argument must be a TypedArray or DataView", .{}).throw();
@@ -203,6 +205,7 @@ pub fn write(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFr
             }
             stream.write_in_progress = true;
             _ = stream.ref();
+            _ = stream.stream.setBuffers(in_slice, out);
             _ = stream.stream.setFlush((if (comptime @typeInfo(@TypeOf(flush)) == .@"enum") cp_cast_int(i32, @intFromEnum(flush)) else cp_cast_int(i32, flush)));
             _ = stream.this_value.set(globalThis, this_value);
             const vm = globalThis.bunVM();
@@ -257,8 +260,8 @@ pub fn writeSync(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.Ca
             _ = &out_len;
             var flush: u32 = 0;
             _ = &flush;
-            var @"in": ?[]const u8 = null;
-            _ = &@"in";
+            var in_slice: ?[]const u8 = null;
+            _ = &in_slice;
             var out: ?[]u8 = null;
             _ = &out;
             if (arguments[0].isUndefined()) {
@@ -267,6 +270,7 @@ pub fn writeSync(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.Ca
             flush = arguments[0].toU32();
             _ = (blk_catch_1: { break :blk_catch_1 ((std.@"meta".intToEnum(bun.zlib.FlushValue, flush)) catch |__ce_1| { _ = &__ce_1; return globalThis.ERR(.INVALID_ARG_VALUE, "Invalid flush value", .{}).throw(); }); });
             if (arguments[1].isNull()) {
+                in_slice = null;
                 in_len = 0;
                 in_off = 0;
             } else {
@@ -278,6 +282,7 @@ pub fn writeSync(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.Ca
                 if ((in_buf.byte_len < ((if (comptime @typeInfo(@TypeOf(in_off)) == .@"enum") cp_cast_int(usize, @intFromEnum(in_off)) else cp_cast_int(usize, in_off)) + (if (comptime @typeInfo(@TypeOf(in_len)) == .@"enum") cp_cast_int(usize, @intFromEnum(in_len)) else cp_cast_int(usize, in_len))))) {
                     return globalThis.ERR(.OUT_OF_RANGE, "in_off + in_len ({d}) exceeds input buffer length ({d})", .{ ((if (comptime @typeInfo(@TypeOf(in_off)) == .@"enum") cp_cast_int(usize, @intFromEnum(in_off)) else cp_cast_int(usize, in_off)) + (if (comptime @typeInfo(@TypeOf(in_len)) == .@"enum") cp_cast_int(usize, @intFromEnum(in_len)) else cp_cast_int(usize, in_len))), in_buf.byte_len }).throw();
                 }
+                in_slice = in_buf.byteSlice()[in_off..][0..in_len];
             }
             const out_buf = ((arguments[4].asArrayBuffer(globalThis)) orelse {
             return globalThis.ERR(.INVALID_ARG_TYPE, "The \"out\" argument must be a TypedArray or DataView", .{}).throw();
@@ -296,6 +301,7 @@ pub fn writeSync(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.Ca
             }
             stream.write_in_progress = true;
             _ = stream.ref();
+            _ = stream.stream.setBuffers(in_slice, out);
             _ = stream.stream.setFlush((if (comptime @typeInfo(@TypeOf(flush)) == .@"enum") cp_cast_int(i32, @intFromEnum(flush)) else cp_cast_int(i32, flush)));
             const this_value = callframe.this();
             _ = stream.stream.doWork();

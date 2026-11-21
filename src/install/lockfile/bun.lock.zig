@@ -1184,10 +1184,13 @@ else => {
             _ = &maybe_name;
             if (root_pkg_exr.get("name")) |name| {
                 _ = &name;
-                if (maybe_name == null) { maybe_name = ({
-                _ = try log.addError(source, name.loc, "Expected a string");
-                return error.InvalidWorkspaceObject;
-}); }
+                if (name.asString(allocator)) |name_str| {
+                    _ = &name_str;
+                    maybe_name = name_str;
+                } else {
+                    _ = try log.addError(source, name.loc, "Expected a string");
+                    return error.InvalidWorkspaceObject;
+                }
             }
             const root_dep_pair = try parseAppendDependencies(lockfile, allocator, (&root_pkg_exr), (&string_buf), log, source, (&optional_peers_buf), false, undefined, undefined, true, (&workspaces_obj));
             const off = @field(root_dep_pair, "0");

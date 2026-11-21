@@ -118,12 +118,8 @@ pub struct PackageManagerCommand {
             subcommand = "";
             if (args.len > 1) {
                 args = args[1..];
-                subcommand = args[0];
+                return args[0];
             }
-        }
-
-        if (subcommand.len > 0) {
-            args = args[1..];
         }
 
         return subcommand;

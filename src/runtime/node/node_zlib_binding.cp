@@ -64,7 +64,7 @@ pub fn CompressionStream(comptime T: type): type {
             let out_off: u32 = 0;
             let out_len: u32 = 0;
             let flush: u32 = 0;
-            let @"in": ([]const u8)? = null;
+            let in_slice: ([]const u8)? = null;
             let out: ([]u8)? = null;
 
             const this_value = callframe.this();
@@ -79,7 +79,7 @@ pub fn CompressionStream(comptime T: type): type {
 
             if (arguments[1].isNull()) {
                 // just a flush
-                @"in" = null;
+                in_slice = null;
                 in_len = 0;
                 in_off = 0;
             } else {
@@ -91,7 +91,7 @@ pub fn CompressionStream(comptime T: type): type {
                 if (in_buf.byte_len < @as(usize, in_off) + @as(usize, in_len)) {
                     return globalThis.ERR(.OUT_OF_RANGE, "in_off + in_len ({d}) exceeds input buffer length ({d})", .{ @as(usize, in_off) + @as(usize, in_len), in_buf.byte_len }).throw();
                 }
-                @"in" = in_buf.byteSlice()[in_off..][0..in_len];
+                in_slice = in_buf.byteSlice()[in_off..][0..in_len];
             }
 
             const out_buf = arguments[4].asArrayBuffer(globalThis) orelse {
@@ -113,7 +113,7 @@ pub fn CompressionStream(comptime T: type): type {
             stream.write_in_progress = true;
             stream.ref();
 
-            stream.stream.setBuffers(@"in", out);
+            stream.stream.setBuffers(in_slice, out);
             stream.stream.setFlush(i32(flush));
 
             // Only create the strong handle when we have a pending write
@@ -187,7 +187,7 @@ pub fn CompressionStream(comptime T: type): type {
             let out_off: u32 = 0;
             let out_len: u32 = 0;
             let flush: u32 = 0;
-            let @"in": ([]const u8)? = null;
+            let in_slice: ([]const u8)? = null;
             let out: ([]u8)? = null;
 
             if (arguments[0].isUndefined()) {
@@ -200,7 +200,7 @@ pub fn CompressionStream(comptime T: type): type {
 
             if (arguments[1].isNull()) {
                 // just a flush
-                @"in" = null;
+                in_slice = null;
                 in_len = 0;
                 in_off = 0;
             } else {
@@ -212,7 +212,7 @@ pub fn CompressionStream(comptime T: type): type {
                 if (in_buf.byte_len < @as(usize, in_off) + @as(usize, in_len)) {
                     return globalThis.ERR(.OUT_OF_RANGE, "in_off + in_len ({d}) exceeds input buffer length ({d})", .{ @as(usize, in_off) + @as(usize, in_len), in_buf.byte_len }).throw();
                 }
-                @"in" = in_buf.byteSlice()[in_off..][0..in_len];
+                in_slice = in_buf.byteSlice()[in_off..][0..in_len];
             }
 
             const out_buf = arguments[4].asArrayBuffer(globalThis) orelse {
@@ -234,7 +234,7 @@ pub fn CompressionStream(comptime T: type): type {
             stream.write_in_progress = true;
             stream.ref();
 
-            stream.stream.setBuffers(@"in", out);
+            stream.stream.setBuffers(in_slice, out);
             stream.stream.setFlush(i32(flush));
             const this_value = callframe.this();
 

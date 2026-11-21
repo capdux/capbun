@@ -1491,3 +1491,5 @@
   - `ProcessHandle.start()` 遗漏 `setExitHandler` 与 `watchOrReap` 导致子进程退出成为 `<defunct>` 且 `remaining_scripts` 永不递减；使用 `const proc_ptr = _.process.?.ptr;` 避免 `cpc` 对 `process` 误判可选 `.?` 后，118 个并发/顺序运行用例通过 117 个。
 - **[2026-11-21] `RuntimeTranspilerCache` / `visit` / `lexer` 循环体与分支静默丢弃修复**：
   - `RuntimeTranspilerCache.cp` `Metadata.size` 块内 `for (...) |name|` 被 `cpc` 丢弃循环体导致 `size == 0` 缓存全失效；`visit.cp` `for (*dec of st.decls.slice())` 被丢弃导致 `Scope mismatch` panic；`lexer.cp` `switch (name[0])` 在泛型参数下被吞导致 `isLatin1Identifier` 恒 false；改写为显式索引/范围 `if` 后全部实测 100% 通关。
+- **[2026-11-21] `InvalidWorkspaceObject` / `gzipSync Z_STREAM_ERROR` / `pm view` 偏移根治**：
+  - `bun.lock.cp` 中 `orelse` 赋值吞右值导致所有含 `"name"` 的 `bun.lock` 报 `InvalidWorkspaceObject`；`node_zlib_binding.cp` 中 `@"in"` 局部变量赋值与传参被 `cpc` 静默丢弃导致 `z_stream` 全零报错 `Z_STREAM_ERROR`；`package_manager_command.cp` `getSubcommand` 多切一位参数导致 `bun pm view` 偏移；三项修复后 `tarball-integrity` 13/13 全绿、`audit` 12/13、`info` 12/13。

@@ -1482,10 +1482,12 @@ pub fn parseIntoBinaryLockfile(
     {
         let maybe_name: string? = null;
         if (name := root_pkg_exr.get("name")) {
-            maybe_name = name.asString(allocator) orelse {
+            if (name_str := name.asString(allocator)) {
+                maybe_name = name_str;
+            } else {
                 log.addError(source, name.loc, "Expected a string")?;
                 return error.InvalidWorkspaceObject;
-            };
+            }
         }
 
         const root_dep_pair = parseAppendDependencies(
