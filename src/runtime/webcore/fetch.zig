@@ -541,36 +541,31 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
             }
         }
         url_proxy_buffer = url.href;
+        var found_method: ?Method = null;
+        _ = &found_method;
         if (options_object) |opts| {
             _ = &opts;
             if (try opts.getTruthyComptime(globalThis, "method")) |m| {
                 _ = &m;
-                if (try Method.fromJS(globalThis, m)) |m_val| {
-                    _ = &m_val;
-                    method = m_val;
-                } else {
-                    method = Method.GET;
-                }
+                found_method = ((try Method.fromJS(globalThis, m)) orelse (Method.GET));
             }
-        } else {
+        }
+        if ((found_method == null)) {
             if (request) |req| {
                 _ = &req;
-                method = req.method;
-            } else {
-                if (request_init_object) |req_init| {
-                    _ = &req_init;
-                    if (try req_init.getTruthyComptime(globalThis, "method")) |m| {
-                        _ = &m;
-                        if (try Method.fromJS(globalThis, m)) |m_val| {
-                            _ = &m_val;
-                            method = m_val;
-                        } else {
-                            method = Method.GET;
-                        }
-                    }
+                found_method = req.method;
+            }
+        }
+        if ((found_method == null)) {
+            if (request_init_object) |req_init| {
+                _ = &req_init;
+                if (try req_init.getTruthyComptime(globalThis, "method")) |m| {
+                    _ = &m;
+                    found_method = ((try Method.fromJS(globalThis, m)) orelse (Method.GET));
                 }
             }
         }
+        method = ((found_method) orelse (Method.GET));
         const decompress_objs: [2]JSValue = .{ ((options_object) orelse (JSValue.zero)), ((request_init_object) orelse (JSValue.zero)) };
         for (cp_iter_slice(decompress_objs)) |obj| {
             _ = &obj;

@@ -2166,3 +2166,6 @@
 
 ### [2026-11-23] Wave #72（全仓 `cpc check` 100% 清零 21 处 `E0209` 与重编 `visitExpr`/`toBeCloseTo` 保留 `-0.0`）
 - 用新版 `cpc` 重编 `visitExpr.cp` 与 `toBeCloseTo.cp`（保留 `-0.0`），并修复全仓最后 21 个 `E0209` `unsafe {}` 文件（全仓 1,295 个 `.cp` 实现 100% `cpc check` 通过），通过 `bun run zig:check`（5/5）与 `inspect.test.js`（72/72 全绿）。
+
+### [2026-11-23] Wave #73（修复 `fetch`/`FetchTasklet`/`Blob`/`ReadableStream` 与验证 `-0.0`）
+- 修复 `fetch.cp`（`req.method` 保留）、`FetchTasklet.cp`（`onBodyReceived` 清理顺序与 `fromJS` `static fn`）、`Blob.cp`（`getBytes`/`getJSON`/`getText` OOM 检查与 `AnyBlob.toPromise` `JSPromise.wrap`）与 `ReadableStream.cp`（`toAnyBlob` `isLocked` 检查），通过 `bun run zig:check`（5/5）；`-0.0` 与 `toIncludeRepeated` 相关测试全绿。

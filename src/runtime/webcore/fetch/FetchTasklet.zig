@@ -822,7 +822,6 @@ pub fn onBodyReceived(self: *FetchTasklet) !void {
                     if (self.result.has_more) {
                         _ = try readable.ptr.Bytes.onData(.{ .temporary = ByteList.fromBorrowedSliceDangerous(chunk) }, default_allocator);
                     } else {
-                        _ = try readable.ptr.Bytes.onData(.{ .temporary_and_done = ByteList.fromBorrowedSliceDangerous(chunk) }, default_allocator);
                         _ = self.clearStreamCancelHandler();
                         var prev = self.readable_stream_ref;
                         _ = &prev;
@@ -832,6 +831,7 @@ pub fn onBodyReceived(self: *FetchTasklet) !void {
                         var ___guard_prev_moved = false; _ = &___guard_prev_moved;
                         defer if (!___guard_prev_moved) { ___guard_prev_moved = true; const __T = @TypeOf(_guard_prev); if (@typeInfo(__T) == .optional) { if (_guard_prev) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_prev.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_prev; _drop_val.__cp_deinit(); } };
                         _guard_buf.active = false;
+                        _ = try readable.ptr.Bytes.onData(.{ .temporary_and_done = ByteList.fromBorrowedSliceDangerous(chunk) }, default_allocator);
                     }
                     return;
                 }

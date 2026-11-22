@@ -714,3 +714,16 @@
 | 9 | `task-bun-20261123-as-ptr-field-addr-of` | `_.p as *u64` 误生成 `@ptrCast(&(self.p))` (`repro_as_ptr_field.cp`) | `codegen/expr/ops.rs` 修正 `is_src_ptr` 与切片/定长数组判定 | 验证输出 `@ptrCast(@alignCast(self.p))`，已 `ack` |
 | 10 | `task-bun-20261123-unary-neg-zero-float` | 一元 `-x` 误生成 `(0 - x)` 丢失 `-0.0` (`repro_unary_neg_zero.cp`) | 全链路新增 `Expr::Neg` 原生生成 `(-x)` | 验证输出 `return (-x);`，已 `ack` |
 | 11 | `task-bun-20261123-adopt-cpc-brief` | 收录 `scripts/cpc_brief.py` 至 `cp/scripts` 并改用系统 `zig` | 已收录 `/data/dev/cp/scripts/cpc_brief.py` 并更新 `cp_agent_ref.md` | 验证 `--help` 通过，已 `ack` |
+22. **用户**：`汇报成果与进度, 还剩下多少工作需完成`
+    - **主智能体回应**：汇报全仓 1,295 个 `.cp` 已 100% 通过 `cpc check` 与 `zig:check`（5/5）、Wave #65~#72 核心修复与 Batch 1a/1b/1c/2a 测试进展，说明剩余工作主要为修复 `fetch`/`FetchTasklet` 3 处缺陷并完成余下 ~760+ 个测试文件的回归修绿。
+23. **用户**：`保持两个子智能体和主智能体并行工作, 加快进度, 注意 主智能体不可限于长时间任务.`
+    - **主智能体回应**：立即补派第 2 路只读子智能体排查 `blob-oom.test.ts`/`stream-fast-path.test.ts` 并准备 `fetch`/`FetchTasklet` 精确补丁，与运行 `bun bd test` 的第 1 路保持双路并行。
+
+## [2026-11-23] Wave #73：`-0.0` 回归验证通过，修复 `fetch`/`FetchTasklet`/`Blob`/`ReadableStream` 4 项语义缺陷并提交
+- 验证 `-0.0` 修复（`expect.test.js`、`test-test.test.ts`、`moremore.test.ts`、`jest-extended.test.js`）：478 pass / 2 fail（`-0` 与 `toIncludeRepeated` 全部 PASS，余 2 项为 `deepEquals` 压力超时与 snapshot 时间格式 `[1.52s]`）；Batch 2b 运行 `streams` 前 5 文件 13 pass / 1 fail 后在 `streams.test.js` 挂起（已强杀并派发独立定位）。
+- 完成 4 个核心 webcore 模块修复（均通过 `cpc_brief.py` 4 项门禁 + `bun run zig:check` 5/5 通过）：
+  - `src/runtime/webcore/fetch.cp`（L416-435 `found_method` 依次提取 `options_object` -> `request.method` -> `request_init_object` -> `GET`）；
+  - `src/runtime/webcore/fetch/FetchTasklet.cp`（L566-578 `onBodyReceived` 先清理 `cancel_handler`/`readable_stream_ref`/`_guard_buf.active = false` 再调 `onData`，并补全 `fromJS` `static fn`）；
+  - `src/runtime/webcore/Blob.cp`（恢复 `lifetimeWrap`/`toUint8Array`/`getBytes`/`getJSON`/`getText` 与 `AnyBlob.toJSONShare`/`toActionValue`/`toPromise` 的 `JSPromise.wrap`）；
+  - `src/runtime/webcore/ReadableStream.cp`（L161 `toAnyBlob` 增加 `_.isLocked(globalThis)` 校验）。
+- 推导下一阶段 Wave #74：Subagent 1 运行 `bun bd test` 验证 `blob-oom.test.ts`、`stream-fast-path.test.ts`、`client-fetch.test.ts`、`body-stream.test.ts`（`-t "method"`）与 `fetch.test.ts`；Subagent 2 根据 `streams.test.js` 定位结果修复死循环并覆盖 `test/js/web/websocket`。

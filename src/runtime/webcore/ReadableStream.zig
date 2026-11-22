@@ -182,7 +182,7 @@ pub fn reloadTag(self: *ReadableStream, globalThis: *jsc.JSGlobalObject) bun.JSE
 }
 
 pub fn toAnyBlob(self: *ReadableStream, globalThis: *jsc.JSGlobalObject) ?Blob.Any {
-        if (self.isDisturbed(globalThis)) {
+        if ((self.isDisturbed(globalThis) or self.isLocked(globalThis))) {
             return null;
         }
         _ = (blk_catch_1: { break :blk_catch_1 ((self.reloadTag(globalThis)) catch |__ce_1| { _ = &__ce_1;  }); });

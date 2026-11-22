@@ -414,25 +414,25 @@ fn fetchImpl(
     url_proxy_buffer = url.href;
 
     // method
+    let found_method: Method? = null;
     if (opts := options_object) {
         if (m := opts.getTruthyComptime(globalThis, "method")?) {
-            if (m_val := Method.fromJS(globalThis, m)?) {
-                method = m_val;
-            } else {
-                method = Method.GET;
-            }
+            found_method = Method.fromJS(globalThis, m)? ?? Method.GET;
         }
-    } else if (req := request) {
-        method = req.method;
-    } else if (req_init := request_init_object) {
-        if (m := req_init.getTruthyComptime(globalThis, "method")?) {
-            if (m_val := Method.fromJS(globalThis, m)?) {
-                method = m_val;
-            } else {
-                method = Method.GET;
+    }
+    if (found_method == null) {
+        if (req := request) {
+            found_method = req.method;
+        }
+    }
+    if (found_method == null) {
+        if (req_init := request_init_object) {
+            if (m := req_init.getTruthyComptime(globalThis, "method")?) {
+                found_method = Method.fromJS(globalThis, m)? ?? Method.GET;
             }
         }
     }
+    method = found_method ?? Method.GET;
 
     // decompress
     const decompress_objs: [2]JSValue = [ options_object ?? JSValue.zero, request_init_object ?? JSValue.zero ];

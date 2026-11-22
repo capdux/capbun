@@ -158,7 +158,7 @@ fn reloadTag(*_, globalThis: *jsc.JSGlobalObject): bun.JSError!void {
 }
 
 fn toAnyBlob(*_, globalThis: *jsc.JSGlobalObject): Blob.Any? {
-    if (_.isDisturbed(globalThis)) {
+    if (_.isDisturbed(globalThis) || _.isLocked(globalThis)) {
         return null;
     }
 

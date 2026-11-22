@@ -1718,3 +1718,7 @@
 ### [2026-11-23] Wave #72 技术要点（全仓 `cpc check` 收官）
 - `cpc` 新增 `Expr::Neg` 原生输出 `(-x)` 后，重编 `visitExpr.cp` 与 `toBeCloseTo.cp` 即可让 JS/TS `-0` 字面量保留 IEEE-754 负号位。
 - 经分批只读扫描（170 mtime 滞后 + 340 `runtime/http/bundler/install` + 955 其余目录），全仓所有 `.cp` 模块的 `E0209` 已全部补全 `unsafe {}` 清零。
+
+### [2026-11-23] Wave #73 技术要点（`Blob` Promise 包装与 `ReadableStream` 锁定校验）
+- `Blob.getBytes`/`getJSON`/`getText` 与 `AnyBlob.toPromise` 必须经由 `JSPromise.wrap` 异步包装，否则同步校验（如 `synthetic_allocation_limit` OOM 与非法 JSON `SyntaxError`）会直接抛出同步异常而非返回 rejected Promise。
+- `ReadableStream.toAnyBlob` 必须先检查 `_.isLocked(globalThis)`，否则已锁定但未 disturbed 的流会跳过 `readableStreamToBlob` 抛错分支。

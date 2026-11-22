@@ -261,7 +261,7 @@ pub union(enum) FetchHTTPRequestBody {
         }
     }
 
-    pub fn fromJS(globalThis: *JSGlobalObject, value: JSValue): JSError!FetchHTTPRequestBody {
+    pub static fn fromJS(globalThis: *JSGlobalObject, value: JSValue): JSError!FetchHTTPRequestBody {
         let body_value = Body.Value.fromJS(globalThis, value)?;
         if (body_value == .Used || (body_value == .Locked && (body_value.Locked.action != .none || body_value.Locked.isDisturbed2(globalThis)))) {
             return globalThis.ERR(.BODY_ALREADY_USED, "body already used", .{}).throw();
@@ -564,17 +564,18 @@ export class FetchTasklet {
                         default_allocator,
                     )?;
                 } else {
+                    _.clearStreamCancelHandler();
+                    let prev = _.readable_stream_ref;
+                    _.readable_stream_ref = .{};
+                    const _guard_prev = DeinitGuard<@TypeOf(prev)>{ ptr: &prev };
+                    _guard_buf.active = false;
+
                     readable.ptr.Bytes.onData(
                         .{
                             .temporary_and_done = ByteList.fromBorrowedSliceDangerous(chunk),
                         },
                         default_allocator,
                     )?;
-                    _.clearStreamCancelHandler();
-                    let prev = _.readable_stream_ref;
-                    _.readable_stream_ref = .{};
-                    const _guard_prev = DeinitGuard<@TypeOf(prev)>{ ptr: &prev };
-                    _guard_buf.active = false;
                 }
                 return;
             }

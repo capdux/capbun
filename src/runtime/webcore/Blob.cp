@@ -1649,10 +1649,7 @@ pub union(enum) BlobAny {
     }
 
     fn toJSONShare(*_, globalObject: *JSGlobalObject): JSValue ! JSError {
-        const bytes = _.slice();
-        let str = String.cloneUTF8(bytes);
-        const _guard_str = DerefGuard<String>{ ptr: &str };
-        return str.toJSByParseJSON(globalObject);
+        return _.toJSON(globalObject, .share);
     }
 
     fn toStringTransfer(*_, globalObject: *JSGlobalObject): JSValue ! JSError {
@@ -1660,19 +1657,39 @@ pub union(enum) BlobAny {
         return String.fromBytes(bytes).toJS(globalObject);
     }
 
-    fn toPromise(*_, globalThis: *JSGlobalObject, action: webcore.streams.BufferAction.Tag): JSValue ! JSError {
-        const val = switch (action) {
-            .arrayBuffer => _.toArrayBufferTransfer(globalThis)?,
-            .bytes => _.toUint8ArrayTransfer(globalThis)?,
-            .json => _.toJSONShare(globalThis)?,
-            .text => _.toStringTransfer(globalThis)?,
-            .blob => brk: {
-                const duped = bun.handleOom(bun.default_allocator.dupe(u8, _.slice()));
-                const b = bun.new(Blob, Blob.init(duped, bun.default_allocator, globalThis));
-                break :brk b.toJS(globalThis);
+    fn toActionValue(*_, globalThis: *JSGlobalObject, action: webcore.streams.BufferAction.Tag): JSValue ! JSError {
+        switch (action) {
+            .text => {
+                if (_.* == .Blob) {
+                    return _.toString(globalThis, .clone);
+                }
+                return _.toStringTransfer(globalThis);
             },
-        };
-        return JSPromise.resolvedPromiseValue(globalThis, val);
+            .bytes => {
+                if (_.* == .Blob) {
+                    return _.toArrayBufferView(globalThis, .clone, .Uint8Array);
+                }
+                return _.toUint8ArrayTransfer(globalThis);
+            },
+            .blob => {
+                const result = bun.new(Blob, _.toBlob(globalThis));
+                result.globalThis = globalThis;
+                return result.toJS(globalThis);
+            },
+            .arrayBuffer => {
+                if (_.* == .Blob) {
+                    return _.toArrayBufferView(globalThis, .clone, .ArrayBuffer);
+                }
+                return _.toArrayBufferTransfer(globalThis);
+            },
+            .json => {
+                return _.toJSON(globalThis, .share);
+            },
+        }
+    }
+
+    fn toPromise(*_, globalThis: *JSGlobalObject, action: webcore.streams.BufferAction.Tag): JSValue ! JSError {
+        return JSPromise.wrap(globalThis, toActionValue, .{ _, globalThis, action });
     }
 }
 
@@ -2719,11 +2736,20 @@ pub struct BlobExternalSharedDescriptor {
         return JSPromise.resolvedPromiseValue(globalThis, jsc.ArrayBuffer.create(globalThis, _.sharedView(), .ArrayBuffer)?);
     }
 
+    static fn lifetimeWrap(comptime Fn: auto, comptime lifetime: webcore.Lifetime): *const fn (*Blob, *JSGlobalObject): JSValue {
+        return &struct {
+            static fn wrap(blob: *Blob, globalObject: *JSGlobalObject): JSValue {
+                return jsc.toJSHostCall(globalObject, @src(), Fn, .{ blob, globalObject, lifetime });
+            }
+        }.wrap;
+    }
+
     fn getBytes(*_, globalThis: *JSGlobalObject, _: *CallFrame): JSError!JSValue {
-        if (_.needsToReadFile()) {
-            return _.doReadFile(toUint8ArrayWithBytes, globalThis);
+        if (store := _.store) {
+            store.ref();
         }
-        return JSPromise.resolvedPromiseValue(globalThis, jsc.ArrayBuffer.create(globalThis, _.sharedView(), .Uint8Array)?);
+        const _guard_store = OptDerefGuard<BlobStore>{ ptr: _.store };
+        return JSPromise.wrap(globalThis, lifetimeWrap(toUint8Array, .clone), .{ _, globalThis });
     }
 
     fn doUnlink(*_, globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSValue {
@@ -3009,6 +3035,10 @@ pub struct BlobExternalSharedDescriptor {
         return toJSONWithBytes(_, global, _.sharedView(), lifetime);
     }
 
+    fn toUint8Array(*_, global: *JSGlobalObject, comptime lifetime: webcore.Lifetime): JSError!JSValue {
+        return _.toArrayBufferView(global, lifetime, .Uint8Array);
+    }
+
     fn toArrayBufferView(*_, global: *JSGlobalObject, comptime lifetime: webcore.Lifetime, comptime TypedArrayView: JSValue.JSType): JSError!JSValue {
         const WithBytesFn = comptime if (TypedArrayView == .Uint8Array)
             toUint8ArrayWithBytes
@@ -3073,12 +3103,11 @@ pub struct BlobExternalSharedDescriptor {
     }
 
     fn getJSON(*_, globalThis: *JSGlobalObject, _: *CallFrame): JSError!JSValue {
-        if (_.needsToReadFile()) {
-            return _.doReadFile(toJSONWithBytes, globalThis);
+        if (store := _.store) {
+            store.ref();
         }
-        let str = String.cloneUTF8(_.sharedView());
-        const _guard_str = DerefGuard<String>{ ptr: &str };
-        return JSPromise.resolvedPromiseValue(globalThis, str.toJSByParseJSON(globalThis)?);
+        const _guard_store = OptDerefGuard<BlobStore>{ ptr: _.store };
+        return JSPromise.wrap(globalThis, lifetimeWrap(toJSON, .share), .{ _, globalThis });
     }
 
     fn getLastModified(*_, _: *JSGlobalObject): JSValue {
@@ -3257,11 +3286,11 @@ pub struct BlobExternalSharedDescriptor {
     }
 
     fn getText(*_, globalThis: *JSGlobalObject, _: *CallFrame): JSError!JSValue {
-        if (_.needsToReadFile()) {
-            return _.doReadFile(toStringWithBytes, globalThis);
+        if (store := _.store) {
+            store.ref();
         }
-        const str = String.createUTF8ForJS(globalThis, _.sharedView())?;
-        return JSPromise.resolvedPromiseValue(globalThis, str);
+        const _guard_store = OptDerefGuard<BlobStore>{ ptr: _.store };
+        return JSPromise.wrap(globalThis, lifetimeWrap(toString, .clone), .{ _, globalThis });
     }
 
     fn getType(*_, globalThis: *JSGlobalObject): JSValue {
