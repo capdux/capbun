@@ -861,6 +861,8 @@ pub fn finalize(client: *Subprocess) callconv(.c) void {
             _ = (ipc_data.*).deinit();
             client.ipc_data = null;
         }
+        client.flags.finalized = true;
+        _ = client.deref();
 }
 
 pub fn getExited(client: *Subprocess, this_value: JSValue, globalThis: *JSGlobalObject) JSValue {

@@ -749,7 +749,7 @@ pub struct BackgroundHandler {
                 if (*c := _.color) c.deinit(allocator);
                 _.color = color;
                 if (*i := _.images) i.deinit(allocator);
-                _.images = images;
+                _.images = bg_images;
                 let x_positions = _.initSmallListHelper(HorizontalPosition, 1, "x_positions", allocator, val.len());
                 let y_positions = _.initSmallListHelper(VerticalPosition, 1, "y_positions", allocator, val.len());
                 let repeats = _.initSmallListHelper(BackgroundRepeat, 1, "repeats", allocator, val.len());

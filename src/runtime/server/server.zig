@@ -1405,6 +1405,14 @@ pub const FileResponseStream = _FileResponseStream;
 pub const RangeRequest = _RangeRequest;
 pub const ServerConfig = _ServerConfig;
 pub const ServerWebSocket = _ServerWebSocket;
+const _SelfMod = @This();
+const _Ptrs = struct {
+    pub const ServerWebSocketPtr = *_SelfMod.ServerWebSocket;
+    pub const StaticRoutePtr = *_SelfMod.StaticRoute;
+    pub const FileRoutePtr = *_SelfMod.FileRoute;
+    pub const HTMLBundleRoutePtr = *HTMLBundle.Route;
+    pub const TranspilerPtr = *_SelfMod.Transpiler;
+};
 pub const NodeHTTPResponse = _NodeHTTPResponseMod.NodeHTTPResponse;
 var did_send_idletimeout_warning_once: bool = false;
 pub const AnyRequestContext = _AnyRequestContext;
@@ -1468,12 +1476,12 @@ pub fn PreparedRequestFor(comptime Ctx: type) type {
     request_object: *Request,
     ctx: *Ctx,
 
-pub fn save(prepared: @This(), global: *jsc.JSGlobalObject, req: *Ctx.Req, resp: *Ctx.Resp) SavedRequest {
+pub fn save(self: @This(), global: *jsc.JSGlobalObject, req: *Ctx.Req, resp: *Ctx.Resp) SavedRequest {
             if (comptime Ctx.is_h3) {
                 _ = @compileError("PreparedRequest.save is HTTP/1-only");
             }
-            _ = prepared.ctx.toAsync(req, prepared.request_object);
-            return .{ .js_request = .create(prepared.js_request, global), .request = prepared.request_object, .ctx = AnyRequestContext.init(prepared.ctx), .response = uws.AnyResponse.init(resp) };
+            _ = self.ctx.toAsync(req, self.request_object);
+            return .{ .js_request = .create(self.js_request, global), .request = self.request_object, .ctx = AnyRequestContext.init(self.ctx), .response = uws.AnyResponse.init(resp) };
     }
 };
 }
@@ -1987,7 +1995,7 @@ pub fn onUpgrade(self: *@This(), globalThis: *jsc.JSGlobalObject, object: jsc.JS
             _ = resp.clearOnWritable();
             _ = resp.clearTimeout();
             _ = upgrader.deref();
-            _ = resp.upgrade(*ServerWebSocket, ws, sec_websocket_key_str.slice(), sec_websocket_protocol_str.slice(), sec_websocket_extensions_str.slice(), ctx);
+            _ = resp.upgrade(_Ptrs.ServerWebSocketPtr, ws, sec_websocket_key_str.slice(), sec_websocket_protocol_str.slice(), sec_websocket_extensions_str.slice(), ctx);
             return JSValue.true;
     }
 
@@ -2912,7 +2920,7 @@ pub fn onBunInfoRequest(self: *@This(), req: *uws.Request, resp: *App.Response) 
             var ___guard_writer_buf_moved = false; _ = &___guard_writer_buf_moved;
             defer if (!___guard_writer_buf_moved) { ___guard_writer_buf_moved = true; const __T = @TypeOf(_guard_writer_buf); if (@typeInfo(__T) == .optional) { if (_guard_writer_buf) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_writer_buf.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_writer_buf; _drop_val.__cp_deinit(); } };
             const source = (&logger.Source.initEmptyFile("info.json"));
-            _ = ((js_printer.printJSON(*js_printer.BufferPrinter, (&writer), ((bun.Global.BunInfo.generate(*Transpiler, (&jsc.VirtualMachine.get().transpiler), allocator)) catch unreachable), source, .{ .mangled_props = null })) catch unreachable);
+            _ = ((js_printer.printJSON(*js_printer.BufferPrinter, (&writer), ((bun.Global.BunInfo.generate(_Ptrs.TranspilerPtr, (&jsc.VirtualMachine.get().transpiler), allocator)) catch unreachable), source, .{ .mangled_props = null })) catch unreachable);
             _ = resp.writeStatus("200 OK");
             _ = resp.writeHeader("Content-Type", (if (@typeInfo(@TypeOf(MimeType.json)) == .@"enum") @intFromEnum(MimeType.json) else MimeType.json.value));
             _ = resp.writeHeader("Cache-Control", "public, max-age=3600");
@@ -3576,29 +3584,29 @@ _ = star_methods_covered_by_user.setUnion(method);
                     }
                     switch ((entry.*).route) {
 .static => |static_route| {
-_ = ServerConfig.applyStaticRoute(any_server, ssl_enabled, self.app.?, *StaticRoute, static_route, (entry.*).path, (entry.*).method);
+_ = ServerConfig.applyStaticRoute(any_server, ssl_enabled, self.app.?, _Ptrs.StaticRoutePtr, static_route, (entry.*).path, (entry.*).method);
                     if (comptime has_h3) {
                         if (self.h3_app) |h3_app| {
                             _ = &h3_app;
-                            _ = ServerConfig.applyStaticRouteH3(any_server, h3_app, *StaticRoute, static_route, (entry.*).path, (entry.*).method);
+                            _ = ServerConfig.applyStaticRouteH3(any_server, h3_app, _Ptrs.StaticRoutePtr, static_route, (entry.*).path, (entry.*).method);
                         }
                     }
 },
 .file => |file_route| {
-_ = ServerConfig.applyStaticRoute(any_server, ssl_enabled, self.app.?, *FileRoute, file_route, (entry.*).path, (entry.*).method);
+_ = ServerConfig.applyStaticRoute(any_server, ssl_enabled, self.app.?, _Ptrs.FileRoutePtr, file_route, (entry.*).path, (entry.*).method);
                     if (comptime has_h3) {
                         if (self.h3_app) |h3_app| {
                             _ = &h3_app;
-                            _ = ServerConfig.applyStaticRouteH3(any_server, h3_app, *FileRoute, file_route, (entry.*).path, (entry.*).method);
+                            _ = ServerConfig.applyStaticRouteH3(any_server, h3_app, _Ptrs.FileRoutePtr, file_route, (entry.*).path, (entry.*).method);
                         }
                     }
 },
 .html => |html_bundle_route| {
-_ = ServerConfig.applyStaticRoute(any_server, ssl_enabled, self.app.?, *HTMLBundle.Route, html_bundle_route.data, (entry.*).path, (entry.*).method);
+_ = ServerConfig.applyStaticRoute(any_server, ssl_enabled, self.app.?, _Ptrs.HTMLBundleRoutePtr, html_bundle_route.data, (entry.*).path, (entry.*).method);
                     if (comptime has_h3) {
                         if (self.h3_app) |h3_app| {
                             _ = &h3_app;
-                            _ = ServerConfig.applyStaticRouteH3(any_server, h3_app, *HTMLBundle.Route, html_bundle_route.data, (entry.*).path, (entry.*).method);
+                            _ = ServerConfig.applyStaticRouteH3(any_server, h3_app, _Ptrs.HTMLBundleRoutePtr, html_bundle_route.data, (entry.*).path, (entry.*).method);
                         }
                     }
                     if (dev_server) |dev| {

@@ -709,7 +709,7 @@ pub fn fromJS(global: *jsc.JSGlobalObject, args: *ServerConfig, arguments: *jsc.
                 _ = &_guard_iter;
                 var ___guard_iter_moved = false; _ = &___guard_iter_moved;
                 defer if (!___guard_iter_moved) { ___guard_iter_moved = true; const __T = @TypeOf(_guard_iter); if (@typeInfo(__T) == .optional) { if (_guard_iter) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_iter.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_iter; _drop_val.__cp_deinit(); } };
-                var init_ctx_: AnyRoute.ServerInitContext = .{ .@"arena" = std.heap.ArenaAllocator.init(bun.default_allocator), .dedupe_html_bundle_map = std.AutoHashMap(*HTMLBundle, bun.ptr.RefPtr(HTMLBundle.Route)).init(bun.default_allocator), .framework_router_list = std.array_list.Managed(bun.bake.Framework.FileSystemRouterType).init(bun.default_allocator), .js_string_allocations = .empty, .user_routes = (&args.static_routes), .global = global };
+                var init_ctx_: AnyRoute.ServerInitContext = .{ .@"arena" = std.heap.ArenaAllocator.init(bun.default_allocator), .dedupe_html_bundle_map = std.AutoHashMap(_Ptrs.HTMLBundlePtr, bun.ptr.RefPtr(HTMLBundle.Route)).init(bun.default_allocator), .framework_router_list = std.array_list.Managed(bun.bake.Framework.FileSystemRouterType).init(bun.default_allocator), .js_string_allocations = .empty, .user_routes = (&args.static_routes), .global = global };
                 _ = &init_ctx_;
                 const init_ctx: *AnyRoute.ServerInitContext = (&init_ctx_);
                 var _guard_init_ctx = InitCtxErrGuard{ .ctx = init_ctx };
@@ -1239,6 +1239,10 @@ pub const RouteDeclaration = _RouteDeclaration;
 pub const StaticRouteEntry = _StaticRouteEntry;
 pub const FromJSOptions = _FromJSOptions;
 pub const StringZ = [:0]const u8;
+const _SelfMod = @This();
+const _Ptrs = struct {
+    pub const HTMLBundlePtr = *_SelfMod.HTMLBundle;
+};
 const HTTP = bun.http;
 const JSError = bun.JSError;
 const URL = bun.URL;

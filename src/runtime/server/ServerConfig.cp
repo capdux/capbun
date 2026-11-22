@@ -2,6 +2,10 @@ import std from "std";
 import bun from "bun";
 import WebSocketServerContext from "./WebSocketServerContext.zig";
 import HTMLBundle from "./HTMLBundle.zig";
+const _SelfMod = @This();
+const _Ptrs = struct {
+    pub const HTMLBundlePtr = *_SelfMod.HTMLBundle;
+};
 import _SSLConfig from "../socket/SSLConfig.zig";
 const HTTP = bun.http;
 const JSError = bun.JSError;
@@ -219,12 +223,12 @@ struct _StaticRoutesHashContext {
 
 fn _HandlerWrap(comptime ssl: bool, comptime T: type): type {
     return struct {
-        pub fn handler(route: T, req: *uws.Request, resp: *uws.NewApp(ssl).Response) {
+        pub static fn handler(route: T, req: *uws.Request, resp: *uws.NewApp(ssl).Response) {
             const any_resp: uws.AnyResponse = if (comptime ssl) .{ .SSL = resp } else .{ .TCP = resp };
             route.onRequest(.{ .h1 = req }, any_resp);
         }
 
-        pub fn HEAD(route: T, req: *uws.Request, resp: *uws.NewApp(ssl).Response) {
+        pub static fn HEAD(route: T, req: *uws.Request, resp: *uws.NewApp(ssl).Response) {
             const any_resp: uws.AnyResponse = if (comptime ssl) .{ .SSL = resp } else .{ .TCP = resp };
             route.onHEADRequest(.{ .h1 = req }, any_resp);
         }
@@ -233,10 +237,10 @@ fn _HandlerWrap(comptime ssl: bool, comptime T: type): type {
 
 fn _H3HandlerWrap(comptime T: type): type {
     return struct {
-        pub fn handler(route: T, req: *uws.H3.Request, resp: *uws.H3.Response) {
+        pub static fn handler(route: T, req: *uws.H3.Request, resp: *uws.H3.Response) {
             route.onRequest(.{ .h3 = req }, .{ .H3 = resp });
         }
-        pub fn HEAD(route: T, req: *uws.H3.Request, resp: *uws.H3.Response) {
+        pub static fn HEAD(route: T, req: *uws.H3.Request, resp: *uws.H3.Response) {
             route.onHEADRequest(.{ .h3 = req }, .{ .H3 = resp });
         }
     };
@@ -482,7 +486,7 @@ pub fn getUsocketsOptions(): i32 {
     return out;
 }
 
-fn validateRouteName(global: *jsc.JSGlobalObject, path: []const u8): !void {
+static fn validateRouteName(global: *jsc.JSGlobalObject, path: []const u8): !void {
     bun.debugAssert(path.len > 0 && path[0] == '/');
 
     let remaining = path;
@@ -510,7 +514,7 @@ fn validateRouteName(global: *jsc.JSGlobalObject, path: []const u8): !void {
 }
 
 
-fn getRoutesObject(global: *jsc.JSGlobalObject, arg: jsc.JSValue): bun.JSError!jsc.JSValue? {
+static fn getRoutesObject(global: *jsc.JSGlobalObject, arg: jsc.JSValue): bun.JSError!jsc.JSValue? {
     inline for (key of .{ "routes", "static" }) {
         if (routes := arg.get(global, key)?) {
             if (routes.isArray()) {
@@ -630,7 +634,7 @@ pub static fn fromJS(
 
             let init_ctx_: AnyRoute.ServerInitContext = .{
                 .@"arena" = std.heap.ArenaAllocator.init(bun.default_allocator),
-                .dedupe_html_bundle_map = std.AutoHashMap(*HTMLBundle, bun.ptr.RefPtr(HTMLBundle.Route)).init(bun.default_allocator),
+                .dedupe_html_bundle_map = std.AutoHashMap(_Ptrs.HTMLBundlePtr, bun.ptr.RefPtr(HTMLBundle.Route)).init(bun.default_allocator),
                 .framework_router_list = std.array_list.Managed(bun.bake.Framework.FileSystemRouterType).init(bun.default_allocator),
                 .js_string_allocations = .empty,
                 .user_routes = &args.static_routes,

@@ -1700,3 +1700,7 @@
 - 原 Zig `sw: switch (state)` 改写为 CP `while (true) { switch (mut_state) { ... } }` 时，非 `continue` 分支末尾必须显式 `return;` 或 `break;`，否则控制流会回绕重复执行状态机。
 - CP `for (i of 0..len)` 当前生成有符号 `i32` 循环变量，在 Zig 0.15 `std.fmt` `{d}` / `{d:0>8}` 中会带出 `+` 号；传给格式化输出前需显式 `@as(usize, @intCast(i))`。
 - `String.clone()` 会将 `String.dead`（`.Dead`）归一化为 `String.empty`（`.Empty`），导致 `Blob.getNameString()` 跳过 `stored_name` 回退；复制 `Blob.name` 必须使用 `dupeRef()`。
+
+### [2026-11-23] Wave #68 技术要点（`finalize` 状态标志与重名变量自赋值陷阱）
+- `Subprocess.finalize()` 若遗漏 `flags.finalized = true` 与 `deref()`，析构 `JSFileSink` 时 `onStdinDestroyed` 会再次访问已释放的 `Process` 导致 `use-after-poison`。
+- `BackgroundHandler` 中将局部变量改名为 `bg_images` 但仍写 `_.images = images` 时，CP 会解析为字段自赋值 `self.images = self.images`，静默破坏属性合并逻辑。

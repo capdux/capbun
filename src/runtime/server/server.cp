@@ -409,6 +409,14 @@ pub union(enum) AnyRoute {
 
 pub const ServerConfig = _ServerConfig;
 pub const ServerWebSocket = _ServerWebSocket;
+const _SelfMod = @This();
+const _Ptrs = struct {
+    pub const ServerWebSocketPtr = *_SelfMod.ServerWebSocket;
+    pub const StaticRoutePtr = *_SelfMod.StaticRoute;
+    pub const FileRoutePtr = *_SelfMod.FileRoute;
+    pub const HTMLBundleRoutePtr = *HTMLBundle.Route;
+    pub const TranspilerPtr = *_SelfMod.Transpiler;
+};
 pub const NodeHTTPResponse = _NodeHTTPResponseMod.NodeHTTPResponse;
 
 pub struct _ServePluginsPending {
@@ -493,7 +501,7 @@ struct ServePlugins {
         }
     }
 
-    extern fn JSBundlerPlugin__loadAndResolvePluginsForServe(
+    static extern fn JSBundlerPlugin__loadAndResolvePluginsForServe(
         plugin: *bun.jsc.API.JSBundler.Plugin,
         plugins: jsc.JSValue,
         bunfig_folder: jsc.JSValue,
@@ -670,7 +678,6 @@ fn PreparedRequestFor(comptime Ctx: type): type {
         /// This is used by DevServer for deferring calling the JS handler
         /// to until the bundle is actually ready.
         pub fn save(
-            prepared: @This(),
             global: *jsc.JSGlobalObject,
             req: *Ctx.Req,
             resp: *Ctx.Resp,
@@ -679,12 +686,12 @@ fn PreparedRequestFor(comptime Ctx: type): type {
             // By saving a request, all information from `req` must be
             // copied since the provided uws.Request will be re-used for
             // future requests (stack allocated).
-            prepared.ctx.toAsync(req, prepared.request_object);
+            _.ctx.toAsync(req, _.request_object);
 
             return .{
-                .js_request = .create(prepared.js_request, global),
-                .request = prepared.request_object,
-                .ctx = AnyRequestContext.init(prepared.ctx),
+                .js_request = .create(_.js_request, global),
+                .request = _.request_object,
+                .ctx = AnyRequestContext.init(_.ctx),
                 .response = uws.AnyResponse.init(resp),
             };
         }
@@ -781,7 +788,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
         /// - .ready if no plugin has to be loaded
         /// - .err if there is a cached failure. Currently, this requires restarting the entire server.
         /// - .pending if `callback` was stored. It will call `onPluginsResolved` or `onPluginsRejected` later.
-        pub fn getOrLoadPlugins(server: *ThisServer, callback: ServePlugins.Callback) ServePlugins.GetOrStartLoadResult {
+        pub static fn getOrLoadPlugins(server: *ThisServer, callback: ServePlugins.Callback) ServePlugins.GetOrStartLoadResult {
             if (server.plugins) |p| {
                 return p.getOrStartLoad(server.globalThis, callback) catch |err| switch (err) {
                     error.JSError => std.debug.panic("unhandled exception from ServePlugins.getStartOrLoad", .{}),
@@ -813,11 +820,11 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             return JSValue.jsNumber((this.app.?.numSubscribers(topic.slice())));
         }
 
-        pub fn constructor(globalThis: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!*ThisServer {
+        pub static fn constructor(globalThis: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!*ThisServer {
             return globalThis.throw2("Server() is not a constructor", .{});
         }
 
-        pub fn jsValueAssertAlive(server: *ThisServer) jsc.JSValue {
+        pub static fn jsValueAssertAlive(server: *ThisServer) jsc.JSValue {
             bun.assert(server.js_value.isNotEmpty());
             return server.js_value.tryGet().?;
         }
@@ -1252,7 +1259,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             upgrader.deref();
 
             _ = resp.upgrade(
-                *ServerWebSocket,
+                _Ptrs.ServerWebSocketPtr,
                 ws,
                 sec_websocket_key_str.slice(),
                 sec_websocket_protocol_str.slice(),
@@ -1697,7 +1704,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             return bun.String.static(if (ssl_enabled) "https" else "http").toJS(globalThis);
         }
 
-        pub fn getDevelopment(_: *ThisServer, _: *jsc.JSGlobalObject) jsc.JSValue {
+        pub static fn getDevelopment(_: *ThisServer, _: *jsc.JSGlobalObject) jsc.JSValue {
             return jsc.JSValue.jsBoolean(debug_mode);
         }
 
@@ -2153,12 +2160,12 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             this.onRequestFor(H3RequestContext, req, resp);
         }
 
-        pub fn onH3UserRouteRequest(user_route: *UserRoute, req: *uws.H3.Request, resp: *uws.H3.Response) void {
+        pub static fn onH3UserRouteRequest(user_route: *UserRoute, req: *uws.H3.Request, resp: *uws.H3.Response) void {
             if (comptime !has_h3) unreachable;
             onUserRouteRequestFor(H3RequestContext, user_route, req, resp);
         }
 
-        pub fn onH3404(_: *ThisServer, _: *uws.H3.Request, resp: *uws.H3.Response) void {
+        pub static fn onH3404(_: *ThisServer, _: *uws.H3.Request, resp: *uws.H3.Response) void {
             if (comptime !has_h3) unreachable;
             resp.writeStatus("404 Not Found");
             resp.end("", false);
@@ -2205,7 +2212,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             _ = js_printer.printJSON(
                 *js_printer.BufferPrinter,
                 &writer,
-                bun.Global.BunInfo.generate(*Transpiler, &jsc.VirtualMachine.get().transpiler, allocator) catch unreachable,
+                bun.Global.BunInfo.generate(_Ptrs.TranspilerPtr, &jsc.VirtualMachine.get().transpiler, allocator) catch unreachable,
                 source,
                 .{ .mangled_props = null },
             ) catch unreachable;
@@ -2370,7 +2377,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             NodeHTTP_setUsingCustomExpectHandler(ssl_enabled, this.app.?, value);
         }
 
-        fn onTimeoutForIdleWarn(_: *void, _: (*void)?) {
+        static fn onTimeoutForIdleWarn(_: *void, _: (*void)?) {
             if (debug_mode and !did_send_idletimeout_warning_once) {
                 if (!bun.cli.Command.get().debug.silent) {
                     did_send_idletimeout_warning_once = true;
@@ -2380,7 +2387,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             }
         }
 
-        fn shouldAddTimeoutHandlerForWarning(server: *ThisServer) bool {
+        static fn shouldAddTimeoutHandlerForWarning(server: *ThisServer) bool {
             if (comptime debug_mode) {
                 if (!did_send_idletimeout_warning_once and !bun.cli.Command.get().debug.silent) {
                     return !server.config.has_idleTimeout;
@@ -2390,11 +2397,11 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             return false;
         }
 
-        pub fn onUserRouteRequest(user_route: *UserRoute, req: *uws.Request, resp: *App.Response) void {
+        pub static fn onUserRouteRequest(user_route: *UserRoute, req: *uws.Request, resp: *App.Response) void {
             onUserRouteRequestFor(RequestContext, user_route, req, resp);
         }
 
-        fn onUserRouteRequestFor(comptime Ctx: type, user_route: *UserRoute, req: *Ctx.Req, resp: *Ctx.Resp) void {
+        static fn onUserRouteRequestFor(comptime Ctx: type, user_route: *UserRoute, req: *Ctx.Req, resp: *Ctx.Resp) void {
             const server = user_route.server;
             const index = user_route.id;
 
@@ -2605,7 +2612,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             if (shouldAddTimeoutHandlerForWarning(this)) {
                 // We need to pass it a pointer, any pointer should do.
                 resp.onTimeout(&did_send_idletimeout_warning_once, struct {
-                    fn warn(p: *void, _: *Ctx.Resp) void {
+                    static fn warn(p: *void, _: *Ctx.Resp) void {
                         onTimeoutForIdleWarn(p, null);
                     }
                 }.warn);
@@ -3013,19 +3020,19 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
 
                     switch (entry.route) {
                         .static => |static_route| {
-                            ServerConfig.applyStaticRoute(any_server, ssl_enabled, this.app.?, *StaticRoute, static_route, entry.path, entry.method);
+                            ServerConfig.applyStaticRoute(any_server, ssl_enabled, this.app.?, _Ptrs.StaticRoutePtr, static_route, entry.path, entry.method);
                             if (comptime has_h3) if (this.h3_app) |h3_app|
-                                ServerConfig.applyStaticRouteH3(any_server, h3_app, *StaticRoute, static_route, entry.path, entry.method);
+                                ServerConfig.applyStaticRouteH3(any_server, h3_app, _Ptrs.StaticRoutePtr, static_route, entry.path, entry.method);
                         },
                         .file => |file_route| {
-                            ServerConfig.applyStaticRoute(any_server, ssl_enabled, this.app.?, *FileRoute, file_route, entry.path, entry.method);
+                            ServerConfig.applyStaticRoute(any_server, ssl_enabled, this.app.?, _Ptrs.FileRoutePtr, file_route, entry.path, entry.method);
                             if (comptime has_h3) if (this.h3_app) |h3_app|
-                                ServerConfig.applyStaticRouteH3(any_server, h3_app, *FileRoute, file_route, entry.path, entry.method);
+                                ServerConfig.applyStaticRouteH3(any_server, h3_app, _Ptrs.FileRoutePtr, file_route, entry.path, entry.method);
                         },
                         .html => |html_bundle_route| {
-                            ServerConfig.applyStaticRoute(any_server, ssl_enabled, this.app.?, *HTMLBundle.Route, html_bundle_route.data, entry.path, entry.method);
+                            ServerConfig.applyStaticRoute(any_server, ssl_enabled, this.app.?, _Ptrs.HTMLBundleRoutePtr, html_bundle_route.data, entry.path, entry.method);
                             if (comptime has_h3) if (this.h3_app) |h3_app|
-                                ServerConfig.applyStaticRouteH3(any_server, h3_app, *HTMLBundle.Route, html_bundle_route.data, entry.path, entry.method);
+                                ServerConfig.applyStaticRouteH3(any_server, h3_app, _Ptrs.HTMLBundleRoutePtr, html_bundle_route.data, entry.path, entry.method);
                             if (dev_server) |dev| {
                                 bun.handleOom(dev.html_router.put(dev.allocator(), entry.path, html_bundle_route.data));
                             }
@@ -3149,7 +3156,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             return route_list_value;
         }
 
-        pub fn on404(_: *ThisServer, req: *uws.Request, resp: *App.Response) void {
+        pub static fn on404(_: *ThisServer, req: *uws.Request, resp: *App.Response) void {
             if (comptime Environment.enable_logs)
                 httplog("{s} - {s} 404", .{ req.method(), req.url() });
 
@@ -3758,7 +3765,7 @@ extern fn NodeHTTPServer__onRequest_http(
     request: *uws.Request,
     response: *uws.NewApp(false).Response,
     upgrade_ctx: *uws.WebSocketUpgradeContext?,
-    node_response_ptr: **NodeHTTPResponse?,
+    node_response_ptr: *((*NodeHTTPResponse)?),
 ): jsc.JSValue;
 
 extern fn NodeHTTPServer__onRequest_https(
@@ -3770,7 +3777,7 @@ extern fn NodeHTTPServer__onRequest_https(
     request: *uws.Request,
     response: *uws.NewApp(true).Response,
     upgrade_ctx: *uws.WebSocketUpgradeContext?,
-    node_response_ptr: **NodeHTTPResponse?,
+    node_response_ptr: *((*NodeHTTPResponse)?),
 ): jsc.JSValue;
 
 extern fn Bun__createNodeHTTPServerSocketForClientError(_: bool, _: *!, _: *jsc.JSGlobalObject): jsc.JSValue;

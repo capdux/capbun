@@ -86,7 +86,7 @@ const Sendfile = _Sendfile;
 
 pub const StartOptions = _StartOptions;
 
-pub fn start(opts: StartOptions) {
+pub static fn start(opts: StartOptions) {
     const use_sendfile = canSendfile(opts.resp, opts.file_type, opts.length);
 
     let stream = bun.new(FileResponseStream, .{
@@ -161,7 +161,7 @@ pub fn start(opts: StartOptions) {
     stream.reader.read();
 }
 
-fn canSendfile(resp: AnyResponse, file_type: bun.io.FileType, length: u64?): bool {
+static fn canSendfile(resp: AnyResponse, file_type: bun.io.FileType, length: u64?): bool {
     if (comptime bun.Environment.isWindows) return false;
     // sendfile() needs a real socket fd; SSL writes go through BIO and H3
     // through lsquic stream frames — neither has one.

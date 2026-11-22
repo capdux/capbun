@@ -846,6 +846,9 @@ pub struct TestingAPIs {
             ipc_data.deinit();
             client.ipc_data = null;
         }
+
+        client.flags.finalized = true;
+        client.deref();
     }
 
     pub static fn getExited(

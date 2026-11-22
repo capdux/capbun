@@ -1123,8 +1123,9 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             });
         }
 
+        const RequestContextPtr: type = *RequestContext;
         static fn doRenderWithBodyLocked(this: *!, value: *jsc.WebCore.Body.Value) void {
-            doRenderWithBody(bun.cast(*RequestContext, this), value, null);
+            doRenderWithBody(bun.cast(RequestContextPtr, this), value, null);
         }
 
         static fn renderWithBlobFromBodyValue(this: *RequestContext) void {
@@ -2651,17 +2652,17 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
         }
 
         static fn onRequestBodyReadableStreamAvailable(ptr: *!, globalThis: *jsc.JSGlobalObject, readable: jsc.WebCore.ReadableStream) void {
-            let this = bun.cast(*RequestContext, ptr);
+            let this = bun.cast(RequestContextPtr, ptr);
             bun.debugAssert(this.request_body_readable_stream_ref.held.impl == null);
             this.request_body_readable_stream_ref = jsc.WebCore.ReadableStream.Strong.init(readable, globalThis);
         }
 
         static fn onStartBufferingCallback(this: *!) void {
-            onStartBuffering(bun.cast(*RequestContext, this));
+            onStartBuffering(bun.cast(RequestContextPtr, this));
         }
 
         static fn onStartStreamingRequestBodyCallback(this: *!) jsc.WebCore.DrainResult {
-            return onStartStreamingRequestBody(bun.cast(*RequestContext, this));
+            return onStartStreamingRequestBody(bun.cast(RequestContextPtr, this));
         }
 
         static fn getRemoteSocketInfo(this: *RequestContext) ?uws.SocketAddress {

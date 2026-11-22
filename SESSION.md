@@ -603,3 +603,12 @@
   - `src/napi/napi.cp`、`src/cli/cli.cp`、`src/css/values/css_string.cp`、`src/css/values/rect.cp`（消除 `@ptrCast(&(` 误取地址并补全 `static fn`）。
 - 验证：`bun run zig:check` 5/5 通过（29s）；`hspec.test.ts` 40/40 通过；`form-data-set-append.test.js` 4/4 通过；`bun-serve-html.test.ts` 崩溃与 `DevServer` JSX 用例修复（8 pass / 8 fail，余下为 CSS snapshot 展开与 `ParseTask` 缓存 fd 复用）。
 - 推导下一阶段 Wave #68：继续按“1 路 `bun bd test` 分批回归 + 1 路语义修复”并行推进——Subagent 1 重跑 `test/js/bun/http`（重点验证 `hspec.test.ts` 之后余下 29 个未跑文件及 `serve-protocols`/`bun-serve-static`），Subagent 2 补全 `Blob.cp`（`doReadFromS3` / `S3BlobDownloadTask` / `onStructuredClone*`）。
+
+## [2026-11-23] Wave #68：Batch 1a 余下运行时修复（`background`/`subprocess`/`HTMLImportManifest`/`server`/`uws_sys`）完成与提交
+- 完成 9 个模块的修复与重编同步（均通过 `cpc_brief.py` 4 项门禁）：
+  - `src/css/properties/background.cp`（L752 `_.images = bg_images;`，根治 CSS `background` 简写合并退化展开）；
+  - `src/runtime/api/bun/subprocess.cp`（`finalize()` 末尾补回 `client.flags.finalized = true; client.deref();`，根治 `serve-http3.test.ts` `Process.hasExited` ASan `use-after-poison`）；
+  - `src/bundler/HTMLImportManifest.cp`（L162-177 恢复 `for (*ch of chunks)` 写入 `ch.final_rel_path` 与 `entry_point_bits.set(ch.entry_point.entry_point_id)`）；
+  - `src/runtime/server/{server,ServerConfig,RequestContext,FileResponseStream,WebSocketServerContext}.cp` 与 `src/uws_sys/Request.cp`（重编同步滞后文件，补全 `static fn` 与指针类型别名）。
+- 验证：`bun run zig:check` 5/5 通过（29s）；`bun-serve-html.test.ts -t "^serve html$"` 1/1 通过；`serve-http3.test.ts` ASan 崩溃消除（43 pass / 1 超时）；`serve-protocols.test.ts` 20/20 通过。
+- 推导下一阶段 Wave #69：Subagent 1 运行 `bun-serve-html-manifest.test.ts` 及 Batch 1a 此前未跑的余下 14 个 `test/js/bun/http` 文件；Subagent 2 只读排查全仓 `while (true) { switch` 是否还有遗漏 `return`/`break` 的状态机。

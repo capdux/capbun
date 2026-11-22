@@ -136,7 +136,7 @@ fn escapedJSONFormatter(client: HTMLImportManifest, writer: *std.Io.Writer)! {
         };
     }
 
-    pub fn formatEscapedJSON(client: HTMLImportManifest): std.fmt.Alt(HTMLImportManifest, escapedJSONFormatter) {
+    pub static fn formatEscapedJSON(client: HTMLImportManifest): std.fmt.Alt(HTMLImportManifest, escapedJSONFormatter) {
         return { data: client };
     }
 }
@@ -159,22 +159,26 @@ pub fn write(index: u32, graph: *const Graph, linker_graph: *const LinkerGraph, 
     let temp_buffer = std.array_list.Managed(u8).init(bun.default_allocator);
     const temp_buffer_guard = DeinitGuard<std.array_list.Managed(u8)>{ ptr: unsafe { &temp_buffer } };
 
-    writer.writeAll("\"index\":")?;
-    bun.js_printer.writeJSONString(
-        bun.strings.removeLeadingDotSlash(bun.path.relativeNormalized(
-            root_dir,
-            sources[browser_source_index].path.text,
-            .posix,
-            false,
-        )),
-        @TypeOf(writer),
-        writer,
-        .utf8,
-    )?;
+    for (*ch of chunks) {
+        if (ch.entry_point.source_index == browser_source_index && ch.entry_point.is_entry_point) {
+            entry_point_bits.set(ch.entry_point.entry_point_id);
 
-    writer.writeAll(",\"files\":[")?;
+            if (ch.content == .html) {
+                writer.writeAll("\"index\":")?;
+                if (inject_compiler_filesystem_prefix) {
+                    temp_buffer.clearRetainingCapacity();
+                    temp_buffer.appendSlice(public_path)?;
+                    temp_buffer.appendSlice(bun.strings.removeLeadingDotSlash(ch.final_rel_path))?;
+                    bun.js_printer.writeJSONString(temp_buffer.items, @TypeOf(writer), writer, .utf8)?;
+                } else {
+                    bun.js_printer.writeJSONString(ch.final_rel_path, @TypeOf(writer), writer, .utf8)?;
+                }
+                writer.writeAll(",")?;
+            }
+        }
+    }
 
-    entry_point_bits.set(index);
+    writer.writeAll("\"files\":[")?;
 
     let first = true;
     const has_single_html_import = graph.html_imports.html_source_indices.len == 1;

@@ -810,7 +810,7 @@ var bg_images = SmallList(Image, 1).initCapacity(allocator, val.len());
                 _ = &i;
                 _ = (i.*).deinit(allocator);
             }
-            self.images = self.images;
+            self.images = bg_images;
             var x_positions = self.initSmallListHelper(HorizontalPosition, 1, "x_positions", allocator, val.len());
             _ = &x_positions;
             var y_positions = self.initSmallListHelper(VerticalPosition, 1, "y_positions", allocator, val.len());

@@ -88,7 +88,8 @@ graph: *const Graph,
 chunks: []Chunk,
 linker_graph: *const LinkerGraph,
 
-pub fn format(client: HTMLImportManifest, writer: *std.Io.Writer) !void {
+pub fn format(self: HTMLImportManifest, client: HTMLImportManifest, writer: *std.Io.Writer) !void {
+    _ = self;
         return (blk_catch_0: { break :blk_catch_0 ((write(client.index, client.graph, client.linker_graph, client.chunks, writer)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
             return error.OutOfMemory;
         }
@@ -188,10 +189,25 @@ pub fn write(index: u32, graph: *const Graph, linker_graph: *const LinkerGraph, 
         _ = &temp_buffer_guard;
         var __temp_buffer_guard_moved = false; _ = &__temp_buffer_guard_moved;
         defer if (!__temp_buffer_guard_moved) { __temp_buffer_guard_moved = true; const __T = @TypeOf(temp_buffer_guard); if (@typeInfo(__T) == .optional) { if (temp_buffer_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { temp_buffer_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = temp_buffer_guard; _drop_val.__cp_deinit(); } };
-        _ = try writer.writeAll("\"index\":");
-        _ = try bun.js_printer.writeJSONString(bun.strings.removeLeadingDotSlash(bun.path.relativeNormalized(root_dir, sources[@as(usize, @intCast(browser_source_index))].path.text, .posix, false)), @TypeOf(writer), writer, .utf8);
-        _ = try writer.writeAll(",\"files\":[");
-        _ = entry_point_bits.set(index);
+        for (cp_mut_slice(&chunks)) |*ch| {
+            _ = &ch;
+            if ((((ch.*).entry_point.source_index == browser_source_index) and (ch.*).entry_point.is_entry_point)) {
+                _ = entry_point_bits.set((ch.*).entry_point.entry_point_id);
+                if (((ch.*).content == .html)) {
+                    _ = try writer.writeAll("\"index\":");
+                    if (inject_compiler_filesystem_prefix) {
+                        _ = temp_buffer.clearRetainingCapacity();
+                        _ = try temp_buffer.appendSlice(public_path);
+                        _ = try temp_buffer.appendSlice(bun.strings.removeLeadingDotSlash((ch.*).final_rel_path));
+                        _ = try bun.js_printer.writeJSONString(temp_buffer.items, @TypeOf(writer), writer, .utf8);
+                    } else {
+                        _ = try bun.js_printer.writeJSONString((ch.*).final_rel_path, @TypeOf(writer), writer, .utf8);
+                    }
+                    _ = try writer.writeAll(",");
+                }
+            }
+        }
+        _ = try writer.writeAll("\"files\":[");
         var first = true;
         _ = &first;
         const has_single_html_import = (graph.html_imports.html_source_indices.len == 1);

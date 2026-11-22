@@ -1207,7 +1207,7 @@ if (auto_close) {
     }
 
 pub fn doRenderWithBodyLocked(self: *anyopaque, value: *jsc.WebCore.Body.Value) void {
-            _ = doRenderWithBody(bun.cast(*RequestContext, self), value, null);
+            _ = doRenderWithBody(bun.cast(RequestContextPtr, self), value, null);
     }
 
 pub fn renderWithBlobFromBodyValue(self: *RequestContext) void {
@@ -2512,18 +2512,18 @@ pub fn onStartBuffering(self: *RequestContext) void {
     }
 
 pub fn onRequestBodyReadableStreamAvailable(ptr: *anyopaque, globalThis: *jsc.JSGlobalObject, readable: jsc.WebCore.ReadableStream) void {
-            var this = bun.cast(*RequestContext, ptr);
+            var this = bun.cast(RequestContextPtr, ptr);
             _ = &this;
             _ = bun.debugAssert((this.request_body_readable_stream_ref.held.impl == null));
             this.request_body_readable_stream_ref = jsc.WebCore.ReadableStream.Strong.init(readable, globalThis);
     }
 
 pub fn onStartBufferingCallback(self: *anyopaque) void {
-            _ = onStartBuffering(bun.cast(*RequestContext, self));
+            _ = onStartBuffering(bun.cast(RequestContextPtr, self));
     }
 
 pub fn onStartStreamingRequestBodyCallback(self: *anyopaque) jsc.WebCore.DrainResult {
-            return onStartStreamingRequestBody(bun.cast(*RequestContext, self));
+            return onStartStreamingRequestBody(bun.cast(RequestContextPtr, self));
     }
 
 pub fn getRemoteSocketInfo(self: *RequestContext) ?uws.SocketAddress {
@@ -2559,6 +2559,7 @@ pub fn setTimeout(self: *RequestContext, seconds: c_uint) bool {
     pub threadlocal var pool: ?*RequestContext.RequestContextStackAllocator = null;
     pub const ResponseStream = jsc.WebCore.HTTPServerWritable(ssl_enabled, http3);
     pub const RequestContextStackAllocator = bun.HiveArray(RequestContext, (if (bun.heap_breakdown.enabled) 0 else 2048)).Fallback;
+    const RequestContextPtr: type = *RequestContext;
     const StreamPair = RequestStreamPair(RequestContext);
     const streamLog = Output.scoped(.ReadableStream, .visible);
     const HeaderResponseSizePair = RequestHeaderResponseSizePair(RequestContext);

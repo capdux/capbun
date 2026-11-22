@@ -2151,3 +2151,6 @@
 
 ### [2026-11-23] Wave #67（运行时排雷修复：`DevServer`/`computeChunks`/`fmt`/`Blob`/`node_fs`/`Terminal`/`napi`/`cli`/`rect`）
 - 修复 `DevServer.cp`（`ensureRouteIsBundled` 补全 `return;` 消除 `heap-use-after-free`）、`computeChunks.cp`（`usize` 消除 `{d:0>8}` `+` 号）、`fmt.cp`（消除 `stack-buffer-overflow`）、`Blob.cp`（`dupeRef` 保留 `String.dead`）、`Terminal.cp`（Windows `makeLibUVOwned`）、`json.cp`（恢复 `json_.zig` 备份与 `expectPrintedJSON`）、`node_fs.cp`/`node_fs_binding.cp`/`http.cp`/`path.cp`/`meta.cp`/`napi.cp`/`cli.cp`/`css_string.cp`/`rect.cp`，通过 `bun run zig:check`（5/5）、`hspec.test.ts`（40/40）及 `form-data-set-append.test.js`（4/4）。
+
+### [2026-11-23] Wave #68（修复 `background`/`subprocess`/`HTMLImportManifest` 与 `server`/`uws_sys` 同步重编）
+- 修复 `background.cp`（`bg_images`）、`subprocess.cp`（`finalize()` 补回 `finalized = true` 与 `deref()` 消除 ASan `use-after-poison`）、`HTMLImportManifest.cp`（恢复 `for (*ch of chunks)`）及重编同步 `server/`、`uws_sys/Request.cp`，通过 `bun run zig:check`（5/5）、`serve html$`（1/1）、`serve-protocols.test.ts`（20/20）与 `serve-http3.test.ts`（43 pass / 1 超时）。
