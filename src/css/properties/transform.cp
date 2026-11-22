@@ -1234,7 +1234,7 @@ pub union(enum) Scale {
     }
 }
 
-const TransformAndPrefix = struct { TransformList, VendorPrefix };
+type TransformAndPrefix = [TransformList, VendorPrefix];
 
 pub struct TransformHandler {
     transform: TransformAndPrefix? = null,

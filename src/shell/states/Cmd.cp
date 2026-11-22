@@ -100,10 +100,10 @@ pub const ChildPtr = StatePtrUnion(.{
     Expansion,
 });
 
-pub const BufferedIoStateUnion = union(enum) {
-    open,
+pub union(enum) BufferedIoStateUnion {
+    open: void,
     closed: bun.ByteList,
-};
+}
 
 pub struct BufferedIoState {
     state: BufferedIoStateUnion = .open,
@@ -116,22 +116,22 @@ pub struct BufferedIoState {
         }
     }
 
-    fn closed(*_): bool {
+    fn closed(): bool {
         return _.state == .closed;
     }
 }
 
-pub const BufferedIoCloseTarget = union(enum) {
+pub union(enum) BufferedIoCloseTarget {
     stdout: *Subprocess.Readable,
     stderr: *Subprocess.Readable,
-    stdin,
-};
+    stdin: void,
+}
 
-pub const IoKind = enum {
+pub enum IoKind {
     stdout,
     stderr,
     stdin,
-};
+}
 
 pub struct BufferedIoClosed {
     stdin: bool? = null,
@@ -202,7 +202,7 @@ pub struct BufferedIoClosed {
         }
     }
 
-    fn isBuffered(*_, comptime io: IoKind): bool {
+    fn isBuffered(comptime io: IoKind): bool {
         return @field(_, @tagName(io)) != null;
     }
 
@@ -215,30 +215,36 @@ pub struct BufferedIoClosed {
     }
 }
 
-pub const Exec = union(enum) {
-    none,
-    bltn: Builtin,
-    subproc: struct {
-        child: *Subprocess,
-        buffered_closed: BufferedIoClosed = .{},
-    },
-};
+pub struct SubprocExecState {
+    child: *Subprocess,
+    buffered_closed: BufferedIoClosed = .{},
+}
 
-pub const CmdState = union(enum) {
-    idle,
+pub union(enum) Exec {
+    none: void,
+    bltn: Builtin,
+    subproc: SubprocExecState,
+}
+
+pub struct CmdExpandingRedirectState {
+    idx: u32 = 0,
+    expansion: Expansion,
+}
+
+pub struct CmdExpandingArgsState {
+    idx: u32 = 0,
+    expansion: Expansion,
+}
+
+pub union(enum) CmdState {
+    idle: void,
     expanding_assigns: Assigns,
-    expanding_redirect: struct {
-        idx: u32 = 0,
-        expansion: Expansion,
-    },
-    expanding_args: struct {
-        idx: u32 = 0,
-        expansion: Expansion,
-    },
-    exec,
-    done,
-    waiting_write_err,
-};
+    expanding_redirect: CmdExpandingRedirectState,
+    expanding_args: CmdExpandingArgsState,
+    exec: void,
+    done: void,
+    waiting_write_err: void,
+}
 
 pub struct ShellAsyncSubprocessDone {
     cmd: *Cmd,
@@ -333,7 +339,7 @@ pub struct ShellAsyncSubprocessDone {
         return _.base.shell.writeFailingErrorFmt(_, Cmd.enqueueCb, fmt, args);
     }
 
-    fn isSubproc(*_): bool {
+    fn isSubproc(): bool {
         return _.exec == .subproc;
     }
 
@@ -604,9 +610,12 @@ pub struct ShellAsyncSubprocessDone {
             .buffered_closed = buffered_closed,
         } };
         let did_exit_immediately = false;
-        const subproc = switch (Subprocess.spawnAsync(_.base.eventLoop(), &shellio, spawn_args, unsafe { &_.exec.subproc.child }, &did_exit_immediately)) {
+        let child_out_arr: [1]*Subprocess = undefined;
+        const spawn_res = Subprocess.spawnAsync(_.base.eventLoop(), &shellio, spawn_args, unsafe { @ptrCast(&child_out_arr) }, &did_exit_immediately);
+        _.exec.subproc.child = child_out_arr[0];
+        const subproc = switch (spawn_res) {
             .result => _.exec.subproc.child,
-            .err => |*e| {
+            .err *e => {
                 const _err_guard = DeinitWithAllocGuard<@TypeOf(e)>{ val: e, alloc: bun.default_allocator };
                 * = _err_guard;
                 _.exec = .none;
@@ -638,7 +647,7 @@ pub struct ShellAsyncSubprocessDone {
             if (comptime in_cmd_subst) {
                 Cmd.setStdioFromRedirect(&spawn_args.stdio, _.node.redirect, .ignore);
             } else switch (redirect) {
-                .jsbuf => |val| {
+                .jsbuf val => {
                     // JS values in here is probably a bug
                     if (_.base.eventLoop() != .js) @panic("JS values not allowed in this context");
                     const global = _.base.eventLoop().js.global;
@@ -702,13 +711,13 @@ pub struct ShellAsyncSubprocessDone {
                     const perm = 0o666;
                     const flags = _.node.redirect.toFlags();
                     const redirfd = switch (ShellSyscall.openat(_.base.shell.cwd_fd, path, flags, perm)) {
-                        .err => |e| {
+                        .err e => {
                             const sys_err = e.toShellSystemError();
                             const _se_guard = ValDerefGuard<@TypeOf(sys_err)>{ val: sys_err };
                             * = _se_guard;
                             return _.writeFailingError("bun: {f}: {s}", .{ sys_err.message, path });
                         },
-                        .result => |f| f,
+                        .result f => f,
                     };
                     _.redirection_fd = CowFd.init(redirfd);
                     Cmd.setStdioFromRedirect(&spawn_args.stdio, _.node.redirect, .{ .fd = redirfd });

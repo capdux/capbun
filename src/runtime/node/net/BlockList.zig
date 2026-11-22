@@ -100,6 +100,22 @@ pub fn __cp_deinit(self: *MutexGuard) void {
     }
 };
 
+pub const RuleRange = struct {
+    start: sockaddr,
+    end: sockaddr,
+};
+
+pub const RuleSubnet = struct {
+    network: sockaddr,
+    prefix: u8,
+};
+
+pub const Rule = union(enum) {
+    addr: sockaddr,
+    range: RuleRange,
+    subnet: RuleSubnet,
+};
+
 pub fn StructuredCloneWriter(comptime WriteBytesFn: type) type {
     return struct {
         ctx: *anyopaque,
@@ -453,11 +469,6 @@ const jsc = bun.jsc;
 const js = jsc.Codegen.JSBlockList;
 const SocketAddress = bun.jsc.GeneratedClassesList.SocketAddress;
 const sockaddr = SocketAddress.sockaddr;
-pub const Rule = union(enum) {
-    addr: sockaddr,
-    range: struct { start: sockaddr, end: sockaddr },
-    subnet: struct { network: sockaddr, prefix: u8 },
-};
 
 pub fn _compare(l: *const sockaddr, r: *const sockaddr) ?std.math.Order {
         if (l.as_v4()) |l_4| {

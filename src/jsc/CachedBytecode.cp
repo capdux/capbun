@@ -1,6 +1,6 @@
 import bun from "bun";
 
-pub const BytecodeResult = struct { []const u8, *CachedBytecode };
+pub type BytecodeResult = [[]const u8, *CachedBytecode];
 type OptU8Ptr = ([*]u8)?;
 
 @c {

@@ -74,20 +74,22 @@ struct UngetGuard<T> {
 
 const debug = Output.scoped(.ParseTask, .hidden);
 
-pub const ContentsOrFd = union(enum) {
-    fd: struct {
-        dir: FD,
-        file: FD,
-    },
+pub struct ContentsOrFd_Fd {
+    dir: FD,
+    file: FD,
+}
+
+pub union(enum) ContentsOrFd {
+    fd: ContentsOrFd_Fd,
     contents: string,
 
     const Tag = @typeInfo(ContentsOrFd).@"union".tag_type.?;
-};
+}
 
-const ParseTaskStage = union(enum) {
-    needs_source_code,
+union(enum) ParseTaskStage {
+    needs_source_code: void,
     needs_parse: CacheEntry,
-};
+}
 
 pub struct ResultWatcherData {
     fd: bun.FD,
@@ -135,13 +137,15 @@ pub struct ResultError {
     pub const Step = ResultErrorStep;
 }
 
-pub const ResultValue = union(enum) {
+pub struct ResultValue_Empty {
+    source_index: Index,
+}
+
+pub union(enum) ResultValue {
     success: ResultSuccess,
     @"err": ResultError,
-    empty: struct {
-        source_index: Index,
-    },
-};
+    empty: ResultValue_Empty,
+}
 
 /// The information returned to the Bundler thread when a parse finishes.
 pub struct ParseTaskResult {

@@ -32,6 +32,7 @@ pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 pub extern "c" const IPv4: StaticStringImpl;
 pub extern "c" const IPv6: StaticStringImpl;
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
@@ -61,11 +62,75 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+const Message = struct { __cp_no_message_sentinel: void = {} };
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 pub const AddressError = error{
     InvalidLength,
+};
+
+pub const AF = enum(inet.sa_family_t) {
+    INET = @intCast(inet.AF_INET),
+    INET6 = @intCast(inet.AF_INET6),
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub fn int(self: AF) inet.sa_family_t {
+            return @intFromEnum(self);
+    }
+
+pub fn fromJS(global: *jsc.JSGlobalObject, value: JSValue) !AF {
+            if (value.isString()) {
+                const fam_str = try bun.String.fromJS(value, global);
+                defer {
+                _ = fam_str.deref();
+                }
+                if ((fam_str.length() != 4)) {
+                    return global.throwInvalidArgumentPropertyValue("options.family", "'ipv4' or 'ipv6'", value);
+                }
+                if (fam_str.is8Bit()) {
+                    const slice = fam_str.latin1();
+                    if (std.ascii.eqlIgnoreCase(slice[0..4], "ipv4")) {
+                        return AF.INET;
+                    }
+                    if (std.ascii.eqlIgnoreCase(slice[0..4], "ipv6")) {
+                        return AF.INET6;
+                    }
+                    return global.throwInvalidArgumentPropertyValue("options.family", "'ipv4' or 'ipv6'", value);
+                } else {
+                    if ((fam_str.eqlComptime("ipv4") or fam_str.eqlComptime("IPv4"))) {
+                        return AF.INET;
+                    }
+                    if ((fam_str.eqlComptime("ipv6") or fam_str.eqlComptime("IPv6"))) {
+                        return AF.INET6;
+                    }
+                    return global.throwInvalidArgumentPropertyValue("options.family", "'ipv4' or 'ipv6'", value);
+                }
+            } else {
+                if (value.isUInt32AsAnyInt()) {
+                    return (__sw_blk_0: { const __disc_0 = value.toU32(); _ = &__disc_0; { if ((cp_match_tag(__disc_0, .int))) {  break :__sw_blk_0 cp_val(AF.INET); } } { if ((cp_match_tag(__disc_0, .int))) {  break :__sw_blk_0 cp_val(AF.INET6); } } {  return global.throwInvalidArgumentPropertyValue("options.family", "AF_INET or AF_INET6", value); }  unreachable; });
+                } else {
+                    return global.throwInvalidArgumentPropertyValue("options.family", "a string or number", value);
+                }
+            }
+    }
+
+pub fn upper(self: AF) [:0]const u8 {
+            return (switch (self) {
+.INET => "IPv4",
+.INET6 => "IPv6",
+});
+    }
 };
 
 pub fn DerefGuard(comptime T: type) type {
@@ -458,6 +523,65 @@ pub const fromJS = js.fromJS;
 pub const fromJSDirect = js.fromJSDirect;
 pub const @"new" = bun.TrivialNew(SocketAddress);
 pub const Options = SocketAddressOptions;
+pub const sockaddr = extern union {
+    sin: inet.sockaddr_in,
+    sin6: inet.sockaddr_in6,
+
+pub fn v4(port_: inet.in_port_t, addr: u32) sockaddr {
+            return .{ .sin = .{ .family = AF.INET.int(), .port = port_, .addr = addr } };
+    }
+
+pub fn v6(port_: inet.in_port_t, addr: [16]u8, flowinfo: u32, scope_id: u32) sockaddr {
+            return .{ .sin6 = .{ .family = AF.INET6.int(), .port = port_, .flowinfo = flowinfo, .scope_id = scope_id, .addr = addr } };
+    }
+
+pub fn as_v4(self: sockaddr) ?u32 {
+            if ((self.sin.family == std.posix.AF.INET)) {
+                return self.sin.addr;
+            }
+            if ((self.sin.family == std.posix.AF.INET6)) {
+                if ((!std.mem.allEqual(u8, self.sin6.addr[0..10], 0))) {
+                    return null;
+                }
+                if ((self.sin6.addr[10] != 255)) {
+                    return null;
+                }
+                if ((self.sin6.addr[11] != 255)) {
+                    return null;
+                }
+                return @bitCast((self.sin6.addr[12..16]).*);
+            }
+            return null;
+    }
+
+pub fn family(self: sockaddr) AF {
+            return (switch (self.sin.family) {
+std.posix.AF.INET => .INET,
+std.posix.AF.INET6 => .INET6,
+else => unreachable,
+});
+    }
+
+pub fn fmt(self: *const sockaddr, buf: *AddrBuf) [:0]const u8 {
+            var addr_src: *const void = undefined;
+            _ = &addr_src;
+            {
+                addr_src = (if ((self.family() == AF.INET)) @ptrCast((&self.sin.addr)) else @ptrCast((&self.sin6.addr)));
+            }
+            const formatted = std.mem.sliceTo(((ares.ares_inet_ntop(self.family().int(), addr_src, buf, buf.len)) orelse {
+            _ = std.debug.panic("Invariant violation: SocketAddress created with invalid IPv6 address", .{});
+}), 0);
+            if (comptime bun.Environment.isDebug) {
+                _ = bun.assertWithLocation(bun.strings.isAllASCII(formatted), @src());
+            }
+            return formatted;
+    }
+    pub const @"127.0.0.1": sockaddr = sockaddr.v4(0, _loopback_v4_addr);
+    pub const @"::": sockaddr = sockaddr.v6(0, inet.IN6ADDR_ANY_INIT, 0, 0);
+    pub const @"in" = inet.sockaddr_in;
+    pub const in6 = inet.sockaddr_in6;
+};
+
 const ares = bun.c_ares;
 const StaticStringImpl = bun.WTF.StringImpl;
 const Environment = bun.Environment;
@@ -468,109 +592,8 @@ const JSValue = jsc.JSValue;
 const net = std.net;
 const ipv4: bun.String = .{ .tag = .WTFStringImpl, .value = .{ .WTFStringImpl = IPv4 } };
 const ipv6: bun.String = .{ .tag = .WTFStringImpl, .value = .{ .WTFStringImpl = IPv6 } };
-pub const AF = enum(inet.sa_family_t) {
-    INET = @intCast(inet.AF_INET),
-    INET6 = @intCast(inet.AF_INET6),
-
-    pub fn int(self: AF) inet.sa_family_t {
-        return @intFromEnum(self);
-    }
-
-    pub fn fromJS(global: *jsc.JSGlobalObject, value: JSValue) !AF {
-        if (value.isString()) {
-            const fam_str = try bun.String.fromJS(value, global);
-            defer fam_str.deref();
-            if (fam_str.length() != 4) return global.throwInvalidArgumentPropertyValue("options.family", "'ipv4' or 'ipv6'", value);
-
-            if (fam_str.is8Bit()) {
-                const slice = fam_str.latin1();
-                if (std.ascii.eqlIgnoreCase(slice[0..4], "ipv4")) return AF.INET;
-                if (std.ascii.eqlIgnoreCase(slice[0..4], "ipv6")) return AF.INET6;
-                return global.throwInvalidArgumentPropertyValue("options.family", "'ipv4' or 'ipv6'", value);
-            } else {
-                if (fam_str.eqlComptime("ipv4") or fam_str.eqlComptime("IPv4")) return AF.INET;
-                if (fam_str.eqlComptime("ipv6") or fam_str.eqlComptime("IPv6")) return AF.INET6;
-                return global.throwInvalidArgumentPropertyValue("options.family", "'ipv4' or 'ipv6'", value);
-            }
-        } else if (value.isUInt32AsAnyInt()) {
-            return switch (value.toU32()) {
-                AF.INET.int() => AF.INET,
-                AF.INET6.int() => AF.INET6,
-                else => return global.throwInvalidArgumentPropertyValue("options.family", "AF_INET or AF_INET6", value),
-            };
-        } else {
-            return global.throwInvalidArgumentPropertyValue("options.family", "a string or number", value);
-        }
-    }
-
-    pub fn upper(self: AF) [:0]const u8 {
-        return switch (self) {
-            .INET => "IPv4",
-            .INET6 => "IPv6",
-        };
-    }
-};
-pub const sockaddr = extern union {
-    sin: inet.sockaddr_in,
-    sin6: inet.sockaddr_in6,
-
-    pub fn v4(port_: inet.in_port_t, addr: u32) sockaddr {
-        return .{ .sin = .{
-            .family = AF.INET.int(),
-            .port = port_,
-            .addr = addr,
-        } };
-    }
-
-    pub fn v6(
-        port_: inet.in_port_t,
-        addr: [16]u8,
-        flowinfo: u32,
-        scope_id: u32,
-    ) sockaddr {
-        return .{ .sin6 = .{
-            .family = AF.INET6.int(),
-            .port = port_,
-            .flowinfo = flowinfo,
-            .scope_id = scope_id,
-            .addr = addr,
-        } };
-    }
-
-    pub fn as_v4(this: *const sockaddr) ?u32 {
-        if (this.sin.family == std.posix.AF.INET) return this.sin.addr;
-        if (this.sin.family == std.posix.AF.INET6) {
-            if (!std.mem.allEqual(u8, this.sin6.addr[0..10], 0)) return null;
-            if (this.sin6.addr[10] != 255) return null;
-            if (this.sin6.addr[11] != 255) return null;
-            return @bitCast(this.sin6.addr[12..16].*);
-        }
-        return null;
-    }
-
-    pub fn family(this: *const sockaddr) AF {
-        return switch (this.sin.family) {
-            std.posix.AF.INET => .INET,
-            std.posix.AF.INET6 => .INET6,
-            else => unreachable,
-        };
-    }
-
-    pub fn fmt(this: *const sockaddr, buf: *[inet.INET6_ADDRSTRLEN]u8) [:0]const u8 {
-        const addr_src: *const void = if (this.family() == AF.INET) @ptrCast(&this.sin.addr) else @ptrCast(&this.sin6.addr);
-        const formatted = std.mem.sliceTo(ares.ares_inet_ntop(this.family().int(), addr_src, buf, buf.len) orelse {
-            std.debug.panic("Invariant violation: SocketAddress created with invalid IPv6 address", .{});
-        }, 0);
-        if (comptime bun.Environment.isDebug) bun.assertWithLocation(bun.strings.isAllASCII(formatted), @src());
-        return formatted;
-    }
-
-    pub const @"127.0.0.1": sockaddr = sockaddr.v4(0, @bitCast([_]u8{ 127, 0, 0, 1 }));
-    pub const @"::": sockaddr = sockaddr.v6(0, inet.IN6ADDR_ANY_INIT, 0, 0);
-
-    pub const in = inet.sockaddr_in;
-    pub const in6 = inet.sockaddr_in6;
-};
+const AddrBuf = [inet.INET6_ADDRSTRLEN]u8;
+const _loopback_v4_addr: u32 = @bitCast(@as([4]u8, .{ 127, 0, 0, 1 }));
 pub const inet = (if (bun.Environment.isWindows) blk: {
     const ws2 = std.os.windows.ws2_32;
     _ = &ws2;

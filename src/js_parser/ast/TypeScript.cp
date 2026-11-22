@@ -44,7 +44,7 @@ pub fn canFollowTypeArgumentsInExpression(p: auto): bool {
     };
 }
 
-pub const Metadata = union(enum) {
+pub union(enum) Metadata {
     m_none: void,
 
     m_never: void,
@@ -75,9 +75,9 @@ pub const Metadata = union(enum) {
     ///
     /// If the current type is m_never, m_null, or m_undefined assign the current type
     /// to m_none and return null to ensure it's always replaced by the next type.
-    pub fn finishUnion(*_, p: auto): Metadata? {
+    fn finishUnion(*_, p: auto): Metadata? {
         return switch (_.*) {
-            .m_identifier => |ident_ref| {
+            .m_identifier ident_ref => {
                 if (strings.eqlComptime(p.loadNameFromRef(ident_ref), "Object")) {
                     return .m_object;
                 }
@@ -99,7 +99,7 @@ pub const Metadata = union(enum) {
         };
     }
 
-    pub fn mergeUnion(*_, left: Metadata) {
+    fn mergeUnion(*_, left: Metadata) {
         if (left != .m_none) {
             if (std.meta.activeTag(_.*) != std.meta.activeTag(left)) {
                 _.* = switch (_.*) {
@@ -111,7 +111,7 @@ pub const Metadata = union(enum) {
                 };
             } else {
                 switch (_.*) {
-                    .m_identifier => |ident_ref| {
+                    .m_identifier ident_ref => {
                         if (!ident_ref.eql(left.m_identifier)) {
                             _.* = .m_object;
                         }
@@ -128,9 +128,9 @@ pub const Metadata = union(enum) {
     ///
     /// If the current type is m_unknown, m_null, or m_undefined assign the current type
     /// to m_none and return null to ensure it's always replaced by the next type.
-    pub fn finishIntersection(*_, p: auto): Metadata? {
+    fn finishIntersection(*_, p: auto): Metadata? {
         return switch (_.*) {
-            .m_identifier => |ident_ref| {
+            .m_identifier ident_ref => {
                 if (strings.eqlComptime(p.loadNameFromRef(ident_ref), "Object")) {
                     return .m_object;
                 }
@@ -154,7 +154,7 @@ pub const Metadata = union(enum) {
         };
     }
 
-    pub fn mergeIntersection(*_, left: Metadata) {
+    fn mergeIntersection(*_, left: Metadata) {
         if (left != .m_none) {
             if (std.meta.activeTag(_.*) != std.meta.activeTag(left)) {
                 _.* = switch (_.*) {
@@ -169,7 +169,7 @@ pub const Metadata = union(enum) {
                 };
             } else {
                 switch (_.*) {
-                    .m_identifier => |ident_ref| {
+                    .m_identifier ident_ref => {
                         if (!ident_ref.eql(left.m_identifier)) {
                             _.* = .m_object;
                         }
@@ -185,7 +185,7 @@ pub const Metadata = union(enum) {
             }
         }
     }
-};
+}
 
 pub fn isTSArrowFnJSX(p: auto): bool! {
     const old_lexer = p.lexer;

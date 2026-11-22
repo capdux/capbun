@@ -4,7 +4,7 @@ const Printer = css.Printer;
 const PrintErr = css.PrintErr;
 
 /// A value for the [display](https://drafts.csswg.org/css-display-3/#the-display-properties) property.
-pub const Display = union(enum) {
+pub union(enum) Display {
     /// A display keyword.
     keyword: DisplayKeyword,
     /// The inside and outside display values.
@@ -13,18 +13,19 @@ pub const Display = union(enum) {
     pub const parse = css.DeriveParse(@This()).parse;
     pub const toCss = css.DeriveToCss(@This()).toCss;
 
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+    fn deepClone(allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
-    pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) {
-        return css.implementHash(@This(), this, hasher);
+    fn hash(hasher: *std.hash.Wyhash) {
+        const s = _;
+        css.implementHash(@This(), &s, hasher);
     }
 
-    pub fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
-};
+}
 
 /// A value for the [visibility](https://drafts.csswg.org/css-display-3/#visibility) property.
 pub enum Visibility {
@@ -220,69 +221,68 @@ pub enum DisplayOutside {
 }
 
 /// A [`<display-inside>`](https://drafts.csswg.org/css-display-3/#typedef-display-inside) value.
-pub const DisplayInside = union(enum) {
-    flow,
-    flow_root,
-    table,
+pub union(enum) DisplayInside {
+    flow: void,
+    flow_root: void,
+    table: void,
     flex: css.VendorPrefix,
     box: css.VendorPrefix,
-    grid,
-    ruby,
+    grid: void,
+    ruby: void,
 
-    pub fn parse(input: *css.Parser) css.Result(@This()) {
+    static fn parse(input: *css.Parser): css.Result(@This()) {
         const displayInsideMap = bun.ComptimeStringMap(DisplayInside, .{
             .{ "flow", DisplayInside.flow },
             .{ "flow-root", DisplayInside.flow_root },
             .{ "table", DisplayInside.table },
-            .{ "flex", DisplayInside{ .flex = css.VendorPrefix{ .none = true } } },
-            .{ "-webkit-flex", DisplayInside{ .flex = css.VendorPrefix{ .webkit = true } } },
-            .{ "-ms-flexbox", DisplayInside{ .flex = css.VendorPrefix{ .ms = true } } },
-            .{ "-webkit-box", DisplayInside{ .box = css.VendorPrefix{ .webkit = true } } },
-            .{ "-moz-box", DisplayInside{ .box = css.VendorPrefix{ .moz = true } } },
+            .{ "flex", DisplayInside{ flex: css.VendorPrefix{ none: true } } },
+            .{ "-webkit-flex", DisplayInside{ flex: css.VendorPrefix{ webkit: true } } },
+            .{ "-ms-flexbox", DisplayInside{ flex: css.VendorPrefix{ ms: true } } },
+            .{ "-webkit-box", DisplayInside{ box: css.VendorPrefix{ webkit: true } } },
+            .{ "-moz-box", DisplayInside{ box: css.VendorPrefix{ moz: true } } },
             .{ "grid", DisplayInside.grid },
             .{ "ruby", DisplayInside.ruby },
         });
 
         const location = input.currentSourceLocation();
         const ident = switch (input.expectIdent()) {
-            .result => |v| v,
-            .err => |e| return .{ .err = e },
+            .result v => v,
+            .err e => return { err: e },
         };
 
-        if (displayInsideMap.getASCIIICaseInsensitive(ident)) |value| {
-            return .{ .result = value };
+        if (value := displayInsideMap.getASCIIICaseInsensitive(ident)) {
+            return { result: value };
         }
 
-        return .{ .err = location.newUnexpectedTokenError(.{ .ident = ident }) };
+        return { err: location.newUnexpectedTokenError({ ident: ident }) };
     }
 
-    pub fn toCss(this: *const DisplayInside, dest: *css.Printer) css.PrintErr!void {
-        switch (this.*) {
-            .flow => try dest.writeStr("flow"),
-            .flow_root => try dest.writeStr("flow-root"),
-            .table => try dest.writeStr("table"),
-            .flex => |prefix| {
-                try prefix.toCss(dest);
-                if (prefix == css.VendorPrefix{ .ms = true }) {
-                    try dest.writeStr("flexbox");
+    fn toCss(dest: *css.Printer): css.PrintErr!void {
+        switch (_) {
+            .flow => return dest.writeStr("flow"),
+            .flow_root => return dest.writeStr("flow-root"),
+            .table => return dest.writeStr("table"),
+            .flex prefix => {
+                prefix.toCss(dest)?;
+                if (prefix == css.VendorPrefix{ ms: true }) {
+                    return dest.writeStr("flexbox");
                 } else {
-                    try dest.writeStr("flex");
+                    return dest.writeStr("flex");
                 }
             },
-            .box => |prefix| {
-                try prefix.toCss(dest);
-                try dest.writeStr("box");
+            .box prefix => {
+                prefix.toCss(dest)?;
+                return dest.writeStr("box");
             },
-            .grid => try dest.writeStr("grid"),
-            .ruby => try dest.writeStr("ruby"),
+            .grid => return dest.writeStr("grid"),
+            .ruby => return dest.writeStr("ruby"),
         }
     }
 
-    pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
-};
+}
 
-const bun = @import("bun");
-const std = @import("std");
+import bun from "bun";
 const Allocator = std.mem.Allocator;

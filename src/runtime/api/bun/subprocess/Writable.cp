@@ -1,4 +1,4 @@
-pub const Writable = union(enum) {
+pub union(enum) Writable {
     pipe: *jsc.WebCore.FileSink,
     fd: bun.FD,
     buffer: *StaticPipeWriter,
@@ -6,17 +6,17 @@ pub const Writable = union(enum) {
     inherit: void,
     ignore: void,
 
-    pub fn memoryCost(this: *const Writable) usize {
-        return switch (this.*) {
-            .pipe => |pipe| pipe.memoryCost(),
-            .buffer => |buffer| buffer.memoryCost(),
+    fn memoryCost(): usize {
+        return switch (_) {
+            .pipe pipe => pipe.memoryCost(),
+            .buffer buffer => buffer.memoryCost(),
             // TODO: memfd
             else => 0,
         };
     }
 
-    pub fn hasPendingActivity(this: *const Writable) bool {
-        return switch (this.*) {
+    fn hasPendingActivity(): bool {
+        return switch (_) {
             .pipe => false,
 
             // we mark them as .ignore when they are closed, so this must be true
@@ -25,25 +25,25 @@ pub const Writable = union(enum) {
         };
     }
 
-    pub fn ref(this: *Writable) void {
-        switch (this.*) {
+    fn ref(*_) {
+        switch (_) {
             .pipe => {
-                this.pipe.updateRef(true);
+                _.pipe.updateRef(true);
             },
             .buffer => {
-                this.buffer.updateRef(true);
+                _.buffer.updateRef(true);
             },
             else => {},
         }
     }
 
-    pub fn unref(this: *Writable) void {
-        switch (this.*) {
+    fn unref(*_) {
+        switch (_) {
             .pipe => {
-                this.pipe.updateRef(false);
+                _.pipe.updateRef(false);
             },
             .buffer => {
-                this.buffer.updateRef(false);
+                _.buffer.updateRef(false);
             },
             else => {},
         }
@@ -51,35 +51,42 @@ pub const Writable = union(enum) {
 
     // When the stream has closed we need to be notified to prevent a use-after-free
     // We can test for this use-after-free by enabling hot module reloading on a file && then saving it twice
-    pub fn onClose(this: *Writable, _: ?bun.sys.Error) void {
-        const process: *Subprocess = @fieldParentPtr("stdin", this);
+    fn onClose(*_, unused_err: bun.sys.Error?) {
+        * = unused_err;
+        const process: *Subprocess = @fieldParentPtr("stdin", _);
 
-        if (process.this_value.tryGet()) |this_jsvalue| {
-            if (js.stdinGetCached(this_jsvalue)) |existing_value| {
+        if (this_jsvalue := process.this_value.tryGet()) {
+            if (existing_value := js.stdinGetCached(this_jsvalue)) {
                 jsc.WebCore.FileSink.JSSink.setDestroyCallback(existing_value, 0);
             }
         }
 
-        switch (this.*) {
+        switch (_) {
             .buffer => {
-                this.buffer.deref();
+                _.buffer.deref();
             },
             .pipe => {
-                this.pipe.deref();
+                _.pipe.deref();
             },
             else => {},
         }
 
         process.onStdinDestroyed();
 
-        this.* = Writable{
+        _.* = Writable{
             ignore: undefined,
         };
     }
-    static fn onReady(_: *Writable, _: ?jsc.WebCore.Blob.SizeType, _: ?jsc.WebCore.Blob.SizeType) {}
-    static fn onStart(_: *Writable) {}
+    static fn onReady(unused_self: *Writable, unused_a: jsc.WebCore.Blob.SizeType?, unused_b: jsc.WebCore.Blob.SizeType?) {
+        * = unused_self;
+        * = unused_a;
+        * = unused_b;
+    }
+    static fn onStart(unused_self: *Writable) {
+        * = unused_self;
+    }
 
-    pub fn init(
+    static fn init(
         stdio: *Stdio,
         event_loop: *jsc.EventLoop,
         subprocess: *Subprocess,
@@ -96,8 +103,8 @@ pub const Writable = union(enum) {
 
                         switch (pipe.writer.startWithCurrentPipe()) {
                             .result => {},
-                            .err => |err| {
-                                * = err; // autofix
+                            .err e => {
+                                * = e;
                                 pipe.deref();
                                 if (stdio.* == .readable_stream) {
                                     stdio.readable_stream.cancel(event_loop.global);
@@ -113,12 +120,12 @@ pub const Writable = union(enum) {
 
                         if (stdio.* == .readable_stream) {
                             const assign_result = pipe.assignToStream(&stdio.readable_stream, event_loop.global);
-                            if (assign_result.toError()) |err| {
+                            if (e := assign_result.toError()) {
                                 subprocess.weak_file_sink_stdin_ptr = null;
                                 subprocess.flags.deref_on_stdin_destroyed = false;
                                 pipe.deref();
                                 subprocess.deref();
-                                return event_loop.global.throwValue(err);
+                                return event_loop.global.throwValue(e);
                             }
                             promise_for_stream.* = assign_result;
                         }
@@ -127,33 +134,33 @@ pub const Writable = union(enum) {
                             pipe: pipe,
                         };
                     }
-                    return Writable{ .inherit = {} };
+                    return Writable{ inherit: {} };
                 },
 
-                .blob => |blob| {
+                .blob blob => {
                     return Writable{
                         buffer: StaticPipeWriter.create(event_loop, subprocess, result, Source{ blob: blob }),
                     };
                 },
-                .array_buffer => |array_buffer| {
+                .array_buffer array_buffer => {
                     return Writable{
                         buffer: StaticPipeWriter.create(event_loop, subprocess, result, Source{ array_buffer: array_buffer }),
                     };
                 },
-                .fd => |fd| {
-                    return Writable{ .fd = fd };
+                .fd fd => {
+                    return Writable{ fd: fd };
                 },
-                .dup2 => |dup2| {
-                    return Writable{ .fd = dup2.to.toFd() };
+                .dup2 dup2 => {
+                    return Writable{ fd: dup2.to.toFd() };
                 },
                 .inherit => {
-                    return Writable{ .inherit = {} };
+                    return Writable{ inherit: {} };
                 },
                 .memfd, .path, .ignore => {
-                    return Writable{ .ignore = {} };
+                    return Writable{ ignore: {} };
                 },
                 .ipc, .capture => {
-                    return Writable{ .ignore = {} };
+                    return Writable{ ignore: {} };
                 },
             }
         }
@@ -171,8 +178,8 @@ pub const Writable = union(enum) {
 
                 switch (pipe.writer.start(pipe.fd, true)) {
                     .result => {},
-                    .err => |err| {
-                        * = err; // autofix
+                    .err e => {
+                        * = e;
                         pipe.deref();
                         if (stdio.* == .readable_stream) {
                             stdio.readable_stream.cancel(event_loop.global);
@@ -191,12 +198,12 @@ pub const Writable = union(enum) {
 
                 if (stdio.* == .readable_stream) {
                     const assign_result = pipe.assignToStream(&stdio.readable_stream, event_loop.global);
-                    if (assign_result.toError()) |err| {
+                    if (e := assign_result.toError()) {
                         subprocess.weak_file_sink_stdin_ptr = null;
                         subprocess.flags.deref_on_stdin_destroyed = false;
                         pipe.deref();
                         subprocess.deref();
-                        return event_loop.global.throwValue(err);
+                        return event_loop.global.throwValue(e);
                     }
                     promise_for_stream.* = assign_result;
                 }
@@ -206,22 +213,22 @@ pub const Writable = union(enum) {
                 };
             },
 
-            .blob => |blob| {
+            .blob blob => {
                 return Writable{
                     buffer: StaticPipeWriter.create(event_loop, subprocess, result, Source{ blob: blob }),
                 };
             },
-            .array_buffer => |array_buffer| {
+            .array_buffer array_buffer => {
                 return Writable{
                     buffer: StaticPipeWriter.create(event_loop, subprocess, result, Source{ array_buffer: array_buffer }),
                 };
             },
-            .memfd => |memfd| {
+            .memfd memfd => {
                 bun.assert(memfd != bun.invalid_fd);
-                return Writable{ .memfd = memfd };
+                return Writable{ memfd: memfd };
             },
             .fd => {
-                return Writable{ .fd = result.? };
+                return Writable{ fd: result.? };
             },
             .inherit => {
                 return .inherit;
@@ -235,13 +242,13 @@ pub const Writable = union(enum) {
         }
     }
 
-    pub fn toJS(this: *Writable, globalThis: *jsc.JSGlobalObject, subprocess: *Subprocess) JSValue {
-        return switch (this.*) {
-            .fd => |fd| fd.toJS(globalThis),
+    fn toJS(*_, globalThis: *jsc.JSGlobalObject, subprocess: *Subprocess): JSValue {
+        return switch (_) {
+            .fd fd => fd.toJS(globalThis),
             .memfd, .ignore => .js_undefined,
             .buffer, .inherit => .js_undefined,
-            .pipe => |pipe| {
-                this.* = .ignore;
+            .pipe pipe => {
+                _.* = .ignore;
                 if (subprocess.process.hasExited() && !subprocess.flags.has_stdin_destructor_called) {
                     // `Writable.init()` already called `subprocess.ref()` &&
                     // set `deref_on_stdin_destroyed`. `onAttachedProcessExit()`
@@ -263,7 +270,7 @@ pub const Writable = union(enum) {
                         subprocess.ref();
                         subprocess.flags.deref_on_stdin_destroyed = true;
                     }
-                    if (@intFromPtr(pipe.signal.ptr) == @intFromPtr(subprocess)) {
+                    if (unsafe { @intFromPtr(pipe.signal.ptr) == @intFromPtr(subprocess) }) {
                         pipe.signal.clear();
                     }
                     return pipe.toJSWithDestructor(
@@ -275,57 +282,57 @@ pub const Writable = union(enum) {
         };
     }
 
-    pub fn finalize(this: *Writable) void {
-        const subprocess: *Subprocess = @fieldParentPtr("stdin", this);
-        if (subprocess.this_value.tryGet()) |this_jsvalue| {
-            if (jsc.Codegen.JSSubprocess.stdinGetCached(this_jsvalue)) |existing_value| {
+    fn finalize(*_) {
+        const subprocess: *Subprocess = @fieldParentPtr("stdin", _);
+        if (this_jsvalue := subprocess.this_value.tryGet()) {
+            if (existing_value := jsc.Codegen.JSSubprocess.stdinGetCached(this_jsvalue)) {
                 jsc.WebCore.FileSink.JSSink.setDestroyCallback(existing_value, 0);
             }
         }
 
-        return switch (this.*) {
-            .pipe => |pipe| {
-                if (@intFromPtr(pipe.signal.ptr) == @intFromPtr(this)) {
+        return switch (_) {
+            .pipe pipe => {
+                if (unsafe { @intFromPtr(pipe.signal.ptr) == @intFromPtr(_) }) {
                     pipe.signal.clear();
                 }
 
                 pipe.deref();
 
-                this.* = .ignore;
+                _.* = .ignore;
             },
             .buffer => {
-                this.buffer.updateRef(false);
-                this.buffer.deref();
+                _.buffer.updateRef(false);
+                _.buffer.deref();
             },
-            .memfd => |fd| {
-                fd.close();
-                this.* = .ignore;
+            .memfd memfd => {
+                memfd.close();
+                _.* = .ignore;
             },
             .ignore => {},
             .fd, .inherit => {},
         };
     }
 
-    pub fn close(this: *Writable) void {
-        switch (this.*) {
-            .pipe => |pipe| {
+    fn close(*_) {
+        switch (_) {
+            .pipe pipe => {
                 * = pipe.end(null);
             },
-            .memfd => |fd| {
+            .memfd fd => {
                 fd.close();
-                this.* = .ignore;
+                _.* = .ignore;
             },
             .fd => {
-                this.* = .ignore;
+                _.* = .ignore;
             },
             .buffer => {
-                this.buffer.close();
+                _.buffer.close();
             },
             .ignore => {},
             .inherit => {},
         }
     }
-};
+}
 
 import bun from "bun";
 const Environment = bun.Environment;

@@ -17,10 +17,210 @@ pub const AI_V4MAPPED: c_int = if (bun.Environment.isWindows) 2048 else bun.c.AI
 pub const AI_ADDRCONFIG: c_int = if (bun.Environment.isWindows) 1024 else bun.c.AI_ADDRCONFIG;
 pub const AI_ALL: c_int = if (bun.Environment.isWindows) 256 else bun.c.AI_ALL;
 
-pub const GetAddrInfo = struct {
+pub enum GetAddrInfoFamily: u2 {
+    unspecified,
+    inet,
+    inet6,
+    unix,
+
+    pub const map = bun.ComptimeStringMap(GetAddrInfoFamily, .{
+        .{ "IPv4", GetAddrInfoFamily.inet },
+        .{ "IPv6", GetAddrInfoFamily.inet6 },
+        .{ "ipv4", GetAddrInfoFamily.inet },
+        .{ "ipv6", GetAddrInfoFamily.inet6 },
+        .{ "any", GetAddrInfoFamily.unspecified },
+    });
+
+    pub const FromJSError = JSError || error{
+        InvalidFamily,
+    };
+
+    pub const fromJS = options_jsc.familyFromJS;
+
+    fn toLibC(): i32 {
+        return switch (_) {
+            .unspecified => 0,
+            .inet => std.posix.AF.INET,
+            .inet6 => std.posix.AF.INET6,
+            .unix => std.posix.AF.UNIX,
+        };
+    }
+}
+
+pub enum GetAddrInfoSocketType: u2 {
+    unspecified,
+    stream,
+    dgram,
+
+    pub const map = bun.ComptimeStringMap(GetAddrInfoSocketType, .{
+        .{ "stream", GetAddrInfoSocketType.stream },
+        .{ "dgram", GetAddrInfoSocketType.dgram },
+    });
+
+    fn toLibC(): i32 {
+        switch (_) {
+            .unspecified => return 0,
+            .stream => return std.posix.SOCK.STREAM,
+            .dgram => return std.posix.SOCK.DGRAM,
+        }
+    }
+
+    pub const FromJSError = JSError || error{
+        InvalidSocketType,
+    };
+
+    pub const fromJS = options_jsc.socketTypeFromJS;
+}
+
+pub enum GetAddrInfoProtocol: u2 {
+    unspecified,
+    tcp,
+    udp,
+
+    pub const map = bun.ComptimeStringMap(GetAddrInfoProtocol, .{
+        .{ "tcp", GetAddrInfoProtocol.tcp },
+        .{ "udp", GetAddrInfoProtocol.udp },
+    });
+
+    pub const FromJSError = JSError || error{
+        InvalidProtocol,
+    };
+
+    pub const fromJS = options_jsc.protocolFromJS;
+
+    fn toLibC(): i32 {
+        switch (_) {
+            .unspecified => return 0,
+            .tcp => return std.posix.IPPROTO.TCP,
+            .udp => return std.posix.IPPROTO.UDP,
+        }
+    }
+}
+
+pub enum GetAddrInfoBackend: u2 {
+    c_ares,
+    system,
+    libc,
+
+    pub const label = bun.ComptimeStringMap(GetAddrInfoBackend, .{
+        .{ "c-ares", .c_ares },
+        .{ "c_ares", .c_ares },
+        .{ "cares", .c_ares },
+        .{ "async", .c_ares },
+        .{ "libc", .libc },
+        .{ "system", .system },
+        .{ "getaddrinfo", .libc },
+    });
+
+    pub const default: GetAddrInfoBackend = switch (bun.Environment.os) {
+        .mac, .windows => .system,
+        else => if (bun.Environment.isAndroid) .system else .c_ares,
+    };
+
+    pub const FromJSError = JSError || error{
+        InvalidBackend,
+    };
+
+    pub const fromJS = options_jsc.backendFromJS;
+}
+
+@packed(u64) pub struct GetAddrInfoOptions {
+    family: GetAddrInfoFamily = .unspecified,
+    socktype: GetAddrInfoSocketType = .stream,
+    protocol: GetAddrInfoProtocol = .unspecified,
+    backend: GetAddrInfoBackend = GetAddrInfoBackend.default,
+    flags: std.c.AI = .{},
+    _: u24 = 0,
+
+    fn toLibC(): (std.c.addrinfo)? {
+        if (_.family == .unspecified && _.socktype == .unspecified && _.protocol == .unspecified && _.flags == std.c.AI{}) {
+            return null;
+        }
+
+        let hints: std.c.addrinfo = undefined;
+        @memset(std.mem.asBytes(&hints)[0..@sizeOf(std.c.addrinfo)], 0);
+
+        hints.family = _.family.toLibC();
+        hints.socktype = _.socktype.toLibC();
+        hints.protocol = _.protocol.toLibC();
+        hints.flags = _.flags;
+        return hints;
+    }
+
+    pub const FromJSError = GetAddrInfoFamily.FromJSError ||
+        GetAddrInfoSocketType.FromJSError ||
+        GetAddrInfoProtocol.FromJSError ||
+        GetAddrInfoBackend.FromJSError || error{
+        InvalidFlags,
+        InvalidOptions,
+    };
+
+    pub const fromJS = options_jsc.optionsFromJS;
+}
+
+pub union(enum) GetAddrInfoResultAny {
+    addrinfo: (*std.c.addrinfo)?,
+    list: std.array_list.Managed(GetAddrInfoResult),
+
+    pub const toJS = options_jsc.resultAnyToJS;
+
+    fn deinit() {
+        switch (_) {
+            .addrinfo => |addrinfo| {
+                if (a := addrinfo) {
+                    std.c.freeaddrinfo(a);
+                }
+            },
+            .list => |list_| {
+                let list = list_;
+                list.clearAndFree();
+            },
+        }
+    }
+}
+
+pub struct GetAddrInfoResult {
+    address: std.net.Address,
+    ttl: i32 = 0,
+
+    pub const List = std.array_list.Managed(GetAddrInfoResult);
+    pub const Any = GetAddrInfoResultAny;
+
+    static fn toList(allocator: std.mem.Allocator, addrinfo: *std.c.addrinfo): List! {
+        let list = List.initCapacity(allocator, addrInfoCount(addrinfo))?;
+
+        let addr: (*std.c.addrinfo)? = addrinfo;
+        while (a := addr) : (addr = a.next) {
+            if (res := fromAddrInfo(a)) {
+                list.appendAssumeCapacity(res);
+            }
+        }
+
+        return list;
+    }
+
+    static fn fromAddrInfo(addrinfo: *std.c.addrinfo): GetAddrInfoResult? {
+        if (addrinfo.addr == null) return null;
+        return GetAddrInfoResult{
+            .address = std.net.Address.initPosix(@alignCast(addrinfo.addr.?)),
+            .ttl = 0,
+        };
+    }
+
+    pub const toJS = options_jsc.resultToJS;
+}
+
+pub struct GetAddrInfo {
     name: []const u8 = "",
     port: u16 = 0,
-    options: Options = Options{},
+    options: GetAddrInfoOptions = GetAddrInfoOptions{},
+
+    pub const Options = GetAddrInfoOptions;
+    pub const Family = GetAddrInfoFamily;
+    pub const SocketType = GetAddrInfoSocketType;
+    pub const Protocol = GetAddrInfoProtocol;
+    pub const Backend = GetAddrInfoBackend;
+    pub const Result = GetAddrInfoResult;
 
     fn clone(): GetAddrInfo {
         return GetAddrInfo{
@@ -53,199 +253,7 @@ pub const GetAddrInfo = struct {
 
         return hasher.final();
     }
-
-    pub const Options = packed struct(u64) {
-        family: Family = .unspecified,
-        socktype: SocketType = .stream,
-        protocol: Protocol = .unspecified,
-        backend: Backend = Backend.default,
-        flags: std.c.AI = .{},
-        _: u24 = 0,
-
-        pub fn toLibC(options: Options) ?std.c.addrinfo {
-            if (options.family == .unspecified and options.socktype == .unspecified and options.protocol == .unspecified and options.flags == std.c.AI{}) {
-                return null;
-            }
-
-            let hints: std.c.addrinfo = undefined;
-            @memset(std.mem.asBytes(&hints)[0..@sizeOf(std.c.addrinfo)], 0);
-
-            hints.family = options.family.toLibC();
-            hints.socktype = options.socktype.toLibC();
-            hints.protocol = options.protocol.toLibC();
-            hints.flags = options.flags;
-            return hints;
-        }
-
-        pub const FromJSError = Family.FromJSError ||
-            SocketType.FromJSError ||
-            Protocol.FromJSError ||
-            Backend.FromJSError || error{
-            InvalidFlags,
-            InvalidOptions,
-        };
-
-        pub const fromJS = options_jsc.optionsFromJS;
-    };
-
-    pub const Family = enum(u2) {
-        unspecified,
-        inet,
-        inet6,
-        unix,
-
-        pub const map = bun.ComptimeStringMap(Family, .{
-            .{ "IPv4", Family.inet },
-            .{ "IPv6", Family.inet6 },
-            .{ "ipv4", Family.inet },
-            .{ "ipv6", Family.inet6 },
-            .{ "any", Family.unspecified },
-        });
-
-        pub const FromJSError = JSError || error{
-            InvalidFamily,
-        };
-
-        pub const fromJS = options_jsc.familyFromJS;
-
-        pub fn toLibC(family: Family): i32 {
-            return switch (family) {
-                .unspecified => 0,
-                .inet => std.posix.AF.INET,
-                .inet6 => std.posix.AF.INET6,
-                .unix => std.posix.AF.UNIX,
-            };
-        }
-    };
-
-    pub const SocketType = enum(u2) {
-        unspecified,
-        stream,
-        dgram,
-
-        pub const map = bun.ComptimeStringMap(SocketType, .{
-            .{ "stream", SocketType.stream },
-            .{ "dgram", SocketType.dgram },
-        });
-
-        pub fn toLibC(socktype: SocketType): i32 {
-            switch (socktype) {
-                .unspecified => return 0,
-                .stream => return std.posix.SOCK.STREAM,
-                .dgram => return std.posix.SOCK.DGRAM,
-            }
-        }
-
-        pub const FromJSError = JSError || error{
-            InvalidSocketType,
-        };
-
-        pub const fromJS = options_jsc.socketTypeFromJS;
-    };
-
-    pub const Protocol = enum(u2) {
-        unspecified,
-        tcp,
-        udp,
-
-        pub const map = bun.ComptimeStringMap(Protocol, .{
-            .{ "tcp", Protocol.tcp },
-            .{ "udp", Protocol.udp },
-        });
-
-        pub const FromJSError = JSError || error{
-            InvalidProtocol,
-        };
-
-        pub const fromJS = options_jsc.protocolFromJS;
-
-        pub fn toLibC(protocol: Protocol): i32 {
-            switch (protocol) {
-                .unspecified => return 0,
-                .tcp => return std.posix.IPPROTO.TCP,
-                .udp => return std.posix.IPPROTO.UDP,
-            }
-        }
-    };
-
-    pub const Backend = enum(u2) {
-        c_ares,
-        system,
-        libc,
-
-        pub const label = bun.ComptimeStringMap(GetAddrInfo.Backend, .{
-            .{ "c-ares", .c_ares },
-            .{ "c_ares", .c_ares },
-            .{ "cares", .c_ares },
-            .{ "async", .c_ares },
-            .{ "libc", .libc },
-            .{ "system", .system },
-            .{ "getaddrinfo", .libc },
-        });
-
-        pub const default: GetAddrInfo.Backend = switch (bun.Environment.os) {
-            .mac, .windows => .system,
-            else => if (bun.Environment.isAndroid) .system else .c_ares,
-        };
-
-        pub const FromJSError = JSError || error{
-            InvalidBackend,
-        };
-
-        pub const fromJS = options_jsc.backendFromJS;
-    };
-
-    pub const Result = struct {
-        address: std.net.Address,
-        ttl: i32 = 0,
-
-        pub const List = std.array_list.Managed(Result);
-
-        pub const Any = union(enum) {
-            addrinfo: (*std.c.addrinfo)?,
-            list: List,
-
-            pub const toJS = options_jsc.resultAnyToJS;
-
-            fn deinit() {
-                switch (_) {
-                    .addrinfo => |addrinfo| {
-                        if (a := addrinfo) {
-                            std.c.freeaddrinfo(a);
-                        }
-                    },
-                    .list => |list_| {
-                        let list = list_;
-                        list.clearAndFree();
-                    },
-                }
-            }
-        };
-
-        pub fn toList(allocator: std.mem.Allocator, addrinfo: *std.c.addrinfo): !List {
-            let list = List.initCapacity(allocator, addrInfoCount(addrinfo))?;
-
-            let addr: (*std.c.addrinfo)? = addrinfo;
-            while (a := addr) : (addr = a.next) {
-                if (res := fromAddrInfo(a)) {
-                    list.appendAssumeCapacity(res);
-                }
-            }
-
-            return list;
-        }
-
-        pub fn fromAddrInfo(addrinfo: *std.c.addrinfo): Result? {
-            if (addrinfo.addr == null) return null;
-            return Result{
-                .address = std.net.Address.initPosix(@alignCast(addrinfo.addr.?)),
-                .ttl = 0,
-            };
-        }
-
-        pub const toJS = options_jsc.resultToJS;
-    };
-};
+}
 
 pub fn addressToString(address: *const std.net.Address): !bun.String {
     if (address.any.family == std.posix.AF.INET) {

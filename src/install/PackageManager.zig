@@ -468,6 +468,7 @@ else => ((if (Environment.isAndroid) "#!/system/bin/sh\n" else "#!/bin/sh\n") ++
     }
 };
 
+pub const InitResult_ = struct { *PackageManager, []const u8 };
 const string = []const u8;
 const stringZ = [:0]const u8;
 pub var verbose_install = false;
@@ -481,7 +482,6 @@ pub const SuccessFn = *const fn(*PackageManager, DependencyID, PackageID) void;
 pub const FailFn = *const fn(*PackageManager, *const Dependency, PackageID, anyerror) void;
 pub const debug = Output.scoped(.PackageManager, .hidden);
 var ensureTempNodeGypScriptOnce = bun.once(EnsureTempNodeGypScriptOnce_.run);
-pub const InitResult_ = struct { *PackageManager, string };
 var init_with_runtime_once = bun.once(initWithRuntimeOnce);
 var cwd_buf: bun.PathBuffer = undefined;
 var root_package_json_path_buf: bun.PathBuffer = undefined;

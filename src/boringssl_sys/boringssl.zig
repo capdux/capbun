@@ -123,6 +123,71 @@ fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub const struct_asn1_string_st = extern struct {
+    length: c_int,
+    @"type": c_int,
+    data: [*c]u8,
+    flags: c_long,
+};
+
+const union_unnamed_1 = extern union {
+    ptr: [*c]u8,
+    boolean: ASN1_BOOLEAN,
+    asn1_string: [*c]ASN1_STRING,
+    object: Opt__ASN1_OBJECT,
+    integer: [*c]ASN1_INTEGER,
+    enumerated: [*c]ASN1_ENUMERATED,
+    bit_string: [*c]ASN1_BIT_STRING,
+    octet_string: [*c]ASN1_OCTET_STRING,
+    printablestring: [*c]ASN1_PRINTABLESTRING,
+    t61string: [*c]ASN1_T61STRING,
+    ia5string: [*c]ASN1_IA5STRING,
+    generalstring: [*c]ASN1_GENERALSTRING,
+    bmpstring: [*c]ASN1_BMPSTRING,
+    universalstring: [*c]ASN1_UNIVERSALSTRING,
+    utctime: [*c]ASN1_UTCTIME,
+    generalizedtime: [*c]ASN1_GENERALIZEDTIME,
+    visiblestring: [*c]ASN1_VISIBLESTRING,
+    utf8string: [*c]ASN1_UTF8STRING,
+    set: [*c]ASN1_STRING,
+    sequence: [*c]ASN1_STRING,
+    asn1_value: Opt__ASN1_VALUE,
+};
+
+pub const struct_asn1_type_st = extern struct {
+    @"type": c_int,
+    value: union_unnamed_1,
+};
+
+pub const struct_bignum_st = extern struct {
+    d: [*c]BN_ULONG,
+    width: c_int,
+    dmax: c_int,
+    neg: c_int,
+    flags: c_int,
+};
+
+pub const struct_DSA_SIG_st = extern struct {
+    r: [*c]BIGNUM,
+    s: [*c]BIGNUM,
+};
+
+pub const struct_Netscape_spkac_st = extern struct {
+    pubkey: Opt__X509_PUBKEY,
+    challenge: [*c]ASN1_IA5STRING,
+};
+
+pub const struct_X509_algor_st = extern struct {
+    algorithm: Opt__ASN1_OBJECT,
+    parameter: [*c]ASN1_TYPE,
+};
+
+pub const struct_Netscape_spki_st = extern struct {
+    spkac: [*c]NETSCAPE_SPKAC,
+    sig_algor: [*c]X509_ALGOR,
+    signature: [*c]ASN1_BIT_STRING,
+};
+
 pub const struct_x509_st = opaque {
 
 pub fn dup(self: *struct_x509_st) ?*X509 {
@@ -137,6 +202,400 @@ pub fn ref(self: *struct_x509_st) *X509 {
 pub fn free(self: *struct_x509_st) void {
             _ = X509_free(self);
     }
+};
+
+pub const struct_openssl_method_common_st = extern struct {
+    references: c_int,
+    is_static: u8,
+};
+
+pub const struct_rsa_meth_st = extern struct {
+    common: struct_openssl_method_common_st,
+    app_data: ?*anyopaque,
+    init: FnPtr_1,
+    finish: FnPtr_2,
+    size: FnPtr_3,
+    sign: FnPtr_4,
+    sign_raw: FnPtr_5,
+    decrypt: FnPtr_6,
+    private_transform: FnPtr_7,
+    flags: c_int,
+};
+
+pub const struct_crypto_ex_data_st = extern struct {
+    sk: Opt__struct_stack_st_void,
+};
+
+pub const struct_bn_mont_ctx_st = extern struct {
+    RR: BIGNUM,
+    N: BIGNUM,
+    n0: [2]BN_ULONG,
+};
+
+pub const struct_dsa_st = extern struct {
+    version: c_long,
+    p: [*c]BIGNUM,
+    q: [*c]BIGNUM,
+    g: [*c]BIGNUM,
+    pub_key: [*c]BIGNUM,
+    priv_key: [*c]BIGNUM,
+    flags: c_int,
+    method_mont_lock: CRYPTO_MUTEX,
+    method_mont_p: [*c]BN_MONT_CTX,
+    method_mont_q: [*c]BN_MONT_CTX,
+    references: CRYPTO_refcount_t,
+    ex_data: CRYPTO_EX_DATA,
+};
+
+const union_unnamed_2 = extern union {
+    ptr: ?*anyopaque,
+    rsa: Opt__RSA,
+    dsa: [*c]DSA,
+    dh: Opt__DH,
+    ec: Opt__EC_KEY,
+};
+
+pub const struct_evp_pkey_st = extern struct {
+    references: CRYPTO_refcount_t,
+    @"type": c_int,
+    pkey: union_unnamed_2,
+    ameth: Opt__const_EVP_PKEY_ASN1_METHOD,
+};
+
+pub const struct_evp_cipher_info_st = extern struct {
+    cipher: Opt__const_EVP_CIPHER,
+    iv: [16]u8,
+};
+
+pub const struct_private_key_st = extern struct {
+    version: c_int,
+    enc_algor: [*c]X509_ALGOR,
+    enc_pkey: [*c]ASN1_OCTET_STRING,
+    dec_pkey: [*c]EVP_PKEY,
+    key_length: c_int,
+    key_data: [*c]u8,
+    key_free: c_int,
+    cipher: EVP_CIPHER_INFO,
+};
+
+pub const struct_X509_info_st = extern struct {
+    x509: Opt__X509,
+    crl: Opt__X509_CRL,
+    x_pkey: [*c]X509_PKEY,
+    enc_cipher: EVP_CIPHER_INFO,
+    enc_len: c_int,
+    enc_data: [*c]u8,
+};
+
+pub const struct_bio_method_st = extern struct {
+    @"type": c_int,
+    name: [*c]const u8,
+    bwrite: FnPtr_8,
+    bread: FnPtr_9,
+    bputs: FnPtr_10,
+    bgets: FnPtr_11,
+    ctrl: FnPtr_12,
+    create: FnPtr_13,
+    destroy: FnPtr_14,
+    callback_ctrl: FnPtr_15,
+};
+
+pub const struct_bn_gencb_st = extern struct {
+    arg: ?*anyopaque,
+    callback: FnPtr_16,
+};
+
+pub const struct_buf_mem_st = extern struct {
+    length: usize,
+    data: [*c]u8,
+    max: usize,
+};
+
+const union_unnamed_3 = extern union {
+    base: struct_cbb_buffer_st,
+    child: struct_cbb_child_st,
+};
+
+pub const struct_cbb_st = extern struct {
+    child: [*c]CBB,
+    is_child: u8,
+    u: union_unnamed_3,
+};
+
+pub const struct_cbs_st = extern struct {
+    data: [*c]const u8,
+    len: usize,
+};
+
+pub const struct_ecdsa_method_st = extern struct {
+    common: struct_openssl_method_common_st,
+    app_data: ?*anyopaque,
+    init: FnPtr_17,
+    finish: FnPtr_18,
+    group_order_size: FnPtr_19,
+    sign: FnPtr_20,
+    flags: c_int,
+};
+
+pub const struct_ecdsa_sig_st = extern struct {
+    r: [*c]BIGNUM,
+    s: [*c]BIGNUM,
+};
+
+pub const struct_env_md_ctx_st = extern struct {
+    md_data: extern union {
+        data: [240]u8,
+        alignment: u64,
+    },
+    digest: Opt__const_EVP_MD,
+    pctx: Opt__EVP_PKEY_CTX,
+    pctx_ops: Opt__const_struct_evp_md_pctx_ops,
+};
+
+pub const union_evp_aead_ctx_st_state = extern union {
+    @"opaque": [560]u8,
+    alignment: u64,
+};
+
+pub const struct_evp_aead_ctx_st = extern struct {
+    aead: Opt__const_EVP_AEAD,
+    state: union_evp_aead_ctx_st_state,
+    tag_len: u8,
+};
+
+pub const struct_evp_cipher_ctx_st = extern struct {
+    cipher: Opt__const_EVP_CIPHER,
+    app_data: ?*anyopaque,
+    cipher_data: ?*anyopaque,
+    key_len: c_uint,
+    encrypt: c_int,
+    flags: u32,
+    oiv: [16]u8,
+    iv: [16]u8,
+    buf: [32]u8,
+    buf_len: c_int,
+    num: c_uint,
+    final_used: c_int,
+    final: [32]u8,
+    poisoned: c_int,
+};
+
+pub const struct_evp_encode_ctx_st = extern struct {
+    data_used: c_uint,
+    data: [48]u8,
+    eof_seen: u8,
+    error_encountered: u8,
+};
+
+pub const struct_hmac_ctx_st = extern struct {
+    md: Opt__const_EVP_MD,
+    md_ctx: EVP_MD_CTX,
+    i_ctx: EVP_MD_CTX,
+    o_ctx: EVP_MD_CTX,
+};
+
+pub const struct_rsa_pss_params_st = extern struct {
+    hashAlgorithm: [*c]X509_ALGOR,
+    maskGenAlgorithm: [*c]X509_ALGOR,
+    saltLength: [*c]ASN1_INTEGER,
+    trailerField: [*c]ASN1_INTEGER,
+    maskHash: [*c]X509_ALGOR,
+};
+
+pub const struct_sha256_state_st = extern struct {
+    h: [8]u32,
+    Nl: u32,
+    Nh: u32,
+    data: [64]u8,
+    num: c_uint,
+    md_len: c_uint,
+};
+
+pub const struct_sha512_state_st = extern struct {
+    h: [8]u64,
+    num: u16,
+    md_len: u16,
+    bytes_so_far_high: u32,
+    bytes_so_far_low: u64,
+    p: [128]u8,
+};
+
+const struct_unnamed_5 = extern struct {
+    h0: u32,
+    h1: u32,
+    h2: u32,
+    h3: u32,
+    h4: u32,
+};
+
+const union_unnamed_4 = extern union {
+    h: [5]u32,
+    unnamed_0: struct_unnamed_5,
+};
+
+pub const struct_sha_state_st = extern struct {
+    unnamed_0: union_unnamed_4,
+    Nl: u32,
+    Nh: u32,
+    data: [64]u8,
+    num: c_uint,
+};
+
+pub const struct_srtp_protection_profile_st = extern struct {
+    name: [*c]const u8,
+    id: c_ulong,
+};
+
+pub const struct_ssl_early_callback_ctx = extern struct {
+    ssl: Opt__SSL,
+    client_hello: [*c]const u8,
+    client_hello_len: usize,
+    version: u16,
+    random: [*c]const u8,
+    random_len: usize,
+    session_id: [*c]const u8,
+    session_id_len: usize,
+    cipher_suites: [*c]const u8,
+    cipher_suites_len: usize,
+    compression_methods: [*c]const u8,
+    compression_methods_len: usize,
+    extensions: [*c]const u8,
+    extensions_len: usize,
+};
+
+pub const struct_ssl_private_key_method_st = extern struct {
+    sign: FnPtr_21,
+    decrypt: FnPtr_22,
+    complete: FnPtr_23,
+};
+
+pub const struct_ssl_quic_method_st = extern struct {
+    set_read_secret: FnPtr_24,
+    set_write_secret: FnPtr_25,
+    add_handshake_data: FnPtr_26,
+    flush_flight: FnPtr_27,
+    send_alert: FnPtr_28,
+};
+
+pub const struct_ssl_ticket_aead_method_st = extern struct {
+    max_overhead: FnPtr_29,
+    seal: FnPtr_30,
+    open: FnPtr_31,
+};
+
+pub const struct_x509_trust_st = extern struct {
+    trust: c_int,
+    flags: c_int,
+    check_trust: FnPtr_32,
+    name: [*c]u8,
+    arg1: c_int,
+    arg2: ?*anyopaque,
+};
+
+pub const struct___sbuf = extern struct {
+    _base: [*c]u8,
+    _size: c_int,
+};
+
+pub const struct_stack_st = extern struct {
+    num: usize,
+    data: [*c]OptVoidPtr,
+    sorted: c_int,
+    num_alloc: usize,
+    comp: OPENSSL_sk_cmp_func,
+};
+
+pub const CRYPTO_dynlock = extern struct {
+    references: c_int,
+    data: Opt__struct_CRYPTO_dynlock_value,
+};
+
+pub const PKCS7_SIGNED = extern struct {
+    cert: Opt__struct_stack_st_X509,
+    crl: Opt__struct_stack_st_X509_CRL,
+};
+
+pub const PKCS7_SIGN_ENVELOPE = extern struct {
+    cert: Opt__struct_stack_st_X509,
+    crl: Opt__struct_stack_st_X509_CRL,
+};
+
+const union_unnamed_7 = extern union {
+    ptr: [*c]u8,
+    data: [*c]ASN1_OCTET_STRING,
+    sign: [*c]PKCS7_SIGNED,
+    enveloped: Opt__PKCS7_ENVELOPE,
+    signed_and_enveloped: [*c]PKCS7_SIGN_ENVELOPE,
+    digest: Opt__PKCS7_DIGEST,
+    encrypted: Opt__PKCS7_ENCRYPT,
+    other: [*c]ASN1_TYPE,
+};
+
+pub const PKCS7 = extern struct {
+    ber_bytes: [*c]u8,
+    ber_len: usize,
+    @"type": Opt__ASN1_OBJECT,
+    d: union_unnamed_7,
+};
+
+pub const EC_builtin_curve = extern struct {
+    nid: c_int,
+    comment: [*c]const u8,
+};
+
+pub const struct_obj_name_st = extern struct {
+    @"type": c_int,
+    alias: c_int,
+    name: [*c]const u8,
+    data: [*c]const u8,
+};
+
+pub const OTHERNAME = extern struct {
+    type_id: Opt__ASN1_OBJECT,
+    value: Opt__ASN1_TYPE,
+};
+
+pub const GENERAL_NAME = extern struct {
+    name_type: enum(c_int) {
+        GEN_OTHERNAME = 0,
+        GEN_EMAIL = 1,
+        GEN_DNS = 2,
+        GEN_X400 = 3,
+        GEN_DIRNAME = 4,
+        GEN_EDIPARTY = 5,
+        GEN_URI = 6,
+        GEN_IPADD = 7,
+        GEN_RID = 8,
+    },
+    d: extern union {
+        ptr: *c_char,
+        otherName: *OTHERNAME,
+        rfc822Name: *ASN1_IA5STRING,
+        dNSName: *ASN1_IA5STRING,
+        x400Address: *ASN1_STRING,
+        directoryName: *X509_NAME,
+        //EDIPARTYNAME
+        ediPartyName: *anyopaque,
+        uniformResourceIdentifier: *ASN1_IA5STRING,
+        iPAddress: *ASN1_OCTET_STRING,
+        registeredID: *ASN1_OBJECT,
+        ip: *ASN1_OCTET_STRING,
+        dirn: *X509_NAME,
+        ia5: *ASN1_IA5STRING,
+        rid: *ASN1_OBJECT,
+        other: *ASN1_TYPE,
+    },
+};
+
+pub const ACCESS_DESCRIPTION = extern struct {
+    method: *ASN1_OBJECT,
+    location: *GENERAL_NAME,
+};
+
+pub const struct_ssl_comp_st = extern struct {
+    id: c_int,
+    name: [*c]const u8,
+    method: [*c]u8,
 };
 
 pub const struct_bio_st = extern struct {
@@ -470,11 +929,44 @@ pub fn deinit(self: *SSL_CTX) void {
     }
 };
 
-pub const CRYPTO_EX_free = *const fn (?*anyopaque, ?*anyopaque, [*c]CRYPTO_EX_DATA, c_int, c_long, ?*anyopaque) callconv(.c) void;
-pub const CRYPTO_EX_dup = *const fn ([*c]CRYPTO_EX_DATA, [*c]const CRYPTO_EX_DATA, [*c]OptVoidPtr, c_int, c_long, ?*anyopaque) callconv(.c) void;
-pub const d2i_of_void = *const fn ([*c]OptVoidPtr, [*c][*c]const u8, c_long) callconv(.c) void;
-pub const i2d_of_void = *const fn (OptVoidPtr, [*c][*c]u8) callconv(.c) void;
-pub const pem_password_cb = *const fn ([*c]u8, c_int, c_int, ?*anyopaque) callconv(.c) void;
+pub const BIOMethod = struct {
+
+pub fn init(name: [:0]const u8, comptime create__: ?create, comptime destroy__: ?destroy, comptime write__: ?write, comptime read__: ?read, comptime gets__: ?gets, comptime ctrl__: ?ctrl) *BIO_METHOD {
+            const method = BIO_meth_new((BIO_get_new_index() | BIO_TYPE_SOURCE_SINK), name);
+            if ((comptime create__)) |create_| {
+                _ = &create_;
+                _ = bun.assert((BIO_meth_set_create(method, create_) > 0));
+            }
+            if ((comptime destroy__)) |destroy_| {
+                _ = &destroy_;
+                _ = bun.assert((BIO_meth_set_destroy(method, destroy_) > 0));
+            }
+            if ((comptime write__)) |write_| {
+                _ = &write_;
+                _ = bun.assert((BIO_meth_set_write(method, write_) > 0));
+            }
+            if ((comptime read__)) |read_| {
+                _ = &read_;
+                _ = bun.assert((BIO_meth_set_read(method, read_) > 0));
+            }
+            if ((comptime gets__)) |gets_| {
+                _ = &gets_;
+                _ = bun.assert((BIO_meth_set_gets(method, gets_) > 0));
+            }
+            if ((comptime ctrl__)) |ctrl_| {
+                _ = &ctrl_;
+                _ = bun.assert((BIO_meth_set_ctrl(method, ctrl_) > 0));
+            }
+            return method;
+    }
+    pub const create = *const fn(_: *BIO) callconv(.c) c_int;
+    pub const destroy = *const fn(_: *BIO) callconv(.c) c_int;
+    pub const write = *const fn(_: *BIO, _: [*c]const u8, _: c_int) callconv(.c) c_int;
+    pub const read = *const fn(_: *BIO, _: [*c]u8, _: c_int) callconv(.c) c_int;
+    pub const gets = *const fn(_: *BIO, _: [*c]u8, _: c_int) callconv(.c) c_int;
+    pub const ctrl = *const fn(_: *BIO, _: c_int, _: c_long, _: ?*anyopaque) callconv(.c) c_long;
+};
+
 const Opt__AUTHORITY_INFO_ACCESS = ?*AUTHORITY_INFO_ACCESS;
 const Opt__CBB = ?*CBB;
 const Opt__CRYPTO_BUFFER = ?*CRYPTO_BUFFER;
@@ -613,12 +1105,6 @@ pub const struct_asn1_object_st = opaque {};
 pub const ASN1_OBJECT = struct_asn1_object_st;
 pub const struct_asn1_pctx_st = opaque {};
 pub const ASN1_PCTX = struct_asn1_pctx_st;
-pub const struct_asn1_string_st = extern struct {
-    length: c_int,
-    @"type": c_int,
-    data: [*c]u8,
-    flags: c_long,
-};
 pub const ASN1_BIT_STRING = struct_asn1_string_st;
 pub const ASN1_BMPSTRING = struct_asn1_string_st;
 pub const ASN1_ENUMERATED = struct_asn1_string_st;
@@ -637,33 +1123,6 @@ pub const ASN1_UTF8STRING = struct_asn1_string_st;
 pub const ASN1_VISIBLESTRING = struct_asn1_string_st;
 pub const struct_ASN1_VALUE_st = opaque {};
 pub const ASN1_VALUE = struct_ASN1_VALUE_st;
-const union_unnamed_1 = extern union {
-    ptr: [*c]u8,
-    boolean: ASN1_BOOLEAN,
-    asn1_string: [*c]ASN1_STRING,
-    object: Opt__ASN1_OBJECT,
-    integer: [*c]ASN1_INTEGER,
-    enumerated: [*c]ASN1_ENUMERATED,
-    bit_string: [*c]ASN1_BIT_STRING,
-    octet_string: [*c]ASN1_OCTET_STRING,
-    printablestring: [*c]ASN1_PRINTABLESTRING,
-    t61string: [*c]ASN1_T61STRING,
-    ia5string: [*c]ASN1_IA5STRING,
-    generalstring: [*c]ASN1_GENERALSTRING,
-    bmpstring: [*c]ASN1_BMPSTRING,
-    universalstring: [*c]ASN1_UNIVERSALSTRING,
-    utctime: [*c]ASN1_UTCTIME,
-    generalizedtime: [*c]ASN1_GENERALIZEDTIME,
-    visiblestring: [*c]ASN1_VISIBLESTRING,
-    utf8string: [*c]ASN1_UTF8STRING,
-    set: [*c]ASN1_STRING,
-    sequence: [*c]ASN1_STRING,
-    asn1_value: Opt__ASN1_VALUE,
-};
-pub const struct_asn1_type_st = extern struct {
-    @"type": c_int,
-    value: union_unnamed_1,
-};
 pub const ASN1_TYPE = struct_asn1_type_st;
 pub const struct_AUTHORITY_KEYID_st = opaque {};
 pub const AUTHORITY_KEYID = struct_AUTHORITY_KEYID_st;
@@ -672,18 +1131,7 @@ pub const BASIC_CONSTRAINTS = struct_BASIC_CONSTRAINTS_st;
 pub const struct_DIST_POINT_st = opaque {};
 pub const DIST_POINT = struct_DIST_POINT_st;
 pub const BN_ULONG = u64;
-pub const struct_bignum_st = extern struct {
-    d: [*c]BN_ULONG,
-    width: c_int,
-    dmax: c_int,
-    neg: c_int,
-    flags: c_int,
-};
 pub const BIGNUM = struct_bignum_st;
-pub const struct_DSA_SIG_st = extern struct {
-    r: [*c]BIGNUM,
-    s: [*c]BIGNUM,
-};
 pub const DSA_SIG = struct_DSA_SIG_st;
 pub const struct_ISSUING_DIST_POINT_st = opaque {};
 pub const ISSUING_DIST_POINT = struct_ISSUING_DIST_POINT_st;
@@ -691,21 +1139,8 @@ pub const struct_NAME_CONSTRAINTS_st = opaque {};
 pub const NAME_CONSTRAINTS = struct_NAME_CONSTRAINTS_st;
 pub const struct_X509_pubkey_st = opaque {};
 pub const X509_PUBKEY = struct_X509_pubkey_st;
-pub const struct_Netscape_spkac_st = extern struct {
-    pubkey: Opt__X509_PUBKEY,
-    challenge: [*c]ASN1_IA5STRING,
-};
 pub const NETSCAPE_SPKAC = struct_Netscape_spkac_st;
-pub const struct_X509_algor_st = extern struct {
-    algorithm: Opt__ASN1_OBJECT,
-    parameter: [*c]ASN1_TYPE,
-};
 pub const X509_ALGOR = struct_X509_algor_st;
-pub const struct_Netscape_spki_st = extern struct {
-    spkac: [*c]NETSCAPE_SPKAC,
-    sig_algor: [*c]X509_ALGOR,
-    signature: [*c]ASN1_BIT_STRING,
-};
 pub const NETSCAPE_SPKI = struct_Netscape_spki_st;
 pub const struct_RIPEMD160state_st = opaque {};
 pub const RIPEMD160_CTX = struct_RIPEMD160state_st;
@@ -717,100 +1152,27 @@ pub const struct_X509_extension_st = opaque {};
 pub const X509_EXTENSION = struct_X509_extension_st;
 pub const X509 = struct_x509_st;
 pub const CRYPTO_refcount_t = u32;
-pub const struct_openssl_method_common_st = extern struct {
-    references: c_int,
-    is_static: u8,
-};
-pub const struct_rsa_meth_st = extern struct {
-    common: struct_openssl_method_common_st,
-    app_data: ?*anyopaque,
-    init: FnPtr_1,
-    finish: FnPtr_2,
-    size: FnPtr_3,
-    sign: FnPtr_4,
-    sign_raw: FnPtr_5,
-    decrypt: FnPtr_6,
-    private_transform: FnPtr_7,
-    flags: c_int,
-};
 pub const RSA_METHOD = struct_rsa_meth_st;
 pub const struct_stack_st_void = opaque {};
-pub const struct_crypto_ex_data_st = extern struct {
-    sk: Opt__struct_stack_st_void,
-};
 pub const CRYPTO_EX_DATA = struct_crypto_ex_data_st;
 pub const CRYPTO_MUTEX = pthread_rwlock_t;
-pub const struct_bn_mont_ctx_st = extern struct {
-    RR: BIGNUM,
-    N: BIGNUM,
-    n0: [2]BN_ULONG,
-};
 pub const BN_MONT_CTX = struct_bn_mont_ctx_st;
 pub const struct_bn_blinding_st = opaque {};
 pub const BN_BLINDING = struct_bn_blinding_st;
 pub const struct_rsa_st = opaque {};
 pub const RSA = struct_rsa_st;
-pub const struct_dsa_st = extern struct {
-    version: c_long,
-    p: [*c]BIGNUM,
-    q: [*c]BIGNUM,
-    g: [*c]BIGNUM,
-    pub_key: [*c]BIGNUM,
-    priv_key: [*c]BIGNUM,
-    flags: c_int,
-    method_mont_lock: CRYPTO_MUTEX,
-    method_mont_p: [*c]BN_MONT_CTX,
-    method_mont_q: [*c]BN_MONT_CTX,
-    references: CRYPTO_refcount_t,
-    ex_data: CRYPTO_EX_DATA,
-};
 pub const DSA = struct_dsa_st;
 pub const struct_dh_st = opaque {};
 pub const DH = struct_dh_st;
 pub const struct_ec_key_st = opaque {};
 pub const EC_KEY = struct_ec_key_st;
-const union_unnamed_2 = extern union {
-    ptr: ?*anyopaque,
-    rsa: Opt__RSA,
-    dsa: [*c]DSA,
-    dh: Opt__DH,
-    ec: Opt__EC_KEY,
-};
 pub const struct_evp_pkey_asn1_method_st = opaque {};
 pub const EVP_PKEY_ASN1_METHOD = struct_evp_pkey_asn1_method_st;
-pub const struct_evp_pkey_st = extern struct {
-    references: CRYPTO_refcount_t,
-    @"type": c_int,
-    pkey: union_unnamed_2,
-    ameth: Opt__const_EVP_PKEY_ASN1_METHOD,
-};
 pub const EVP_PKEY = struct_evp_pkey_st;
 pub const struct_evp_cipher_st = opaque {};
 pub const EVP_CIPHER = struct_evp_cipher_st;
-pub const struct_evp_cipher_info_st = extern struct {
-    cipher: Opt__const_EVP_CIPHER,
-    iv: [16]u8,
-};
 pub const EVP_CIPHER_INFO = struct_evp_cipher_info_st;
-pub const struct_private_key_st = extern struct {
-    version: c_int,
-    enc_algor: [*c]X509_ALGOR,
-    enc_pkey: [*c]ASN1_OCTET_STRING,
-    dec_pkey: [*c]EVP_PKEY,
-    key_length: c_int,
-    key_data: [*c]u8,
-    key_free: c_int,
-    cipher: EVP_CIPHER_INFO,
-};
 pub const X509_PKEY = struct_private_key_st;
-pub const struct_X509_info_st = extern struct {
-    x509: Opt__X509,
-    crl: Opt__X509_CRL,
-    x_pkey: [*c]X509_PKEY,
-    enc_cipher: EVP_CIPHER_INFO,
-    enc_len: c_int,
-    enc_data: [*c]u8,
-};
 pub const X509_INFO = struct_X509_info_st;
 pub const struct_X509_name_entry_st = opaque {};
 pub const X509_NAME_ENTRY = struct_X509_name_entry_st;
@@ -826,47 +1188,13 @@ pub const BIO_METHOD = struct_bio_method_st;
 pub const BIO = struct_bio_st;
 const bio_info_cb__fn = *const fn(_: [*c]BIO, _: c_int, _: [*c]const u8, _: c_int, _: c_long, _: c_long) callconv(.c) c_long;
 pub const bio_info_cb = ?bio_info_cb__fn;
-pub const struct_bio_method_st = extern struct {
-    @"type": c_int,
-    name: [*c]const u8,
-    bwrite: FnPtr_8,
-    bread: FnPtr_9,
-    bputs: FnPtr_10,
-    bgets: FnPtr_11,
-    ctrl: FnPtr_12,
-    create: FnPtr_13,
-    destroy: FnPtr_14,
-    callback_ctrl: FnPtr_15,
-};
 pub const struct_blake2b_state_st = opaque {};
 pub const BLAKE2B_CTX = struct_blake2b_state_st;
-pub const struct_bn_gencb_st = extern struct {
-    arg: ?*anyopaque,
-    callback: FnPtr_16,
-};
 pub const BN_GENCB = struct_bn_gencb_st;
-pub const struct_buf_mem_st = extern struct {
-    length: usize,
-    data: [*c]u8,
-    max: usize,
-};
 pub const BUF_MEM = struct_buf_mem_st;
 pub const CBB = struct_cbb_st;
 pub const struct_cbb_buffer_st = opaque {};
 pub const struct_cbb_child_st = opaque {};
-const union_unnamed_3 = extern union {
-    base: struct_cbb_buffer_st,
-    child: struct_cbb_child_st,
-};
-pub const struct_cbb_st = extern struct {
-    child: [*c]CBB,
-    is_child: u8,
-    u: union_unnamed_3,
-};
-pub const struct_cbs_st = extern struct {
-    data: [*c]const u8,
-    len: usize,
-};
 pub const CBS = struct_cbs_st;
 pub const struct_cmac_ctx_st = opaque {};
 pub const CMAC_CTX = struct_cmac_ctx_st;
@@ -884,20 +1212,7 @@ pub const struct_ec_group_st = opaque {};
 pub const EC_GROUP = struct_ec_group_st;
 pub const struct_ec_point_st = opaque {};
 pub const EC_POINT = struct_ec_point_st;
-pub const struct_ecdsa_method_st = extern struct {
-    common: struct_openssl_method_common_st,
-    app_data: ?*anyopaque,
-    init: FnPtr_17,
-    finish: FnPtr_18,
-    group_order_size: FnPtr_19,
-    sign: FnPtr_20,
-    flags: c_int,
-};
 pub const ECDSA_METHOD = struct_ecdsa_method_st;
-pub const struct_ecdsa_sig_st = extern struct {
-    r: [*c]BIGNUM,
-    s: [*c]BIGNUM,
-};
 pub const ECDSA_SIG = struct_ecdsa_sig_st;
 pub const struct_engine_st = opaque {};
 pub const ENGINE = struct_engine_st;
@@ -906,55 +1221,11 @@ pub const EVP_MD = struct_env_md_st;
 pub const struct_evp_pkey_ctx_st = opaque {};
 pub const EVP_PKEY_CTX = struct_evp_pkey_ctx_st;
 pub const struct_evp_md_pctx_ops = opaque {};
-pub const struct_env_md_ctx_st = extern struct {
-    // md_data contains the hash-specific context
-    md_data: extern union {
-        data: [240]u8,
-        alignment: u64,
-    },
-    // digest is the underlying digest function, or NULL if not set
-    digest: Opt__const_EVP_MD,
-    // pctx is an opaque pointer to additional context
-    pctx: Opt__EVP_PKEY_CTX,
-    // pctx_ops points to a vtable that contains functions to manipulate pctx
-    pctx_ops: Opt__const_struct_evp_md_pctx_ops,
-};
 pub const EVP_MD_CTX = struct_env_md_ctx_st;
 pub const struct_evp_aead_st = opaque {};
 pub const EVP_AEAD = struct_evp_aead_st;
-pub const union_evp_aead_ctx_st_state = extern union {
-    @"opaque": [560]u8,
-    alignment: u64,
-};
-pub const struct_evp_aead_ctx_st = extern struct {
-    aead: Opt__const_EVP_AEAD,
-    state: union_evp_aead_ctx_st_state,
-    tag_len: u8,
-};
 pub const EVP_AEAD_CTX = struct_evp_aead_ctx_st;
-pub const struct_evp_cipher_ctx_st = extern struct {
-    cipher: Opt__const_EVP_CIPHER,
-    app_data: ?*anyopaque,
-    cipher_data: ?*anyopaque,
-    key_len: c_uint,
-    encrypt: c_int,
-    flags: u32,
-    oiv: [16]u8,
-    iv: [16]u8,
-    buf: [32]u8,
-    buf_len: c_int,
-    num: c_uint,
-    final_used: c_int,
-    final: [32]u8,
-    poisoned: c_int,
-};
 pub const EVP_CIPHER_CTX = struct_evp_cipher_ctx_st;
-pub const struct_evp_encode_ctx_st = extern struct {
-    data_used: c_uint,
-    data: [48]u8,
-    eof_seen: u8,
-    error_encountered: u8,
-};
 pub const EVP_ENCODE_CTX = struct_evp_encode_ctx_st;
 pub const struct_evp_hpke_aead_st = opaque {};
 pub const EVP_HPKE_AEAD = struct_evp_hpke_aead_st;
@@ -968,12 +1239,6 @@ pub const struct_evp_hpke_key_st = opaque {};
 pub const EVP_HPKE_KEY = struct_evp_hpke_key_st;
 pub const struct_evp_pkey_method_st = opaque {};
 pub const EVP_PKEY_METHOD = struct_evp_pkey_method_st;
-pub const struct_hmac_ctx_st = extern struct {
-    md: Opt__const_EVP_MD,
-    md_ctx: EVP_MD_CTX,
-    i_ctx: EVP_MD_CTX,
-    o_ctx: EVP_MD_CTX,
-};
 pub const HMAC_CTX = struct_hmac_ctx_st;
 pub const struct_md4_state_st = opaque {};
 pub const MD4_CTX = struct_md4_state_st;
@@ -989,76 +1254,15 @@ pub const struct_rand_meth_st = opaque {};
 pub const RAND_METHOD = struct_rand_meth_st;
 pub const struct_rc4_key_st = opaque {};
 pub const RC4_KEY = struct_rc4_key_st;
-pub const struct_rsa_pss_params_st = extern struct {
-    hashAlgorithm: [*c]X509_ALGOR,
-    maskGenAlgorithm: [*c]X509_ALGOR,
-    saltLength: [*c]ASN1_INTEGER,
-    trailerField: [*c]ASN1_INTEGER,
-    maskHash: [*c]X509_ALGOR,
-};
 pub const RSA_PSS_PARAMS = struct_rsa_pss_params_st;
-pub const struct_sha256_state_st = extern struct {
-    h: [8]u32,
-    Nl: u32,
-    Nh: u32,
-    data: [64]u8,
-    num: c_uint,
-    md_len: c_uint,
-};
 pub const SHA256_CTX = struct_sha256_state_st;
-pub const struct_sha512_state_st = extern struct {
-    h: [8]u64,
-    num: u16,
-    md_len: u16,
-    bytes_so_far_high: u32,
-    bytes_so_far_low: u64,
-    p: [128]u8,
-};
 pub const SHA512_CTX = struct_sha512_state_st;
-const struct_unnamed_5 = extern struct {
-    h0: u32,
-    h1: u32,
-    h2: u32,
-    h3: u32,
-    h4: u32,
-};
-const union_unnamed_4 = extern union {
-    h: [5]u32,
-    unnamed_0: struct_unnamed_5,
-};
-pub const struct_sha_state_st = extern struct {
-    unnamed_0: union_unnamed_4,
-    Nl: u32,
-    Nh: u32,
-    data: [64]u8,
-    num: c_uint,
-};
 pub const SHA_CTX = struct_sha_state_st;
 pub const struct_spake2_ctx_st = opaque {};
 pub const SPAKE2_CTX = struct_spake2_ctx_st;
-pub const struct_srtp_protection_profile_st = extern struct {
-    name: [*c]const u8,
-    id: c_ulong,
-};
 pub const SRTP_PROTECTION_PROFILE = struct_srtp_protection_profile_st;
 pub const struct_ssl_cipher_st = opaque {};
 pub const SSL_CIPHER = struct_ssl_cipher_st;
-pub const struct_ssl_early_callback_ctx = extern struct {
-    ssl: Opt__SSL,
-    client_hello: [*c]const u8,
-    client_hello_len: usize,
-    version: u16,
-    random: [*c]const u8,
-    random_len: usize,
-    session_id: [*c]const u8,
-    session_id_len: usize,
-    cipher_suites: [*c]const u8,
-    cipher_suites_len: usize,
-    compression_methods: [*c]const u8,
-    compression_methods_len: usize,
-    extensions: [*c]const u8,
-    extensions_len: usize,
-};
 pub const SSL_CLIENT_HELLO = struct_ssl_early_callback_ctx;
 pub const struct_ssl_ech_keys_st = opaque {};
 pub const SSL_ECH_KEYS = struct_ssl_ech_keys_st;
@@ -1068,24 +1272,12 @@ pub const ssl_private_key_success: c_int = 0;
 pub const ssl_private_key_retry: c_int = 1;
 pub const ssl_private_key_failure: c_int = 2;
 pub const enum_ssl_private_key_result_t = c_uint;
-pub const struct_ssl_private_key_method_st = extern struct {
-    sign: FnPtr_21,
-    decrypt: FnPtr_22,
-    complete: FnPtr_23,
-};
 pub const SSL_PRIVATE_KEY_METHOD = struct_ssl_private_key_method_st;
 pub const ssl_encryption_initial: c_int = 0;
 pub const ssl_encryption_early_data: c_int = 1;
 pub const ssl_encryption_handshake: c_int = 2;
 pub const ssl_encryption_application: c_int = 3;
 pub const enum_ssl_encryption_level_t = c_uint;
-pub const struct_ssl_quic_method_st = extern struct {
-    set_read_secret: FnPtr_24,
-    set_write_secret: FnPtr_25,
-    add_handshake_data: FnPtr_26,
-    flush_flight: FnPtr_27,
-    send_alert: FnPtr_28,
-};
 pub const SSL_QUIC_METHOD = struct_ssl_quic_method_st;
 pub const struct_ssl_session_st = opaque {};
 pub const SSL_SESSION = struct_ssl_session_st;
@@ -1094,11 +1286,6 @@ pub const ssl_ticket_aead_retry: c_int = 1;
 pub const ssl_ticket_aead_ignore_ticket: c_int = 2;
 pub const ssl_ticket_aead_error: c_int = 3;
 pub const enum_ssl_ticket_aead_result_t = c_uint;
-pub const struct_ssl_ticket_aead_method_st = extern struct {
-    max_overhead: FnPtr_29,
-    seal: FnPtr_30,
-    open: FnPtr_31,
-};
 pub const SSL_TICKET_AEAD_METHOD = struct_ssl_ticket_aead_method_st;
 pub const struct_st_ERR_FNS = opaque {};
 pub const ERR_FNS = struct_st_ERR_FNS;
@@ -1126,20 +1313,8 @@ pub const struct_x509_store_ctx_st = opaque {};
 pub const X509_STORE_CTX = struct_x509_store_ctx_st;
 pub const struct_x509_store_st = opaque {};
 pub const X509_STORE = struct_x509_store_st;
-pub const struct_x509_trust_st = extern struct {
-    trust: c_int,
-    flags: c_int,
-    check_trust: FnPtr_32,
-    name: [*c]u8,
-    arg1: c_int,
-    arg2: ?*anyopaque,
-};
 pub const X509_TRUST = struct_x509_trust_st;
 pub const OPENSSL_BLOCK = ?*void;
-pub const struct___sbuf = extern struct {
-    _base: [*c]u8,
-    _size: c_int,
-};
 const ERR_print_errors_callback_t__fn = *const fn(_: [*c]const u8, _: usize, _: ?*anyopaque) callconv(.c) c_int;
 pub const ERR_print_errors_callback_t = ?ERR_print_errors_callback_t__fn;
 pub const ERR_LIB_NONE: c_int = 1;
@@ -1188,13 +1363,6 @@ const OPENSSL_sk_call_copy_func__fn = *const fn(_: OPENSSL_sk_copy_func, _: ?*an
 pub const OPENSSL_sk_call_copy_func = ?OPENSSL_sk_call_copy_func__fn;
 const OPENSSL_sk_call_cmp_func__fn = *const fn(_: OPENSSL_sk_cmp_func, _: [*c]const OptVoidPtr, _: [*c]const OptVoidPtr) callconv(.c) c_int;
 pub const OPENSSL_sk_call_cmp_func = ?OPENSSL_sk_call_cmp_func__fn;
-pub const struct_stack_st = extern struct {
-    num: usize,
-    data: [*c]OptVoidPtr,
-    sorted: c_int,
-    num_alloc: usize,
-    comp: OPENSSL_sk_cmp_func,
-};
 pub const _STACK = struct_stack_st;
 pub const OPENSSL_STRING = [*c]u8;
 const sk_void_free_func__fn = *const fn(_: ?*anyopaque) callconv(.c) void;
@@ -1210,12 +1378,10 @@ const sk_OPENSSL_STRING_copy_func__fn = *const fn(_: [*c]u8) callconv(.c) [*c]u8
 pub const sk_OPENSSL_STRING_copy_func = ?sk_OPENSSL_STRING_copy_func__fn;
 const sk_OPENSSL_STRING_cmp_func__fn = *const fn(_: [*c][*c]const u8, _: [*c][*c]const u8) callconv(.c) c_int;
 pub const sk_OPENSSL_STRING_cmp_func = ?sk_OPENSSL_STRING_cmp_func__fn;
+pub const CRYPTO_EX_free = *const fn(_: ?*anyopaque, _: ?*anyopaque, _: [*c]CRYPTO_EX_DATA, _: c_int, _: c_long, _: ?*anyopaque) callconv(.c) void;
+pub const CRYPTO_EX_dup = *const fn(_: [*c]CRYPTO_EX_DATA, _: [*c]const CRYPTO_EX_DATA, _: [*c]OptVoidPtr, _: c_int, _: c_long, _: ?*anyopaque) callconv(.c) c_int;
 pub const CRYPTO_EX_unused = c_int;
 pub const struct_CRYPTO_dynlock_value = opaque {};
-pub const CRYPTO_dynlock = extern struct {
-    references: c_int,
-    data: Opt__struct_CRYPTO_dynlock_value,
-};
 const OptDynlockPtr = ?(&struct_CRYPTO_dynlock_value);
 pub const struct_stack_st_BIO = opaque {};
 const sk_BIO_free_func__fn = *const fn(_: [*c]BIO) callconv(.c) void;
@@ -1230,38 +1396,16 @@ pub const enum_evp_aead_direction_t = c_uint;
 pub const struct_stack_st_CRYPTO_BUFFER = opaque {};
 pub const struct_stack_st_X509 = opaque {};
 pub const struct_stack_st_X509_CRL = opaque {};
-pub const PKCS7_SIGNED = extern struct {
-    cert: Opt__struct_stack_st_X509,
-    crl: Opt__struct_stack_st_X509_CRL,
-};
-pub const PKCS7_SIGN_ENVELOPE = extern struct {
-    cert: Opt__struct_stack_st_X509,
-    crl: Opt__struct_stack_st_X509_CRL,
-};
 pub const PKCS7_ENVELOPE = anyopaque;
 pub const PKCS7_DIGEST = anyopaque;
 pub const PKCS7_ENCRYPT = anyopaque;
 pub const PKCS7_SIGNER_INFO = anyopaque;
-const union_unnamed_7 = extern union {
-    ptr: [*c]u8,
-    data: [*c]ASN1_OCTET_STRING,
-    sign: [*c]PKCS7_SIGNED,
-    enveloped: Opt__PKCS7_ENVELOPE,
-    signed_and_enveloped: [*c]PKCS7_SIGN_ENVELOPE,
-    digest: Opt__PKCS7_DIGEST,
-    encrypted: Opt__PKCS7_ENCRYPT,
-    other: [*c]ASN1_TYPE,
-};
-pub const PKCS7 = extern struct {
-    ber_bytes: [*c]u8,
-    ber_len: usize,
-    @"type": Opt__ASN1_OBJECT,
-    d: union_unnamed_7,
-};
 pub const bn_probably_prime: c_int = 0;
 pub const bn_composite: c_int = 1;
 pub const bn_non_prime_power_composite: c_int = 2;
 pub const enum_bn_primality_result_t = c_uint;
+pub const d2i_of_void = *const fn(_: [*c]OptVoidPtr, _: [*c][*c]const u8, _: c_long) callconv(.c) OptVoidPtr;
+pub const i2d_of_void = *const fn(_: OptVoidPtr, _: [*c][*c]u8) callconv(.c) c_int;
 pub const ASN1_ITEM_EXP = ASN1_ITEM;
 pub const struct_stack_st_ASN1_INTEGER = opaque {};
 const sk_ASN1_INTEGER_free_func__fn = *const fn(_: [*c]ASN1_INTEGER) callconv(.c) void;
@@ -1291,16 +1435,6 @@ pub const POINT_CONVERSION_HYBRID: c_int = 6;
 pub const point_conversion_form_t = c_uint;
 pub const struct_ec_method_st = opaque {};
 pub const EC_METHOD = struct_ec_method_st;
-pub const EC_builtin_curve = extern struct {
-    nid: c_int,
-    comment: [*c]const u8,
-};
-pub const struct_obj_name_st = extern struct {
-    @"type": c_int,
-    alias: c_int,
-    name: [*c]const u8,
-    data: [*c]const u8,
-};
 pub const OBJ_NAME = struct_obj_name_st;
 const sk_CRYPTO_BUFFER_free_func__fn = *const fn(_: Opt__CRYPTO_BUFFER) callconv(.c) void;
 pub const sk_CRYPTO_BUFFER_free_func = ?sk_CRYPTO_BUFFER_free_func__fn;
@@ -1337,45 +1471,6 @@ const stack_X509_REVOKED_cmp_func__fn = *const fn(_: [*c][*c]const X509_REVOKED,
 pub const stack_X509_REVOKED_cmp_func = ?stack_X509_REVOKED_cmp_func__fn;
 pub const struct_stack_st_GENERAL_NAMES = opaque {};
 pub const struct_stack_st_ACCESS_DESCRIPTION = opaque {};
-pub const OTHERNAME = extern struct {
-    type_id: Opt__ASN1_OBJECT,
-    value: Opt__ASN1_TYPE,
-};
-pub const GENERAL_NAME = extern struct {
-    name_type: enum(c_int) {
-        GEN_OTHERNAME = 0,
-        GEN_EMAIL = 1,
-        GEN_DNS = 2,
-        GEN_X400 = 3,
-        GEN_DIRNAME = 4,
-        GEN_EDIPARTY = 5,
-        GEN_URI = 6,
-        GEN_IPADD = 7,
-        GEN_RID = 8,
-    },
-    d: extern union {
-        ptr: *c_char,
-        otherName: *OTHERNAME,
-        rfc822Name: *ASN1_IA5STRING,
-        dNSName: *ASN1_IA5STRING,
-        x400Address: *ASN1_STRING,
-        directoryName: *X509_NAME,
-        //EDIPARTYNAME
-        ediPartyName: *anyopaque,
-        uniformResourceIdentifier: *ASN1_IA5STRING,
-        iPAddress: *ASN1_OCTET_STRING,
-        registeredID: *ASN1_OBJECT,
-        ip: *ASN1_OCTET_STRING,
-        dirn: *X509_NAME,
-        ia5: *ASN1_IA5STRING,
-        rid: *ASN1_OBJECT,
-        other: *ASN1_TYPE,
-    },
-};
-pub const ACCESS_DESCRIPTION = extern struct {
-    method: *ASN1_OBJECT,
-    location: *GENERAL_NAME,
-};
 const stack_GENERAL_NAME_free_func__fn = *const fn(_: Opt__struct_stack_st_GENERAL_NAME) callconv(.c) void;
 pub const stack_GENERAL_NAME_free_func = ?stack_GENERAL_NAME_free_func__fn;
 const stack_ACCESS_DESCRIPTION_free_func__fn = *const fn(_: Opt__AUTHORITY_INFO_ACCESS) callconv(.c) void;
@@ -1498,6 +1593,7 @@ pub const fips_counter_evp_aes_128_ctr: c_int = 2;
 pub const fips_counter_evp_aes_256_ctr: c_int = 3;
 pub const fips_counter_max: c_int = 3;
 pub const enum_fips_counter_t = c_uint;
+pub const pem_password_cb = *const fn(_: [*c]u8, _: c_int, _: c_int, _: ?*anyopaque) callconv(.c) c_int;
 pub const struct_stack_st_SSL_CIPHER = opaque {};
 const sk_SSL_CIPHER_free_func__fn = *const fn(_: Opt__const_SSL_CIPHER) callconv(.c) void;
 pub const sk_SSL_CIPHER_free_func = ?sk_SSL_CIPHER_free_func__fn;
@@ -1547,11 +1643,6 @@ pub const ssl_select_cert_retry: c_int = 0;
 pub const ssl_select_cert_error: c_int = -1;
 pub const enum_ssl_select_cert_result_t = c_int;
 pub const COMP_METHOD = anyopaque;
-pub const struct_ssl_comp_st = extern struct {
-    id: c_int,
-    name: [*c]const u8,
-    method: [*c]u8,
-};
 pub const SSL_COMP = struct_ssl_comp_st;
 pub const struct_stack_st_SSL_COMP = opaque {};
 const OptRSAPtr = ?*RSA;
@@ -14119,43 +14210,6 @@ pub const VerifyResult = enum(c_int) {
 };
 pub const VerifyCallback = *const fn(_: *SSL, _: [*c]u8) callconv(.c) VerifyResult;
 threadlocal var auto_crypto_buffer_pool: ?*CRYPTO_BUFFER_POOL = null;
-pub const BIOMethod = struct {
-
-pub fn init(name: [:0]const u8, comptime create__: ?create, comptime destroy__: ?destroy, comptime write__: ?write, comptime read__: ?read, comptime gets__: ?gets, comptime ctrl__: ?ctrl) *BIO_METHOD {
-            const method = BIO_meth_new((BIO_get_new_index() | BIO_TYPE_SOURCE_SINK), name);
-            if ((comptime create__)) |create_| {
-                _ = &create_;
-                _ = bun.assert((BIO_meth_set_create(method, create_) > 0));
-            }
-            if ((comptime destroy__)) |destroy_| {
-                _ = &destroy_;
-                _ = bun.assert((BIO_meth_set_destroy(method, destroy_) > 0));
-            }
-            if ((comptime write__)) |write_| {
-                _ = &write_;
-                _ = bun.assert((BIO_meth_set_write(method, write_) > 0));
-            }
-            if ((comptime read__)) |read_| {
-                _ = &read_;
-                _ = bun.assert((BIO_meth_set_read(method, read_) > 0));
-            }
-            if ((comptime gets__)) |gets_| {
-                _ = &gets_;
-                _ = bun.assert((BIO_meth_set_gets(method, gets_) > 0));
-            }
-            if ((comptime ctrl__)) |ctrl_| {
-                _ = &ctrl_;
-                _ = bun.assert((BIO_meth_set_ctrl(method, ctrl_) > 0));
-            }
-            return method;
-    }
-    pub const create = *const fn(_: *BIO) callconv(.c) c_int;
-    pub const destroy = *const fn(_: *BIO) callconv(.c) c_int;
-    pub const write = *const fn(_: *BIO, _: [*c]const u8, _: c_int) callconv(.c) c_int;
-    pub const read = *const fn(_: *BIO, _: [*c]u8, _: c_int) callconv(.c) c_int;
-    pub const gets = *const fn(_: *BIO, _: [*c]u8, _: c_int) callconv(.c) c_int;
-    pub const ctrl = *const fn(_: *BIO, _: c_int, _: c_long, _: ?*anyopaque) callconv(.c) c_long;
-};
 const C = @import("std").zig.c_builtins;
 const DECLARE_ASN1_ALLOC_FUNCTIONS_name = C.DECLARE_ASN1_ALLOC_FUNCTIONS_name;
 const DECLARE_ASN1_FUNCTIONS_name = C.DECLARE_ASN1_FUNCTIONS_name;

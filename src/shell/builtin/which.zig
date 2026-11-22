@@ -24,6 +24,13 @@ pub const MultiArgs = struct {
     state: MultiArgsState = .none,
 };
 
+pub const State = union(enum) {
+    idle: void,
+    one_arg: void,
+    multi_args: MultiArgs,
+    done: void,
+};
+
 pub fn PathBufGuard(comptime T: type) type {
     return struct {
         buf: T,
@@ -101,7 +108,7 @@ pub fn start(self: *Which) Yield {
 }
 
 pub fn next(self: *Which) Yield {
-        if ((self.state.multi_args.arg_idx >= self.state.multi_args.args_slice.len)) {
+        if ((self.state.multi_args.arg_idx >= bun.len(self.state.multi_args.args_slice))) {
             return self.bltn().done(@intFromBool(self.state.multi_args.had_not_found));
         }
         const arg_raw = self.state.multi_args.args_slice[@as(usize, @intCast(self.state.multi_args.arg_idx))];
@@ -189,9 +196,3 @@ const jsc = bun.jsc;
 const which = bun.which;
 const shell = bun.shell;
 const Yield = shell.Yield;
-const State = union(enum) {
-    idle,
-    one_arg,
-    multi_args: MultiArgs,
-    done,
-};

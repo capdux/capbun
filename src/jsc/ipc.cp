@@ -134,10 +134,10 @@ pub enum AdvancedIPCMessageType: u8 {
     _,
 }
 
-pub const AdvancedVersionPacket = extern struct {
+@c pub struct AdvancedVersionPacket {
     type: AdvancedIPCMessageType align(1) = .Version,
     version: u32 align(1) = 1,
-};
+}
 
 pub struct advanced {
     pub const header_length = @sizeOf(IPCMessageType) + @sizeOf(u32);

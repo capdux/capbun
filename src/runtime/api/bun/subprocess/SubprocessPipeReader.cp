@@ -10,11 +10,11 @@ struct DetachGuard<T: type> {
     ~init() { _.ptr.detach(); }
 }
 
-pub const State = union(enum) {
+pub union(enum) State {
     pending: void,
     done: []u8,
     @"err": bun.sys.Error,
-};
+}
 
 @root struct PipeReader {
     const RefCount = bun.ptr.RefCount(PipeReader, "ref_count", PipeReader.deinit, {});
@@ -30,23 +30,23 @@ pub const State = union(enum) {
     pub const IOReader = bun.io.BufferedReader;
     pub const Poll = IOReader;
 
-    pub fn memoryCost(*_): usize {
+    fn memoryCost(): usize {
         return _.reader.memoryCost();
     }
 
-    pub fn hasPendingActivity(*_): bool {
+    fn hasPendingActivity(): bool {
         if (_.state == .pending)
             return true;
 
         return _.reader.hasPendingActivity();
     }
 
-    pub fn detach(*_) {
+    fn detach(*_) {
         _.process = null;
         _.deref();
     }
 
-    pub static fn create(event_loop: *jsc.EventLoop, process: *Subprocess, result: StdioResult, limit: (*MaxBuf)?): *PipeReader {
+    static fn create(event_loop: *jsc.EventLoop, process: *Subprocess, result: StdioResult, limit: (*MaxBuf)?): *PipeReader {
         let instance = bun.new(PipeReader, {
             ref_count: .init(),
             process: process,
@@ -56,19 +56,19 @@ pub const State = union(enum) {
         });
         MaxBuf.addToPipereader(limit, &instance.reader.maxbuf);
         if (Environment.isWindows) {
-            instance.reader.source = .{ .pipe = instance.stdio_result.buffer };
+            instance.reader.source = .{ pipe: instance.stdio_result.buffer };
         }
 
         instance.reader.setParent(instance);
         return instance;
     }
 
-    pub fn readAll(*_) {
+    fn readAll(*_) {
         if (_.state == .pending)
             _.reader.read();
     }
 
-    pub fn start(*_, process: *Subprocess, event_loop: *jsc.EventLoop): bun.sys.Maybe(void) {
+    fn start(*_, process: *Subprocess, event_loop: *jsc.EventLoop): bun.sys.Maybe(void) {
         _.ref();
         _.process = process;
         _.event_loop = event_loop;
@@ -80,8 +80,8 @@ pub const State = union(enum) {
         const deref_guard = DerefGuard<PipeReader>{ ptr: _ };
 
         switch (_.reader.start(_.stdio_result.?, true)) {
-            .err => |e| {
-                return .{ .err = e };
+            .err e => {
+                return .{ @"err": e };
             },
             .result => {
                 if (comptime Environment.isPosix) {
@@ -103,29 +103,29 @@ pub const State = union(enum) {
 
     pub const toJS = toReadableStream;
 
-    pub fn onReaderDone(*_) {
+    fn onReaderDone(*_) {
         const owned = _.toOwnedSlice();
         _.state = State{ done: owned };
         if (process := _.process) {
             _.process = null;
-            process.onCloseIO(_.kind(process));
+            process.onCloseIO(PipeReader.kind(_, process));
             _.deref();
         }
     }
 
-    pub fn kind(*_, process: *const Subprocess): StdioKind {
-        if (process.stdout == .pipe && process.stdout.pipe == _) {
+    static fn kind(reader: *const PipeReader, process: *const Subprocess): StdioKind {
+        if (process.stdout == .pipe && process.stdout.pipe == reader) {
             return .stdout;
         }
 
-        if (process.stderr == .pipe && process.stderr.pipe == _) {
+        if (process.stderr == .pipe && process.stderr.pipe == reader) {
             return .stderr;
         }
 
         @panic("We should be either stdout or stderr");
     }
 
-    pub fn toOwnedSlice(*_): []u8 {
+    fn toOwnedSlice(*_): []u8 {
         if (_.state == .done) {
             return _.state.done;
         }
@@ -141,16 +141,16 @@ pub const State = union(enum) {
         return out.items;
     }
 
-    pub fn updateRef(*_, add: bool) {
+    fn updateRef(*_, add: bool) {
         _.reader.updateRef(add);
     }
 
-    pub fn watch(*_) {
+    fn watch(*_) {
         if (!_.reader.isDone())
             _.reader.watch();
     }
 
-    pub fn toReadableStream(*_, globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
+    fn toReadableStream(*_, globalObject: *jsc.JSGlobalObject): jsc.JSValue ! bun.JSError {
         const detach_guard = DetachGuard<PipeReader>{ ptr: _ };
 
         switch (_.state) {
@@ -159,7 +159,7 @@ pub const State = union(enum) {
                 _.state = State{ done: empty_u8[0..0] };
                 return stream;
             },
-            .done => |bytes| {
+            .done bytes => {
                 _.state = State{ done: empty_u8[0..0] };
                 return jsc.WebCore.ReadableStream.fromOwnedSlice(globalObject, bytes, 0);
             },
@@ -173,9 +173,9 @@ pub const State = union(enum) {
         }
     }
 
-    pub fn toBuffer(*_, globalThis: *jsc.JSGlobalObject): jsc.JSValue {
+    fn toBuffer(*_, globalThis: *jsc.JSGlobalObject): jsc.JSValue {
         switch (_.state) {
-            .done => |bytes| {
+            .done bytes => {
                 defer _.state = State{ done: empty_u8[0..0] };
                 return jsc.MarkedArrayBuffer.fromBytes(bytes, bun.default_allocator, .Uint8Array).toNodeBuffer(globalThis);
             },
@@ -185,19 +185,19 @@ pub const State = union(enum) {
         }
     }
 
-    pub fn onReaderError(*_, e: bun.sys.Error) {
+    fn onReaderError(*_, e: bun.sys.Error) {
         if (_.state == .done) {
             bun.default_allocator.free(_.state.done);
         }
         _.state = State{ @"err": e };
         if (process := _.process) {
             _.process = null;
-            process.onCloseIO(_.kind(process));
+            process.onCloseIO(PipeReader.kind(_, process));
             _.deref();
         }
     }
 
-    pub fn close(*_) {
+    fn close(*_) {
         switch (_.state) {
             .pending => {
                 _.reader.close();
@@ -207,11 +207,11 @@ pub const State = union(enum) {
         }
     }
 
-    pub fn eventLoop(*_): *jsc.EventLoop {
+    fn eventLoop(): *jsc.EventLoop {
         return _.event_loop;
     }
 
-    pub fn loop(*_): *bun.Async.Loop {
+    fn loop(): *bun.Async.Loop {
         if (comptime bun.Environment.isWindows) {
             return _.event_loop.virtual_machine.uwsLoop().uv_loop;
         } else {

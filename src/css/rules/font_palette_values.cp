@@ -56,7 +56,7 @@ pub struct FontPaletteValuesRule {
             dest.newline()?;
             prop.toCss(dest)?;
             if (i != len - 1 || !dest.minify) {
-                try dest.writeChar(';');
+                dest.writeChar(';')?;
             }
             i += 1;
         }
@@ -70,7 +70,7 @@ pub struct FontPaletteValuesRule {
     }
 }
 
-pub const FontPaletteValuesProperty = union(enum) {
+pub union(enum) FontPaletteValuesProperty {
     /// The `font-family` property.
     font_family: fontprops.FontFamily,
 
@@ -88,24 +88,24 @@ pub const FontPaletteValuesProperty = union(enum) {
     /// See [FontPaletteValuesRule](FontPaletteValuesRule).
     const This = @This();
 
-    pub fn toCss(dest: *Printer): PrintErr!void {
+    fn toCss(dest: *Printer): PrintErr!void {
         switch (_) {
-            .font_family => |*f| {
+            .font_family *f => {
                 dest.writeStr("font-family")?;
                 dest.delim(':', false)?;
                 f.toCss(dest)?;
             },
-            .base_palette => |*b| {
+            .base_palette *b => {
                 dest.writeStr("base-palette")?;
                 dest.delim(':', false)?;
                 b.toCss(dest)?;
             },
-            .override_colors => |*o| {
+            .override_colors *o => {
                 dest.writeStr("override-colors")?;
                 dest.delim(':', false)?;
                 css.to_css.fromList(OverrideColors, o.items, dest)?;
             },
-            .custom => |*custom| {
+            .custom *custom => {
                 dest.writeStr(custom.name.asStr())?;
                 dest.delim(':', false)?;
                 custom.value.toCss(dest, true)?;
@@ -113,7 +113,7 @@ pub const FontPaletteValuesProperty = union(enum) {
         }
     }
 
-    pub fn deepClone(*_, allocator: std.mem.Allocator): @This() {
+    fn deepClone(*_, allocator: std.mem.Allocator): @This() {
         return css.implementDeepClone(@This(), _, allocator);
     }
 }
@@ -129,14 +129,14 @@ pub struct OverrideColors {
 
     static fn parse(input: *css.Parser): Result(OverrideColors) {
         const index = switch (css.CSSIntegerFns.parse(input)) {
-            .result => |vv| vv,
-            .err => |e| return { err: e },
+            .result vv => vv,
+            .err e => return { err: e },
         };
         if (index < 0) return { err: input.newCustomError(css.ParserError.invalid_value) };
 
         const color = switch (css.CssColor.parse(input)) {
-            .result => |vv| vv,
-            .err => |e| return { err: e },
+            .result vv => vv,
+            .err e => return { err: e },
         };
         if (color == .current_color) return { err: input.newCustomError(css.ParserError.invalid_value) };
 
@@ -171,7 +171,7 @@ pub union(enum) BasePalette {
     /// A palette index within the font.
     integer: u16,
 
-    pub fn parse(input: *css.Parser): Result(BasePalette) {
+    static fn parse(input: *css.Parser): Result(BasePalette) {
         if (i := input.tryParse(css.CSSIntegerFns.parse, {}).asValue()) {
             if (i < 0) return { err: input.newCustomError(css.ParserError.invalid_value) };
             return { result: { integer: @intCast(i) } };
@@ -179,8 +179,8 @@ pub union(enum) BasePalette {
 
         const location = input.currentSourceLocation();
         const ident = switch (input.expectIdent()) {
-            .result => |vv| vv,
-            .err => |e| return { err: e },
+            .result vv => vv,
+            .err e => return { err: e },
         };
         if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("light", ident)) {
             return { result: .light };
@@ -189,15 +189,15 @@ pub union(enum) BasePalette {
         } else return { err: location.newUnexpectedTokenError({ ident: ident }) };
     }
 
-    pub fn toCss(dest: *Printer): PrintErr!void {
+    fn toCss(dest: *Printer): PrintErr!void {
         switch (_) {
-            .light => try dest.writeStr("light"),
-            .dark => try dest.writeStr("dark"),
-            .integer => try css.CSSIntegerFns.toCss(&@as(i32, @intCast(_.integer)), dest),
+            .light => dest.writeStr("light")?,
+            .dark => dest.writeStr("dark")?,
+            .integer => css.CSSIntegerFns.toCss(&@as(i32, @intCast(_.integer)), dest)?,
         }
     }
 
-    pub fn deepClone(*_, allocator: std.mem.Allocator): @This() {
+    fn deepClone(*_, allocator: std.mem.Allocator): @This() {
         return css.implementDeepClone(@This(), _, allocator);
     }
 }

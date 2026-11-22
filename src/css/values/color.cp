@@ -3161,7 +3161,7 @@ pub enum HueInterpolationMethod {
     }
 }
 
-const F32x3 = struct { f32, f32, f32 };
+type F32x3 = [f32, f32, f32];
 fn rectangularToPolar(l: f32, a: f32, b: f32): F32x3 {
     // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L375
 

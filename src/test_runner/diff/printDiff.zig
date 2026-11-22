@@ -61,19 +61,42 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 pub const diff_match_patch = @import("./diff_match_patch.zig");
-const DMP = diff_match_patch.DMP(u8);
-const DMPUsize = diff_match_patch.DMP(usize);
-const Mode = enum {
+pub const Mode = enum {
     bg_always,
     bg_diff_only,
     fg,
     fg_diff,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
-const mode: Mode = .bg_diff_only;
+
+pub const DiffOperation = enum {
+    insert,
+    delete,
+    equal,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const DiffSegmentMode = enum {
+    equal,
+    removed,
+    inserted,
+    modified,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const DiffConfig = struct {
     min_bytes_before_chunking: usize,
     chunk_context_lines: usize,
@@ -85,16 +108,14 @@ pub fn default(is_agent: bool, enable_ansi_colors: bool) DiffConfig {
             return DiffConfig{ .min_bytes_before_chunking = (if (is_agent) 0 else (2 * 1024)), .chunk_context_lines = (if (is_agent) 1 else 5), .enable_ansi_colors = enable_ansi_colors, .truncate_threshold = (if (is_agent) (1 * 1024) else (2 * 1024)), .truncate_context = (if (is_agent) 50 else 100) };
     }
 };
+
 pub const Diff = struct {
     operation: Operation,
     text: []const u8,
-    pub const Operation = enum {
-            insert,
-            delete,
-            equal,
-        };
+    pub const Operation = DiffOperation;
 };
-const colors = struct {
+
+pub const colors = struct {
     const red = "\x1b[31m";
     const green = "\x1b[32m";
     const yellow = "\x1b[33m";
@@ -104,34 +125,26 @@ const colors = struct {
     const white = "\x1b[97m";
     const reset = "\x1b[0m";
 };
-const PrefixStyle = struct {
+
+pub const PrefixStyle = struct {
     msg: []const u8,
     color: []const u8,
 };
-const Style = struct {
+
+pub const Style = struct {
     prefix: PrefixStyle,
     text_color: []const u8,
 };
-const prefix_style_inserted = PrefixStyle{ .msg = "+ ", .color = colors.red };
-const prefix_style_removed = PrefixStyle{ .msg = "- ", .color = colors.green };
-const prefix_style_equal = PrefixStyle{ .msg = "  ", .color = "" };
-const prefix_style_single_line_inserted = PrefixStyle{ .msg = "Received: ", .color = "" };
-const prefix_style_single_line_removed = PrefixStyle{ .msg = "Expected: ", .color = "" };
-const prefix_styles = struct {
+
+pub const prefix_styles = struct {
     const inserted = prefix_style_inserted;
     const removed = prefix_style_removed;
     const equal = prefix_style_equal;
     const single_line_inserted = prefix_style_single_line_inserted;
     const single_line_removed = prefix_style_single_line_removed;
 };
-const base_style_red_bg_inserted = Style{ .prefix = prefix_styles.inserted, .text_color = (colors.red ++ colors.invert) };
-const base_style_green_bg_removed = Style{ .prefix = prefix_styles.removed, .text_color = (colors.green ++ colors.invert) };
-const base_style_dim_equal = Style{ .prefix = prefix_styles.equal, .text_color = colors.dim };
-const base_style_red_fg_inserted = Style{ .prefix = prefix_styles.inserted, .text_color = colors.red };
-const base_style_green_fg_removed = Style{ .prefix = prefix_styles.removed, .text_color = colors.green };
-const base_style_dim_inserted = Style{ .prefix = prefix_styles.inserted, .text_color = colors.dim };
-const base_style_dim_removed = Style{ .prefix = prefix_styles.removed, .text_color = colors.dim };
-const base_styles = struct {
+
+pub const base_styles = struct {
     const red_bg_inserted = base_style_red_bg_inserted;
     const green_bg_removed = base_style_green_bg_removed;
     const dim_equal = base_style_dim_equal;
@@ -140,8 +153,8 @@ const base_styles = struct {
     const dim_inserted = base_style_dim_inserted;
     const dim_removed = base_style_dim_removed;
 };
-const styles = (switch (mode) {
-.bg_always => struct {
+
+pub const StylesBgAlways = struct {
     const inserted_line = base_styles.red_fg_inserted;
     const removed_line = base_styles.green_fg_removed;
     const inserted_diff = base_styles.red_fg_inserted;
@@ -149,8 +162,9 @@ const styles = (switch (mode) {
     const equal = base_styles.dim_equal;
     const inserted_equal = base_styles.red_fg_inserted;
     const removed_equal = base_styles.green_fg_removed;
-},
-.bg_diff_only => struct {
+};
+
+pub const StylesBgDiffOnly = struct {
     const inserted_line = base_styles.red_fg_inserted;
     const removed_line = base_styles.green_fg_removed;
     const inserted_diff = base_styles.red_fg_inserted;
@@ -158,15 +172,17 @@ const styles = (switch (mode) {
     const equal = base_styles.dim_equal;
     const inserted_equal = base_styles.red_fg_inserted;
     const removed_equal = base_styles.green_fg_removed;
-},
-.fg => struct {
+};
+
+pub const StylesFg = struct {
     const inserted_line = base_styles.red_fg_inserted;
     const removed_line = base_styles.green_fg_removed;
     const equal = base_styles.dim_equal;
     const inserted_equal = base_styles.red_fg_inserted;
     const removed_equal = base_styles.green_fg_removed;
-},
-.fg_diff => struct {
+};
+
+pub const StylesFgDiff = struct {
     const inserted_line = base_styles.red_fg_inserted;
     const removed_line = base_styles.green_fg_removed;
     const inserted_diff = base_styles.red_fg_inserted;
@@ -174,24 +190,42 @@ const styles = (switch (mode) {
     const equal = base_styles.dim_equal;
     const inserted_equal = base_styles.dim_inserted;
     const removed_equal = base_styles.dim_removed;
-},
-});
+};
+
 pub const DiffSegment = struct {
     removed: []const u8,
     inserted: []const u8,
-    mode: enum {
-        equal,
-        removed,
-        inserted,
-        modified,
-    },
+    mode: DiffSegmentMode,
     removed_line_count: usize = 0,
     inserted_line_count: usize = 0,
     skip: bool = false,
 };
-const ModifiedStyle = struct {
+
+pub const ModifiedStyle = struct {
     single_line: bool,
 };
+
+const DMP = diff_match_patch.DMP(u8);
+const DMPUsize = diff_match_patch.DMP(usize);
+const mode: Mode = .bg_diff_only;
+const prefix_style_inserted = PrefixStyle{ .msg = "+ ", .color = colors.red };
+const prefix_style_removed = PrefixStyle{ .msg = "- ", .color = colors.green };
+const prefix_style_equal = PrefixStyle{ .msg = "  ", .color = "" };
+const prefix_style_single_line_inserted = PrefixStyle{ .msg = "Received: ", .color = "" };
+const prefix_style_single_line_removed = PrefixStyle{ .msg = "Expected: ", .color = "" };
+const base_style_red_bg_inserted = Style{ .prefix = prefix_styles.inserted, .text_color = (colors.red ++ colors.invert) };
+const base_style_green_bg_removed = Style{ .prefix = prefix_styles.removed, .text_color = (colors.green ++ colors.invert) };
+const base_style_dim_equal = Style{ .prefix = prefix_styles.equal, .text_color = colors.dim };
+const base_style_red_fg_inserted = Style{ .prefix = prefix_styles.inserted, .text_color = colors.red };
+const base_style_green_fg_removed = Style{ .prefix = prefix_styles.removed, .text_color = colors.green };
+const base_style_dim_inserted = Style{ .prefix = prefix_styles.inserted, .text_color = colors.dim };
+const base_style_dim_removed = Style{ .prefix = prefix_styles.removed, .text_color = colors.dim };
+const styles = (switch (mode) {
+.bg_always => StylesBgAlways,
+.bg_diff_only => StylesBgDiffOnly,
+.fg => StylesFg,
+.fg_diff => StylesFgDiff,
+});
 
 pub fn removeTrailingNewline(text: []const u8) []const u8 {
         if ((!std.mem.endsWith(u8, text, "\n"))) {

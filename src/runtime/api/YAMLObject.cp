@@ -110,15 +110,15 @@ pub struct PropValue {
     counter: usize,
 }
 
-pub const Name = union(AnchorOrigin) {
-    root,
+pub union(AnchorOrigin) Name {
+    root: void,
     array_item: usize,
     prop_value: PropValue,
 }
 
-pub const ValueOrigin = union(AnchorOrigin) {
-    root,
-    array_item,
+pub union(AnchorOrigin) ValueOrigin {
+    root: void,
+    array_item: void,
     prop_value: String,
 }
 
@@ -169,14 +169,14 @@ pub fn spaceDeinit(this_space: *Space) {
     }
 }
 
-pub const Space = union(enum) {
-    minified,
+pub union(enum) Space {
+    minified: void,
     number: u32,
     str: String,
 
     pub const init = spaceInit;
     pub const deinit = spaceDeinit;
-};
+}
 
 pub err StringifyError {
     JSError,

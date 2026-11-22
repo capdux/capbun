@@ -39,7 +39,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -60,8 +60,9 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
+pub const bun = @import("bun");
 pub const css = @import("../css_parser.zig");
 pub const Percentage = struct {
     v: CSSNumber,
@@ -120,7 +121,6 @@ pub fn add(lhs: Percentage, _: std.mem.Allocator, rhs: Percentage) Percentage {
 
 pub fn intoCalc(self: Percentage, allocator: std.mem.Allocator) Calc(Percentage) {
             const R = Calc(Percentage);
-            _ = &R;
             return R{ .value = bun.create(allocator, Percentage, self) };
     }
 
@@ -167,25 +167,20 @@ pub fn tryOp(self: Percentage, other: *const Percentage, ctx: anytype, comptime 
     }
 };
 
-const Result = css.Result;
-const Printer = css.Printer;
-const PrintErr = css.PrintErr;
-const CSSNumber = css.css_values.number.CSSNumber;
-const Calc = css.css_values.calc.Calc;
 pub const NumberOrPercentage = union(enum) {
     number: CSSNumber,
     percentage: Percentage,
 
-pub fn deepClone(self: *const @This(), allocator: std.mem.Allocator) NumberOrPercentage {
-            return css.implementDeepClone(@This(), self, allocator);
+pub fn deepClone(self: NumberOrPercentage, allocator: std.mem.Allocator) NumberOrPercentage {
+            return css.implementDeepClone(@This(), (&self), allocator);
     }
 
-pub fn eql(self: *const @This(), other: *const NumberOrPercentage) bool {
-            return css.implementEql(@This(), self, other);
+pub fn eql(self: NumberOrPercentage, other: *const NumberOrPercentage) bool {
+            return css.implementEql(@This(), (&self), other);
     }
 
-pub fn intoF32(self: *const @This()) f32 {
-            return (switch (self.*) {
+pub fn intoF32(self: NumberOrPercentage) f32 {
+            return (switch (self) {
 .number => self.number,
 .percentage => self.percentage.v,
 });
@@ -193,7 +188,12 @@ pub fn intoF32(self: *const @This()) f32 {
     pub const parse = css.DeriveParse(@This()).parse;
     pub const toCss = css.DeriveToCss(@This()).toCss;
 };
-const bun = @import("bun");
+
+const Result = css.Result;
+const Printer = css.Printer;
+const PrintErr = css.PrintErr;
+const CSSNumber = css.css_values.number.CSSNumber;
+const Calc = css.css_values.calc.Calc;
 
 pub fn needsDeepclone(comptime D: type) bool {
         if (((D == css.css_values.angle.Angle) or (D == css.css_values.length.LengthValue))) {
@@ -205,294 +205,276 @@ pub fn needsDeepclone(comptime D: type) bool {
 pub fn DimensionPercentage(comptime D: type) type {
         const needs_deepclone = needsDeepclone(D);
         return union(enum) {
-        dimension: D,
-        percentage: Percentage,
-        calc: *Calc(DimensionPercentage(D)),
+    dimension: D,
+    percentage: Percentage,
+    calc: *Calc(DimensionPercentage(D)),
 
-        const This = @This();
-
-        pub fn parse(input: *css.Parser) Result(@This()) {
+pub fn parse(input: *css.Parser) Result(@This()) {
             if (input.tryParse(Calc(This).parse, .{}).asValue()) |calc_value| {
-                if (calc_value == .value) return .{ .result = calc_value.value.* };
-                return .{ .result = .{
-                    .calc = bun.create(input.allocator(), Calc(DimensionPercentage(D)), calc_value),
-                } };
+                _ = &calc_value;
+                if ((calc_value == .value)) {
+                    return .{ .result = (if (@typeInfo(@TypeOf(calc_value)) == .@"enum") @intFromEnum(calc_value) else calc_value.value).* };
+                }
+                return .{ .result = .{ .calc = bun.create(input.allocator(), Calc(DimensionPercentage(D)), calc_value) } };
             }
-
             if (input.tryParse(D.parse, .{}).asValue()) |length| {
+                _ = &length;
                 return .{ .result = .{ .dimension = length } };
             }
-
             if (input.tryParse(Percentage.parse, .{}).asValue()) |percentage| {
+                _ = &percentage;
                 return .{ .result = .{ .percentage = percentage } };
             }
-
             return .{ .err = input.newErrorForNextToken() };
-        }
+    }
 
-        pub fn toCss(this: *const @This(), dest: *css.Printer) css.PrintErr!void {
-            return switch (this.*) {
-                .dimension => |*length| length.toCss(dest),
-                .percentage => |*per| per.toCss(dest),
-                .calc => |calc| calc.toCss(dest),
-            };
-        }
+pub fn toCss(self: @This(), dest: *css.Printer) css.PrintErr!void {
+            return (switch (self) {
+.dimension => |*length| length.toCss(dest),
+.percentage => |*per| per.toCss(dest),
+.calc => |calc| calc.toCss(dest),
+});
+    }
 
-        pub fn isCompatible(this: *const @This(), browsers: css.targets.Browsers) bool {
-            return switch (this.*) {
-                .dimension => |*d| d.isCompatible(browsers),
-                .calc => |c| c.isCompatible(browsers),
-                .percentage => true,
-            };
-        }
+pub fn isCompatible(self: @This(), browsers: css.targets.Browsers) bool {
+            return (switch (self) {
+.dimension => |*d| d.isCompatible(browsers),
+.calc => |c| c.isCompatible(browsers),
+.percentage => true,
+});
+    }
 
-        pub fn eql(this: *const This, other: *const This) bool {
-            return css.implementEql(@This(), this, other);
-        }
+pub fn eql(self: @This(), other: *const This) bool {
+            return css.implementEql(@This(), (&self), other);
+    }
 
-        pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) This {
-            return switch (this.*) {
-                .dimension => |d| if (comptime needs_deepclone) .{ .dimension = d.deepClone(allocator) } else this.*,
-                .percentage => return this.*,
-                .calc => |calc| .{ .calc = bun.create(allocator, Calc(DimensionPercentage(D)), calc.deepClone(allocator)) },
-            };
-        }
+pub fn deepClone(self: @This(), allocator: std.mem.Allocator) This {
+            return (switch (self) {
+.dimension => |d| (if (comptime needs_deepclone) .{ .dimension = d.deepClone(allocator) } else self),
+.percentage => {
+return self;
+},
+.calc => |calc| .{ .calc = bun.create(allocator, Calc(DimensionPercentage(D)), calc.deepClone(allocator)) },
+});
+    }
 
-        pub fn deinit(this: *const @This(), allocator: std.mem.Allocator) void {
-            return switch (this.*) {
-                .dimension => |d| if (comptime @hasDecl(D, "deinit")) d.deinit(allocator),
-                .percentage => {},
-                .calc => |calc| calc.deinit(allocator),
-            };
-        }
+pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
+            switch (self) {
+.dimension => |d| {
+if (comptime @hasDecl(D, "deinit")) {
+                _ = d.deinit(allocator);
+            }
+},
+.percentage => {
 
-        pub fn zero() This {
-            return This{ .dimension = switch (D) {
-                f32 => 0.0,
-                else => D.zero(),
-            } };
-        }
+},
+.calc => |calc| {
+_ = calc.deinit(allocator);
+},
+}
+    }
 
-        pub fn isZero(this: *const This) bool {
-            return switch (this.*) {
-                .dimension => |*d| switch (D) {
-                    f32 => d == 0.0,
-                    else => d.isZero(),
-                },
-                .percentage => |*p| p.isZero(),
-                else => false,
-            };
-        }
+pub fn zero() This {
+            return This{ .dimension = (if (D == f32) 0.0 else D.zero()) };
+    }
 
-        fn mulValueF32(lhs: D, allocator: std.mem.Allocator, rhs: f32) D {
-            return switch (D) {
-                f32 => lhs * rhs,
-                else => lhs.mulF32(allocator, rhs),
-            };
-        }
+pub fn isZero(self: @This()) bool {
+            return (switch (self) {
+.dimension => |*d| (if (D == f32) (d == 0.0) else d.isZero()),
+.percentage => |*p| p.isZero(),
+else => false,
+});
+    }
 
-        pub fn mulF32(this: This, allocator: std.mem.Allocator, other: f32) This {
-            return switch (this) {
-                .dimension => |d| .{ .dimension = mulValueF32(d, allocator, other) },
-                .percentage => |p| .{ .percentage = p.mulF32(allocator, other) },
-                .calc => |c| .{ .calc = bun.create(allocator, Calc(DimensionPercentage(D)), c.mulF32(allocator, other)) },
-            };
-        }
+pub fn mulValueF32(lhs: D, allocator: std.mem.Allocator, rhs: f32) D {
+            return (if (D == f32) (lhs * rhs) else lhs.mulF32(allocator, rhs));
+    }
 
-        pub fn add(this: This, allocator: std.mem.Allocator, other: This) This {
-            // Unwrap calc(...) functions so we can add inside.
-            // Then wrap the result in a calc(...) again if necessary.
-            const a = unwrapCalc(this, allocator);
+pub fn mulF32(self: @This(), allocator: std.mem.Allocator, other: f32) This {
+            return (switch (self) {
+.dimension => |d| .{ .dimension = mulValueF32(d, allocator, other) },
+.percentage => |p| .{ .percentage = p.mulF32(allocator, other) },
+.calc => |c| .{ .calc = bun.create(allocator, Calc(DimensionPercentage(D)), c.mulF32(allocator, other)) },
+});
+    }
+
+pub fn add(self: @This(), allocator: std.mem.Allocator, other: This) This {
+            const a = unwrapCalc(self, allocator);
             const b = unwrapCalc(other, allocator);
             const res = a.addInternal(allocator, b);
-            return switch (res) {
-                .calc => |c| switch (c.*) {
-                    .value => |l| l.*,
-                    .function => |f| if (f.* != .calc) .{
-                        .calc = bun.create(allocator, Calc(DimensionPercentage(D)), .{
-                            .function = f,
-                        }),
-                    } else .{
-                        .calc = bun.create(allocator, Calc(DimensionPercentage(D)), .{
-                            .function = bun.create(
-                                allocator,
-                                css.css_values.calc.MathFunction(DimensionPercentage(D)),
-                                .{ .calc = c.* },
-                            ),
-                        }),
-                    },
-                    else => .{
-                        .calc = bun.create(allocator, Calc(DimensionPercentage(D)), .{
-                            .function = bun.create(
-                                allocator,
-                                css.css_values.calc.MathFunction(DimensionPercentage(D)),
-                                .{ .calc = c.* },
-                            ),
-                        }),
-                    },
-                },
-                else => res,
-            };
-        }
+            return (switch (res) {
+.calc => |c| (switch (c.*) {
+.value => |l| l.*,
+.function => |f| (if ((f.* != .calc)) .{ .calc = bun.create(allocator, Calc(DimensionPercentage(D)), .{ .function = f }) } else .{ .calc = bun.create(allocator, Calc(DimensionPercentage(D)), .{ .function = bun.create(allocator, css.css_values.calc.MathFunction(DimensionPercentage(D)), .{ .calc = c.* }) }) }),
+else => .{ .calc = bun.create(allocator, Calc(DimensionPercentage(D)), .{ .function = bun.create(allocator, css.css_values.calc.MathFunction(DimensionPercentage(D)), .{ .calc = c.* }) }) },
+}),
+else => res,
+});
+    }
 
-        pub fn addInternal(this: This, allocator: std.mem.Allocator, other: This) This {
-            if (this.addRecursive(allocator, &other)) |res| return res;
-            return this.addImpl(allocator, other);
-        }
+pub fn addInternal(self: @This(), allocator: std.mem.Allocator, other: This) This {
+            if (self.addRecursive(allocator, (&other))) |res| {
+                _ = &res;
+                return res;
+            }
+            return self.addImpl(allocator, other);
+    }
 
-        fn addRecursive(this: *const This, allocator: std.mem.Allocator, other: *const This) ?This {
-            if (this.* == .dimension and other.* == .dimension) {
-                if (this.dimension.tryAdd(allocator, &other.dimension)) |res| {
+pub fn addRecursive(self: @This(), allocator: std.mem.Allocator, other: *const This) ?This {
+            if (((self == .dimension) and (other.* == .dimension))) {
+                if (self.dimension.tryAdd(allocator, (&other.dimension))) |res| {
+                    _ = &res;
                     return .{ .dimension = res };
                 }
-            } else if (this.* == .percentage and other.* == .percentage) {
-                return .{ .percentage = .{ .v = this.percentage.v + other.percentage.v } };
-            } else if (this.* == .calc) {
-                switch (this.calc.*) {
-                    .value => |v| return v.addRecursive(allocator, other),
-                    .sum => |sum| {
-                        const left_calc = This{ .calc = sum.left };
+            } else {
+                if (((self == .percentage) and (other.* == .percentage))) {
+                    return .{ .percentage = .{ .v = (self.percentage.v + other.percentage.v) } };
+                } else {
+                    if ((self == .calc)) {
+                        switch (self.calc.*) {
+.value => |v| {
+return v.addRecursive(allocator, other);
+},
+.sum => |sum| {
+const left_calc = This{ .calc = sum.left };
                         if (left_calc.addRecursive(allocator, other)) |res| {
+                            _ = &res;
                             return res.addImpl(allocator, This{ .calc = sum.right });
                         }
-
                         const right_calc = This{ .calc = sum.right };
                         if (right_calc.addRecursive(allocator, other)) |res| {
+                            _ = &res;
                             return (This{ .calc = sum.left }).addImpl(allocator, res);
                         }
-                    },
-                    else => {},
-                }
-            } else if (other.* == .calc) {
-                switch (other.calc.*) {
-                    .value => |v| return this.addRecursive(allocator, v),
-                    .sum => |sum| {
-                        const left_calc = This{ .calc = sum.left };
-                        if (this.addRecursive(allocator, &left_calc)) |res| {
-                            return res.addImpl(allocator, This{ .calc = sum.right });
-                        }
+},
+else => {
 
-                        const right_calc = This{ .calc = sum.right };
-                        if (this.addRecursive(allocator, &right_calc)) |res| {
-                            return (This{ .calc = sum.left }).addImpl(allocator, res);
+},
+}
+                    } else {
+                        if ((other.* == .calc)) {
+                            switch (other.calc.*) {
+.value => |v| {
+return self.addRecursive(allocator, v);
+},
+.sum => |sum| {
+const left_calc = This{ .calc = sum.left };
+                            if (self.addRecursive(allocator, (&left_calc))) |res| {
+                                _ = &res;
+                                return res.addImpl(allocator, This{ .calc = sum.right });
+                            }
+                            const right_calc = This{ .calc = sum.right };
+                            if (self.addRecursive(allocator, (&right_calc))) |res| {
+                                _ = &res;
+                                return (This{ .calc = sum.left }).addImpl(allocator, res);
+                            }
+},
+else => {
+
+},
+}
                         }
-                    },
-                    else => {},
+                    }
                 }
             }
-
             return null;
-        }
+    }
 
-        fn addImpl(this: This, allocator: std.mem.Allocator, other: This) This {
-            var a = this;
+pub fn addImpl(self: @This(), allocator: std.mem.Allocator, other: This) This {
+            var a = self;
+            _ = &a;
             var b = other;
-
-            if (a.isZero()) return b;
-            if (b.isZero()) return a;
-
-            if (a.isSignNegative() and b.isSignPositive()) {
-                std.mem.swap(This, &a, &b);
+            _ = &b;
+            if (a.isZero()) {
+                return b;
             }
-
-            if (a == .calc and a.calc.* == .value and b != .calc) {
-                return a.calc.value.addImpl(allocator, b);
-            } else if (b == .calc and b.calc.* == .value and a != .calc) {
-                return a.addImpl(allocator, b.calc.value.*);
+            if (b.isZero()) {
+                return a;
+            }
+            if ((a.isSignNegative() and b.isSignPositive())) {
+                _ = std.mem.swap(This, (&a), (&b));
+            }
+            if ((((a == .calc) and (a.calc.* == .value)) and (b != .calc))) {
+                return (if (@typeInfo(@TypeOf(a.calc)) == .@"enum") @intFromEnum(a.calc) else a.calc.value).addImpl(allocator, b);
             } else {
-                return .{
-                    .calc = bun.create(
-                        allocator,
-                        Calc(DimensionPercentage(D)),
-                        .{ .sum = .{
-                            .left = bun.create(allocator, Calc(DimensionPercentage(D)), a.intoCalc(allocator)),
-                            .right = bun.create(allocator, Calc(DimensionPercentage(D)), b.intoCalc(allocator)),
-                        } },
-                    ),
-                };
+                if ((((b == .calc) and (b.calc.* == .value)) and (a != .calc))) {
+                    return a.addImpl(allocator, (if (@typeInfo(@TypeOf(b.calc)) == .@"enum") @intFromEnum(b.calc) else b.calc.value).*);
+                } else {
+                    return .{ .calc = bun.create(allocator, Calc(DimensionPercentage(D)), .{ .sum = .{ .left = bun.create(allocator, Calc(DimensionPercentage(D)), a.intoCalc(allocator)), .right = bun.create(allocator, Calc(DimensionPercentage(D)), b.intoCalc(allocator)) } }) };
+                }
             }
-        }
+    }
 
-        inline fn isSignPositive(this: This) bool {
-            const sign = this.trySign() orelse return false;
+pub inline fn isSignPositive(self: @This()) bool {
+            const sign = ((self.trySign()) orelse { return false; });
             return css.signfns.isSignPositive(sign);
-        }
+    }
 
-        inline fn isSignNegative(this: This) bool {
-            const sign = this.trySign() orelse return false;
+pub inline fn isSignNegative(self: @This()) bool {
+            const sign = ((self.trySign()) orelse { return false; });
             return css.signfns.isSignNegative(sign);
-        }
+    }
 
-        fn unwrapCalc(this: This, allocator: std.mem.Allocator) This {
-            return switch (this) {
-                .calc => |calc| switch (calc.*) {
-                    .function => |f| switch (f.*) {
-                        .calc => |c2| .{ .calc = bun.create(allocator, Calc(DimensionPercentage(D)), c2) },
-                        else => .{ .calc = bun.create(
-                            allocator,
-                            Calc(DimensionPercentage(D)),
-                            .{
-                                .function = bun.create(
-                                    allocator,
-                                    css.css_values.calc.MathFunction(DimensionPercentage(D)),
-                                    f.*,
-                                ),
-                            },
-                        ) },
-                    },
-                    else => .{ .calc = calc },
-                },
-                else => this,
-            };
-        }
+pub fn unwrapCalc(self: @This(), allocator: std.mem.Allocator) This {
+            return (switch (self) {
+.calc => |calc| (switch (calc.*) {
+.function => |f| (switch (f.*) {
+.calc => |c2| .{ .calc = bun.create(allocator, Calc(DimensionPercentage(D)), c2) },
+else => .{ .calc = bun.create(allocator, Calc(DimensionPercentage(D)), .{ .function = bun.create(allocator, css.css_values.calc.MathFunction(DimensionPercentage(D)), f.*) }) },
+}),
+else => .{ .calc = calc },
+}),
+else => self,
+});
+    }
 
-        pub fn partialCmp(this: *const This, other: *const This) ?std.math.Order {
-            if (this.* == .dimension and other.* == .dimension) {
-                return this.dimension.partialCmp(&other.dimension);
-            } else if (this.* == .percentage and other.* == .percentage) {
-                return this.percentage.partialCmp(&other.percentage);
+pub fn partialCmp(self: @This(), other: *const This) ?std.math.Order {
+            if (((self == .dimension) and (other.* == .dimension))) {
+                return self.dimension.partialCmp((&other.dimension));
             } else {
-                return null;
+                if (((self == .percentage) and (other.* == .percentage))) {
+                    return self.percentage.partialCmp((&other.percentage));
+                } else {
+                    return null;
+                }
             }
-        }
+    }
 
-        pub fn trySign(this: *const This) ?f32 {
-            return switch (this.*) {
-                .dimension => |*d| css.generic.trySign(@TypeOf(d.*), d),
-                .percentage => |p| p.trySign(),
-                .calc => |c| c.trySign(),
-            };
-        }
+pub fn trySign(self: @This()) ?f32 {
+            return (switch (self) {
+.dimension => |*d| css.generic.trySign(@TypeOf(d.*), d),
+.percentage => |p| p.trySign(),
+.calc => |c| c.trySign(),
+});
+    }
 
-        pub fn tryFromAngle(angle: css.css_values.angle.Angle) ?This {
-            return DimensionPercentage(D){
-                .dimension = D.tryFromAngle(angle) orelse return null,
-            };
-        }
+pub fn tryFromAngle(angle: css.css_values.angle.Angle) ?This {
+            return DimensionPercentage(D){ .dimension = ((D.tryFromAngle(angle)) orelse { return null; }) };
+    }
 
-        pub fn tryMap(this: *const This, comptime mapfn: *const fn(f32) f32) ?This {
-            return switch (this.*) {
-                .dimension => |vv| if (css.generic.tryMap(D, &vv, mapfn)) |v| .{ .dimension = v } else null,
-                else => null,
-            };
-        }
+pub fn tryMap(self: @This(), comptime mapfn: *const fn (f32) f32) ?This {
+            return (switch (self) {
+.dimension => |vv| (if (css.generic.tryMap(D, (&vv), mapfn)) |v| .{ .dimension = v } else null),
+else => null,
+});
+    }
 
-        pub fn tryOp(
-            this: *const This,
-            other: *const This,
-            ctx: anytype,
-            comptime op_fn: *const fn(@TypeOf(ctx), a: f32, b: f32) f32,
-        ) ?This {
-            if (this.* == .dimension and other.* == .dimension) return .{ .dimension = css.generic.tryOp(D, &this.dimension, &other.dimension, ctx, op_fn) orelse return null };
-            if (this.* == .percentage and other.* == .percentage) return .{ .percentage = Percentage{ .v = op_fn(ctx, this.percentage.v, other.percentage.v) } };
+pub fn tryOp(self: @This(), other: *const This, ctx: anytype, comptime op_fn: *const fn (@TypeOf(ctx), f32, f32) f32) ?This {
+            if (((self == .dimension) and (other.* == .dimension))) {
+                return .{ .dimension = ((css.generic.tryOp(D, (&self.dimension), (&other.dimension), ctx, op_fn)) orelse { return null; }) };
+            }
+            if (((self == .percentage) and (other.* == .percentage))) {
+                return .{ .percentage = Percentage{ .v = op_fn(ctx, self.percentage.v, other.percentage.v) } };
+            }
             return null;
-        }
+    }
 
-        pub fn intoCalc(this: This, allocator: std.mem.Allocator) Calc(DimensionPercentage(D)) {
-            return switch (this) {
-                .calc => |calc| calc.*,
-                else => .{ .value = bun.create(allocator, This, this) },
-            };
-        }
-    };
+pub fn intoCalc(self: @This(), allocator: std.mem.Allocator) Calc(DimensionPercentage(D)) {
+            return (switch (self) {
+.calc => |calc| calc.*,
+else => .{ .value = bun.create(allocator, This, self) },
+});
+    }
+    const This = @This();
+};
 }

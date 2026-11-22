@@ -66,11 +66,25 @@ pub const ElifState = struct {
     idx: u32 = 0,
 };
 
+pub const ExecInnerState = union(enum) {
+    cond: void,
+    then: void,
+    elif: ElifState,
+    @"else": void,
+};
+
 pub const ExecState = struct {
     state: ExecInnerState,
     stmts: *const SmolList(ast.Stmt, 1),
     stmt_idx: u32 = 0,
     last_exit_code: ExitCode = 0,
+};
+
+pub const IfState = union(enum) {
+    idle: void,
+    exec: ExecState,
+    waiting_write_err: void,
+    done: void,
 };
 
 pub fn DeinitGuard(comptime T: type) type {
@@ -242,15 +256,3 @@ const StatePtrUnion = bun.shell.interpret.StatePtrUnion;
 const log = bun.shell.interpret.log;
 pub const ParentPtr = StatePtrUnion(.{ Stmt, Binary, Pipeline, Async });
 pub const ChildPtr = StatePtrUnion(.{ Stmt });
-pub const ExecInnerState = union(enum) {
-    cond,
-    then,
-    elif: ElifState,
-    @"else",
-};
-pub const IfState = union(enum) {
-    idle,
-    exec: ExecState,
-    waiting_write_err,
-    done,
-};

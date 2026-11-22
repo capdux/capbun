@@ -116,6 +116,14 @@ pub fn deinit(self: *ExecFilePathArgs) void {
     }
 };
 
+pub const State = union(enum) {
+    idle: void,
+    exec_stdin: ExecStdin,
+    exec_filepath_args: ExecFilePathArgs,
+    waiting_write_err: void,
+    done: void,
+};
+
 pub const Opts = struct {
     number_nonblank: bool = false,
     show_ends: bool = false,
@@ -226,7 +234,7 @@ if ((!self.bltn().stdin.needsIO())) {
 },
 .exec_filepath_args => {
 const exec = (&self.state.exec_filepath_args);
-        if ((exec.idx >= exec.args.len)) {
+        if ((exec.idx >= bun.len(exec.args))) {
             _ = exec.deinit();
             return self.bltn().done(0);
         }
@@ -445,10 +453,3 @@ const ExitCode = shell.ExitCode;
 const IOReader = shell.IOReader;
 const Yield = bun.shell.Yield;
 const debug = bun.Output.scoped(.ShellCat, .hidden);
-pub const State = union(enum) {
-    idle,
-    exec_stdin: ExecStdin,
-    exec_filepath_args: ExecFilePathArgs,
-    waiting_write_err,
-    done,
-};

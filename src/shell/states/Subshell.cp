@@ -31,16 +31,18 @@ pub const ChildPtr = StatePtrUnion(.{
     Expansion,
 });
 
-pub const RunState = union(enum) {
-    idle,
-    expanding_redirect: struct {
-        idx: u32 = 0,
-        expansion: Expansion,
-    },
-    exec,
-    wait_write_err,
-    done,
-};
+pub struct ExpandingRedirectState {
+    idx: u32 = 0,
+    expansion: Expansion,
+}
+
+pub union(enum) RunState {
+    idle: void,
+    expanding_redirect: ExpandingRedirectState,
+    exec: void,
+    wait_write_err: void,
+    done: void,
+}
 
 struct AllocDeinitConstPtrGuard<T> {
     ptr: *const T!,
@@ -60,7 +62,7 @@ struct AllocDeinitConstPtrGuard<T> {
     exit_code: ExitCode = 0,
 
     static fn format(subshell: *const Subshell, writer: *std.Io.Writer)! {
-        try writer.print("Subshell(0x{x})", .{ unsafe { @intFromPtr(subshell) } });
+        writer.print("Subshell(0x{x})", .{ unsafe { @intFromPtr(subshell) } })?;
     }
 
     static fn init(
@@ -98,8 +100,8 @@ struct AllocDeinitConstPtrGuard<T> {
             .redirection_file = undefined,
         };
         subshell.base.shell = switch (shell_state.dupeForSubshell(subshell.base.allocScope(), subshell.base.allocator(), io, .subshell)) {
-            .result => |s| s,
-            .err => |e| {
+            .result s => s,
+            .err e => {
                 // Callee-consumes-on-failure: we own the io refs the caller passed in.
                 subshell.io.deref();
                 subshell.base.endScope();

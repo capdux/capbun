@@ -51,9 +51,9 @@ const host_fn = bun.jsc.host_fn;
 const JSBundler = bun.jsc.API.JSBundler;
 const Transpiler = bun.jsc.API.JSTranspiler;
 
-pub const ZlibOptionsTuple = struct { jsc.Node.StringOrBuffer, ?JSValue };
-pub const ZstdOptionsTuple = struct { jsc.Node.StringOrBuffer, ?JSValue };
-pub const ZstdOptionsAsyncTuple = struct { jsc.Node.StringOrBuffer, ?JSValue, i32 };
+pub type ZlibOptionsTuple = [jsc.Node.StringOrBuffer, JSValue?];
+pub type ZstdOptionsTuple = [jsc.Node.StringOrBuffer, JSValue?];
+pub type ZstdOptionsAsyncTuple = [jsc.Node.StringOrBuffer, JSValue?, i32];
 
 pub struct DeinitGuard<T> {
     val: T,
@@ -1274,13 +1274,13 @@ pub fn serve(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.
     };
 
     switch (escaped) {
-        .static => |val| {
+        .static val => {
             return ZigString.init(val).toJS(globalObject);
         },
         .original => {
             return input_value;
         },
-        .allocated => |escaped_html| {
+        .allocated escaped_html => {
             return ZigString.from16(escaped_html.ptr, escaped_html.len).toExternalValue(globalObject);
         },
     }
@@ -1300,13 +1300,13 @@ pub fn serve(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.
     };
 
     switch (escaped) {
-        .static => |val| {
+        .static val => {
             return ZigString.init(val).toJS(globalObject);
         },
         .original => {
             return input_value;
         },
-        .allocated => |escaped_html| {
+        .allocated escaped_html => {
             if (comptime Environment.allow_assert) {
                 // the output should always be longer than the input
                 assert(escaped_html.len > input_slice.len);
@@ -2023,7 +2023,7 @@ pub struct JSZstdJob {
 
             // Perform compression
             job.output = switch (bun.zstd.compress(job.output, input, job.level)) {
-                .success => |size| blk: {
+                .success size => blk: {
                     // Resize to actual compressed size
                     if (size < job.output.len) {
                         break :blk allocator.realloc(job.output, size) catch {
@@ -2033,7 +2033,7 @@ pub struct JSZstdJob {
                     }
                     break :blk job.output;
                 },
-                .err => |e| {
+                .err e => {
                     allocator.free(job.output);
                     job.output = [];
                     job.error_message = e;
@@ -2173,8 +2173,8 @@ pub struct JSZstd {
 
         // Perform compression with context
         const compressed_size = switch (bun.zstd.compress(output, input, level)) {
-            .success => |size| size,
-            .err => |e| {
+            .success size => size,
+            .err e => {
                 allocator.free(output);
                 return globalThis.ERR(.ZSTD, "{s}", .{ e }).throw();
             },

@@ -111,6 +111,7 @@ pub const css_printer = @import("./printer.zig");
 pub const targets = @import("./targets.zig");
 pub const generic = @import("./generics.zig");
 pub const compat = @import("./compat.zig");
+pub const small_list = @import("./small_list.zig");
 pub const context = @import("./context.zig");
 pub const css_decls = @import("./declaration.zig");
 pub const errors_ = @import("./error.zig");
@@ -3733,7 +3734,9 @@ pub fn integer() Notation {
 };
 
 pub const MediaFeatureType = media_query.MediaFeatureType;
+pub const OptionalString = ?[]const u8;
 pub const OptionalBundlerTailwindState = ?*BundlerTailwindState;
+pub const NthResult = struct { i32, i32 };
 pub const SrcIndex = bun.bundle_v2.Index;
 pub const SymbolList = bun.ast.Symbol.List;
 pub const ImportRecord = bun.ImportRecord;
@@ -3815,7 +3818,7 @@ pub const fmtPrinterError = errors_.fmtPrinterError;
 pub const PrintErr = error{
     CSSPrintError,
 };
-pub const SmallList = @import("./small_list.zig").SmallList;
+pub const SmallList = small_list.SmallList;
 pub const Location = css_rules.Location;
 pub const Error = .ParserError;
 pub const ENABLE_TAILWIND_PARSING = false;
@@ -3828,7 +3831,6 @@ pub const LocalPropertyUsage = std.AutoArrayHashMapUnmanaged(bun.bundle_v2.Ref, 
 pub const Composes = css_properties.css_modules.Composes;
 pub const ComposesMap = std.AutoArrayHashMapUnmanaged(bun.bundle_v2.Ref, ComposesEntry);
 pub const PropertyBitset = std.bit_set.ArrayBitSet(usize, ((std.math.ceilPowerOfTwo(u16, bun.@"meta".EnumFields(PropertyIdTag).len)) catch unreachable));
-pub const OptionalString = ?[]const u8;
 pub const CustomMediaMap = std.StringArrayHashMapUnmanaged(css_rules.custom_media.CustomMediaRule);
 pub const BundlerStyleSheet = StyleSheet(BundlerAtRule);
 pub const BundlerCssRuleList = CssRuleList(BundlerAtRule);
@@ -3837,7 +3839,6 @@ pub const BundlerLayerBlockRule = css_rules.layer.LayerBlockRule(BundlerAtRule);
 pub const BundlerSupportsRule = css_rules.supports.SupportsRule(BundlerAtRule);
 pub const BundlerMediaRule = css_rules.media.MediaRule(BundlerAtRule);
 pub const BundlerPrintResult = bun.css.PrintResult(BundlerAtRule);
-pub const NthResult = struct { i32, i32 };
 const SeenStatus = enum {
     dont_care,
     looking_for_them,
@@ -4459,7 +4460,6 @@ return .{ .err = e };
 
 pub fn parse_custom_at_rule_without_block(comptime T: type, prelude: T.CustomAtRuleParser.Prelude, start: *const ParserState, options: *const ParserOptions, at_rule_parser: *T, is_nested: bool) Maybe(CssRule(T.CustomAtRuleParser.AtRule), void) {
         const RuleT = CssRule(T.CustomAtRuleParser.AtRule);
-        _ = &RuleT;
         return (switch (T.CustomAtRuleParser.ruleWithoutBlock(at_rule_parser, prelude, start, options, is_nested)) {
 .result => |v| .{ .result = RuleT{ .custom = v } },
 .err => |e| .{ .err = e },
@@ -4984,7 +4984,6 @@ return .{ .err = e };
             _ = &rules;
             if ((declarations.len() > 0)) {
                 const StyleRuleT = StyleRule(T.CustomAtRuleParser.AtRule);
-                _ = &StyleRuleT;
                 _ = ((rules.v.insert(input.allocator(), 0, .{ .style = StyleRuleT{ .selectors = selector.parser.SelectorList.fromSelector(input.allocator(), selector.parser.Selector.fromComponent(input.allocator(), .nesting)), .declarations = declarations, .vendor_prefix = .{}, .rules = .{}, .loc = loc } })) catch unreachable);
             }
             return .{ .result = rules };
@@ -5235,7 +5234,6 @@ return .{ .err = e };
                 var body_parser = RuleBodyParser(css_rules.font_face.FontFaceDeclarationParser).new(input, (&decl_parser));
                 _ = &body_parser;
                 const FontFaceProps = ArrayList(css_rules.font_face.FontFaceProperty);
-                _ = &FontFaceProps;
                 var properties = FontFaceProps{  };
                 _ = &properties;
                 while (body_parser.next()) |result| {
@@ -5278,7 +5276,6 @@ return .{ .err = e };
     });
                 _ = (blk_catch_4: { break :blk_catch_4 ((parser.rules.v.append(input.allocator(), .{ .media = blk_mr: {
                 const MediaRuleT = css_rules.media.MediaRule(T.CustomAtRuleParser.AtRule);
-                _ = &MediaRuleT;
                 break :blk_mr MediaRuleT{ .query = query, .rules = rules, .loc = loc };
     } })) catch |e| { _ = &e; break :blk_catch_4 bun.handleOom(e); }); });
                 return .success;
@@ -5293,7 +5290,6 @@ return .{ .err = e };
     });
                 _ = (blk_catch_5: { break :blk_catch_5 ((parser.rules.v.append(input.allocator(), .{ .supports = blk_sr: {
                 const SupportsRuleT = css_rules.supports.SupportsRule(T.CustomAtRuleParser.AtRule);
-                _ = &SupportsRuleT;
                 break :blk_sr SupportsRuleT{ .condition = condition, .rules = rules, .loc = loc };
     } })) catch |e| { _ = &e; break :blk_catch_5 bun.handleOom(e); }); });
                 return .success;
@@ -5307,7 +5303,6 @@ return .{ .err = e };
     });
                 _ = (blk_catch_6: { break :blk_catch_6 ((parser.rules.v.append(input.allocator(), .{ .container = blk_cr: {
                 const ContainerRuleT = css_rules.container.ContainerRule(T.CustomAtRuleParser.AtRule);
-                _ = &ContainerRuleT;
                 break :blk_cr ContainerRuleT{ .name = (if (@typeInfo(@TypeOf(prelude.container)) == .@"enum" or @typeInfo(@TypeOf(prelude.container)) == .@"union") @tagName(prelude.container) else prelude.container.name), .condition = prelude.container.condition, .rules = rules, .loc = loc };
     } })) catch |e| { _ = &e; break :blk_catch_6 bun.handleOom(e); }); });
                 return .success;
@@ -5321,7 +5316,6 @@ return .{ .err = e };
     });
                 _ = (blk_catch_7: { break :blk_catch_7 ((parser.rules.v.append(input.allocator(), .{ .scope = blk_scr: {
                 const ScopeRuleT = css_rules.scope.ScopeRule(T.CustomAtRuleParser.AtRule);
-                _ = &ScopeRuleT;
                 break :blk_scr ScopeRuleT{ .scope_start = prelude.scope.scope_start, .scope_end = prelude.scope.scope_end, .rules = rules, .loc = loc };
     } })) catch |e| { _ = &e; break :blk_catch_7 bun.handleOom(e); }); });
                 return .success;
@@ -5371,7 +5365,6 @@ return .{ .err = e };
     });
                 _ = (blk_catch_12: { break :blk_catch_12 ((parser.rules.v.append(input.allocator(), .{ .moz_document = blk_mdr: {
                 const MozDocumentRuleT = css_rules.document.MozDocumentRule(T.CustomAtRuleParser.AtRule);
-                _ = &MozDocumentRuleT;
                 break :blk_mdr MozDocumentRuleT{ .rules = rules, .loc = loc };
     } })) catch |e| { _ = &e; break :blk_catch_12 bun.handleOom(e); }); });
                 return .success;
@@ -5405,7 +5398,6 @@ return .{ .err = e };
                 _ = T.CustomAtRuleParser.resetEnclosingLayer(parser.at_rule_parser, old_len);
                 _ = (blk_catch_13: { break :blk_catch_13 ((parser.rules.v.append(input.allocator(), .{ .layer_block = blk_lbr: {
                 const LayerBlockRuleT = css_rules.layer.LayerBlockRule(T.CustomAtRuleParser.AtRule);
-                _ = &LayerBlockRuleT;
                 break :blk_lbr LayerBlockRuleT{ .name = name, .rules = rules, .loc = loc };
     } })) catch |e| { _ = &e; break :blk_catch_13 bun.handleOom(e); }); });
                 return .success;
@@ -5432,7 +5424,6 @@ return .{ .err = e };
     });
                 _ = (blk_catch_15: { break :blk_catch_15 ((parser.rules.v.append(input.allocator(), .{ .starting_style = blk_ssr: {
                 const StartingStyleRuleT = css_rules.starting_style.StartingStyleRule(T.CustomAtRuleParser.AtRule);
-                _ = &StartingStyleRuleT;
                 break :blk_ssr StartingStyleRuleT{ .rules = rules, .loc = loc };
     } })) catch |e| { _ = &e; break :blk_catch_15 bun.handleOom(e); }); });
                 return .success;
@@ -5449,9 +5440,7 @@ return .{ .err = e };
                 const rules = result[1];
                 _ = (blk_catch_16: { break :blk_catch_16 ((parser.rules.v.append(input.allocator(), .{ .nesting = blk_nr: {
                 const NestingRuleT = css_rules.nesting.NestingRule(T.CustomAtRuleParser.AtRule);
-                _ = &NestingRuleT;
                 const NestStyleRuleT = css_rules.style.StyleRule(T.CustomAtRuleParser.AtRule);
-                _ = &NestStyleRuleT;
                 break :blk_nr NestingRuleT{ .style = NestStyleRuleT{ .selectors = selectors, .declarations = declarations, .vendor_prefix = .{}, .rules = rules, .loc = loc }, .loc = loc };
     } })) catch |e| { _ = &e; break :blk_catch_16 bun.handleOom(e); }); });
                 return .success;
@@ -5584,7 +5573,6 @@ return .{ .err = e };
                     }
                 }
                 const QualStyleRuleT = StyleRule(T.CustomAtRuleParser.AtRule);
-                _ = &QualStyleRuleT;
                 _ = (blk_catch_0: { break :blk_catch_0 ((parser.rules.v.append(parser.allocator, .{ .style = QualStyleRuleT{ .selectors = selectors, .vendor_prefix = VendorPrefix{  }, .declarations = declarations, .rules = rules, .loc = loc } })) catch |e| { _ = &e; break :blk_catch_0 bun.handleOom(e); }); });
                 return .success;
         }

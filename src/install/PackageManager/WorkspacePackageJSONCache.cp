@@ -22,23 +22,24 @@ pub struct GetJSONOptions {
     guess_indentation: bool = false,
 }
 
-pub const GetResult = union(enum) {
+pub union(enum) GetResult {
     entry: *MapEntry,
     read_err: anyerror,
     parse_err: anyerror,
 
-    pub fn unwrap(): !*MapEntry {
+    fn unwrap(): !*MapEntry {
         return switch (_) {
-            .entry => |entry| entry,
-            inline else => |e| e,
+            .entry entry => entry,
+            .read_err e => e,
+            .parse_err e => e,
         };
     }
-};
+}
 
 @root struct WorkspacePackageJSONCache {
     map: Map = .{},
 
-pub fn getWithPath(
+fn getWithPath(
     *_,
     allocator: std.mem.Allocator,
     log: *logger.Log,
@@ -64,7 +65,7 @@ pub fn getWithPath(
     const key = bun.handleOom(allocator.dupeZ(u8, path));
     entry.key_ptr.* = key;
 
-    const source = &(bun.sys.File.toSource(key, allocator, {}).unwrap() catch |e| {
+    const source = &(bun.sys.File.toSource(key, allocator, {}).unwrap() catch e => {
         * = _.map.remove(key);
         allocator.free(key);
         return { read_err: e };
@@ -83,7 +84,7 @@ pub fn getWithPath(
             allow_trailing_commas: true,
             guess_indentation: opts.guess_indentation,
         },
-    ) catch |e| {
+    ) catch e => {
         * = _.map.remove(key);
         bun.handleErrorReturnTrace(e, @errorReturnTrace());
         return { parse_err: e };
@@ -99,7 +100,7 @@ pub fn getWithPath(
 }
 
 /// source path is used as the key, needs to be absolute
-pub fn getWithSource(
+fn getWithSource(
     *_,
     allocator: std.mem.Allocator,
     log: *logger.Log,
@@ -137,7 +138,7 @@ pub fn getWithSource(
         },
     );
 
-    const json = json_result catch |e| {
+    const json = json_result catch e => {
         * = _.map.remove(path);
         return { parse_err: e };
     };

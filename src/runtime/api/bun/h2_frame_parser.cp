@@ -148,13 +148,13 @@ pub struct ParserDestroyGuard {
         }
     }
 }
-const BunSocket = union(enum) {
+union(enum) BunSocket {
     none: void,
     tls: *TLSSocket,
     tls_writeonly: *TLSSocket,
     tcp: *TCPSocket,
     tcp_writeonly: *TCPSocket,
-};
+}
 @c {
     fn JSC__JSGlobalObject__getHTTP2CommonString(globalObject: *jsc.JSGlobalObject, hpack_index: u32): jsc.JSValue;
 }
@@ -189,7 +189,7 @@ enum PaddingStrategy {
     max,
 }
 
-const FrameType = enum(u8) {
+enum FrameType: u8 {
     HTTP_FRAME_DATA = 0x00,
     HTTP_FRAME_HEADERS = 0x01,
     HTTP_FRAME_PRIORITY = 0x02,
@@ -202,29 +202,29 @@ const FrameType = enum(u8) {
     HTTP_FRAME_CONTINUATION = 0x09, // RFC 7540 Section 6.10: Continues header block fragments
     HTTP_FRAME_ALTSVC = 0x0A, // https://datatracker.ietf.org/doc/html/rfc7838#section-7.2
     HTTP_FRAME_ORIGIN = 0x0C, // https://datatracker.ietf.org/doc/html/rfc8336#section-2
-};
+}
 
-const PingFrameFlags = enum(u8) {
+enum PingFrameFlags: u8 {
     ACK = 0x1,
-};
+}
 
-const DataFrameFlags = enum(u8) {
+enum DataFrameFlags: u8 {
     END_STREAM = 0x1,
     PADDED = 0x8,
-};
+}
 
-const HeadersFrameFlags = enum(u8) {
+enum HeadersFrameFlags: u8 {
     END_STREAM = 0x1,
     END_HEADERS = 0x4,
     PADDED = 0x8,
     PRIORITY = 0x20,
-};
+}
 
-const SettingsFlags = enum(u8) {
+enum SettingsFlags: u8 {
     ACK = 0x1,
-};
+}
 
-const ErrorCode = enum(u32) {
+enum ErrorCode: u32 {
     NO_ERROR = 0x0,
     PROTOCOL_ERROR = 0x1,
     INTERNAL_ERROR = 0x2,
@@ -241,9 +241,9 @@ const ErrorCode = enum(u32) {
     HTTP_1_1_REQUIRED = 0xd,
     MAX_PENDING_SETTINGS_ACK = 0xe,
     _, // we can have unsupported extension/custom error codes types
-};
+}
 
-const SettingsType = enum(u16) {
+enum SettingsType: u16 {
     SETTINGS_HEADER_TABLE_SIZE = 0x1,
     SETTINGS_ENABLE_PUSH = 0x2,
     SETTINGS_MAX_CONCURRENT_STREAMS = 0x3,
@@ -255,7 +255,7 @@ const SettingsType = enum(u16) {
     SETTINGS_ENABLE_CONNECT_PROTOCOL = 0x8,
     SETTINGS_NO_RFC7540_PRIORITIES = 0x9,
     _, // we can have more unsupported extension settings types
-};
+}
 
 inline fn u32FromBytes(src: []const u8): u32 {
     bun.debugAssert(src.len == 4);

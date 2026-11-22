@@ -153,6 +153,18 @@ pub const PropValue = struct {
     counter: usize,
 };
 
+pub const Name = union(AnchorOrigin) {
+    root: void,
+    array_item: usize,
+    prop_value: PropValue,
+};
+
+pub const ValueOrigin = union(AnchorOrigin) {
+    root: void,
+    array_item: void,
+    prop_value: String,
+};
+
 pub const AnchorAlias = struct {
     anchored: bool,
     used: bool,
@@ -165,6 +177,14 @@ pub fn init(origin: ValueOrigin) AnchorAlias {
 .prop_value => Name{ .prop_value = PropValue{ .prop_name = origin.prop_value, .counter = 0 } },
 }) };
     }
+};
+
+pub const Space = union(enum) {
+    minified: void,
+    number: u32,
+    str: String,
+    pub const init = spaceInit;
+    pub const deinit = spaceDeinit;
 };
 
 pub const Stringifier = struct {
@@ -876,24 +896,6 @@ return JSValue.js_undefined;
 };
 
 const SeenObjectPtr = *anyopaque;
-pub const Name = union(AnchorOrigin) {
-    root,
-    array_item: usize,
-    prop_value: PropValue,
-};
-pub const ValueOrigin = union(AnchorOrigin) {
-    root,
-    array_item,
-    prop_value: String,
-};
-pub const Space = union(enum) {
-    minified,
-    number: u32,
-    str: String,
-
-    pub const init = spaceInit;
-    pub const deinit = spaceDeinit;
-};
 pub const PropIter = jsc.JSPropertyIterator(.{ .skip_empty_name = false, .include_value = true });
 const Environment = bun.Environment;
 const JSError = bun.JSError;

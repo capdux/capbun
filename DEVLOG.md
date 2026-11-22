@@ -1649,3 +1649,5 @@
 - **`@opaque` 结构体方法**：不透明类型不可按值传递，只读/可变方法需使用 `*_` 或 `static fn(..., self: *const T)`。
 - **匿名嵌套提炼与 `pub` 别名**：提炼嵌套结构体/枚举至模块顶层后，父类型内必须保留 `pub const Sub = _Sub;` 以维持跨模块可见性；空状态 Hash/Eql 上下文需保留 `const _ctx = _; * = _ctx;`。
 - **`[]const [*:0]const u8` 长度读取**：使用 `bun.len(slice)` 规避 `cpc` 将 `.len` 误转为 `std.mem.span(slice).len`。
+
+- **Waves #47–#49 (2026-11-22)**：`[]const [*:0]const u8` 别名切片的 `.len` 会被 `cpc` 误 lowering 为 `std.mem.span(...).len`，改用 `bun.len(x)` 或直接传入原切片；`cpc` 对 `**T` 折叠与 `*T` 局部变量取地址 `&p` 剥离缺陷已提单 `task-bun-20261122-double-ptr-addr-of`，本地通过 `[1]*T` + `unsafe { @ptrCast(&arr) }` 绕过；空荷载错误联合返回类型统一使用 `: Err!void`。

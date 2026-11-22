@@ -30,11 +30,11 @@ const NodePath = jsc.Node.path;
 
 pub const log = Output.scoped(.Listener, .visible);
 
-pub const ListenerType = union(enum) {
+pub union(enum) ListenerType {
     uws: *uws.ListenSocket,
     namedPipe: *WindowsNamedPipeListeningContext,
     none: void,
-};
+}
 
 pub struct DeinitGuard<T> {
     ptr: *T!,
@@ -292,14 +292,15 @@ struct NamedPipeCtxErrGuard {
         const listener = _.listener;
         _.listener = .none;
         switch (listener) {
-            .uws => |socket| {
+            .uws socket => {
                 _.unlinkUnixSocketPath();
                 socket.close();
             },
-            .namedPipe => |namedPipe| if (Environment.isWindows) namedPipe.closePipeAndDeinit(),
+            .namedPipe namedPipe => if (Environment.isWindows) namedPipe.closePipeAndDeinit(),
             .none => {},
         }
-        _.release();
+        const release_fn = Listener.release;
+        release_fn(_);
     }
 
     fn unlinkUnixSocketPath() {
@@ -428,54 +429,63 @@ struct NamedPipeCtxErrGuard {
     }
 }
 
-pub const UnixOrHost = union(enum) {
+pub struct _UnixOrHostAddr {
+    host: []const u8,
+    port: u16,
+}
+
+pub union(enum) UnixOrHost {
     unix: []const u8,
-    host: struct {
-        host: []const u8,
-        port: u16,
-    },
+    host: _UnixOrHostAddr,
     fd: bun.FD,
 
-    pub fn clone(this: UnixOrHost): UnixOrHost {
-        switch (this) {
-            .unix => |u| {
-                return .{
-                    .unix = bun.handleOom(bun.default_allocator.dupe(u8, u)),
+    fn clone(): UnixOrHost {
+        switch (_) {
+            .unix u => {
+                return {
+                    unix: bun.handleOom(bun.default_allocator.dupe(u8, u)),
                 };
             },
-            .host => |h| {
-                return .{
-                    .host = .{
-                        .host = bun.handleOom(bun.default_allocator.dupe(u8, h.host)),
-                        .port = h.port,
+            .host h => {
+                return {
+                    host: _UnixOrHostAddr{
+                        host: bun.handleOom(bun.default_allocator.dupe(u8, h.host)),
+                        port: h.port,
                     },
                 };
             },
-            .fd => |f| return .{ .fd = f },
+            .fd f => return { fd: f },
         }
     }
 
-    pub fn release(this: UnixOrHost) void {
-        switch (this) {
-            .unix => |u| {
+    fn release(*_) {
+        switch (_.*) {
+            .unix u => {
                 bun.default_allocator.free(u);
             },
-            .host => |h| {
+            .host h => {
                 bun.default_allocator.free(h.host);
             },
             .fd => {},
         }
     }
 
-    pub fn deinit() {
-        let copy = _;
-        copy.release();
+    fn deinit() {
+        switch (_) {
+            .unix u => {
+                bun.default_allocator.free(u);
+            },
+            .host h => {
+                bun.default_allocator.free(h.host);
+            },
+            .fd => {},
+        }
     }
-};
+}
 
 pub fn listen(globalObject: *jsc.JSGlobalObject, opts: JSValue): bun.JSError!JSValue {
     log("listen", .{});
-    if (opts.isEmptyOrUndefinedOrNull() or opts.isBoolean() or !opts.isObject()) {
+    if (opts.isEmptyOrUndefinedOrNull() || opts.isBoolean() || !opts.isObject()) {
         return globalObject.throwInvalidArguments("Expected object", .{});
     }
 
@@ -1038,58 +1048,60 @@ fn normalizePipeName(pipe_name: []const u8, buffer: []u8): ([]const u8)? {
     }
 }
 
-pub const WindowsNamedPipeListeningContext = if (Environment.isWindows) struct {
+pub struct _EmptyNamedPipeContext {}
+
+pub struct _WindowsNamedPipeListeningContextImpl {
     uvPipe: uv.Pipe = std.mem.zeroes(uv.Pipe),
-    listener: ?*Listener,
+    listener: (*Listener)?,
     globalThis: *jsc.JSGlobalObject,
     vm: *jsc.VirtualMachine,
-    ctx: ?*BoringSSL.SSL_CTX = null,
-    pub const new = bun.TrivialNew(WindowsNamedPipeListeningContext);
+    ctx: (*BoringSSL.SSL_CTX)? = null,
+    const new = bun.TrivialNew(_WindowsNamedPipeListeningContextImpl);
 
-    fn onClientConnect(this: *WindowsNamedPipeListeningContext, status: uv.ReturnCode) {
-        if (status != uv.ReturnCode.zero or this.vm.isShuttingDown() or this.listener == null) {
+    fn onClientConnect(*_, status: uv.ReturnCode) {
+        if (status != uv.ReturnCode.zero || _.vm.isShuttingDown() || _.listener == null) {
             return;
         }
-        const listener = this.listener.?;
-        const socket: WindowsNamedPipeContext.SocketType = if (this.ctx != null)
-            .{ .tls = Listener.onNamePipeCreated(true, listener) }
+        const listener = _.listener.?;
+        const socket: WindowsNamedPipeContext.SocketType = if (_.ctx != null)
+            .{ tls: Listener.onNamePipeCreated(true, listener) }
         else
-            .{ .tcp = Listener.onNamePipeCreated(false, listener) };
+            .{ tcp: Listener.onNamePipeCreated(false, listener) };
 
-        const client = WindowsNamedPipeContext.create(this.globalThis, socket);
+        const client = WindowsNamedPipeContext.create(_.globalThis, socket);
 
-        const result = client.named_pipe.getAcceptedBy(&this.uvPipe, this.ctx);
+        const result = client.named_pipe.getAcceptedBy(&_.uvPipe, _.ctx);
         if (result == .err) {
             client.deinit();
         }
     }
 
-    fn onPipeClosed(pipe: *uv.Pipe) callconv(.c) void {
-        const this_ctx: *WindowsNamedPipeListeningContext = unsafe { @ptrCast(@alignCast(pipe.data)) };
+    static fn onPipeClosed(pipe: *uv.Pipe) callconv(.c) {
+        const this_ctx: *_WindowsNamedPipeListeningContextImpl = unsafe { @ptrCast(@alignCast(pipe.data)) };
         this_ctx.release();
     }
 
-    pub fn closePipeAndDeinit(this: *WindowsNamedPipeListeningContext) {
-        this.listener = null;
-        this.uvPipe.data = this;
-        this.uvPipe.close(onPipeClosed);
+    fn closePipeAndDeinit(*_) {
+        _.listener = null;
+        _.uvPipe.data = _;
+        _.uvPipe.close(onPipeClosed);
     }
 
-    pub fn listen(
+    static fn listen(
         globalThis: *jsc.JSGlobalObject,
         path: []const u8,
         backlog: i32,
-        ssl_config: ?*const SSLConfig,
+        ssl_config: (*const SSLConfig)?,
         listener: *Listener,
-    ): !*WindowsNamedPipeListeningContext {
-        const this_ctx = WindowsNamedPipeListeningContext.new(.{
-            .globalThis = globalThis,
-            .vm = globalThis.bunVM(),
-            .listener = listener,
+    ): !*_WindowsNamedPipeListeningContextImpl {
+        const this_ctx = _WindowsNamedPipeListeningContextImpl.new(.{
+            globalThis: globalThis,
+            vm: globalThis.bunVM(),
+            listener: listener,
         });
         let _guard_ctx = NamedPipeCtxErrGuard{ ctx: this_ctx };
 
-        if (ssl_config) |ssl_options| {
+        if (ssl_options := ssl_config) {
             bun.BoringSSL.load();
 
             const ctx_opts: uws.SocketContext.BunSocketContextOptions = ssl_options.asUSockets();
@@ -1123,7 +1135,7 @@ pub const WindowsNamedPipeListeningContext = if (Environment.isWindows) struct {
         return this_ctx;
     }
 
-    pub fn release(*_) {
+    fn release(*_) {
         _.listener = null;
         if (ctx := _.ctx) {
             _.ctx = null;
@@ -1132,8 +1144,9 @@ pub const WindowsNamedPipeListeningContext = if (Environment.isWindows) struct {
         bun.destroy(_);
     }
 
-    pub fn deinit() {
-        let copy = _;
-        copy.release();
+    fn deinit(*_) {
+        _.release();
     }
-} else struct {};
+}
+
+pub const WindowsNamedPipeListeningContext = if (Environment.isWindows) _WindowsNamedPipeListeningContextImpl else _EmptyNamedPipeContext;

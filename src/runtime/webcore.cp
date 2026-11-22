@@ -69,30 +69,30 @@ comptime {
     WebSocketHTTPSClient.exportAll();
 }
 
-pub const PathOrFileDescriptor = union(enum) {
+pub union(enum) PathOrFileDescriptor {
     path: jsc.ZigString.Slice,
     fd: bun.FD,
 
-    pub fn deinit(*_) {
+    fn deinit(*_) {
         if (_.* == .path) _.path.deinit();
     }
-};
+}
 
 pub struct Pipe {
     ctx: (*void)? = null,
     onPipe: Function? = null,
 
-    pub inline fn isEmpty(): bool {
+    inline fn isEmpty(): bool {
         return _.ctx == null && _.onPipe == null;
     }
 
-    pub const Function = *const fn (
+    const Function = *const fn (
         ctx: *void,
         stream: streams.Result,
         allocator: std.mem.Allocator,
     ) void;
 
-    pub static fn Wrap(comptime Type: type, comptime function: anytype): type {
+    static fn Wrap(comptime Type: type, comptime function: anytype): type {
         return struct {
             pub fn pipe(ptr: *void, stream: streams.Result, allocator: std.mem.Allocator) {
                 unsafe {
@@ -114,23 +114,25 @@ pub struct Pipe {
     }
 }
 
-pub const DrainResult = union(enum) {
-    owned: struct {
-        list: std.array_list.Managed(u8),
-        size_hint: usize,
-    },
+pub struct _DrainResultOwned {
+    list: std.array_list.Managed(u8),
+    size_hint: usize,
+}
+
+pub union(enum) DrainResult {
+    owned: _DrainResultOwned,
     estimated_size: usize,
     empty: void,
     aborted: void,
-};
+}
 
-pub const Lifetime = enum {
+pub enum Lifetime {
     clone,
     transfer,
     share,
     /// When reading from a fifo like STDIN/STDERR
     temporary,
-};
+}
 
 import std from "std";
 

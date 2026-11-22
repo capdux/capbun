@@ -92,7 +92,7 @@ pub union(enum) InKind {
     pub fn to_subproc_stdio(stdio: *bun.shell.subproc.Stdio) {
         switch (_) {
             .fd => {
-                stdio.* = { fd: _.fd.fd };
+                stdio.* = { fd: _.fd.fd }
             },
             .ignore => {
                 stdio.* = .ignore;
@@ -120,7 +120,7 @@ pub struct OutKindFd {
     }
 }
 
-pub const OutKind = union(enum) {
+pub union(enum) OutKind {
     /// Write/Read to/from file descriptor
     /// If `captured` is non-null, it will write to std{out,err} and also buffer it.
     /// The pointer points to the `buffered_stdout`/`buffered_stdin` fields
@@ -138,7 +138,7 @@ pub const OutKind = union(enum) {
             .fd fd => fd.memoryCost(),
             .pipe => 0,
             .ignore => 0,
-        };
+        }
     }
 
     // fn dupeForSubshell(this: *ShellExecEnv,
@@ -192,10 +192,10 @@ pub const OutKind = union(enum) {
                         capture: {
                             buf: cap,
                         },
-                    };
+                    }
                 } else if (fd := val.writer.fd.get()) {
                     // We have a valid fd that hasn't been moved to libuv
-                    break :brk { fd: fd };
+                    break :brk { fd: fd }
                 } else {
                     // On Windows, the fd might have been moved to libuv
                     // In this case, the subprocess should inherit the stdio
@@ -205,6 +205,6 @@ pub const OutKind = union(enum) {
             },
             .pipe => .pipe,
             .ignore => .ignore,
-        };
+        }
     }
-};
+}

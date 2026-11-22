@@ -62,9 +62,23 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+const Message = struct { __cp_no_message_sentinel: void = {} };
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub const ListenerType = union(enum) {
+    uws: *uws.ListenSocket,
+    namedPipe: *WindowsNamedPipeListeningContext,
+    none: void,
+};
+
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         ptr: *T,
@@ -421,7 +435,8 @@ _ = (if (Environment.isWindows) namedPipe.closePipeAndDeinit() else null);
 
 },
 }
-        _ = self.release();
+        const release_fn = Listener.release;
+        _ = release_fn(self);
 }
 
 pub fn unlinkUnixSocketPath(self: Listener) void {
@@ -567,50 +582,23 @@ pub const js = jsc.Codegen.JSListener;
 pub const toJS = js.toJS;
 pub const fromJS = js.fromJS;
 pub const fromJSDirect = js.fromJSDirect;
-const OpaquePtrPtr = **anyopaque;
-const Async = bun.Async;
-const Environment = bun.Environment;
-const Output = bun.Output;
-const default_allocator = bun.default_allocator;
-const strings = bun.strings;
-const uws = bun.uws;
-const BoringSSL = bun.BoringSSL.c;
-const uv = bun.windows.libuv;
-const api = bun.api;
-const Handlers = bun.api.SocketHandlers.Handlers;
-const SecureContext = bun.api.SecureContext;
-const TCPSocket = bun.api.TCPSocket;
-const TLSSocket = bun.api.TLSSocket;
-const SSLConfig = bun.api.ServerConfig.SSLConfig;
-const NewSocket = api.socket.NewSocket;
-const SocketConfig = api.socket.SocketConfig;
-const WindowsNamedPipeContext = api.socket.WindowsNamedPipeContext;
-const jsc = bun.jsc;
-const JSGlobalObject = jsc.JSGlobalObject;
-const JSValue = jsc.JSValue;
-const ZigString = jsc.ZigString;
-const NodePath = jsc.Node.path;
-pub const log = Output.scoped(.Listener, .visible);
-pub const ListenerType = union(enum) {
-    uws: *uws.ListenSocket,
-    namedPipe: *WindowsNamedPipeListeningContext,
-    none: void,
+pub const _UnixOrHostAddr = struct {
+    host: []const u8,
+    port: u16,
 };
+
 pub const UnixOrHost = union(enum) {
     unix: []const u8,
-    host: struct {
-        host: []const u8,
-        port: u16,
-    },
+    host: _UnixOrHostAddr,
     fd: bun.FD,
 
-pub fn clone(self: @This()) UnixOrHost {
+pub fn clone(self: UnixOrHost) UnixOrHost {
             switch (self) {
 .unix => |u| {
 return .{ .unix = bun.handleOom(bun.default_allocator.dupe(u8, u)) };
 },
 .host => |h| {
-return .{ .host = .{ .host = bun.handleOom(bun.default_allocator.dupe(u8, h.host)), .port = h.port } };
+return .{ .host = _UnixOrHostAddr{ .host = bun.handleOom(bun.default_allocator.dupe(u8, h.host)), .port = h.port } };
 },
 .fd => |f| {
 return .{ .fd = f };
@@ -618,7 +606,7 @@ return .{ .fd = f };
 }
     }
 
-pub fn release(self: *@This()) void {
+pub fn release(self: *UnixOrHost) void {
             switch (self.*) {
 .unix => |u| {
 _ = bun.default_allocator.free(u);
@@ -632,20 +620,32 @@ _ = bun.default_allocator.free(h.host);
 }
     }
 
-pub fn deinit(self: @This()) void {
-            var copy = self;
-            _ = &copy;
-            _ = copy.release();
+pub fn deinit(self: UnixOrHost) void {
+            switch (self) {
+.unix => |u| {
+_ = bun.default_allocator.free(u);
+},
+.host => |h| {
+_ = bun.default_allocator.free(h.host);
+},
+.fd => {
+
+},
+}
     }
 };
-pub const WindowsNamedPipeListeningContext = (if (Environment.isWindows) struct {
+
+pub const _EmptyNamedPipeContext = struct {
+};
+
+pub const _WindowsNamedPipeListeningContextImpl = struct {
     uvPipe: uv.Pipe = std.mem.zeroes(uv.Pipe),
     listener: ?*Listener,
     globalThis: *jsc.JSGlobalObject,
     vm: *jsc.VirtualMachine,
     ctx: ?*BoringSSL.SSL_CTX = null,
 
-pub fn onClientConnect(self: *@This(), status: uv.ReturnCode) void {
+pub fn onClientConnect(self: *_WindowsNamedPipeListeningContextImpl, status: uv.ReturnCode) void {
             if ((((status != uv.ReturnCode.zero) or self.vm.isShuttingDown()) or (self.listener == null))) {
                 return;
             }
@@ -659,21 +659,21 @@ pub fn onClientConnect(self: *@This(), status: uv.ReturnCode) void {
     }
 
 pub fn onPipeClosed(pipe: *uv.Pipe) callconv(.c) void {
-            const this_ctx: *WindowsNamedPipeListeningContext = (blk: {
+            const this_ctx: *_WindowsNamedPipeListeningContextImpl = (blk: {
             break :blk @ptrCast(@alignCast(pipe.data));
 
 });
             _ = this_ctx.release();
     }
 
-pub fn closePipeAndDeinit(self: *@This()) void {
+pub fn closePipeAndDeinit(self: *_WindowsNamedPipeListeningContextImpl) void {
             self.listener = null;
             self.uvPipe.data = self;
             _ = self.uvPipe.close(onPipeClosed);
     }
 
-pub fn listen(globalThis: *jsc.JSGlobalObject, path: []const u8, backlog: i32, ssl_config: ?*const SSLConfig, listener: *Listener) !*WindowsNamedPipeListeningContext {
-            const this_ctx = WindowsNamedPipeListeningContext.new(.{ .globalThis = globalThis, .vm = globalThis.bunVM(), .listener = listener });
+pub fn listen(globalThis: *jsc.JSGlobalObject, path: []const u8, backlog: i32, ssl_config: ?*const SSLConfig, listener: *Listener) !*_WindowsNamedPipeListeningContextImpl {
+            const this_ctx = _WindowsNamedPipeListeningContextImpl.new(.{ .globalThis = globalThis, .vm = globalThis.bunVM(), .listener = listener });
             var _guard_ctx = NamedPipeCtxErrGuard{ .ctx = this_ctx };
             _ = &_guard_ctx;
             var ___guard_ctx_moved = false; _ = &___guard_ctx_moved;
@@ -698,7 +698,7 @@ pub fn listen(globalThis: *jsc.JSGlobalObject, path: []const u8, backlog: i32, s
             _guard_ctx.pipe_initialized = true;
             if ((path[@as(usize, @intCast((path.len - 1)))] == 0)) {
                 const slice_z = path[0..(path.len - 1) :0];
-                _ = (blk_catch_0: { break :blk_catch_0 ((this_ctx.uvPipe.listenNamedPipe(slice_z, backlog, this_ctx, onClientConnect).unwrap()) catch |__ce_0| { _ = &__ce_0; return error.FailedToBindPipe; }); });
+                _ = (blk_catch_3: { break :blk_catch_3 ((this_ctx.uvPipe.listenNamedPipe(slice_z, backlog, this_ctx, onClientConnect).unwrap()) catch |__ce_3| { _ = &__ce_3; return error.FailedToBindPipe; }); });
             } else {
                 var path_buf: bun.PathBuffer = undefined;
                 _ = &path_buf;
@@ -706,13 +706,13 @@ pub fn listen(globalThis: *jsc.JSGlobalObject, path: []const u8, backlog: i32, s
                 _ = @memcpy(path_buf[0..len], path[0..len]);
                 path_buf[cp_cast_int(usize, len)] = 0;
                 const slice_z = path_buf[0..len :0];
-                _ = (blk_catch_1: { break :blk_catch_1 ((this_ctx.uvPipe.listenNamedPipe(slice_z, backlog, this_ctx, onClientConnect).unwrap()) catch |__ce_1| { _ = &__ce_1; return error.FailedToBindPipe; }); });
+                _ = (blk_catch_4: { break :blk_catch_4 ((this_ctx.uvPipe.listenNamedPipe(slice_z, backlog, this_ctx, onClientConnect).unwrap()) catch |__ce_4| { _ = &__ce_4; return error.FailedToBindPipe; }); });
             }
             _guard_ctx.armed = false;
             return this_ctx;
     }
 
-pub fn release(self: *@This()) void {
+pub fn release(self: *_WindowsNamedPipeListeningContextImpl) void {
             self.listener = null;
             if (self.ctx) |ctx| {
                 _ = &ctx;
@@ -722,14 +722,37 @@ pub fn release(self: *@This()) void {
             _ = bun.destroy(self);
     }
 
-pub fn deinit(self: @This()) void {
-            var copy = self;
-            _ = &copy;
-            _ = copy.release();
+pub fn deinit(self: *_WindowsNamedPipeListeningContextImpl) void {
+            _ = self.release();
     }
-    pub const new = bun.TrivialNew(WindowsNamedPipeListeningContext);
-} else struct {
-});
+    const new = bun.TrivialNew(_WindowsNamedPipeListeningContextImpl);
+};
+
+const OpaquePtrPtr = **anyopaque;
+const Async = bun.Async;
+const Environment = bun.Environment;
+const Output = bun.Output;
+const default_allocator = bun.default_allocator;
+const strings = bun.strings;
+const uws = bun.uws;
+const BoringSSL = bun.BoringSSL.c;
+const uv = bun.windows.libuv;
+const api = bun.api;
+const Handlers = bun.api.SocketHandlers.Handlers;
+const SecureContext = bun.api.SecureContext;
+const TCPSocket = bun.api.TCPSocket;
+const TLSSocket = bun.api.TLSSocket;
+const SSLConfig = bun.api.ServerConfig.SSLConfig;
+const NewSocket = api.socket.NewSocket;
+const SocketConfig = api.socket.SocketConfig;
+const WindowsNamedPipeContext = api.socket.WindowsNamedPipeContext;
+const jsc = bun.jsc;
+const JSGlobalObject = jsc.JSGlobalObject;
+const JSValue = jsc.JSValue;
+const ZigString = jsc.ZigString;
+const NodePath = jsc.Node.path;
+pub const log = Output.scoped(.Listener, .visible);
+pub const WindowsNamedPipeListeningContext = (if (Environment.isWindows) _WindowsNamedPipeListeningContextImpl else _EmptyNamedPipeContext);
 
 pub fn listen(globalObject: *jsc.JSGlobalObject, opts: JSValue) bun.JSError!JSValue {
         _ = log("listen", .{});
@@ -772,7 +795,7 @@ pub fn listen(globalObject: *jsc.JSGlobalObject, opts: JSValue) bun.JSError!JSVa
                 _ = &_guard_named_pipe;
                 var ___guard_named_pipe_moved = false; _ = &___guard_named_pipe_moved;
                 defer if (!___guard_named_pipe_moved) { ___guard_named_pipe_moved = true; const __T = @TypeOf(_guard_named_pipe); if (@typeInfo(__T) == .optional) { if (_guard_named_pipe) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_named_pipe.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_named_pipe; _drop_val.__cp_deinit(); } };
-                const named_pipe = (blk_catch_3: { break :blk_catch_3 ((WindowsNamedPipeListeningContext.listen(globalObject, pipe_name, 511, ssl, this_ptr)) catch |__ce_3| { _ = &__ce_3; return globalObject.throwInvalidArguments("Failed to listen at {s}", .{ pipe_name }); }); });
+                const named_pipe = (blk_catch_5: { break :blk_catch_5 ((WindowsNamedPipeListeningContext.listen(globalObject, pipe_name, 511, ssl, this_ptr)) catch |__ce_5| { _ = &__ce_5; return globalObject.throwInvalidArguments("Failed to listen at {s}", .{ pipe_name }); }); });
                 this_ptr.listener = .{ .namedPipe = named_pipe };
                 _guard_named_pipe.armed = false;
                 _guard_handlers.armed = false;
@@ -1016,7 +1039,7 @@ const uvfd = fd.uv();
 
 });
                     if ((bun.windows.GetFileType(osfd) == bun.windows.FILE_TYPE_PIPE)) {
-                        connection.fd = (blk_catch_4: { break :blk_catch_4 ((bun.FD.fromNative(osfd).makeLibUVOwned()) catch |__ce_4| { _ = &__ce_4; @panic("failed to allocate file descriptor"); }); });
+                        connection.fd = (blk_catch_6: { break :blk_catch_6 ((bun.FD.fromNative(osfd).makeLibUVOwned()) catch |__ce_6| { _ = &__ce_6; @panic("failed to allocate file descriptor"); }); });
                         isNamedPipe = true;
                     }
                 }
@@ -1079,8 +1102,8 @@ else => {
                     _guard_connection.armed = false;
                     _guard_ssl_ctx.armed = false;
                     const named_pipe = (switch (connection) {
-.unix => (blk_catch_5: { break :blk_catch_5 ((WindowsNamedPipeContext.connect(globalObject, pipe_name.?, (if ((ssl != null)) (ssl.?).* else null), ctx_for_pipe, .{ .tls = tls })) catch |__ce_5| { _ = &__ce_5; return promise_value; }); }),
-.fd => |fd| (blk_catch_6: { break :blk_catch_6 ((WindowsNamedPipeContext.open(globalObject, fd, (if ((ssl != null)) (ssl.?).* else null), ctx_for_pipe, .{ .tls = tls })) catch |__ce_6| { _ = &__ce_6; return promise_value; }); }),
+.unix => (blk_catch_7: { break :blk_catch_7 ((WindowsNamedPipeContext.connect(globalObject, pipe_name.?, (if ((ssl != null)) (ssl.?).* else null), ctx_for_pipe, .{ .tls = tls })) catch |__ce_7| { _ = &__ce_7; return promise_value; }); }),
+.fd => |fd| (blk_catch_8: { break :blk_catch_8 ((WindowsNamedPipeContext.open(globalObject, fd, (if ((ssl != null)) (ssl.?).* else null), ctx_for_pipe, .{ .tls = tls })) catch |__ce_8| { _ = &__ce_8; return promise_value; }); }),
 else => unreachable,
 });
                     tls.socket = TLSSocket.Socket.fromNamedPipe(named_pipe);
@@ -1115,8 +1138,8 @@ else => unreachable,
                     _guard_connection.armed = false;
                     _guard_ssl_ctx.armed = false;
                     const named_pipe = (switch (connection) {
-.unix => (blk_catch_7: { break :blk_catch_7 ((WindowsNamedPipeContext.connect(globalObject, pipe_name.?, null, null, .{ .tcp = tcp })) catch |__ce_7| { _ = &__ce_7; return promise_value; }); }),
-.fd => |fd| (blk_catch_8: { break :blk_catch_8 ((WindowsNamedPipeContext.open(globalObject, fd, null, null, .{ .tcp = tcp })) catch |__ce_8| { _ = &__ce_8; return promise_value; }); }),
+.unix => (blk_catch_9: { break :blk_catch_9 ((WindowsNamedPipeContext.connect(globalObject, pipe_name.?, null, null, .{ .tcp = tcp })) catch |__ce_9| { _ = &__ce_9; return promise_value; }); }),
+.fd => |fd| (blk_catch_10: { break :blk_catch_10 ((WindowsNamedPipeContext.open(globalObject, fd, null, null, .{ .tcp = tcp })) catch |__ce_10| { _ = &__ce_10; return promise_value; }); }),
 else => unreachable,
 });
                     tcp.socket = TCPSocket.Socket.fromNamedPipe(named_pipe);
@@ -1194,7 +1217,7 @@ else => unreachable,
                 _ = socket.ref();
                 _ = SocketType.js.dataSetCached(socket.getThisValue(globalObject), globalObject, default_data);
                 socket.flags.allow_half_open = socket_config.allowHalfOpen;
-                _ = (blk_catch_9: { break :blk_catch_9 ((socket.doConnect(connection)) catch |__ce_9| { _ = &__ce_9; _ = (blk_catch_10: { break :blk_catch_10 ((socket.handleConnectError(@intFromEnum((if ((port == null)) bun.sys.SystemErrno.ENOENT else bun.sys.SystemErrno.ECONNREFUSED)))) catch |__ce_10| { _ = &__ce_10;  }); });
+                _ = (blk_catch_11: { break :blk_catch_11 ((socket.doConnect(connection)) catch |__ce_11| { _ = &__ce_11; _ = (blk_catch_12: { break :blk_catch_12 ((socket.handleConnectError(@intFromEnum((if ((port == null)) bun.sys.SystemErrno.ENOENT else bun.sys.SystemErrno.ECONNREFUSED)))) catch |__ce_12| { _ = &__ce_12;  }); });
                 _ = socket.deref();
                 return promise_value; }); });
                 if (socket.ref_pollref_on_connect) {

@@ -10,13 +10,13 @@ const String = Semver.String;
 
 type string = []const u8;
 
-const Value = union(enum) {
+union(enum) Value {
     expired: Npm.PackageManifest,
     manifest: Npm.PackageManifest,
 
     // Avoid checking the filesystem again.
     not_found: void,
-};
+}
 
 const HashMap = std.HashMapUnmanaged(PackageNameHash, Value, IdentityContext(PackageNameHash), 80);
 

@@ -69,7 +69,7 @@ pub struct PathOrBlobGuard {
     }
 }
 
-pub const Source = union(enum) {
+pub union(enum) Source {
     /// Input is a JS ArrayBuffer/TypedArray held in the wrapper's `sourceJS`
     /// cached slot. We never cache the raw pointer here — it could be detached
     /// or (for resizable, which we reject) reallocated. Each use re-fetches:
@@ -94,16 +94,16 @@ pub const Source = union(enum) {
     /// source is swapped to `.owned` so subsequent terminals reuse the bytes.
     blob: jsc.Strong.Optional,
 
-    pub fn deinit(s: *Source) void {
-        if (s.* == .owned) {
-            bun.default_allocator.free(s.owned);
-        } else if (s.* == .path) {
-            bun.default_allocator.free(s.path);
-        } else if (s.* == .blob) {
-            s.blob.deinit();
+    fn deinit(*_) {
+        if (_.* == .owned) {
+            bun.default_allocator.free(_.owned);
+        } else if (_.* == .path) {
+            bun.default_allocator.free(_.path);
+        } else if (_.* == .blob) {
+            _.blob.deinit();
         }
     }
-};
+}
 
 pub enum Fit {
     fill,
@@ -164,7 +164,7 @@ pub struct PipelineTaskInput {
     }
 }
 
-pub const PipelineDeliver = union(enum) {
+pub union(enum) PipelineDeliver {
     uint8array: void,
     buffer: void,
     blob: void,
@@ -172,16 +172,16 @@ pub const PipelineDeliver = union(enum) {
     dataurl: void,
     write_dest: jsc.Strong.Optional,
 
-    pub fn deinit(d: *PipelineDeliver) void {
-        if (d.* == .write_dest) jsc.Strong.Optional.deinit(&d.write_dest);
+    fn deinit(*_) {
+        if (_.* == .write_dest) jsc.Strong.Optional.deinit(&_.write_dest);
     }
-};
+}
 
-pub const PipelineKind = union(enum) {
-    encode: ?codecs.EncodeOptions,
+pub union(enum) PipelineKind {
+    encode: codecs.EncodeOptions?,
     metadata: void,
     placeholder: void,
-};
+}
 
 pub struct EncodedResult {
     out: codecs.Encoded,
@@ -196,12 +196,12 @@ pub struct MetaResult {
     format: codecs.Format,
 }
 
-pub const PipelineResult = union(enum) {
+pub union(enum) PipelineResult {
     encoded: EncodedResult,
     @"meta": MetaResult,
     @"err": codecs.Error,
     io_err: bun.sys.Error,
-};
+}
 
 pub struct EncodeForBodyResult {
     bytes: codecs.Encoded,
@@ -307,8 +307,8 @@ fn estimatedSize(*_): usize {
     // task-scoped and freed before any GC could observe it.
     return @sizeOf(Image) + switch (_.source) {
         .js_buffer, .blob => 0,
-        .owned => |b| b.len,
-        .path => |p| p.len,
+        .owned b => b.len,
+        .path p => p.len,
     };
 }
 
@@ -535,7 +535,7 @@ fn jsThreadBytes(this_value: jsc.JSValue, global: *jsc.JSGlobalObject): ([]const
             }
             return null;
         },
-        .owned => |b| return b,
+        .owned b => return b,
         .path, .blob => return null,
     }
 }
@@ -559,8 +559,8 @@ fn pinForTask(this_value: jsc.JSValue, _: *jsc.JSGlobalObject): PinTaskError!Pip
                 else => unreachable,
             };
         },
-        .owned => |b| return PipelineTaskInput{ bytes: b },
-        .path => |p| return PipelineTaskInput{ path: p },
+        .owned b => return PipelineTaskInput{ bytes: b },
+        .path p => return PipelineTaskInput{ path: p },
         // schedule() peels this off before pinForTask is reached.
         .blob => unreachable,
     }
@@ -819,14 +819,14 @@ fn encodeForBody(*_, global: *jsc.JSGlobalObject, this_value: jsc.JSValue): bun.
     };
     task.run();
     return switch (task.result) {
-        .encoded => |e| {
+        .encoded e => {
             _.last_width = @intCast(e.w);
             _.last_height = @intCast(e.h);
             return { bytes: e.out, mime: e.format.mime() };
         },
-        .err => |e| global.throw("{s}", .{errorMessage(e)}),
+        .err e => global.throw("{s}", .{errorMessage(e)}),
         // Preserve errno/path/syscall instead of flattening to DecodeFailed.
-        .io_err => |e| global.throwValue(e.toJS(global)?),
+        .io_err e => global.throwValue(e.toJS(global)?),
         .@"meta" => unreachable,
     };
 }
@@ -899,7 +899,7 @@ struct BlobReadChain {
         const _guard_outer = DeinitGuard<@TypeOf(outer)>{ ptr: &outer };
 
         switch (r) {
-            .ok => |bytes| {
+            .ok bytes => {
                 // Concurrent terminals can have started multiple BlobReadChains
                 // (no in-flight serialisation — `start()` re-enters every time
                 // it sees `.blob`). The FIRST resolver wins and swaps to
@@ -929,7 +929,7 @@ struct BlobReadChain {
                 };
                 * = outer.resolve(global, inner) catch {};
             },
-            .err => |e| {
+            .err e => {
                 deliver.deinit();
                 * = outer.reject(global, e.toErrorInstance(global)) catch {};
             },
@@ -982,16 +982,16 @@ pub struct PipelineTask {
             // below still rejects pipes/devices.
             const oflags = bun.O.RDONLY | if (bun.Environment.isPosix) bun.O.NONBLOCK else @as(@TypeOf(bun.O.RDONLY), 0);
             let file = switch (bun.sys.File.openat(bun.FD.cwd(), p, oflags, 0)) {
-                .result => |f| f,
-                .err => |e| {
+                .result f => f,
+                .err e => {
                     _.result = { io_err: e.withPath(p) };
                     return;
                 },
             };
             const _guard_file = CloseGuard<bun.sys.File>{ ptr: &file };
             const st = switch (file.stat()) {
-                .result => |s| s,
-                .err => |e| {
+                .result s => s,
+                .err e => {
                     _.result = { io_err: e.withPath(p) };
                     return;
                 },
@@ -1169,18 +1169,18 @@ pub struct PipelineTask {
         // Stash final dims here (JS thread) — `run()` is on a WorkPool thread
         // so writing `this.image.*` there would race the synchronous getters.
         switch (_.result) {
-            .encoded => |r| {
+            .encoded r => {
                 _.image.last_width = @intCast(r.w);
                 _.image.last_height = @intCast(r.h);
             },
-            .@"meta" => |r| {
+            .@"meta" r => {
                 _.image.last_width = @intCast(r.w);
                 _.image.last_height = @intCast(r.h);
             },
             else => {},
         }
         switch (_.result) {
-            .encoded => |enc| switch (_.deliver) {
+            .encoded enc => switch (_.deliver) {
                 // The codec's own allocation is handed straight to JS with the
                 // codec's free as the finalizer — no dupe of the output.
                 .uint8array => {
@@ -1226,7 +1226,7 @@ pub struct PipelineTask {
                 // with that Promise<number>. So `dest` may be a path string,
                 // `Bun.file()`, `Bun.s3()`, or an fd — anything `Bun.write`
                 // accepts — and we don't reimplement any of it.
-                .write_dest => |*dest| {
+                .write_dest *dest => {
                     const dest_js_opt = dest.get();
                     if (dest_js_opt == null) {
                         enc.out.deinit();

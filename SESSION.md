@@ -487,3 +487,11 @@
 ### [2026-11-22 Wave #39~#46] 全仓 `old_struct_todo.txt` 296 个旧式 `struct` 模块清零收官（全仓 `zig:check` + `bun bd test` 通过）
 - **范围**：完成 `src/css/**`（36）、`dotenv/errno/event_loop/glob/http/http_types/ini`（12）、`install/interchange`（30）、`io/js_parser/js_printer`（18）、`jsc/jsc_stub/libuv/md/napi/options_types/paths/ptr/resolver/router`（48）、`runtime/{api,crypto,dns_jsc,ffi,image,node,server,socket,timer,valkey_jsc,webcore}`（59）、`s3_signing/semver/sha_hmac/shell/shell_parser/string/sys/test_runner/threading/unicode/url/uws_sys`（44）等全部剩余模块纯 CP 结构体/联合体结构化与所有权/借用深度净化，`old_struct_todo.txt` 296 项全面清零。
 - **全仓验证**：`cpc_brief.py` 四门禁全绿（膨胀率 `<= 1.2x`、`0` 违例）；`bun run zig:check` 5/5 PASS；`bun bd test test/regression/issue/29181.test.ts test/js/bun/util/bun-file.test.ts` 8/8 PASS（460 expect() calls，Debug + ASan）。
+
+### [2026-11-22 上游 `cp_agy` 工单投递]
+- `task-bun-20261122-union-method-dotted-arr-len`（repro: `/data/dev/cp/temp/repro_union_method_arr_ptr_param.cp`）：`pub union(enum)` 内部方法形参使用带点路径定长数组指针 `buf: *[inet.LEN]u8` 时，`cpc` 误拆分为 `buf: *struct { inet.LEN }, u8: *anyopaque`。
+
+### [2026-11-22 上游 `cp_agy` 结单验收（1 条）]
+- `task-bun-20261122-union-method-dotted-arr-len`：已修复并验收（`ack` 完成）。`cpc/src/parser/types.rs`（`parse_base_type`）现已扩展定长数组长度解析（支持多级点分路径 `A.B.C` 及常量算术表达式），`buf: *[inet.LEN]u8` 正确输出并通过 `zig ast-check`。
+
+- **2026-11-22 20:57 (Waves #47–#49 闭环 & 提单)**：完成 `temp/top_struct_todo.txt` 剩余 94 模块顶层 `struct`/`union` 纯 CP 化（Wave #47: 36 模块，Wave #48: 24 模块，Wave #49: 34 模块）；修复 `percentage`/`CommandLineArguments`/`JSRef`/`SubprocessPipeReader`/`types`/`Listener`/`SocketAddress`/`credentials`/`MySQLConnection`/`printDiff`/`cat`/`NativeBrotli`/`which`/`rm`/`Cmd` 等 `zig:check` 报错；向 `cp_agy` 提交 `task-bun-20261122-double-ptr-addr-of`（`**S -> *S` 与 `&ptr` 剥离缺陷）；`bun run zig:check` 5/5 PASS，`bun bd test test/regression/issue/29181.test.ts test/js/bun/util/bun-file.test.ts` 8/8 PASS（460 expect()）。

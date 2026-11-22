@@ -93,7 +93,7 @@ pub enum StdioKind {
     stdout,
     stderr,
 
-    pub fn toFd(): bun.FD {
+    fn toFd(): bun.FD {
         return switch (_) {
             .stdin => .stdin(),
             .stdout => .stdout(),
@@ -101,7 +101,7 @@ pub enum StdioKind {
         };
     }
 
-    pub fn toNum(): c_int {
+    fn toNum(): c_int {
         return switch (_) {
             .stdin => 0,
             .stdout => 1,
@@ -110,12 +110,12 @@ pub enum StdioKind {
     }
 }
 
-pub const Source = union(enum) {
+pub union(enum) Source {
     blob: jsc.WebCore.Blob.Any,
     array_buffer: jsc.ArrayBuffer.Strong,
     detached: void,
 
-    pub fn memoryCost(): usize {
+    fn memoryCost(): usize {
         return switch (_) {
             .blob => _.blob.memoryCost(),
             .array_buffer => 0,
@@ -123,7 +123,7 @@ pub const Source = union(enum) {
         };
     }
 
-    pub fn slice(): []const u8 {
+    fn slice(): []const u8 {
         return switch (_) {
             .blob => _.blob.slice(),
             .array_buffer => _.array_buffer.slice(),
@@ -131,7 +131,7 @@ pub const Source = union(enum) {
         };
     }
 
-    pub fn detach(*_) {
+    fn detach(*_) {
         switch (_.*) {
             .blob => {
                 _.blob.detach();
@@ -143,7 +143,7 @@ pub const Source = union(enum) {
         }
         _.* = .detached;
     }
-};
+}
 
 pub const NewStaticPipeWriter = StaticPipeWriterMod.NewStaticPipeWriter;
 pub const StaticPipeWriter = NewStaticPipeWriter(Subprocess);
@@ -159,7 +159,7 @@ pub const StaticPipeWriter = NewStaticPipeWriter(Subprocess);
 }
 
 pub struct TestingAPIs {
-    pub static fn injectStdioReadError(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+    static fn injectStdioReadError(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): jsc.JSValue ! bun.JSError {
         const args = callframe.argumentsAsArray(2);
         const subprocess_value = args[0];
         const kind_value = args[1];
@@ -319,11 +319,11 @@ pub struct TestingAPIs {
         return false;
     }
 
-    pub fn onCloseIO(client: *Subprocess, kind: StdioKind) {
+    fn onCloseIO(client: *Subprocess, kind: StdioKind) {
         switch (kind) {
             .stdin => {
                 switch (client.stdin) {
-                    .pipe => |pipe| {
+                    .pipe pipe => {
                         pipe.signal.clear();
                         pipe.deref();
                         client.stdin = .ignore;
@@ -336,10 +336,10 @@ pub struct TestingAPIs {
                     else => {},
                 }
             },
-            inline .stdout, .stderr => |tag| {
+            inline .stdout, .stderr tag => {
                 const out: *Readable = &@field(client, @tagName(tag));
                 switch (out.*) {
-                    .pipe => |pipe| {
+                    .pipe pipe => {
                         if (pipe.state == .done) {
                             out.* = { buffer: CowString.initOwned(pipe.state.done, bun.default_allocator) };
                             pipe.state = { done: [] };
@@ -438,7 +438,7 @@ pub struct TestingAPIs {
 
         switch (client.tryKill(client.killSignal)) {
             .result => {},
-            .@"err" => |e| {
+            .@"err" e => {
                 return global.throwValue(e.toJS(global)?);
             },
         }
@@ -486,7 +486,7 @@ pub struct TestingAPIs {
 
         switch (client.tryKill(sig)) {
             .result => {},
-            .@"err" => |e| {
+            .@"err" e => {
                 return globalThis.throwValue(e.toJS(globalThis)?);
             },
         }
@@ -593,7 +593,7 @@ pub struct TestingAPIs {
                     array.push(global, JSValue.jsNull())?;
                 }
             } else switch (item) {
-                .owned_fd, .unowned_fd => |fd| array.push(global, JSValue.jsNumber(fd.cast()))?,
+                .owned_fd, .unowned_fd fd => array.push(global, JSValue.jsNumber(fd.cast()))?,
                 .unavailable => array.push(global, JSValue.jsNull())?,
             }
         }
@@ -722,11 +722,11 @@ pub struct TestingAPIs {
                     }
 
                     switch (status) {
-                        .exited => |exited| {
+                        .exited exited => {
                             let p = promise.asAnyPromise().?;
                             p.resolve(globalThis, JSValue.jsNumber(exited.code)) catch {};
                         },
-                        .@"err" => |e| {
+                        .@"err" e => {
                             let p = promise.asAnyPromise().?;
                             p.rejectWithAsyncStack(globalThis, e.toJS(globalThis) catch return) catch {};
                         },
@@ -800,7 +800,7 @@ pub struct TestingAPIs {
                     item.buffer.close(onPipeClose);
                 }
             } else switch (item) {
-                .owned_fd => |fd| fd.close(),
+                .owned_fd fd => fd.close(),
                 .unowned_fd, .unavailable => {},
             }
         }
@@ -858,13 +858,13 @@ pub struct TestingAPIs {
         }
 
         switch (client.process.status) {
-            .exited => |exit| {
+            .exited exit => {
                 return jsc.JSPromise.resolvedPromiseValue(globalThis, JSValue.jsNumber(exit.code));
             },
-            .signaled => |signal| {
+            .signaled signal => {
                 return jsc.JSPromise.resolvedPromiseValue(globalThis, JSValue.jsNumber(signal.toExitCode() ?? 254));
             },
-            .@"err" => |e| {
+            .@"err" e => {
                 const js_err = e.toJS(globalThis) catch return .zero;
                 return jsc.JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, js_err);
             },
@@ -907,10 +907,10 @@ pub struct TestingAPIs {
     ) {
         IPClog("Subprocess#handleIPCMessage", {});
         switch (message) {
-            .version => |v| {
+            .version v => {
                 IPC.log("Child IPC version is {d}", [v]);
             },
-            .data => |data| {
+            .data data => {
                 IPC.log("Received IPC message from child", {});
                 const this_jsvalue = client.this_value.tryGet() ?? .zero;
                 defer this_jsvalue.ensureStillAlive();
@@ -927,7 +927,7 @@ pub struct TestingAPIs {
                     }
                 }
             },
-            .internal => |data| {
+            .internal data => {
                 IPC.log("Received IPC internal message from child", {});
                 node_cluster_binding.handleInternalMessagePrimary(client.globalThis, client, data) catch {};
             },

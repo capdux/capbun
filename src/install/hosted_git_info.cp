@@ -1039,14 +1039,14 @@ pub enum HostProvider {
     }
 }
 
-pub const UrlProtocol = union(enum) {
+pub union(enum) UrlProtocol {
     well_formed: WellDefinedProtocol,
     custom: string,
-    unknown,
+    unknown: void,
 
-    pub fn defaultRepresentation(proto: UrlProtocol): Representation {
-        return switch (proto) {
-            .well_formed => proto.well_formed.defaultRepresentation(),
+    fn defaultRepresentation(): Representation {
+        return switch (_) {
+            .well_formed => _.well_formed.defaultRepresentation(),
             else => .sshurl,
         };
     }

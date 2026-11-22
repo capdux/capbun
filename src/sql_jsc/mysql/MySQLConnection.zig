@@ -60,7 +60,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .array and @typeInfo(@typeInfo(__T).pointer.child).array.child == u8)) { return val[0..]; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 pub const ErrorPacketMod = @import("../../sql/mysql/protocol/ErrorPacket.zig");
@@ -136,6 +136,14 @@ pub fn __cp_deinit(self: *@This()) void {
         }
     };
 }
+
+pub const AuthState = union(enum) {
+    pending: void,
+    native_password: void,
+    caching_sha2: CachingSha2State,
+    ok: void,
+    pub const CachingSha2 = CachingSha2State;
+};
 
 pub const Writer = struct {
     connection: *MySQLConnection,
@@ -872,13 +880,11 @@ pub fn sendAuthSwitchResponse(self: *MySQLConnection, auth_method: AuthMethod, p
 
 pub fn writer(self: *MySQLConnection) NewWriter(Writer) {
         const Wrapped = NewWriter(Writer);
-        _ = &Wrapped;
         return Wrapped{ .wrapped = Writer{ .connection = self } };
 }
 
 pub fn bufferedReader(self: *MySQLConnection) NewReader(Reader) {
         const Wrapped = NewReader(Reader);
-        _ = &Wrapped;
         return Wrapped{ .wrapped = Reader{ .connection = self } };
 }
 
@@ -1038,7 +1044,8 @@ pub fn handleResultSet(self: *MySQLConnection, comptime Context: type, reader: N
         defer if (!___guard_request_moved) { ___guard_request_moved = true; const __T = @TypeOf(_guard_request); if (@typeInfo(__T) == .optional) { if (_guard_request) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_request.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_request; _drop_val.__cp_deinit(); } };
         var ok = OKPacket{ .packet_size = header_length };
         _ = &ok;
-        switch (@as(PacketType, @enumFromInt(first_byte))) {
+        const pkt_type = @as(PacketType, @enumFromInt(first_byte));
+        switch (pkt_type) {
 .ERROR => {
 var err_pkt = ErrorPacket{  };
         _ = &err_pkt;
@@ -1061,7 +1068,7 @@ var err_pkt = ErrorPacket{  };
         _ = self.queue.markCurrentRequestAsFinished(request);
         _ = self.getJSConnection().onErrorPacket(request, err_pkt);
 },
-else => |packet_type| {
+else => {
 var statement = ((request.getStatement()) orelse {
         _ = debug("Unexpected result set packet", .{});
         return error.UnexpectedPacket;
@@ -1073,7 +1080,7 @@ var statement = ((request.getStatement()) orelse {
         var ___guard_statement_moved = false; _ = &___guard_statement_moved;
         defer if (!___guard_statement_moved) { ___guard_statement_moved = true; const __T = @TypeOf(_guard_statement); if (@typeInfo(__T) == .optional) { if (_guard_statement) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_statement.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_statement; _drop_val.__cp_deinit(); } };
         if ((!statement.execution_flags.header_received)) {
-            if ((packet_type == .OK)) {
+            if ((pkt_type == .OK)) {
                 _ = try ok.decode(reader);
                 var _guard_ok = DeinitGuard(OKPacket){ .ptr = (&ok) };
                 _ = &_guard_ok;
@@ -1119,7 +1126,7 @@ var statement = ((request.getStatement()) orelse {
                 _ = try statement.columns[@as(usize, @intCast(statement.columns_received))].decode(reader);
                 statement.columns_received = (statement.columns_received + 1);
             } else {
-                if (((packet_type == .EOF) and (header_length < 16777215))) {
+                if (((pkt_type == .EOF) and (header_length < 16777215))) {
                     if ((!self.@"#capabilities".CLIENT_DEPRECATE_EOF)) {
                         if ((!statement.execution_flags.columns_eof_received)) {
                             var eof = EOFPacket{  };
@@ -1176,10 +1183,3 @@ pub const PreparedStatementsMapGetOrPutResult = PreparedStatementsMap.GetOrPutRe
 const MAX_PIPELINE_SIZE = std.math.maxInt(u16);
 const debug = bun.Output.scoped(.MySQLConnection, .visible);
 var empty_columns: [0]ColumnDefinition41 = undefined;
-pub const AuthState = union(enum) {
-    pending: void,
-    native_password: void,
-    caching_sha2: CachingSha2State,
-    ok: void,
-    pub const CachingSha2 = CachingSha2State;
-};

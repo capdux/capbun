@@ -1,4 +1,4 @@
-pub const RouteBundleData = union(enum) {
+pub union(enum) RouteBundleData {
     /// FrameworkRouter provided route
     framework: RouteBundleFramework,
     /// HTMLBundle provided route
@@ -20,20 +20,22 @@ pub struct RouteBundleFramework {
     evaluate_failure: SerializedFailure?,
 }
 
+const RouteBundleHTML_ByteOffset = bun.GenericIndex(u32, u8);
+
 pub struct RouteBundleHTML {
     /// DevServer increments the ref count of this bundle
     html_bundle: RefPtr(HTMLBundle.HTMLBundleRoute),
     bundled_file: IncrementalGraph(.client).FileIndex,
     /// Invalidated when the HTML file is modified, but not it's imports.
     /// The style tag is injected here.
-    script_injection_offset: ByteOffset.Optional,
+    script_injection_offset: RouteBundleHTML_ByteOffset.Optional,
     /// The HTML file bundled, from the bundler.
     bundled_html_text: ([]const u8)?,
     /// Derived from `bundled_html_text` + `client_script_generation`
     /// and css information.
     cached_response: (*StaticRoute)?,
 
-    const ByteOffset = bun.GenericIndex(u32, u8);
+    pub const ByteOffset = RouteBundleHTML_ByteOffset;
 }
 
 pub enum RouteBundleState {
@@ -77,7 +79,7 @@ pub union(enum) RouteBundleUnresolvedIndex {
     pub const State = RouteBundleState;
     pub const UnresolvedIndex = RouteBundleUnresolvedIndex;
 
-    pub fn deinit(*_, allocator: Allocator) {
+    fn deinit(*_, allocator: Allocator) {
         if (blob := _.client_bundle) {
             blob.deref();
         }
@@ -99,11 +101,11 @@ pub union(enum) RouteBundleUnresolvedIndex {
         }
     }
 
-    pub fn sourceMapId(*_): SourceMapStore.Key {
+    fn sourceMapId(): SourceMapStore.Key {
         return SourceMapStore.Key.init(@as(u64, _.client_script_generation) << 32);
     }
 
-    pub fn invalidateClientBundle(*_, dev: *DevServer) {
+    fn invalidateClientBundle(*_, dev: *DevServer) {
         if (bundle := _.client_bundle) {
             dev.source_maps.unref(_.sourceMapId());
             bundle.deref();
@@ -121,7 +123,7 @@ pub union(enum) RouteBundleUnresolvedIndex {
         }
     }
 
-    pub fn memoryCost(): usize {
+    fn memoryCost(): usize {
         let cost: usize = @sizeOf(RouteBundle);
         if (bundle := _.client_bundle) {
             cost += bundle.memoryCost();

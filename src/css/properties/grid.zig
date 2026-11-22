@@ -61,10 +61,17 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const css = @import("../css_parser.zig");
 pub const bun = @import("bun");
+pub const TrackSizing = union(enum) {
+    none: void,
+    tracklist: TrackList,
+    pub const parse = css.DeriveParse(@This()).parse;
+    pub const toCss = css.DeriveToCss(@This()).toCss;
+};
+
 pub const TrackList = struct {
     line_names: bun.BabyList(CustomIdentList),
     items: bun.BabyList(TrackListItem),
@@ -129,11 +136,34 @@ _ = try size.toCss(dest);
     }
 };
 
+pub const TrackListItem = union(enum) {
+    track_size: TrackSize,
+    track_repeat: TrackRepeat,
+};
+
+pub const TrackSizeMinMax = struct {
+    min: TrackBreadth,
+    max: TrackBreadth,
+};
+
+pub const TrackSize = union(enum) {
+    track_breadth: TrackBreadth,
+    min_max: TrackSizeMinMax,
+    fit_content: LengthPercentage,
+
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+            return css.implementEql(@This(), lhs, rhs);
+    }
+    pub const default = defaultTrackSize;
+    pub const parse = parseTrackSize;
+    pub const toCss = toCssTrackSize;
+};
+
 pub const TrackSizeList = struct {
-    v: SmallList(TrackSize,1) = .{},
+    v: SmallList(TrackSize, 1) = .{},
 
 pub fn parse(input: *css.Parser) css.Result(@This()) {
-            var res: SmallList(TrackSize,1) = .{};
+            var res: SmallList(TrackSize, 1) = .{};
             _ = &res;
             while (input.tryParse(TrackSize.parse, .{}).asValue()) |size| {
                 _ = bun.handleOom(res.append(input.allocator(), size));
@@ -163,6 +193,17 @@ pub fn toCss(self: TrackSizeList, dest: *css.Printer) css.PrintErr!void {
     }
 };
 
+pub const TrackBreadth = union(enum) {
+    length: LengthPercentage,
+    flex: CSSNumber,
+    min_content: void,
+    max_content: void,
+    auto: void,
+    pub const parse = parseTrackBreadth;
+    pub const parseInternal = parseTrackBreadthInternal;
+    pub const toCss = toCssTrackBreadth;
+};
+
 pub const TrackRepeat = struct {
     count: RepeatCount,
     line_names: bun.BabyList(CustomIdentList),
@@ -173,7 +214,7 @@ pub fn parse(input: *css.Parser) css.Result(@This()) {
                 _ = &e;
                 return .{ .err = e };
             }
-            return input.parseNestedBlock(struct {
+            return input.parseNestedBlock((struct {
 
 pub fn parse(i: *css.Parser) css.Result(TrackRepeat) {
             const count = (switch (@call(.auto, @field(RepeatCount, "parse"), .{ i })) {
@@ -202,7 +243,7 @@ return .{ .err = e };
             }
             return .{ .result = .{ .count = count, .line_names = line_names, .track_sizes = track_sizes } };
     }
-}.parse);
+}).parse);
     }
 
 pub fn toCss(self: TrackRepeat, dest: *Printer) PrintErr!void {
@@ -236,6 +277,29 @@ pub fn toCss(self: TrackRepeat, dest: *Printer) PrintErr!void {
     }
 };
 
+pub const RepeatCount = union(enum) {
+    number: CSSInteger,
+    @"auto-fill": void,
+    @"auto-fit": void,
+
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+            return css.implementEql(@This(), lhs, rhs);
+    }
+    pub const parse = css.DeriveParse(@This()).parse;
+    pub const toCss = css.DeriveToCss(@This()).toCss;
+};
+
+pub const GridTemplateAreasData = struct {
+    columns: u32,
+    areas: SmallList(OptStr, 1),
+};
+
+pub const GridTemplateAreas = union(enum) {
+    none: void,
+    areas: GridTemplateAreasData,
+    pub const parse = parseGridTemplateAreas;
+};
+
 const StrAlias = []const u8;
 const OptStr = ?StrAlias;
 const SmallList = css.SmallList;
@@ -247,88 +311,7 @@ const CustomIdent = css.css_values.ident.CustomIdent;
 const CSSNumber = css.css_values.number.CSSNumber;
 const CustomIdentList = css.css_values.ident.CustomIdentList;
 const CSSInteger = css.css_values.number.CSSInteger;
-pub const TrackSizing = union(enum) {
-    /// No explicit grid tracks.
-    none,
-    /// A list of grid tracks.
-    tracklist: TrackList,
-
-    pub const parse = css.DeriveParse(@This()).parse;
-    pub const toCss = css.DeriveToCss(@This()).toCss;
-};
-pub const TrackListItem = union(enum) {
-    track_size: TrackSize,
-    track_repeat: TrackRepeat,
-};
-pub const TrackSize = union(enum) {
-    /// An explicit track breadth.
-    track_breadth: TrackBreadth,
-    /// The `minmax()` function.
-    min_max: struct {
-        /// The minimum value.
-        min: TrackBreadth,
-        /// The maximum value.
-        max: TrackBreadth,
-    },
-    /// The `fit-content()` function.
-    fit_content: LengthPercentage,
-
-    pub const default = defaultTrackSize;
-
-    pub fn eql(this: *const @This(), other: *const @This()) bool {
-        return css.implementEql(@This(), this, other);
-    }
-
-    pub const parse = parseTrackSize;
-
-    pub const toCss = toCssTrackSize;
-};
-pub const TrackBreadth = union(enum) {
-    /// An explicit length.
-    length: LengthPercentage,
-    /// A flex factor.
-    flex: CSSNumber,
-    /// The `min-content` keyword.
-    min_content,
-    /// The `max-content` keyword.
-    max_content,
-    /// The `auto` keyword.
-    auto,
-
-    pub const parse = parseTrackBreadth;
-    pub const parseInternal = parseTrackBreadthInternal;
-    pub const toCss = toCssTrackBreadth;
-};
-pub const RepeatCount = union(enum) {
-    /// The number of times to repeat.
-    number: CSSInteger,
-    /// The `auto-fill` keyword.
-    @"auto-fill",
-    /// The `auto-fit` keyword.
-    @"auto-fit",
-
-    pub const parse = css.DeriveParse(@This()).parse;
-    pub const toCss = css.DeriveToCss(@This()).toCss;
-
-    pub fn eql(this: *const @This(), other: *const @This()) bool {
-        return css.implementEql(@This(), this, other);
-    }
-};
 const GRID_HTML_SPACE_CHARACTERS_ARR: [5]u8 = .{ 32, 9, 10, 12, 13 };
-pub const GridTemplateAreas = union(enum) {
-    /// No named grid areas.
-    none,
-    /// Defines the list of named grid areas.
-    areas: struct {
-        /// The number of columns in the grid.
-        columns: u32,
-        /// A flattened list of grid area names.
-        /// Unnamed areas specified by the `.` token are represented as null.
-        areas: SmallList(OptStr, 1),
-    },
-
-    pub const parse = parseGridTemplateAreas;
-};
 const Allocator = std.mem.Allocator;
 const BabyList = bun.BabyList;
 
@@ -505,7 +488,7 @@ pub fn parseLineNames(input: *css.Parser) css.Result(CustomIdentList) {
             _ = &e;
             return .{ .err = e };
         }
-        return input.parseNestedBlock(struct {
+        return input.parseNestedBlock((struct {
 
 pub fn parse(i: *css.Parser) css.Result(CustomIdentList) {
             var values = CustomIdentList{  };
@@ -515,19 +498,19 @@ pub fn parse(i: *css.Parser) css.Result(CustomIdentList) {
             }
             return .{ .result = values };
     }
-}.parse);
+}).parse);
 }
 
 pub fn parseGridTemplateAreas(input: *css.Parser) css.Result(GridTemplateAreas) {
-        if (input.tryParse(struct {
+        if (input.tryParse((struct {
 
 pub fn parseNone(i: *css.Parser) css.Result(void) {
             return i.expectIdentMatching("none");
     }
-}.parseNone, .{}).isOk()) {
+}).parseNone, .{}).isOk()) {
             return .{ .result = .none };
         }
-        var tokens: SmallList(OptStr,1) = .{};
+        var tokens: SmallList(OptStr, 1) = .{};
         _ = &tokens;
         var row: u32 = 0;
         _ = &row;
@@ -553,7 +536,7 @@ return .{ input.newError(.qualified_rule_invalid) };
         return .{ .result = .{ .areas = .{ .columns = columns, .areas = tokens } } };
 }
 
-pub fn parseGridAreaString(allocator: Allocator, s: []const u8, tokens: *SmallList(OptStr,1)) bun.Maybe(u32,void) {
+pub fn parseGridAreaString(allocator: Allocator, s: []const u8, tokens: *SmallList(OptStr, 1)) bun.Maybe(u32, void) {
         var area_str = s;
         _ = &area_str;
         var column: u32 = 0;

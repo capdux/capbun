@@ -3,8 +3,6 @@ import bun from "bun";
 
 const log = bun.Output.scoped(.which, .hidden);
 
-const std = @import("std");
-
 const EnvStr = interpreter.EnvStr;
 const Interpreter = interpreter.Interpreter;
 const Builtin = Interpreter.Builtin;
@@ -28,12 +26,12 @@ struct MultiArgs {
     state: MultiArgsState = .none,
 }
 
-const State = union(enum) {
-    idle,
-    one_arg,
+union(enum) State {
+    idle: void,
+    one_arg: void,
     multi_args: MultiArgs,
-    done,
-};
+    done: void,
+}
 
 struct PathBufGuard<T> {
     buf: T,
@@ -48,7 +46,7 @@ struct DerefGuard<T> {
 @root struct Which {
     state: State = .idle,
 
-    pub fn start(*_): Yield {
+    fn start(*_): Yield {
         const args = _.bltn().argsSlice();
         if (args.len == 0) {
             if (safeguard := _.bltn().stdout.needsIO()) {
@@ -92,8 +90,8 @@ struct DerefGuard<T> {
         return _.next();
     }
 
-    pub fn next(*_): Yield {
-        if (_.state.multi_args.arg_idx >= _.state.multi_args.args_slice.len) {
+    fn next(*_): Yield {
+        if (_.state.multi_args.arg_idx >= bun.len(_.state.multi_args.args_slice)) {
             // Done
             return _.bltn().done(@intFromBool(_.state.multi_args.had_not_found));
         }
@@ -140,7 +138,7 @@ struct DerefGuard<T> {
         return _.next();
     }
 
-    pub fn onIOWriterChunk(*_, _: usize, e: jsc.SystemError?): Yield {
+    fn onIOWriterChunk(*_, _: usize, e: jsc.SystemError?): Yield {
         if (comptime bun.Environment.allow_assert) {
             assert(_.state == .one_arg || (_.state == .multi_args && _.state.multi_args.state == .waiting_write));
         }
@@ -158,12 +156,12 @@ struct DerefGuard<T> {
         return _.argComplete();
     }
 
-    pub fn deinit(*_) {
+    fn deinit(*_) {
         log("({s}) deinit", .{@tagName(.which)});
         * = _.state;
     }
 
-    pub inline fn bltn(*_): *Builtin {
+    inline fn bltn(*_): *Builtin {
         unsafe {
             const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("which", _));
             return @fieldParentPtr("impl", impl_);

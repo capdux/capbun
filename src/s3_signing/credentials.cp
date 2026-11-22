@@ -28,11 +28,11 @@ struct SliceFreeGuard {
     }
 }
 
-const DateResult = struct {
+struct DateResult {
     // numeric representation of year, month and day (excluding time components)
     numeric_day: u64,
     date: []const u8,
-};
+}
 
 pub struct S3SignResult {
     amz_date: []const u8,
@@ -840,6 +840,23 @@ struct SignedHeaders {
     }
 }
 
+type _CanonicalRequestFormatFn = *const fn (
+    []u8,
+    []const u8,
+    []const u8,
+    []const u8,
+    ([]const u8)?,
+    ([]const u8)?,
+    ([]const u8)?,
+    []const u8,
+    ([]const u8)?,
+    []const u8,
+    []const u8,
+    ([]const u8)?,
+    ([]const u8)?,
+    []const u8,
+) std.fmt.BufPrintError![]u8;
+
 /// Comptime-generated format strings for canonical request.
 /// Uses the same key as SignedHeaders to select the right format.
 struct CanonicalRequest {
@@ -886,22 +903,7 @@ struct CanonicalRequest {
             .{ signed_headers, hash });
     }
 
-    const FormatFn = *const fn (
-        []u8,
-        []const u8,
-        []const u8,
-        []const u8,
-        ?[]const u8,
-        ?[]const u8,
-        ?[]const u8,
-        []const u8,
-        ?[]const u8,
-        []const u8,
-        []const u8,
-        ?[]const u8,
-        ?[]const u8,
-        []const u8,
-    ) anyerror![]u8;
+    const FormatFn = _CanonicalRequestFormatFn;
 
     static fn makeFormatFn(comptime key: SignedHeaders.Key): FormatFn {
         return struct {

@@ -13,24 +13,25 @@ const PropertyCategory = css.logical.PropertyCategory;
 const LengthPercentage = css.css_values.length.LengthPercentage;
 const Ratio = css.css_values.ratio.Ratio;
 
+enum SizeKeywordEnum {
+    auto,
+    @"min-content",
+    @"-webkit-min-content",
+    @"-moz-min-content",
+    @"max-content",
+    @"-webkit-max-content",
+    @"-moz-max-content",
+    stretch,
+    @"-webkit-fill-available",
+    @"-moz-available",
+    @"fit-content",
+    @"-webkit-fit-content",
+    @"-moz-fit-content",
+    contain,
+}
+
 fn parseSizeKeywordFn(i: *css.Parser): css.Result(Size) {
-    const Enum = enum {
-        auto,
-        @"min-content",
-        @"-webkit-min-content",
-        @"-moz-min-content",
-        @"max-content",
-        @"-webkit-max-content",
-        @"-moz-max-content",
-        stretch,
-        @"-webkit-fill-available",
-        @"-moz-available",
-        @"fit-content",
-        @"-webkit-fit-content",
-        @"-moz-fit-content",
-        contain,
-    };
-    const Map = comptime bun.ComptimeEnumMap(Enum);
+    const Map = comptime bun.ComptimeEnumMap(SizeKeywordEnum);
     const ident_res = i.expectIdent();
     if (ident_res == .err) return { err: ident_res.err };
     const ident = ident_res.result;
@@ -138,9 +139,9 @@ fn isCompatibleSize(this_size: *const Size, browsers: css.targets.Browsers): boo
     };
 }
 
-pub const Size = union(enum) {
+pub union(enum) Size {
     /// The `auto` keyworda
-    auto,
+    auto: void,
     /// An explicit length or percentage.
     length_percentage: LengthPercentage,
     /// The `min-content` keyword.
@@ -154,7 +155,7 @@ pub const Size = union(enum) {
     /// The `stretch` keyword, or the `-webkit-fill-available` or `-moz-available` prefixed keywords.
     stretch: css.VendorPrefix,
     /// The `contain` keyword.
-    contain,
+    contain: void,
 
     pub const parse = parseSize;
 
@@ -162,37 +163,37 @@ pub const Size = union(enum) {
 
     pub const isCompatible = isCompatibleSize;
 
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+    fn deepClone(allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
-    pub fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
-};
+}
+
+enum MaxSizeIdent {
+    none,
+    min_content,
+    webkit_min_content,
+    moz_min_content,
+    max_content,
+    webkit_max_content,
+    moz_max_content,
+    stretch,
+    webkit_fill_available,
+    moz_available,
+    fit_content,
+    webkit_fit_content,
+    moz_fit_content,
+    contain,
+}
 
 /// A value for the [minimum](https://drafts.csswg.org/css-sizing-3/#min-size-properties)
 /// and [maximum](https://drafts.csswg.org/css-sizing-3/#max-size-properties) size properties,
 /// e.g. `min-width` and `max-height`.
 fn parseMaxSizeKeywordFn(i: *css.Parser): css.Result(MaxSize) {
-    const Ident = enum {
-        none,
-        min_content,
-        webkit_min_content,
-        moz_min_content,
-        max_content,
-        webkit_max_content,
-        moz_max_content,
-        stretch,
-        webkit_fill_available,
-        moz_available,
-        fit_content,
-        webkit_fit_content,
-        moz_fit_content,
-        contain,
-    };
-
-    const IdentMap = bun.ComptimeStringMap(Ident, .{
+    const IdentMap = bun.ComptimeStringMap(MaxSizeIdent, .{
         .{ "none", .none },
         .{ "min-content", .min_content },
         .{ "-webkit-min-content", .webkit_min_content },
@@ -283,9 +284,9 @@ fn toCssMaxSize(this_ms: *const MaxSize, dest: *css.Printer): css.PrintErr!void 
     }
 }
 
-pub const MaxSize = union(enum) {
+pub union(enum) MaxSize {
     /// The `none` keyword.
-    none,
+    none: void,
     /// An explicit length or percentage.
     length_percentage: LengthPercentage,
     /// The `min-content` keyword.
@@ -299,19 +300,19 @@ pub const MaxSize = union(enum) {
     /// The `stretch` keyword, or the `-webkit-fill-available` or `-moz-available` prefixed keywords.
     stretch: css.VendorPrefix,
     /// The `contain` keyword.
-    contain,
+    contain: void,
 
     pub const parse = parseMaxSize;
     pub const toCss = toCssMaxSize;
 
-    pub fn isCompatible(this_ms: *const MaxSize, browsers: css.targets.Browsers) bool {
+    fn isCompatible(browsers: css.targets.Browsers): bool {
         const F = css.compat.Feature;
-        return switch (this_ms.*) {
+        return switch (_) {
             .length_percentage => |*l| l.isCompatible(browsers),
             .min_content => F.isCompatible(.min_content_size, browsers),
             .max_content => F.isCompatible(.max_content_size, browsers),
             .fit_content => F.isCompatible(.fit_content_size, browsers),
-            .fit_content_function => |*l| F.isCompatible(F.fit_content_function_size, browsers) and l.isCompatible(browsers),
+            .fit_content_function => |*l| F.isCompatible(F.fit_content_function_size, browsers) && l.isCompatible(browsers),
             .stretch => |*vp| blk: {
                 const bits = vp.asBits();
                 if (bits == css.VendorPrefix.NONE.asBits()) break :blk F.isCompatible(F.stretch_size, browsers);
@@ -324,14 +325,14 @@ pub const MaxSize = union(enum) {
         };
     }
 
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+    fn deepClone(allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
-    pub fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
-};
+}
 
 /// A value for the [aspect-ratio](https://drafts.csswg.org/css-sizing-4/#aspect-ratio) property.
 pub struct AspectRatio {
@@ -402,7 +403,7 @@ fn parseFitContent(input: *css.Parser): css.Result(LengthPercentage) {
     @"max-inline-size": bool = false,
     __unused: u4 = 0,
 
-    pub fn tryFromPropertyIdTag(property_id: PropertyIdTag): SizeProperty? {
+    static fn tryFromPropertyIdTag(property_id: PropertyIdTag): SizeProperty? {
         inline for (field of std.@"meta".fields(@This())) {
             if (comptime std.mem.eql(u8, field.name, "__unused")) continue;
             if (@intFromEnum(@field(PropertyIdTag, field.name)) == @intFromEnum(property_id)) {
@@ -438,30 +439,30 @@ pub struct SizeHandler {
         const logical_supported = !context.shouldCompileLogical(Feature.logical_size);
 
         switch (property.*) {
-            .width => |*v| this.propertyHelper("width", Size, v, PropertyCategory.physical, dest, context),
-            .height => |*v| this.propertyHelper("height", Size, v, PropertyCategory.physical, dest, context),
-            .@"min-width" => |*v| this.propertyHelper("min_width", Size, v, PropertyCategory.physical, dest, context),
-            .@"min-height" => |*v| this.propertyHelper("min_height", Size, v, PropertyCategory.physical, dest, context),
-            .@"max-width" => |*v| this.propertyHelper("max_width", MaxSize, v, PropertyCategory.physical, dest, context),
-            .@"max-height" => |*v| this.propertyHelper("max_height", MaxSize, v, PropertyCategory.physical, dest, context),
-            .@"block-size" => |*v| this.propertyHelper("block_size", Size, v, PropertyCategory.logical, dest, context),
-            .@"min-block-size" => |*v| this.propertyHelper("min_block_size", Size, v, PropertyCategory.logical, dest, context),
-            .@"max-block-size" => |*v| this.propertyHelper("max_block_size", MaxSize, v, PropertyCategory.logical, dest, context),
-            .@"inline-size" => |*v| this.propertyHelper("inline_size", Size, v, PropertyCategory.logical, dest, context),
-            .@"min-inline-size" => |*v| this.propertyHelper("min_inline_size", Size, v, PropertyCategory.logical, dest, context),
-            .@"max-inline-size" => |*v| this.propertyHelper("max_inline_size", MaxSize, v, PropertyCategory.logical, dest, context),
+            .width => |*v| _.propertyHelper("width", Size, v, PropertyCategory.physical, dest, context),
+            .height => |*v| _.propertyHelper("height", Size, v, PropertyCategory.physical, dest, context),
+            .@"min-width" => |*v| _.propertyHelper("min_width", Size, v, PropertyCategory.physical, dest, context),
+            .@"min-height" => |*v| _.propertyHelper("min_height", Size, v, PropertyCategory.physical, dest, context),
+            .@"max-width" => |*v| _.propertyHelper("max_width", MaxSize, v, PropertyCategory.physical, dest, context),
+            .@"max-height" => |*v| _.propertyHelper("max_height", MaxSize, v, PropertyCategory.physical, dest, context),
+            .@"block-size" => |*v| _.propertyHelper("block_size", Size, v, PropertyCategory.logical, dest, context),
+            .@"min-block-size" => |*v| _.propertyHelper("min_block_size", Size, v, PropertyCategory.logical, dest, context),
+            .@"max-block-size" => |*v| _.propertyHelper("max_block_size", MaxSize, v, PropertyCategory.logical, dest, context),
+            .@"inline-size" => |*v| _.propertyHelper("inline_size", Size, v, PropertyCategory.logical, dest, context),
+            .@"min-inline-size" => |*v| _.propertyHelper("min_inline_size", Size, v, PropertyCategory.logical, dest, context),
+            .@"max-inline-size" => |*v| _.propertyHelper("max_inline_size", MaxSize, v, PropertyCategory.logical, dest, context),
             .unparsed => |*unparsed| {
                 switch (unparsed.property_id) {
                     .width, .height, .@"min-width", .@"max-width", .@"min-height", .@"max-height" => {
-                        bun.bits.insert(SizeProperty, &this.flushed_properties, SizeProperty.tryFromPropertyIdTag(std.meta.activeTag(unparsed.property_id)).?);
+                        bun.bits.insert(SizeProperty, &_.flushed_properties, SizeProperty.tryFromPropertyIdTag(std.meta.activeTag(unparsed.property_id)).?);
                         dest.append(context.allocator, property.deepClone(context.allocator)) catch unreachable;
                     },
-                    .@"block-size" => this.logicalUnparsedHelper(property, unparsed, .height, logical_supported, dest, context),
-                    .@"min-block-size" => this.logicalUnparsedHelper(property, unparsed, .@"min-height", logical_supported, dest, context),
-                    .@"max-block-size" => this.logicalUnparsedHelper(property, unparsed, .@"max-height", logical_supported, dest, context),
-                    .@"inline-size" => this.logicalUnparsedHelper(property, unparsed, .width, logical_supported, dest, context),
-                    .@"min-inline-size" => this.logicalUnparsedHelper(property, unparsed, .@"min-width", logical_supported, dest, context),
-                    .@"max-inline-size" => this.logicalUnparsedHelper(property, unparsed, .@"max-width", logical_supported, dest, context),
+                    .@"block-size" => _.logicalUnparsedHelper(property, unparsed, .height, logical_supported, dest, context),
+                    .@"min-block-size" => _.logicalUnparsedHelper(property, unparsed, .@"min-height", logical_supported, dest, context),
+                    .@"max-block-size" => _.logicalUnparsedHelper(property, unparsed, .@"max-height", logical_supported, dest, context),
+                    .@"inline-size" => _.logicalUnparsedHelper(property, unparsed, .width, logical_supported, dest, context),
+                    .@"min-inline-size" => _.logicalUnparsedHelper(property, unparsed, .@"min-width", logical_supported, dest, context),
+                    .@"max-inline-size" => _.logicalUnparsedHelper(property, unparsed, .@"max-width", logical_supported, dest, context),
                     else => return false,
                 }
             },
@@ -487,7 +488,7 @@ pub struct SizeHandler {
     }
 
     inline fn propertyHelper(
-        *_: *@This(),
+        *_,
         comptime property: []const u8,
         comptime T: type,
         value: *const T,
@@ -499,49 +500,49 @@ pub struct SizeHandler {
         // or if the value contains syntax that isn't supported across all targets,
         // preserve the previous value as a fallback.
 
-        if (@field(PropertyCategory, @tagName(category)) != this.category || (@field(this, property) != null && context.targets.browsers != null && !value.isCompatible(context.targets.browsers.?))) {
-            this.flush(dest, context);
+        if (@field(PropertyCategory, @tagName(category)) != _.category || (@field(_, property) != null && context.targets.browsers != null && !value.isCompatible(context.targets.browsers.?))) {
+            _.flush(dest, context);
         }
 
-        @field(this, property) = value.deepClone(context.allocator);
-        this.category = category;
-        this.has_any = true;
+        @field(_, property) = value.deepClone(context.allocator);
+        _.category = category;
+        _.has_any = true;
     }
 
     fn flush(*_, dest: *css.DeclarationList, context: *css.PropertyHandlerContext) {
-        if (!this.has_any) return;
+        if (!_.has_any) return;
 
-        this.has_any = false;
+        _.has_any = false;
         const logical_supported = !context.shouldCompileLogical(Feature.logical_size);
 
-        this.flushPropertyHelper(PropertyIdTag.width, "width", Size, dest, context);
-        this.flushPropertyHelper(PropertyIdTag.@"min-width", "min_width", Size, dest, context);
-        this.flushPropertyHelper(PropertyIdTag.@"max-width", "max_width", MaxSize, dest, context);
-        this.flushPropertyHelper(PropertyIdTag.height, "height", Size, dest, context);
-        this.flushPropertyHelper(PropertyIdTag.@"min-height", "min_height", Size, dest, context);
-        this.flushPropertyHelper(PropertyIdTag.@"max-height", "max_height", MaxSize, dest, context);
-        this.flushLogicalHelper(PropertyIdTag.@"block-size", "block_size", PropertyIdTag.height, Size, logical_supported, dest, context);
-        this.flushLogicalHelper(PropertyIdTag.@"min-block-size", "min_block_size", PropertyIdTag.@"min-height", Size, logical_supported, dest, context);
-        this.flushLogicalHelper(PropertyIdTag.@"max-block-size", "max_block_size", PropertyIdTag.@"max-height", MaxSize, logical_supported, dest, context);
-        this.flushLogicalHelper(PropertyIdTag.@"inline-size", "inline_size", PropertyIdTag.width, Size, logical_supported, dest, context);
-        this.flushLogicalHelper(PropertyIdTag.@"min-inline-size", "min_inline_size", PropertyIdTag.@"min-width", Size, logical_supported, dest, context);
-        this.flushLogicalHelper(PropertyIdTag.@"max-inline-size", "max_inline_size", PropertyIdTag.@"max-width", MaxSize, logical_supported, dest, context);
+        _.flushPropertyHelper(PropertyIdTag.width, "width", Size, dest, context);
+        _.flushPropertyHelper(PropertyIdTag.@"min-width", "min_width", Size, dest, context);
+        _.flushPropertyHelper(PropertyIdTag.@"max-width", "max_width", MaxSize, dest, context);
+        _.flushPropertyHelper(PropertyIdTag.height, "height", Size, dest, context);
+        _.flushPropertyHelper(PropertyIdTag.@"min-height", "min_height", Size, dest, context);
+        _.flushPropertyHelper(PropertyIdTag.@"max-height", "max_height", MaxSize, dest, context);
+        _.flushLogicalHelper(PropertyIdTag.@"block-size", "block_size", PropertyIdTag.height, Size, logical_supported, dest, context);
+        _.flushLogicalHelper(PropertyIdTag.@"min-block-size", "min_block_size", PropertyIdTag.@"min-height", Size, logical_supported, dest, context);
+        _.flushLogicalHelper(PropertyIdTag.@"max-block-size", "max_block_size", PropertyIdTag.@"max-height", MaxSize, logical_supported, dest, context);
+        _.flushLogicalHelper(PropertyIdTag.@"inline-size", "inline_size", PropertyIdTag.width, Size, logical_supported, dest, context);
+        _.flushLogicalHelper(PropertyIdTag.@"min-inline-size", "min_inline_size", PropertyIdTag.@"min-width", Size, logical_supported, dest, context);
+        _.flushLogicalHelper(PropertyIdTag.@"max-inline-size", "max_inline_size", PropertyIdTag.@"max-width", MaxSize, logical_supported, dest, context);
     }
 
     fn finalize(*_, dest: *css.DeclarationList, context: *css.PropertyHandlerContext) {
-        this.flush(dest, context);
-        this.flushed_properties = SizeProperty{};
+        _.flush(dest, context);
+        _.flushed_properties = SizeProperty{};
     }
 
     inline fn flushPrefixHelper(
-        *_: *@This(),
+        *_,
         comptime property: PropertyIdTag,
         comptime SizeType: type,
         comptime feature: css.prefixes.Feature,
         dest: *css.DeclarationList,
         context: *css.PropertyHandlerContext,
     ) {
-        if (!@field(this.flushed_properties, @tagName(property))) {
+        if (!@field(_.flushed_properties, @tagName(property))) {
             const prefixes = context.targets.prefixes(css.VendorPrefix{ .none = true }, feature).difference(css.VendorPrefix{ .none = true });
             inline for (field of css.VendorPrefix.FIELDS) {
                 if (@field(prefixes, field)) {
@@ -561,36 +562,36 @@ pub struct SizeHandler {
     }
 
     inline fn flushPropertyHelper(
-        *_: *@This(),
+        *_,
         comptime property: PropertyIdTag,
         comptime field: []const u8,
         comptime SizeType: type,
         dest: *css.DeclarationList,
         context: *css.PropertyHandlerContext,
     ) {
-        if (val := bun.take(&@field(this, field))) {
+        if (val := bun.take(&@field(_, field))) {
             switch (val) {
                 .stretch => |vp| if (vp == css.VendorPrefix{ .none = true }) {
-                    this.flushPrefixHelper(property, SizeType, .stretch, dest, context);
+                    _.flushPrefixHelper(property, SizeType, .stretch, dest, context);
                 },
                 .min_content => |vp| if (vp == css.VendorPrefix{ .none = true }) {
-                    this.flushPrefixHelper(property, SizeType, .min_content, dest, context);
+                    _.flushPrefixHelper(property, SizeType, .min_content, dest, context);
                 },
                 .max_content => |vp| if (vp == css.VendorPrefix{ .none = true }) {
-                    this.flushPrefixHelper(property, SizeType, .max_content, dest, context);
+                    _.flushPrefixHelper(property, SizeType, .max_content, dest, context);
                 },
                 .fit_content => |vp| if (vp == css.VendorPrefix{ .none = true }) {
-                    this.flushPrefixHelper(property, SizeType, .fit_content, dest, context);
+                    _.flushPrefixHelper(property, SizeType, .fit_content, dest, context);
                 },
                 else => {},
             }
             bun.handleOom(dest.append(context.allocator, @unionInit(Property, @tagName(property), val.deepClone(context.allocator))));
-            @field(this.flushed_properties, @tagName(property)) = true;
+            @field(_.flushed_properties, @tagName(property)) = true;
         }
     }
 
     inline fn flushLogicalHelper(
-        *_: *@This(),
+        *_,
         comptime property: PropertyIdTag,
         comptime field: []const u8,
         comptime physical: PropertyIdTag,
@@ -600,9 +601,9 @@ pub struct SizeHandler {
         context: *css.PropertyHandlerContext,
     ) {
         if (logical_supported) {
-            this.flushPropertyHelper(property, field, SizeType, dest, context);
+            _.flushPropertyHelper(property, field, SizeType, dest, context);
         } else {
-            this.flushPropertyHelper(physical, field, SizeType, dest, context);
+            _.flushPropertyHelper(physical, field, SizeType, dest, context);
         }
     }
 }

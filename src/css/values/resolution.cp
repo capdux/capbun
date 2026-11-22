@@ -1,3 +1,4 @@
+import bun from "bun";
 import css from "../css_parser.zig";
 const Result = css.Result;
 const Printer = css.Printer;
@@ -5,7 +6,7 @@ const PrintErr = css.PrintErr;
 const CSSNumber = css.css_values.number.CSSNumber;
 
 /// A CSS `<resolution>` value.
-pub const Resolution = union(enum) {
+pub union(enum) Resolution {
     /// A resolution in dots per inch.
     dpi: CSSNumber,
     /// A resolution in dots per centimeter.
@@ -16,15 +17,15 @@ pub const Resolution = union(enum) {
     // ~toCssImpl
     const This = @This();
 
-    pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) {
-        return css.implementHash(@This(), this, hasher);
+    fn hash(hasher: *std.hash.Wyhash) {
+        return css.implementHash(@This(), &_, hasher);
     }
 
-    pub fn eql(other: *const Resolution): bool {
+    fn eql(other: *const Resolution): bool {
         return css.implementEql(@This(), &_, other);
     }
 
-    pub fn parse(input: *css.Parser): Result(Resolution) {
+    static fn parse(input: *css.Parser): Result(Resolution) {
         // TODO: calc?
         const location = input.currentSourceLocation();
         const tok = switch (input.next()) {
@@ -43,7 +44,7 @@ pub const Resolution = union(enum) {
         return { err: location.newUnexpectedTokenError(tok.*) };
     }
 
-    pub fn tryFromToken(token: *const css.Token): css.Maybe(Resolution, void) {
+    static fn tryFromToken(token: *const css.Token): css.Maybe(Resolution, void) {
         switch (token.*) {
             .dimension => |dim| {
                 const value = dim.num.value;
@@ -65,7 +66,7 @@ pub const Resolution = union(enum) {
         }
     }
 
-    pub fn toCss(dest: *Printer): PrintErr!void {
+    fn toCss(dest: *Printer): PrintErr!void {
         const vu = switch (_) {
             .dpi => |dpi| .{ dpi, "dpi" },
             .dpcm => |dpcm| .{ dpcm, "dpcm" },
@@ -80,13 +81,11 @@ pub const Resolution = union(enum) {
         return css.serializer.serializeDimension(value, unit, dest)?;
     }
 
-    pub fn addF32(_: std.mem.Allocator, other: f32): Resolution {
+    fn addF32(_: std.mem.Allocator, other: f32): Resolution {
         return switch (_) {
             .dpi => |dpi| Resolution{ dpi: dpi + other },
             .dpcm => |dpcm| Resolution{ dpcm: dpcm + other },
             .dppx => |dppx| Resolution{ dppx: dppx + other },
         };
     }
-};
-
-import bun from "bun";
+}

@@ -19,13 +19,13 @@ const Url = css.css_values.url.Url;
     only: bool = false,
     __unused: u5 = 0,
 
-    pub fn eql(a: ColorScheme, b: ColorScheme): bool {
+    static fn eql(a: ColorScheme, b: ColorScheme): bool {
         return a == b;
     }
 
     const Map = bun.ComptimeEnumMap(enum { normal, only, light, dark });
 
-    pub fn parse(input: *css.Parser): css.Result(ColorScheme) {
+    static fn parse(input: *css.Parser): css.Result(ColorScheme) {
         let res = ColorScheme{};
         const ident_res = input.expectIdent();
         if (ident_res == .err) return { err: ident_res.err };
@@ -57,7 +57,7 @@ const Url = css.css_values.url.Url;
         return { result: res };
     }
 
-    pub fn toCss(dest: *Printer): css.PrintErr!void {
+    fn toCss(dest: *Printer): css.PrintErr!void {
         const empty = ColorScheme{};
         if (std.meta.eql(_, empty)) {
             return dest.writeStr("normal");
@@ -113,12 +113,12 @@ pub struct CursorImage {
 pub const CursorKeyword = css.DefineEnumProperty(@compileError(css.todo_stuff.depth));
 
 /// A value for the [caret-color](https://www.w3.org/TR/2021/WD-css-ui-4-20210316/#caret-color) property.
-pub const ColorOrAuto = union(enum) {
+pub union(enum) ColorOrAuto {
     /// The `currentColor`, adjusted by the UA to ensure contrast against the background.
-    auto,
+    auto: void,
     /// A color.
     color: CssColor,
-};
+}
 
 /// A value for the [caret-shape](https://www.w3.org/TR/2021/WD-css-ui-4-20210316/#caret-shape) property.
 pub const CaretShape = css.DefineEnumProperty(@compileError(css.todo_stuff.depth));
@@ -130,30 +130,30 @@ pub const Caret = @compileError(css.todo_stuff.depth);
 pub const UserSelect = css.DefineEnumProperty(@compileError(css.todo_stuff.depth));
 
 /// A value for the [appearance](https://www.w3.org/TR/2021/WD-css-ui-4-20210316/#appearance-switching) property.
-pub const Appearance = union(enum) {
-    none,
-    auto,
-    textfield,
-    menulist_button,
-    button,
-    checkbox,
-    listbox,
-    menulist,
-    meter,
-    progress_bar,
-    push_button,
-    radio,
-    searchfield,
-    slider_horizontal,
-    square_button,
-    textarea,
+pub union(enum) Appearance {
+    none: void,
+    auto: void,
+    textfield: void,
+    menulist_button: void,
+    button: void,
+    checkbox: void,
+    listbox: void,
+    menulist: void,
+    meter: void,
+    progress_bar: void,
+    push_button: void,
+    radio: void,
+    searchfield: void,
+    slider_horizontal: void,
+    square_button: void,
+    textarea: void,
     non_standard: []const u8,
-};
+}
 
 pub struct ColorSchemeHandler {
-    fn handleProperty(_: *@This(), property: *const css.Property, dest: *css.DeclarationList, context: *css.PropertyHandlerContext): bool {
+    fn handleProperty(*_, property: *const css.Property, dest: *css.DeclarationList, context: *css.PropertyHandlerContext): bool {
         switch (property.*) {
-            .@"color-scheme" => |*color_scheme_| {
+            .@"color-scheme" *color_scheme_ => {
                 const color_scheme: *const ColorScheme = color_scheme_;
                 if (!context.targets.isCompatible(css.compat.Feature.light_dark)) {
                     if (color_scheme.light) {
@@ -188,7 +188,7 @@ pub struct ColorSchemeHandler {
         }
     }
 
-    fn finalize(_: *@This(), _: *css.DeclarationList, _: *css.PropertyHandlerContext)  {}
+    fn finalize(*_, _: *css.DeclarationList, _: *css.PropertyHandlerContext) {}
 }
 
 fn defineVar(allocator: Allocator, name: []const u8, value: css.Token): css.Property {

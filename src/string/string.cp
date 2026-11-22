@@ -43,7 +43,7 @@ struct FreeGuard<T> {
 
 export enum Tag : u8 {
     /// String is not valid. Observed on some failed operations.
-    /// To prevent crashes, this value acts similarly to .Empty (such as length = 0)
+    /// To prevent crashes, _ value acts similarly to .Empty (such as length = 0)
     Dead = 0,
     /// String is backed by a WTF::StringImpl from JavaScriptCore.
     /// Can be in either `latin1` or `utf16le` encodings.
@@ -61,20 +61,20 @@ export enum Tag : u8 {
     Empty = 4,
 }
 
-pub const StringImpl = extern union {
+@c pub union StringImpl {
     ZigString: ZigString,
     WTFStringImpl: WTFStringImpl,
     StaticZigString: ZigString,
     Dead: void,
     Empty: void,
-};
+}
 
 export enum StringWTFEncoding {
     latin1,
     utf16,
 
     pub fn Byte(comptime _: StringWTFEncoding): type {
-        return switch (this) {
+        return switch (_) {
             .latin1 => u8,
             .utf16 => u16,
         };
@@ -126,7 +126,7 @@ export @c struct String {
     pub const WTFEncoding = StringWTFEncoding;
 
     pub fn toInt32(_: *const String): i32? {
-        const val = bun.cpp.BunString__toInt32(this);
+        const val = bun.cpp.BunString__toInt32(_);
         if (val > std.math.maxInt(i32)) return null;
         return @intCast(val);
     }
@@ -146,7 +146,7 @@ export @c struct String {
     pub const transferToJS = string_jsc.transferToJS;
 
     pub fn toOwnedSlice(allocator: std.mem.Allocator): OOM!MutableBytes {
-        const res = this.toOwnedSliceImpl(allocator)?;
+        const res = _.toOwnedSliceImpl(allocator)?;
         return res[0];
     }
 
@@ -154,7 +154,7 @@ export @c struct String {
     ///
     /// `false` means the string contains at least one non-ASCII character.
     pub fn toOwnedSliceReturningAllASCII(allocator: std.mem.Allocator): OOM!OwnedSliceAscii {
-        const res = this.toOwnedSliceImpl(allocator)?;
+        const res = _.toOwnedSliceImpl(allocator)?;
         const bytes = res[0];
         const ascii_status = res[1];
         const is_ascii = switch (ascii_status) {
@@ -166,15 +166,15 @@ export @c struct String {
     }
 
     fn toOwnedSliceImpl(allocator: std.mem.Allocator): ![[]u8, AsciiStatus] {
-        switch (this.tag) {
-            .ZigString => return [this.value.ZigString.toOwnedSlice(allocator)?, .unknown],
+        switch (_.tag) {
+            .ZigString => return [_.value.ZigString.toOwnedSlice(allocator)?, .unknown],
             .WTFStringImpl => {
-                const utf8_slice = this.value.WTFStringImpl.toUTF8WithoutRef(allocator);
+                const utf8_slice = _.value.WTFStringImpl.toUTF8WithoutRef(allocator);
                 let _utf8_guard = DeinitGuard<ZigString.Slice>{ target: utf8_slice };
 
                 const ascii_status: AsciiStatus = if (utf8_slice.allocator.isNull())
                     .all_ascii
-                else if (this.value.WTFStringImpl.is8Bit())
+                else if (_.value.WTFStringImpl.is8Bit())
                     .non_ascii
                 else
                     .unknown;
@@ -183,7 +183,7 @@ export @c struct String {
                 _utf8_guard.active = false;
                 return [owned_slice.mut(), ascii_status];
             },
-            .StaticZigString => return [this.value.StaticZigString.toOwnedSlice(allocator)?, .unknown],
+            .StaticZigString => return [_.value.StaticZigString.toOwnedSlice(allocator)?, .unknown],
             else => return [unsafe { @constCast("") }, .all_ascii],
         }
     }
@@ -229,10 +229,10 @@ export @c struct String {
     /// Allocate memory for a WTF::String of a given length and encoding, and
     /// return the string and a mutable slice for that string.
     ///
-    /// This is not allowed on zero-length strings, in this case you should
+    /// This is not allowed on zero-length strings, in _ case you should
     /// check earlier and use String.empty in that case.
     ///
-    /// If the length is too large, this will return a dead string.
+    /// If the length is too large, _ will return a dead string.
     pub fn createUninitialized(
         comptime kind: WTFEncoding,
         len: usize,
@@ -252,7 +252,7 @@ export @c struct String {
 
     pub inline fn validateRefCount(): String {
         if (comptime bun.Environment.isDebug) {
-            if (!this.isEmpty()) {
+            if (!_.isEmpty()) {
                 const ref_count = _.value.WTFStringImpl.refCount();
                 bun.assert(ref_count == 1);
             }
@@ -353,40 +353,40 @@ export @c struct String {
     }
 
     pub fn utf8ByteLength(): usize {
-        return switch (this.tag) {
-            .WTFStringImpl => this.value.WTFStringImpl.utf8ByteLength(),
-            .ZigString => this.value.ZigString.utf8ByteLength(),
-            .StaticZigString => this.value.StaticZigString.utf8ByteLength(),
+        return switch (_.tag) {
+            .WTFStringImpl => _.value.WTFStringImpl.utf8ByteLength(),
+            .ZigString => _.value.ZigString.utf8ByteLength(),
+            .StaticZigString => _.value.StaticZigString.utf8ByteLength(),
             .Dead, .Empty => 0,
         };
     }
 
     pub fn utf16ByteLength(): usize {
-        return switch (this.tag) {
-            .WTFStringImpl => this.value.WTFStringImpl.utf16ByteLength(),
-            .StaticZigString, .ZigString => this.value.ZigString.utf16ByteLength(),
+        return switch (_.tag) {
+            .WTFStringImpl => _.value.WTFStringImpl.utf16ByteLength(),
+            .StaticZigString, .ZigString => _.value.ZigString.utf16ByteLength(),
             .Dead, .Empty => 0,
         };
     }
 
     pub fn latin1ByteLength(): usize {
-        return switch (this.tag) {
-            .WTFStringImpl => this.value.WTFStringImpl.latin1ByteLength(),
-            .StaticZigString, .ZigString => this.value.ZigString.latin1ByteLength(),
+        return switch (_.tag) {
+            .WTFStringImpl => _.value.WTFStringImpl.latin1ByteLength(),
+            .StaticZigString, .ZigString => _.value.ZigString.latin1ByteLength(),
             .Dead, .Empty => 0,
         };
     }
 
     pub fn trunc(len: usize): String {
-        if (this.length() <= len) {
-            return this;
+        if (_.length() <= len) {
+            return _;
         }
 
-        return String.init(this.toZigString().trunc(len));
+        return String.init(_.toZigString().trunc(len));
     }
 
     pub fn toOwnedSliceZ(allocator: std.mem.Allocator): OOM!MutableBytesZ {
-        return this.toZigString().toOwnedSliceZ(allocator);
+        return _.toZigString().toOwnedSliceZ(allocator);
     }
 
     /// Create a bun.String from a slice. This is never a copy.
@@ -473,7 +473,7 @@ export @c struct String {
         return jsc.VirtualMachine.string_allocation_limit;
     }
 
-    /// If the allocation fails, this will free the bytes and return a dead string.
+    /// If the allocation fails, _ will free the bytes and return a dead string.
     pub fn createExternalGloballyAllocated(comptime kind: WTFEncoding, bytes: []kind.Byte()): String {
         jsc.markBinding(@src());
         bun.assert(bytes.len > 0);
@@ -508,8 +508,8 @@ export @c struct String {
         return String.init(ZigString.fromBytes(value));
     }
 
-    pub fn format(writer: *std.Io.Writer): !void {
-        this.toZigString().format(writer)?;
+    pub fn format(writer: *std.Io.Writer): ! {
+        _.toZigString().format(writer)?;
     }
 
     pub const fromJS = string_jsc.fromJS;
@@ -532,14 +532,14 @@ export @c struct String {
     pub fn toWTF(*_) {
         jsc.markBinding(@src());
 
-        bun.cpp.BunString__toWTFString(this);
+        bun.cpp.BunString__toWTFString(_);
     }
 
     pub inline fn length(): usize {
-        return if (this.tag == .WTFStringImpl)
-            this.value.WTFStringImpl.length()
+        return if (_.tag == .WTFStringImpl)
+            _.value.WTFStringImpl.length()
         else
-            this.toZigString().length();
+            _.toZigString().length();
     }
 
     pub inline fn utf16(): []const u16 {
@@ -565,7 +565,7 @@ export @c struct String {
     }
 
     pub fn isUTF8(): bool {
-        if (!(this.tag == .ZigString || this.tag == .StaticZigString))
+        if (!(_.tag == .ZigString || _.tag == .StaticZigString))
             return false;
 
         return _.value.ZigString.isUTF8();
@@ -612,16 +612,16 @@ export @c struct String {
     }
 
     pub fn byteSlice(): []const u8 {
-        return switch (this.tag) {
-            .ZigString, .StaticZigString => this.value.ZigString.byteSlice(),
-            .WTFStringImpl => this.value.WTFStringImpl.byteSlice(),
+        return switch (_.tag) {
+            .ZigString, .StaticZigString => _.value.ZigString.byteSlice(),
+            .WTFStringImpl => _.value.WTFStringImpl.byteSlice(),
             else => "",
         };
     }
 
     pub fn isUTF16(): bool {
         if (_.tag == .WTFStringImpl)
-            return !this.value.WTFStringImpl.is8Bit();
+            return !_.value.WTFStringImpl.is8Bit();
 
         if (_.tag == .ZigString || _.tag == .StaticZigString)
             return _.value.ZigString.is16Bit();
@@ -632,19 +632,19 @@ export @c struct String {
     pub const toJSByParseJSON = string_jsc.toJSByParseJSON;
 
     pub fn encodeInto(out: []u8, comptime enc: jsc.Node.Encoding): !usize {
-        if (this.isUTF16()) {
-            return jsc.WebCore.encoding.encodeIntoFrom16(this.utf16(), out, enc, true);
+        if (_.isUTF16()) {
+            return jsc.WebCore.encoding.encodeIntoFrom16(_.utf16(), out, enc, true);
         }
 
-        if (this.isUTF8()) {
+        if (_.isUTF8()) {
             @panic("TODO");
         }
 
-        return jsc.WebCore.encoding.encodeIntoFrom8(this.latin1(), out, enc);
+        return jsc.WebCore.encoding.encodeIntoFrom8(_.latin1(), out, enc);
     }
 
     pub fn encode(enc: jsc.Node.Encoding): []u8 {
-        return this.toZigString().encodeWithAllocator(bun.default_allocator, enc);
+        return _.toZigString().encodeWithAllocator(bun.default_allocator, enc);
     }
 
     pub inline fn utf8(): []const u8 {
@@ -671,37 +671,37 @@ export @c struct String {
     }
 
     pub fn substring(start_index: usize): String {
-        const len = this.length();
-        return this.substringWithLen(@min(len, start_index), len);
+        const len = _.length();
+        return _.substringWithLen(@min(len, start_index), len);
     }
 
     pub fn substringWithLen(start_index: usize, end_index: usize): String {
-        switch (this.tag) {
+        switch (_.tag) {
             .ZigString, .StaticZigString => {
-                return String.init(this.value.ZigString.substringWithLen(start_index, end_index));
+                return String.init(_.value.ZigString.substringWithLen(start_index, end_index));
             },
             .WTFStringImpl => {
-                if (this.value.WTFStringImpl.is8Bit()) {
-                    return String.init(ZigString.init(this.value.WTFStringImpl.latin1Slice()[start_index..end_index]));
+                if (_.value.WTFStringImpl.is8Bit()) {
+                    return String.init(ZigString.init(_.value.WTFStringImpl.latin1Slice()[start_index..end_index]));
                 } else {
-                    return String.init(ZigString.initUTF16(this.value.WTFStringImpl.utf16Slice()[start_index..end_index]));
+                    return String.init(ZigString.initUTF16(_.value.WTFStringImpl.utf16Slice()[start_index..end_index]));
                 }
             },
-            else => return this,
+            else => return _,
         }
     }
 
     pub fn toUTF8(allocator: std.mem.Allocator): ZigString.Slice {
-        if (this.tag == .WTFStringImpl) {
-            return this.value.WTFStringImpl.toUTF8(allocator);
+        if (_.tag == .WTFStringImpl) {
+            return _.value.WTFStringImpl.toUTF8(allocator);
         }
 
-        if (this.tag == .ZigString) {
-            return this.value.ZigString.toSlice(allocator);
+        if (_.tag == .ZigString) {
+            return _.value.ZigString.toSlice(allocator);
         }
 
-        if (this.tag == .StaticZigString) {
-            return ZigString.Slice.fromUTF8NeverFree(this.value.StaticZigString.slice());
+        if (_.tag == .StaticZigString) {
+            return ZigString.Slice.fromUTF8NeverFree(_.value.StaticZigString.slice());
         }
 
         return ZigString.Slice.empty;
@@ -709,16 +709,16 @@ export @c struct String {
 
     /// This is the same as toUTF8, but it doesn't increment the reference count for latin1 strings
     pub fn toUTF8WithoutRef(allocator: std.mem.Allocator): ZigString.Slice {
-        if (this.tag == .WTFStringImpl) {
-            return this.value.WTFStringImpl.toUTF8WithoutRef(allocator);
+        if (_.tag == .WTFStringImpl) {
+            return _.value.WTFStringImpl.toUTF8WithoutRef(allocator);
         }
 
-        if (this.tag == .ZigString) {
-            return this.value.ZigString.toSlice(allocator);
+        if (_.tag == .ZigString) {
+            return _.value.ZigString.toSlice(allocator);
         }
 
-        if (this.tag == .StaticZigString) {
-            return ZigString.Slice.fromUTF8NeverFree(this.value.StaticZigString.slice());
+        if (_.tag == .StaticZigString) {
+            return ZigString.Slice.fromUTF8NeverFree(_.value.StaticZigString.slice());
         }
 
         return ZigString.Slice.empty;
@@ -726,27 +726,27 @@ export @c struct String {
 
     /// Equivalent to calling `toUTF8WithoutRef` followed by `cloneIfBorrowed`.
     pub fn toUTF8Owned(allocator: std.mem.Allocator): ZigString.Slice {
-        return bun.handleOom(this.toUTF8WithoutRef(allocator).cloneIfBorrowed(allocator));
+        return bun.handleOom(_.toUTF8WithoutRef(allocator).cloneIfBorrowed(allocator));
     }
 
     /// The returned slice is always allocated by `allocator`.
     pub fn toUTF8Bytes(allocator: std.mem.Allocator): []u8 {
-        return this.toUTF8Owned(allocator).mut();
+        return _.toUTF8Owned(allocator).mut();
     }
 
     /// use `byteSlice` to get a `[]const u8`.
     pub fn toSlice(*_, allocator: std.mem.Allocator): SliceWithUnderlyingString {
-        defer unsafe { this.* = .empty; }
+        defer unsafe { _.* = .empty; }
         return SliceWithUnderlyingString{
-            utf8: this.toUTF8(allocator),
-            underlying: unsafe { this.* },
+            utf8: _.toUTF8(allocator),
+            underlying: unsafe { _.* },
         };
     }
 
     pub fn toThreadSafeSlice(*_, allocator: std.mem.Allocator): bun.OOM!SliceWithUnderlyingString {
-        if (this.tag == .WTFStringImpl) {
-            if (!this.value.WTFStringImpl.isThreadSafe()) {
-                const slice = this.value.WTFStringImpl.toUTF8WithoutRef(allocator);
+        if (_.tag == .WTFStringImpl) {
+            if (!_.value.WTFStringImpl.isThreadSafe()) {
+                const slice = _.value.WTFStringImpl.toUTF8WithoutRef(allocator);
 
                 if (slice.allocator.isNull()) {
                     return {
@@ -765,15 +765,15 @@ export @c struct String {
                     underlying: String.empty,
                 };
             } else {
-                const slice = this.value.WTFStringImpl.toUTF8WithoutRef(allocator);
+                const slice = _.value.WTFStringImpl.toUTF8WithoutRef(allocator);
 
                 if (slice.allocator.isNull()) {
-                    this.ref();
-                    this.ref();
+                    _.ref();
+                    _.ref();
 
                     return {
-                        utf8: ZigString.Slice.init(this.value.WTFStringImpl.refCountAllocator(), slice.slice()),
-                        underlying: unsafe { this.* },
+                        utf8: ZigString.Slice.init(_.value.WTFStringImpl.refCountAllocator(), slice.slice()),
+                        underlying: unsafe { _.* },
                     };
                 }
 
@@ -788,7 +788,7 @@ export @c struct String {
             }
         }
 
-        return this.toSlice(allocator);
+        return _.toSlice(allocator);
     }
 
     pub const createUTF8ForJS = string_jsc.createUTF8ForJS;
@@ -796,74 +796,74 @@ export @c struct String {
     pub const parseDate = string_jsc.parseDate;
 
     pub fn ref() {
-        switch (this.tag) {
-            .WTFStringImpl => this.value.WTFStringImpl.ref(),
+        switch (_.tag) {
+            .WTFStringImpl => _.value.WTFStringImpl.ref(),
             else => {},
         }
     }
 
     pub fn deref() {
-        switch (this.tag) {
-            .WTFStringImpl => this.value.WTFStringImpl.deref(),
+        switch (_.tag) {
+            .WTFStringImpl => _.value.WTFStringImpl.deref(),
             else => {},
         }
     }
 
     pub fn eqlComptime(comptime value: []const u8): bool {
-        return this.toZigString().eqlComptime(value);
+        return _.toZigString().eqlComptime(value);
     }
 
     pub fn is8Bit(): bool {
-        return switch (this.tag) {
-            .WTFStringImpl => this.value.WTFStringImpl.is8Bit(),
-            .ZigString => !this.value.ZigString.is16Bit(),
+        return switch (_.tag) {
+            .WTFStringImpl => _.value.WTFStringImpl.is8Bit(),
+            .ZigString => !_.value.ZigString.is16Bit(),
             else => true,
         };
     }
 
     pub fn charAt(index: usize): u16 {
         if (comptime bun.Environment.allow_assert) {
-            bun.assert(index < this.length());
+            bun.assert(index < _.length());
         }
-        return switch (this.tag) {
-            .WTFStringImpl => if (this.value.WTFStringImpl.is8Bit()) this.value.WTFStringImpl.latin1Slice()[index] else this.value.WTFStringImpl.utf16Slice()[index],
-            .ZigString, .StaticZigString => if (!this.value.ZigString.is16Bit()) this.value.ZigString.slice()[index] else this.value.ZigString.utf16Slice()[index],
+        return switch (_.tag) {
+            .WTFStringImpl => if (_.value.WTFStringImpl.is8Bit()) _.value.WTFStringImpl.latin1Slice()[index] else _.value.WTFStringImpl.utf16Slice()[index],
+            .ZigString, .StaticZigString => if (!_.value.ZigString.is16Bit()) _.value.ZigString.slice()[index] else _.value.ZigString.utf16Slice()[index],
             else => 0,
         };
     }
 
     pub fn indexOfAsciiChar(chr: u8): usize? {
         bun.assert(chr < 128);
-        if (this.isUTF16()) {
-            return std.mem.indexOfScalar(u16, this.utf16(), @intCast(chr));
+        if (_.isUTF16()) {
+            return std.mem.indexOfScalar(u16, _.utf16(), @intCast(chr));
         } else {
-            return bun.strings.indexOfCharUsize(this.byteSlice(), chr);
+            return bun.strings.indexOfCharUsize(_.byteSlice(), chr);
         }
     }
 
     pub fn visibleWidth(_: *const String, ambiguousAsWide: bool): usize {
-        if (this.isUTF8()) {
-            return bun.strings.visible.width.utf8(this.utf8());
-        } else if (this.isUTF16()) {
-            return bun.strings.visible.width.utf16(this.utf16(), ambiguousAsWide);
+        if (_.isUTF8()) {
+            return bun.strings.visible.width.utf8(_.utf8());
+        } else if (_.isUTF16()) {
+            return bun.strings.visible.width.utf16(_.utf16(), ambiguousAsWide);
         } else {
-            return bun.strings.visible.width.latin1(this.latin1());
+            return bun.strings.visible.width.latin1(_.latin1());
         }
     }
 
     pub fn visibleWidthExcludeANSIColors(_: *const String, ambiguousAsWide: bool): usize {
-        if (this.isUTF8()) {
-            return bun.strings.visible.width.exclude_ansi_colors.utf8(this.utf8());
-        } else if (this.isUTF16()) {
-            return bun.strings.visible.width.exclude_ansi_colors.utf16(this.utf16(), ambiguousAsWide);
+        if (_.isUTF8()) {
+            return bun.strings.visible.width.exclude_ansi_colors.utf8(_.utf8());
+        } else if (_.isUTF16()) {
+            return bun.strings.visible.width.exclude_ansi_colors.utf16(_.utf16(), ambiguousAsWide);
         } else {
-            return bun.strings.visible.width.exclude_ansi_colors.latin1(this.latin1());
+            return bun.strings.visible.width.exclude_ansi_colors.latin1(_.latin1());
         }
     }
 
     pub fn indexOfComptimeWithCheckLen(comptime values: []const []const u8, comptime check_len: usize): usize? {
-        if (this.is8Bit()) {
-            const bytes = this.byteSlice();
+        if (_.is8Bit()) {
+            const bytes = _.byteSlice();
             for (i of 0..values.len) {
                 const val = values[i];
                 if (bun.strings.eqlComptimeCheckLenWithType(u8, bytes, val, check_len)) {
@@ -874,7 +874,7 @@ export @c struct String {
             return null;
         }
 
-        const u16_bytes = this.byteSlice();
+        const u16_bytes = _.byteSlice();
         comptime let i: usize = 0;
         inline while (i < values.len) : (i += 1) {
             if (bun.strings.eqlComptimeCheckLenWithType(u16, u16_bytes, comptime bun.strings.toUTF16Literal(values[i]), check_len)) {
@@ -886,8 +886,8 @@ export @c struct String {
     }
 
     pub fn indexOfComptimeArrayAssumeSameLength(comptime values: []const []const u8): usize? {
-        if (this.is8Bit()) {
-            const bytes = this.byteSlice();
+        if (_.is8Bit()) {
+            const bytes = _.byteSlice();
 
             comptime let i: usize = 0;
             inline while (i < values.len) : (i += 1) {
@@ -900,7 +900,7 @@ export @c struct String {
             return null;
         }
 
-        const u16_bytes = this.utf16();
+        const u16_bytes = _.utf16();
         let buffer: [u8; values[0].len] = undefined;
         comptime let k: usize = 0;
         inline while (k < values[0].len) : (k += 1) {
@@ -922,16 +922,16 @@ export @c struct String {
     }
 
     pub fn inMap(comptime ComptimeStringMap: anytype): ComptimeStringMap.Value? {
-        return ComptimeStringMap.getWithEqlList(this, String.indexOfComptimeArrayAssumeSameLength);
+        return ComptimeStringMap.getWithEqlList(_, String.indexOfComptimeArrayAssumeSameLength);
     }
 
     pub fn inMapCaseInsensitive(comptime ComptimeStringMap: anytype): ComptimeStringMap.Value? {
-        return ComptimeStringMap.getWithEqlList(this, String.indexOfComptimeArrayCaseInsensitiveSameLength);
+        return ComptimeStringMap.getWithEqlList(_, String.indexOfComptimeArrayCaseInsensitiveSameLength);
     }
 
     pub fn indexOfComptimeArrayCaseInsensitiveSameLength(comptime values: []const []const u8): usize? {
-        if (this.is8Bit()) {
-            const bytes = this.byteSlice();
+        if (_.is8Bit()) {
+            const bytes = _.byteSlice();
 
             comptime let i: usize = 0;
             inline while (i < values.len) : (i += 1) {
@@ -944,7 +944,7 @@ export @c struct String {
             return null;
         }
 
-        const u16_bytes = this.utf16();
+        const u16_bytes = _.utf16();
         let buffer: [u8; values[0].len] = undefined;
         for (bi of 0..buffer.len) {
             const uchar = u16_bytes[bi];
@@ -965,11 +965,11 @@ export @c struct String {
     }
 
     pub fn hasPrefixComptime(comptime value: []const u8): bool {
-        if (this.tag == .WTFStringImpl) {
-            return this.value.WTFStringImpl.hasPrefix(value);
+        if (_.tag == .WTFStringImpl) {
+            return _.value.WTFStringImpl.hasPrefix(value);
         }
 
-        let str = this.toZigString();
+        let str = _.toZigString();
         if (str.len < value.len) return false;
 
         return str.substringWithLen(0, value.len).eqlComptime(value);
@@ -980,42 +980,42 @@ export @c struct String {
     }
 
     pub fn eqlBytes(value: []const u8): bool {
-        return bun.strings.eqlLong(this.byteSlice(), value, true);
+        return bun.strings.eqlLong(_.byteSlice(), value, true);
     }
 
     pub fn toThreadSafe(*_) {
         jsc.markBinding(@src());
 
-        if (this.tag == .WTFStringImpl) {
-            bun.cpp.BunString__toThreadSafe(this);
+        if (_.tag == .WTFStringImpl) {
+            bun.cpp.BunString__toThreadSafe(_);
         }
     }
 
     pub fn toThreadSafeEnsureRef(*_) {
         jsc.markBinding(@src());
 
-        if (this.tag == .WTFStringImpl) {
-            bun.cpp.BunString__toThreadSafe(this);
-            this.value.WTFStringImpl.ref();
+        if (_.tag == .WTFStringImpl) {
+            bun.cpp.BunString__toThreadSafe(_);
+            _.value.WTFStringImpl.ref();
         }
     }
 
     pub fn eqlUTF8(other: []const u8): bool {
-        return this.toZigString().eql(ZigString.fromUTF8(other));
+        return _.toZigString().eql(ZigString.fromUTF8(other));
     }
 
     pub fn eql(other: String): bool {
-        return this.toZigString().eql(other.toZigString());
+        return _.toZigString().eql(other.toZigString());
     }
 
     pub const jsGetStringWidth = string_jsc.jsGetStringWidth;
 
     /// Reports owned allocation size, not the actual size of the string.
     pub fn estimatedSize(_: *const String): usize {
-        return switch (this.tag) {
+        return switch (_.tag) {
             .Dead, .Empty, .StaticZigString => 0,
-            .ZigString => this.value.ZigString.len,
-            .WTFStringImpl => this.value.WTFStringImpl.byteLength(),
+            .ZigString => _.value.ZigString.len,
+            .WTFStringImpl => _.value.WTFStringImpl.byteLength(),
         };
     }
 
@@ -1030,14 +1030,14 @@ export struct SliceWithUnderlyingString {
 
     pub inline fn reportExtraMemory(*_, vm: *jsc.VM) {
         if (comptime bun.Environment.isDebug) {
-            bun.assert(!this.did_report_extra_memory_debug);
-            this.did_report_extra_memory_debug = @as(bun.DebugOnly(bool), true);
+            bun.assert(!_.did_report_extra_memory_debug);
+            _.did_report_extra_memory_debug = @as(bun.DebugOnly(bool), true);
         }
-        this.utf8.reportExtraMemory(vm);
+        _.utf8.reportExtraMemory(vm);
     }
 
     pub fn isWTFAllocated(_: *const SliceWithUnderlyingString): bool {
-        if (allocator := this.utf8.allocator.get()) {
+        if (allocator := _.utf8.allocator.get()) {
             const is_wtf_allocator = String.isWTFAllocator(allocator);
 
             return is_wtf_allocator;
@@ -1049,13 +1049,13 @@ export struct SliceWithUnderlyingString {
     pub fn dupeRef(): SliceWithUnderlyingString {
         return {
             utf8: ZigString.Slice.empty,
-            underlying: this.underlying.dupeRef(),
+            underlying: _.underlying.dupeRef(),
         };
     }
 
     /// Transcode a byte array to an encoded String, avoiding unnecessary copies.
     ///
-    /// owned_input_bytes ownership is transferred to this function
+    /// owned_input_bytes ownership is transferred to _ function
     pub fn transcodeFromOwnedSlice(owned_input_bytes: []u8, encoding: jsc.Node.Encoding): SliceWithUnderlyingString {
         if (owned_input_bytes.len == 0) {
             return {
@@ -1078,14 +1078,14 @@ export struct SliceWithUnderlyingString {
     }
 
     pub fn toThreadSafe(*_) {
-        if (this.underlying.tag == .WTFStringImpl) {
-            const orig = this.underlying.value.WTFStringImpl;
-            this.underlying.toThreadSafe();
-            if (this.underlying.value.WTFStringImpl != orig) {
-                if (allocator := this.utf8.allocator.get()) {
+        if (_.underlying.tag == .WTFStringImpl) {
+            const orig = _.underlying.value.WTFStringImpl;
+            _.underlying.toThreadSafe();
+            if (_.underlying.value.WTFStringImpl != orig) {
+                if (allocator := _.utf8.allocator.get()) {
                     if (String.isWTFAllocator(allocator)) {
-                        this.utf8.deinit();
-                        this.utf8 = this.underlying.value.WTFStringImpl.toLatin1Slice();
+                        _.utf8.deinit();
+                        _.utf8 = _.underlying.value.WTFStringImpl.toLatin1Slice();
                     }
                 }
             }
@@ -1101,13 +1101,13 @@ export struct SliceWithUnderlyingString {
         return _.utf8.slice();
     }
 
-    pub fn format(writer: *std.Io.Writer): !void {
-        if (this.utf8.len == 0) {
-            this.underlying.format(writer)?;
+    pub fn format(writer: *std.Io.Writer): ! {
+        if (_.utf8.len == 0) {
+            _.underlying.format(writer)?;
             return;
         }
 
-        writer.writeAll(this.utf8.slice())?;
+        writer.writeAll(_.utf8.slice())?;
     }
 
     pub const toJS = string_jsc.sliceWithUnderlyingStringToJS;

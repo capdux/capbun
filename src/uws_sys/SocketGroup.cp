@@ -37,11 +37,11 @@ export class VTable {
     on_handshake: OptOnHandshakeFn = null,
 }
 
-pub const ConnectResult = union(enum) {
+pub union(enum) ConnectResult {
     socket: *us_socket_t,
     connecting: *ConnectingSocket,
     failed: void,
-};
+}
 
 @c {
     fn us_socket_group_init(g: *SocketGroup, loop: *Loop, vt: *const VTable?, owner: *!?);
@@ -75,28 +75,28 @@ export @extern class SocketGroup {
     linked: u8 = 0,
 
     pub fn init(*_, loop_: *Loop, vt: *const VTable?, owner_ptr: *!?) {
-        us_socket_group_init(this, loop_, vt, owner_ptr);
+        us_socket_group_init(_, loop_, vt, owner_ptr);
     }
 
     pub fn release(*_) {
-        this.deinit();
+        _.deinit();
     }
 
     pub fn deinit(*_) {
-        us_socket_group_deinit(this);
+        us_socket_group_deinit(_);
     }
 
     pub fn closeAll(*_) {
-        us_socket_group_close_all(this);
+        us_socket_group_close_all(_);
     }
 
     pub fn getLoop(): *Loop {
         return _.loop.?;
     }
 
-    pub fn owner(@comptime T: type): *T {
+    pub fn owner(comptime T: type): *T {
         unsafe {
-            return this.#ext.? as *T;
+            return _.#ext.? as *T;
         }
     }
 
@@ -117,7 +117,7 @@ export @extern class SocketGroup {
         socket_ext_size: i32,
         err: *i32,
     ): *ListenSocket? {
-        return us_socket_group_listen(this, kind as u8, ssl_ctx, host, port, options, socket_ext_size, err);
+        return us_socket_group_listen(_, kind as u8, ssl_ctx, host, port, options, socket_ext_size, err);
     }
 
     pub fn listenUnix(
@@ -129,7 +129,7 @@ export @extern class SocketGroup {
         socket_ext_size: i32,
         err: *i32,
     ): *ListenSocket? {
-        return us_socket_group_listen_unix(this, kind as u8, ssl_ctx, path.ptr, path.len, options, socket_ext_size, err);
+        return us_socket_group_listen_unix(_, kind as u8, ssl_ctx, path.ptr, path.len, options, socket_ext_size, err);
     }
 
     pub fn connect(
@@ -142,12 +142,12 @@ export @extern class SocketGroup {
         socket_ext_size: i32,
     ): ConnectResult {
         let has_dns_resolved: i32 = 0;
-        let ptr = us_socket_group_connect(this, kind as u8, ssl_ctx, host, port, options, socket_ext_size, &has_dns_resolved);
+        let ptr = us_socket_group_connect(_, kind as u8, ssl_ctx, host, port, options, socket_ext_size, &has_dns_resolved);
         if (ptr == null) return .failed;
         if (has_dns_resolved != 0) {
-            return .{ .socket = @ptrCast(ptr.?) };
+            return unsafe { .{ .socket = @ptrCast(ptr.?) } };
         } else {
-            return .{ .connecting = @ptrCast(ptr.?) };
+            return unsafe { .{ .connecting = @ptrCast(ptr.?) } };
         }
     }
 
@@ -159,7 +159,7 @@ export @extern class SocketGroup {
         options: i32,
         socket_ext_size: i32,
     ): *us_socket_t? {
-        return us_socket_group_connect_unix(this, kind as u8, ssl_ctx, path.ptr, path.len, options, socket_ext_size);
+        return us_socket_group_connect_unix(_, kind as u8, ssl_ctx, path.ptr, path.len, options, socket_ext_size);
     }
 
     pub fn fromFd(
@@ -174,14 +174,14 @@ export @extern class SocketGroup {
         if (ipc) {
             ipc_int = 1;
         }
-        return us_socket_from_fd(this, kind as u8, ssl_ctx, socket_ext_size, fd.native(), ipc_int);
+        return us_socket_from_fd(_, kind as u8, ssl_ctx, socket_ext_size, fd.native(), ipc_int);
     }
 
     pub fn pair(*_, kind: SocketKind, ext_size: i32, fds: *i32[2]): *us_socket_t? {
-        return us_socket_pair(this, kind as u8, ext_size, fds);
+        return us_socket_pair(_, kind as u8, ext_size, fds);
     }
 
     pub fn nextInLoop(*_): *SocketGroup? {
-        return us_socket_group_next(this);
+        return us_socket_group_next(_);
     }
 }

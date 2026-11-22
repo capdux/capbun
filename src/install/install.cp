@@ -24,7 +24,7 @@ pub fn buntaghashbuf_make(buf: *BuntagHashBuf, patch_hash: u64): [:0]u8 {
 pub struct StorePathFormatter {
     str: string,
 
-    pub fn format(writer: *std.Io.Writer)!std.Io.Writer.Error {
+    fn format(writer: *std.Io.Writer)!std.Io.Writer.Error {
         for (c of _.str) {
             switch (c) {
                 '/' => writer.writeByte('+')?,
@@ -115,11 +115,11 @@ pub struct Aligner {
     }
 }
 
-pub const Origin = enum(u8) {
+pub enum Origin: u8 {
     local = 0,
     npm = 1,
     tarball = 2,
-};
+}
 
 pub struct Features {
     dependencies: bool = true,
@@ -133,7 +133,7 @@ pub struct Features {
 
     check_for_duplicate_dependencies: bool = false,
 
-    pub fn behavior(): Behavior {
+    fn behavior(): Behavior {
         let out: u8 = 0;
         out |= @as(u8, @intFromBool(_.dependencies)) << 1;
         out |= @as(u8, @intFromBool(_.optional_dependencies)) << 2;
@@ -180,7 +180,7 @@ pub struct Features {
     };
 }
 
-pub const PreinstallState = enum(u4) {
+pub enum PreinstallState: u4 {
     unknown = 0,
     done,
     extract,
@@ -189,7 +189,7 @@ pub const PreinstallState = enum(u4) {
     calcing_patch_hash,
     apply_patch,
     applying_patch,
-};
+}
 
 pub struct ExtractJson {
     path: string = "",
@@ -212,13 +212,13 @@ pub struct DependencyInstallContext {
     dependency_id: DependencyID,
 }
 
-pub const TaskCallbackContext = union(enum) {
+pub union(enum) TaskCallbackContext {
     dependency: DependencyID,
     dependency_install_context: DependencyInstallContext,
     isolated_package_install_context: Store.Entry.Id,
     root_dependency: DependencyID,
     root_request_id: PackageID,
-};
+}
 
 // We can't know all the packages we need until we've downloaded all the packages
 // The easy way would be:

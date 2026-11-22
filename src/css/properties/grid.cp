@@ -13,15 +13,15 @@ const CSSInteger = css.css_values.number.CSSInteger;
 
 /// A [track sizing](https://drafts.csswg.org/css-grid-2/#track-sizing) value
 /// for the `grid-template-rows` and `grid-template-columns` properties.
-pub const TrackSizing = union(enum) {
+pub union(enum) TrackSizing {
     /// No explicit grid tracks.
-    none,
+    none: void,
     /// A list of grid tracks.
     tracklist: TrackList,
 
     pub const parse = css.DeriveParse(@This()).parse;
     pub const toCss = css.DeriveToCss(@This()).toCss;
-};
+}
 
 /// A [`<track-list>`](https://drafts.csswg.org/css-grid-2/#typedef-track-list) value,
 /// as used in the `grid-template-rows` and `grid-template-columns` properties.
@@ -94,12 +94,12 @@ pub struct TrackList {
 /// Either a track size or `repeat()` function.
 ///
 /// See [TrackList](TrackList).
-pub const TrackListItem = union(enum) {
+pub union(enum) TrackListItem {
     /// A track size.
     track_size: TrackSize,
     /// A `repeat()` function.
     track_repeat: TrackRepeat,
-};
+}
 
 /// A [track size](https://drafts.csswg.org/css-grid-2/#typedef-track-size) value.
 ///
@@ -154,29 +154,31 @@ fn toCssTrackSize(this_ts: *const TrackSize, dest: *css.Printer): css.PrintErr!v
     }
 }
 
-pub const TrackSize = union(enum) {
+pub struct TrackSizeMinMax {
+    /// The minimum value.
+    min: TrackBreadth,
+    /// The maximum value.
+    max: TrackBreadth,
+}
+
+pub union(enum) TrackSize {
     /// An explicit track breadth.
     track_breadth: TrackBreadth,
     /// The `minmax()` function.
-    min_max: struct {
-        /// The minimum value.
-        min: TrackBreadth,
-        /// The maximum value.
-        max: TrackBreadth,
-    },
+    min_max: TrackSizeMinMax,
     /// The `fit-content()` function.
     fit_content: LengthPercentage,
 
     pub const default = defaultTrackSize;
 
-    pub fn eql(this: *const @This(), other: *const @This()) bool {
-        return css.implementEql(@This(), this, other);
+    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+        return css.implementEql(@This(), lhs, rhs);
     }
 
     pub const parse = parseTrackSize;
 
     pub const toCss = toCssTrackSize;
-};
+}
 
 pub struct TrackSizeList {
     v: SmallList(TrackSize, 1) = {},
@@ -274,22 +276,22 @@ fn toCssTrackBreadth(this_tb: *const TrackBreadth, dest: *css.Printer): css.Prin
     }
 }
 
-pub const TrackBreadth = union(enum) {
+pub union(enum) TrackBreadth {
     /// An explicit length.
     length: LengthPercentage,
     /// A flex factor.
     flex: CSSNumber,
     /// The `min-content` keyword.
-    min_content,
+    min_content: void,
     /// The `max-content` keyword.
-    max_content,
+    max_content: void,
     /// The `auto` keyword.
-    auto,
+    auto: void,
 
     pub const parse = parseTrackBreadth;
     pub const parseInternal = parseTrackBreadthInternal;
     pub const toCss = toCssTrackBreadth;
-};
+}
 
 /// A `repeat()` function.
 ///
@@ -351,8 +353,8 @@ pub struct TrackRepeat {
                 serializeLineNames(names.sliceConst(), dest)?;
             }
 
-            if (track_sizes_index < this.track_sizes.len) {
-                const size = this.track_sizes.at(track_sizes_index);
+            if (track_sizes_index < _.track_sizes.len) {
+                const size = _.track_sizes.at(track_sizes_index);
                 track_sizes_index += 1;
 
                 if (!names.isEmpty()) {
@@ -422,21 +424,21 @@ fn parseLineNames(input: *css.Parser): css.Result(CustomIdentList) {
 /// used in the `repeat()` function.
 ///
 /// See [TrackRepeat](TrackRepeat).
-pub const RepeatCount = union(enum) {
+pub union(enum) RepeatCount {
     /// The number of times to repeat.
     number: CSSInteger,
     /// The `auto-fill` keyword.
-    @"auto-fill",
+    @"auto-fill": void,
     /// The `auto-fit` keyword.
-    @"auto-fit",
+    @"auto-fit": void,
 
     pub const parse = css.DeriveParse(@This()).parse;
     pub const toCss = css.DeriveToCss(@This()).toCss;
 
-    pub fn eql(this: *const @This(), other: *const @This()): bool {
-        return css.implementEql(@This(), this, other);
+    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+        return css.implementEql(@This(), lhs, rhs);
     }
-};
+}
 
 /// A grid template areas value.
 /// See https://drafts.csswg.org/css-grid-2/#propdef-grid-template-areas
@@ -528,20 +530,22 @@ fn parseGridAreaString(allocator: Allocator, s: []const u8, tokens: *SmallList(O
     return { result: column };
 }
 
-pub const GridTemplateAreas = union(enum) {
+pub struct GridTemplateAreasData {
+    /// The number of columns in the grid.
+    columns: u32,
+    /// A flattened list of grid area names.
+    /// Unnamed areas specified by the `.` token are represented as null.
+    areas: SmallList(OptStr, 1),
+}
+
+pub union(enum) GridTemplateAreas {
     /// No named grid areas.
-    none,
+    none: void,
     /// Defines the list of named grid areas.
-    areas: struct {
-        /// The number of columns in the grid.
-        columns: u32,
-        /// A flattened list of grid area names.
-        /// Unnamed areas specified by the `.` token are represented as null.
-        areas: SmallList(OptStr, 1),
-    },
+    areas: GridTemplateAreasData,
 
     pub const parse = parseGridTemplateAreas;
-};
+}
 
 fn isNameCodepoint(c: u8): bool {
     // alpha numeric, -, _, o

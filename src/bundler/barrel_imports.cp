@@ -33,10 +33,10 @@ struct DeinitWithAllocGuard<T> {
     }
 }
 
-pub const RequestedExports = union(enum) {
+pub union(enum) RequestedExports {
     all: void,
     partial: bun.StringArrayHashMapUnmanaged(void),
-};
+}
 
 pub struct BarrelExportResolution {
     import_record_index: u32,

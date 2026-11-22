@@ -9,58 +9,58 @@ const MiniEventLoop = jsc.MiniEventLoop;
 const VirtualMachine = jsc.VirtualMachine;
 
 /// A non-owning reference to either the JS event loop or the mini event loop.
-pub const EventLoopHandle = union(EventLoopKind) {
+pub union(EventLoopKind) EventLoopHandle {
     js: *jsc.EventLoop,
     mini: *MiniEventLoop,
 
-    pub fn globalObject(this: EventLoopHandle) ?*jsc.JSGlobalObject {
-        return switch (this) {
-            .js => this.js.global,
+    fn globalObject(): (*jsc.JSGlobalObject)? {
+        return switch (_) {
+            .js => _.js.global,
             .mini => null,
         };
     }
 
-    pub fn stdout(this: EventLoopHandle) *jsc.WebCore.Blob.Store {
-        return switch (this) {
-            .js => this.js.virtual_machine.rareData().stdout(),
-            .mini => this.mini.stdout(),
+    fn stdout(): *jsc.WebCore.Blob.Store {
+        return switch (_) {
+            .js => _.js.virtual_machine.rareData().stdout(),
+            .mini => _.mini.stdout(),
         };
     }
 
-    pub fn bunVM(this: EventLoopHandle) ?*VirtualMachine {
-        if (this == .js) {
-            return this.js.virtual_machine;
+    fn bunVM(): (*VirtualMachine)? {
+        if (_ == .js) {
+            return _.js.virtual_machine;
         }
 
         return null;
     }
 
-    pub fn stderr(this: EventLoopHandle) *jsc.WebCore.Blob.Store {
-        return switch (this) {
-            .js => this.js.virtual_machine.rareData().stderr(),
-            .mini => this.mini.stderr(),
+    fn stderr(): *jsc.WebCore.Blob.Store {
+        return switch (_) {
+            .js => _.js.virtual_machine.rareData().stderr(),
+            .mini => _.mini.stderr(),
         };
     }
 
-    pub fn cast(this: EventLoopHandle, comptime tag: EventLoopKind) tag.Type() {
-        return @field(this, @tagName(tag));
+    fn cast(comptime tag: EventLoopKind): tag.Type() {
+        return @field(_, @tagName(tag));
     }
 
-    pub fn enter(this: EventLoopHandle) void {
-        switch (this) {
-            .js => this.js.enter(),
+    fn enter() {
+        switch (_) {
+            .js => _.js.enter(),
             .mini => {},
         }
     }
 
-    pub fn exit(this: EventLoopHandle) void {
-        switch (this) {
-            .js => this.js.exit(),
+    fn exit() {
+        switch (_) {
+            .js => _.js.exit(),
             .mini => {},
         }
     }
 
-    pub fn init(context: anytype) EventLoopHandle {
+    static fn init(context: auto): EventLoopHandle {
         const Context = @TypeOf(context);
         return switch (Context) {
             *VirtualMachine => .{ .js = context.eventLoop() },
@@ -75,106 +75,106 @@ pub const EventLoopHandle = union(EventLoopKind) {
         };
     }
 
-    pub fn filePolls(this: EventLoopHandle) *bun.Async.FilePoll.Store {
-        return switch (this) {
-            .js => this.js.virtual_machine.rareData().filePolls(this.js.virtual_machine),
-            .mini => this.mini.filePolls(),
+    fn filePolls(): *bun.Async.FilePoll.Store {
+        return switch (_) {
+            .js => _.js.virtual_machine.rareData().filePolls(_.js.virtual_machine),
+            .mini => _.mini.filePolls(),
         };
     }
 
-    pub fn putFilePoll(this: *EventLoopHandle, poll: *Async.FilePoll) void {
-        switch (this.*) {
-            .js => this.js.virtual_machine.rareData().filePolls(this.js.virtual_machine).put(poll, this.js.virtual_machine, poll.flags.contains(.was_ever_registered)),
-            .mini => this.mini.filePolls().put(poll, &this.mini, poll.flags.contains(.was_ever_registered)),
+    fn putFilePoll(*_, poll: *Async.FilePoll) {
+        switch (_.*) {
+            .js => _.js.virtual_machine.rareData().filePolls(_.js.virtual_machine).put(poll, _.js.virtual_machine, poll.flags.contains(.was_ever_registered)),
+            .mini => _.mini.filePolls().put(poll, &_.mini, poll.flags.contains(.was_ever_registered)),
         }
     }
 
-    pub fn enqueueTaskConcurrent(this: EventLoopHandle, context: EventLoopTaskPtr) void {
-        switch (this) {
+    fn enqueueTaskConcurrent(context: EventLoopTaskPtr) {
+        switch (_) {
             .js => {
-                this.js.enqueueTaskConcurrent(context.js);
+                _.js.enqueueTaskConcurrent(context.js);
             },
             .mini => {
-                this.mini.enqueueTaskConcurrent(context.mini);
+                _.mini.enqueueTaskConcurrent(context.mini);
             },
         }
     }
 
-    pub fn loop(this: EventLoopHandle) *bun.uws.Loop {
-        return switch (this) {
-            .js => this.js.usocketsLoop(),
-            .mini => this.mini.loop,
+    fn loop(): *bun.uws.Loop {
+        return switch (_) {
+            .js => _.js.usocketsLoop(),
+            .mini => _.mini.loop,
         };
     }
 
-    pub fn pipeReadBuffer(this: EventLoopHandle) []u8 {
-        return switch (this) {
-            .js => this.js.pipeReadBuffer(),
-            .mini => this.mini.pipeReadBuffer(),
+    fn pipeReadBuffer(): []u8 {
+        return switch (_) {
+            .js => _.js.pipeReadBuffer(),
+            .mini => _.mini.pipeReadBuffer(),
         };
     }
 
     pub const platformEventLoop = loop;
 
-    pub fn ref(this: EventLoopHandle) void {
-        this.loop().ref();
+    fn ref() {
+        _.loop().ref();
     }
 
-    pub fn unref(this: EventLoopHandle) void {
-        this.loop().unref();
+    fn unref() {
+        _.loop().unref();
     }
 
     type NullDelimitedEnvElem = ([*:0]const u8)?;
     pub type NullDelimitedEnvMap = [:null]NullDelimitedEnvElem;
-    pub inline fn createNullDelimitedEnvMap(this: @This(), alloc: Allocator): NullDelimitedEnvMap! {
-        return switch (this) {
-            .js => this.js.virtual_machine.transpiler.env.map.createNullDelimitedEnvMap(alloc),
-            .mini => this.mini.env.?.map.createNullDelimitedEnvMap(alloc),
+    inline fn createNullDelimitedEnvMap(alloc: Allocator): NullDelimitedEnvMap! {
+        return switch (_) {
+            .js => _.js.virtual_machine.transpiler.env.map.createNullDelimitedEnvMap(alloc),
+            .mini => _.mini.env.?.map.createNullDelimitedEnvMap(alloc),
         };
     }
 
-    pub inline fn allocator(this: EventLoopHandle) Allocator {
-        return switch (this) {
-            .js => this.js.virtual_machine.allocator,
-            .mini => this.mini.allocator,
+    inline fn allocator(): Allocator {
+        return switch (_) {
+            .js => _.js.virtual_machine.allocator,
+            .mini => _.mini.allocator,
         };
     }
 
-    pub inline fn topLevelDir(this: EventLoopHandle) []const u8 {
-        return switch (this) {
-            .js => this.js.virtual_machine.transpiler.fs.top_level_dir,
-            .mini => this.mini.top_level_dir,
+    inline fn topLevelDir(): []const u8 {
+        return switch (_) {
+            .js => _.js.virtual_machine.transpiler.fs.top_level_dir,
+            .mini => _.mini.top_level_dir,
         };
     }
 
-    pub inline fn env(this: EventLoopHandle) *bun.DotEnv.Loader {
-        return switch (this) {
-            .js => this.js.virtual_machine.transpiler.env,
-            .mini => this.mini.env.?,
+    inline fn env(): *bun.DotEnv.Loader {
+        return switch (_) {
+            .js => _.js.virtual_machine.transpiler.env,
+            .mini => _.mini.env.?,
         };
     }
-};
+}
 
-pub const EventLoopTask = union(EventLoopKind) {
+pub union(EventLoopKind) EventLoopTask {
     js: jsc.ConcurrentTask,
     mini: jsc.AnyTaskWithExtraContext,
 
-    pub fn init(kind: EventLoopKind) EventLoopTask {
+    static fn init(kind: EventLoopKind): EventLoopTask {
         switch (kind) {
             .js => return .{ .js = .{} },
             .mini => return .{ .mini = .{} },
         }
     }
 
-    pub fn fromEventLoop(loop: jsc.EventLoopHandle) EventLoopTask {
+    static fn fromEventLoop(loop: jsc.EventLoopHandle): EventLoopTask {
         switch (loop) {
             .js => return .{ .js = .{} },
             .mini => return .{ .mini = .{} },
         }
     }
-};
+}
 
-pub const EventLoopTaskPtr = union {
+pub union EventLoopTaskPtr {
     js: *jsc.ConcurrentTask,
     mini: *jsc.AnyTaskWithExtraContext,
-};
+}

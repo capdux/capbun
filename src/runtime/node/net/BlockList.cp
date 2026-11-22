@@ -15,11 +15,10 @@ struct MutexGuard {
     }
 }
 
-pub const Rule = union(enum) {
-    addr: sockaddr,
-    range: struct { start: sockaddr, end: sockaddr },
-    subnet: struct { network: sockaddr, prefix: u8 },
-};
+pub struct RuleRange { start: sockaddr, end: sockaddr }
+pub struct RuleSubnet { network: sockaddr, prefix: u8 }
+
+pub union(enum) Rule { addr: sockaddr, range: RuleRange, subnet: RuleSubnet }
 
 struct StructuredCloneWriter<WriteBytesFn> {
     ctx: *!;
@@ -205,16 +204,16 @@ fn _compare_ipv6(l: *const sockaddr.in6, r: *const sockaddr.in6): std.math.Order
         const _guard = MutexGuard{ m: unsafe { &_.mutex } };
         for (*item of _.da_rules.items) {
             switch (item) {
-                .addr => |*a| {
+                .addr *a => {
                     const order = _compare(address, a) ?? continue;
                     if (order.compare(.eq)) return jsc.JSValue.true;
                 },
-                .range => |*r| {
+                .range *r => {
                     const os = _compare(address, &r.start) ?? continue;
                     const oe = _compare(address, &r.end) ?? continue;
                     if (os.compare(.gte) && oe.compare(.lte)) return jsc.JSValue.true;
                 },
-                .subnet => |*s| {
+                .subnet *s => {
                     if (ip_addr := address.as_v4()) {
                         if (subnet_addr := s.network.as_v4()) {
                             if (s.prefix == 32) {
@@ -254,16 +253,16 @@ fn _compare_ipv6(l: *const sockaddr.in6, r: *const sockaddr.in6): std.math.Order
         const ADDR_LEN = SocketAddress.inet.INET6_ADDRSTRLEN;
         for (*rule of _.da_rules.items) {
             switch (rule) {
-                .addr => |*a| {
+                .addr *a => {
                     let buf: [ADDR_LEN]u8 = @splat(0);
                     array.push(globalThis, bun.String.createFormatForJS(globalThis, "Address: {s} {s}", .{ a.family().upper(), a.fmt(&buf) })?)?;
                 },
-                .range => |*r| {
+                .range *r => {
                     let buf_s: [ADDR_LEN]u8 = @splat(0);
                     let buf_e: [ADDR_LEN]u8 = @splat(0);
                     array.push(globalThis, bun.String.createFormatForJS(globalThis, "Range: {s} {s}-{s}", .{ r.start.family().upper(), r.start.fmt(&buf_s), r.end.fmt(&buf_e) })?)?;
                 },
-                .subnet => |*s| {
+                .subnet *s => {
                     let buf: [ADDR_LEN]u8 = @splat(0);
                     array.push(globalThis, bun.String.createFormatForJS(globalThis, "Subnet: {s} {s}/{d}", .{ s.network.family().upper(), s.network.fmt(&buf), s.prefix })?)?;
                 },
@@ -294,11 +293,7 @@ fn _compare_ipv6(l: *const sockaddr.in6, r: *const sockaddr.in6): std.math.Order
 
         const block_list: *BlockList = unsafe { @ptrFromInt(int) };
         // A single SerializedScriptValue can be deserialized multiple times
-        // (e.g. BroadcastChannel fan-out), so each wrapper must own its own ref
-        // instead of adopting the one taken in serialize. The serialize ref is
-        // what keeps the backing alive while the pointer sits in the byte buffer;
-        // SerializedScriptValue has no destroy hook for Bun-native tags, so that
-        // ref is retained until a buffer-level deref exists (preferable to UAF).
+        // (e.g. BroadcastChannel fan-out), so each wrapper must own its own ref.
         block_list.ref();
         return block_list.toJS(globalThis);
     }

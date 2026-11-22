@@ -63,6 +63,12 @@ pub fn init(self: *VTable, on_open: OptOnOpenFn, on_data: OptOnDataFn, on_fd: Op
     }
 };
 
+pub const ConnectResult = union(enum) {
+    socket: *us_socket_t,
+    connecting: *ConnectingSocket,
+    failed: void,
+};
+
 pub const SocketGroup = extern struct {
     loop: ?*Loop = null,
     vtable: ?*const VTable = null,
@@ -126,9 +132,15 @@ pub fn connect(self: *SocketGroup, kind: SocketKind, ssl_ctx: ?*bun.uws.SslCtx, 
                 return .failed;
             }
             if ((has_dns_resolved != 0)) {
-                return .{ .socket = @ptrCast(ptr.?) };
+                return (blk: {
+                break :blk .{ .socket = @ptrCast(ptr.?) };
+
+});
             } else {
-                return .{ .connecting = @ptrCast(ptr.?) };
+                return (blk: {
+                break :blk .{ .connecting = @ptrCast(ptr.?) };
+
+});
             }
     }
 
@@ -168,11 +180,6 @@ pub const OnConnectingErrFn = *const fn (*ConnectingSocket, i32) callconv(.c) ?*
 pub const OptOnConnectingErrFn = ?OnConnectingErrFn;
 pub const OnHandshakeFn = *const fn (*us_socket_t, i32, bun.uws.us_bun_verify_error_t, ?*anyopaque) callconv(.c) void;
 pub const OptOnHandshakeFn = ?OnHandshakeFn;
-pub const ConnectResult = union(enum) {
-    socket: *us_socket_t,
-    connecting: *ConnectingSocket,
-    failed: void,
-};
 
 extern "c" fn us_socket_group_init(g: *SocketGroup, loop: *Loop, vt: ?*const VTable, owner: ?*anyopaque) callconv(.c) void;
 

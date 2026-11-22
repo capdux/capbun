@@ -70,8 +70,30 @@ pub struct KeyframesListQualifiedRuleParser {
     }
 }
 
+struct KeyframesNameHashContext {
+    fn hash(key: KeyframesName): u32 {
+        return switch (key) {
+            .ident => std.array_hash_map.hashString(key.ident.v),
+            .custom => std.array_hash_map.hashString(key.custom),
+        };
+    }
+
+    fn eql(a: KeyframesName, b: KeyframesName, _: usize): bool {
+        return switch (a) {
+            .ident => switch (b) {
+                .ident => bun.strings.eql(a.ident.v, b.ident.v),
+                .custom => false,
+            },
+            .custom => switch (b) {
+                .ident => false,
+                .custom => bun.strings.eql(a.custom, b.custom),
+            },
+        };
+    }
+}
+
 /// KeyframesName
-pub const KeyframesName = union(enum) {
+pub union(enum) KeyframesName {
     /// `<custom-ident>` of a `@keyframes` name.
     ident: css.css_values.ident.CustomIdent,
     /// `<string>` of a `@keyframes` name.
@@ -79,36 +101,16 @@ pub const KeyframesName = union(enum) {
 
     const This = @This();
 
-    pub static fn HashMap(comptime V: type): type {
-        return std.ArrayHashMapUnmanaged(KeyframesName, V, struct {
-            pub fn hash(_: @This(), key: KeyframesName): u32 {
-                return switch (key) {
-                    .ident => std.array_hash_map.hashString(key.ident.v),
-                    .custom => std.array_hash_map.hashString(key.custom),
-                };
-            }
-
-            pub fn eql(_: @This(), a: KeyframesName, b: KeyframesName, _: usize): bool {
-                return switch (a) {
-                    .ident => switch (b) {
-                        .ident => bun.strings.eql(a.ident.v, b.ident.v),
-                        .custom => false,
-                    },
-                    .custom => switch (b) {
-                        .ident => false,
-                        .custom => bun.strings.eql(a.custom, b.custom),
-                    },
-                };
-            }
-        }, false);
+    static fn HashMap(comptime V: type): type {
+        return std.ArrayHashMapUnmanaged(KeyframesName, V, KeyframesNameHashContext, false);
     }
 
-    pub fn parse(input: *css.Parser): Result(KeyframesName) {
+    static fn parse(input: *css.Parser): Result(KeyframesName) {
         switch (switch (input.next()) {
-            .result => |v| v.*,
-            .err => |e| return { err: e },
+            .result v => v.*,
+            .err e => return { err: e },
         }) {
-            .ident => |s| {
+            .ident s => {
                 // todo_stuff.match_ignore_ascii_case
                 // CSS-wide keywords without quotes throws an error.
                 if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(s, "none") ||
@@ -124,24 +126,24 @@ pub const KeyframesName = union(enum) {
                     return { result: { ident: { v: s } } };
                 }
             },
-            .quoted_string => |s| return { result: { custom: s } },
+            .quoted_string s => return { result: { custom: s } },
             else => |t| {
                 return { err: input.newUnexpectedTokenError(t) };
             },
         }
     }
 
-    pub static fn toCss(self_ptr: *const @This(), dest: *Printer): PrintErr!void {
+    static fn toCss(self_ptr: *const @This(), dest: *Printer): PrintErr!void {
         let css_module_aimation_enabled = false;
         if (cm := dest.css_module) {
             css_module_aimation_enabled = cm.config.animation;
         }
 
         switch (self_ptr.*) {
-            .ident => |ident| {
+            .ident ident => {
                 dest.writeIdent(ident.v, css_module_aimation_enabled)?;
             },
-            .custom => |s| {
+            .custom s => {
                 // todo_stuff.match_ignore_ascii_case
                 // CSS-wide keywords and `none` cannot remove quotes.
                 if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(s, "none") ||
@@ -160,7 +162,7 @@ pub const KeyframesName = union(enum) {
         }
     }
 
-    pub static fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator): @This() {
+    static fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator): @This() {
         return css.implementDeepClone(@This(), this_ptr, allocator);
     }
 }
@@ -181,9 +183,9 @@ pub union(enum) KeyframeSelector {
     //     @panic(css.todo_stuff.depth);
     // }
 
-    pub static fn toCss(s: *const @This(), dest: *Printer): PrintErr!void {
+    static fn toCss(s: *const @This(), dest: *Printer): PrintErr!void {
         switch (s.*) {
-            .percentage => |p| {
+            .percentage p => {
                 if (dest.minify && p.v == 1.0) {
                     dest.writeStr("to")?;
                 } else {
@@ -203,7 +205,7 @@ pub union(enum) KeyframeSelector {
         }
     }
 
-    pub static fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator): @This() {
+    static fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator): @This() {
         return css.implementDeepClone(@This(), this_ptr, allocator);
     }
 }
@@ -262,7 +264,7 @@ pub struct KeyframesRule {
                     first_rule = false;
                 } else {
                     if (!dest.minify) {
-                        try dest.writeChar('\n'); // no indent
+                        dest.writeChar('\n')?; // no indent
                     }
                     dest.newline()?;
                 }
@@ -280,7 +282,7 @@ pub struct KeyframesRule {
                     if (first) {
                         first = false;
                     } else if (!dest.minify) {
-                        try dest.writeChar('\n'); // no indent
+                        dest.writeChar('\n')?; // no indent
                     }
                     dest.newline()?;
                     keyframe.toCss(dest)?;

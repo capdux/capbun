@@ -670,6 +670,7 @@ pub fn flush(self: *TransformHandler, allocator: std.mem.Allocator, dest: *css.D
     }
 };
 
+const TransformAndPrefix = struct { TransformList, VendorPrefix };
 const Printer = css.Printer;
 const PrintErr = css.PrintErr;
 const Result = css.Result;
@@ -679,7 +680,6 @@ const LengthPercentage = css.css_values.length.LengthPercentage;
 const Length = css.css_values.length.LengthValue;
 const NumberOrPercentage = css.css_values.percentage.NumberOrPercentage;
 const Angle = css.css_values.angle.Angle;
-const TransformAndPrefix = struct { TransformList, VendorPrefix };
 const ArrayList = std.ArrayListUnmanaged;
 const Allocator = std.mem.Allocator;
 

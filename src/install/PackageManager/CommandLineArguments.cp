@@ -208,13 +208,15 @@ pub enum AuditLevel {
     }
 }
 
-const PatchOpts = union(enum) {
-    nothing: struct {},
-    patch: struct {},
-    commit: struct {
-        patches_dir: []const u8 = "patches",
-    },
-};
+struct PatchCommitOpts {
+    patches_dir: []const u8 = "patches",
+}
+
+union(enum) PatchOpts {
+    nothing: void,
+    patch: void,
+    commit: PatchCommitOpts,
+}
 
 struct Omit {
     dev: bool = false,
@@ -271,7 +273,7 @@ exact: bool = false,
 
 concurrent_scripts: usize? = null,
 
-patch: PatchOpts = { nothing: {} },
+patch: PatchOpts = .nothing,
 
 registry: string = "",
 
@@ -965,9 +967,7 @@ pub fn parse(allocator: std.mem.Allocator, comptime subcommand: Subcommand): !Co
                 },
             };
         } else {
-            cli.patch = {
-                patch: {},
-            };
+            cli.patch = .patch;
         }
     }
     if (subcommand == .@"patch-commit") {

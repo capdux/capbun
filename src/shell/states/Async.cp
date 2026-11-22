@@ -36,11 +36,11 @@ pub struct ExecState {
     child: ChildPtr? = null,
 }
 
-pub const AsyncState = union(enum) {
-    idle,
+pub union(enum) AsyncState {
+    idle: void,
     exec: ExecState,
     done: ExitCode,
-};
+}
 
 @root struct Async {
     base: State,
@@ -52,7 +52,7 @@ pub const AsyncState = union(enum) {
     concurrent_task: jsc.EventLoopTask,
 
     static fn format(client: *const Async, writer: *std.Io.Writer)! {
-        writer.print("Async(0x{x}, child={s})", .{@intFromPtr(client), @tagName(client.node.*)})?;
+        unsafe { writer.print("Async(0x{x}, child={s})", .{@intFromPtr(client), @tagName(client.node.*)})?; }
     }
 
     static fn init(
@@ -176,7 +176,7 @@ pub const AsyncState = union(enum) {
     }
 
     fn runFromMainThreadMini(*_, dummy: *void) {
-        * = @intFromPtr(dummy);
+        unsafe { * = @intFromPtr(dummy); }
         _.runFromMainThread();
     }
 }

@@ -130,6 +130,16 @@ pub fn fromStandard(self: FlexWrap) ?FlexWrap {
     pub const deepClone = css_impl.deepClone;
 };
 
+pub const FlexZeroKind = enum {
+    NonZero,
+    Length,
+    Percentage,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const BoxOrient = enum {
     horizontal,
     vertical,
@@ -496,22 +506,17 @@ pub fn toCss(self: Flex, dest: *css.Printer) css.PrintErr!void {
                 _ = try dest.writeStr("none");
                 return;
             }
-            const ZeroKind = enum {
-            NonZero,
-            Length,
-            Percentage,
-        };
             const basis_kind = (switch (self.basis) {
 .length => |lp| brk: {
             if (((lp == .dimension) and lp.dimension.isZero())) {
-                break :brk ZeroKind.Length;
+                break :brk FlexZeroKind.Length;
             }
             if (((lp == .percentage) and lp.percentage.isZero())) {
-                break :brk ZeroKind.Percentage;
+                break :brk FlexZeroKind.Percentage;
             }
-            break :brk ZeroKind.NonZero;
+            break :brk FlexZeroKind.NonZero;
 },
-else => ZeroKind.NonZero,
+else => FlexZeroKind.NonZero,
 });
             if ((((self.grow != 1.0) or (self.shrink != 1.0)) or (basis_kind != .NonZero))) {
                 _ = try CSSNumberFns.toCss((&self.grow), dest);
@@ -889,7 +894,18 @@ else => false,
     }
 };
 
+const FlexDirectionAndPrefix = struct { FlexDirection, VendorPrefix };
+const BoxOrientAndPrefix = struct { BoxOrient, VendorPrefix };
+const BoxDirectionAndPrefix = struct { BoxDirection, VendorPrefix };
+const FlexWrapAndPrefix = struct { FlexWrap, VendorPrefix };
+const BoxLinesAndPrefix = struct { BoxLines, VendorPrefix };
 const StrAlias = []const u8;
+const Prop2009 = struct { type, StrAlias };
+const OrientAndDirection = struct { BoxOrient, BoxDirection };
+const CSSNumberAndPrefix = struct { CSSNumber, VendorPrefix };
+const LengthPercentageOrAutoAndPrefix = struct { LengthPercentageOrAuto, VendorPrefix };
+const CSSIntegerAndPrefix = struct { CSSInteger, VendorPrefix };
+const BoxOrdinalGroupAndPrefix = struct { BoxOrdinalGroup, VendorPrefix };
 const Printer = css.Printer;
 const PrintErr = css.PrintErr;
 const Property = css.Property;
@@ -904,17 +920,4 @@ const isFlex2009 = css.prefixes.Feature.isFlex2009;
 const VendorPrefix = css.VendorPrefix;
 pub const FlexAlign = BoxAlign;
 pub const BoxOrdinalGroup = CSSInteger;
-const FlexDirectionAndPrefix = struct { FlexDirection, VendorPrefix };
-const BoxOrientAndPrefix = struct { BoxOrient, VendorPrefix };
-const BoxDirectionAndPrefix = struct { BoxDirection, VendorPrefix };
-const FlexWrapAndPrefix = struct { FlexWrap, VendorPrefix };
-const BoxLinesAndPrefix = struct { BoxLines, VendorPrefix };
-const Prop2009 = struct {
-    type, StrAlias
-};
-const OrientAndDirection = struct { BoxOrient, BoxDirection };
-const CSSNumberAndPrefix = struct { CSSNumber, VendorPrefix };
-const LengthPercentageOrAutoAndPrefix = struct { LengthPercentageOrAuto, VendorPrefix };
-const CSSIntegerAndPrefix = struct { CSSInteger, VendorPrefix };
-const BoxOrdinalGroupAndPrefix = struct { BoxOrdinalGroup, VendorPrefix };
 const Allocator = std.mem.Allocator;

@@ -87,8 +87,8 @@ pub struct ScanOpts {
             // Convert to an absolute path
             let path_buf: bun.PathBuffer = undefined;
             const cwd = switch (bun.sys.getcwd((&path_buf))) {
-                .result => |c| c,
-                .err => |e| {
+                .result c => c,
+                .err e => {
                     const errJs = e.toJS(globalThis)?;
                     return globalThis.throwValue(errJs);
                 },
@@ -160,17 +160,17 @@ pub struct ScanOpts {
     }
 }
 
-pub const WalkTaskErr = union(enum) {
+pub union(enum) WalkTaskErr {
     syscall: Syscall.Error,
     unknown: anyerror,
 
-    fn toJS(this_err: *WalkTaskErr, globalThis: *JSGlobalObject): bun.JSError!JSValue {
-        return switch (this_err.*) {
-            .syscall => |e| e.toJS(globalThis)?,
-            .unknown => |e| ZigString.fromBytes(@errorName(e)).toJS(globalThis),
+    fn toJS(globalThis: *JSGlobalObject): bun.JSError!JSValue {
+        return switch (_) {
+            .syscall e => e.toJS(globalThis)?,
+            .unknown e => ZigString.fromBytes(@errorName(e)).toJS(globalThis),
         };
     }
-};
+}
 
 
 
@@ -215,7 +215,7 @@ pub struct WalkTask {
             return;
         };
         switch (result) {
-            .err => |e| {
+            .err e => {
                 _.e = WalkTaskErr{ syscall: e };
             },
             .result => {},
@@ -296,7 +296,7 @@ fn decrPendingActivityFlag(has_pending_activity: *std.atomic.Value(usize)) {
                 error_on_broken_symlinks,
                 only_files,
             ))?) {
-                .err => |e| {
+                .err e => {
                     return globalThis.throwValue((e.toJS(globalThis))?);
                 },
                 else => {},
@@ -314,7 +314,7 @@ fn decrPendingActivityFlag(has_pending_activity: *std.atomic.Value(usize)) {
             error_on_broken_symlinks,
             only_files,
         ))?) {
-            .err => |e| {
+            .err e => {
                 return globalThis.throwValue((e.toJS(globalThis))?);
             },
             else => {},
@@ -404,7 +404,7 @@ fn decrPendingActivityFlag(has_pending_activity: *std.atomic.Value(usize)) {
         let _walker_guard = GlobWalkerGuard{ alloc: alloc, walker: globWalker };
 
         switch ((globWalker.walk())?) {
-            .err => |e| {
+            .err e => {
                 return globalThis.throwValue((e.toJS(globalThis))?);
             },
             .result => {},

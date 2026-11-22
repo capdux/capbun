@@ -61,10 +61,31 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const css = @import("../css_parser.zig");
 pub const bun = @import("bun");
+pub const SizeKeywordEnum = enum {
+    auto,
+    @"min-content",
+    @"-webkit-min-content",
+    @"-moz-min-content",
+    @"max-content",
+    @"-webkit-max-content",
+    @"-moz-max-content",
+    stretch,
+    @"-webkit-fill-available",
+    @"-moz-available",
+    @"fit-content",
+    @"-webkit-fit-content",
+    @"-moz-fit-content",
+    contain,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const BoxSizing = enum {
     @"content-box",
     @"border-box",
@@ -84,6 +105,96 @@ pub const BoxSizing = enum {
     pub const toCss = css_impl.toCss;
     
     pub const deepClone = css_impl.deepClone;
+};
+
+pub const MaxSizeIdent = enum {
+    none,
+    min_content,
+    webkit_min_content,
+    moz_min_content,
+    max_content,
+    webkit_max_content,
+    moz_max_content,
+    stretch,
+    webkit_fill_available,
+    moz_available,
+    fit_content,
+    webkit_fit_content,
+    moz_fit_content,
+    contain,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const Size = union(enum) {
+    auto: void,
+    length_percentage: LengthPercentage,
+    min_content: css.VendorPrefix,
+    max_content: css.VendorPrefix,
+    fit_content: css.VendorPrefix,
+    fit_content_function: LengthPercentage,
+    stretch: css.VendorPrefix,
+    contain: void,
+
+pub fn deepClone(self: Size, allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), (&self), allocator);
+    }
+
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+            return css.implementEql(@This(), lhs, rhs);
+    }
+    pub const parse = parseSize;
+    pub const toCss = toCssSize;
+    pub const isCompatible = isCompatibleSize;
+};
+
+pub const MaxSize = union(enum) {
+    none: void,
+    length_percentage: LengthPercentage,
+    min_content: css.VendorPrefix,
+    max_content: css.VendorPrefix,
+    fit_content: css.VendorPrefix,
+    fit_content_function: LengthPercentage,
+    stretch: css.VendorPrefix,
+    contain: void,
+
+pub fn isCompatible(self: MaxSize, browsers: css.targets.Browsers) bool {
+            const F = css.compat.Feature;
+            return (switch (self) {
+.length_percentage => |*l| l.isCompatible(browsers),
+.min_content => F.isCompatible(.min_content_size, browsers),
+.max_content => F.isCompatible(.max_content_size, browsers),
+.fit_content => F.isCompatible(.fit_content_size, browsers),
+.fit_content_function => |*l| (F.isCompatible(F.fit_content_function_size, browsers) and l.isCompatible(browsers)),
+.stretch => |*vp| blk: {
+            const bits = vp.asBits();
+            if ((bits == css.VendorPrefix.NONE.asBits())) {
+                break :blk F.isCompatible(F.stretch_size, browsers);
+            }
+            if ((bits == css.VendorPrefix.WEBKIT.asBits())) {
+                break :blk F.isCompatible(F.webkit_fill_available_size, browsers);
+            }
+            if ((bits == css.VendorPrefix.MOZ.asBits())) {
+                break :blk F.isCompatible(F.moz_available_size, browsers);
+            }
+            break :blk false;
+},
+.contain => false,
+.none => true,
+});
+    }
+
+pub fn deepClone(self: MaxSize, allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), (&self), allocator);
+    }
+
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+            return css.implementEql(@This(), lhs, rhs);
+    }
+    pub const parse = parseMaxSize;
+    pub const toCss = toCssMaxSize;
 };
 
 pub const AspectRatio = struct {
@@ -364,107 +475,10 @@ const UnparsedProperty = css.css_properties.custom.UnparsedProperty;
 const PropertyCategory = css.logical.PropertyCategory;
 const LengthPercentage = css.css_values.length.LengthPercentage;
 const Ratio = css.css_values.ratio.Ratio;
-pub const Size = union(enum) {
-    /// The `auto` keyworda
-    auto,
-    /// An explicit length or percentage.
-    length_percentage: LengthPercentage,
-    /// The `min-content` keyword.
-    min_content: css.VendorPrefix,
-    /// The `max-content` keyword.
-    max_content: css.VendorPrefix,
-    /// The `fit-content` keyword.
-    fit_content: css.VendorPrefix,
-    /// The `fit-content()` function.
-    fit_content_function: LengthPercentage,
-    /// The `stretch` keyword, or the `-webkit-fill-available` or `-moz-available` prefixed keywords.
-    stretch: css.VendorPrefix,
-    /// The `contain` keyword.
-    contain,
-
-    pub const parse = parseSize;
-
-    pub const toCss = toCssSize;
-
-    pub const isCompatible = isCompatibleSize;
-
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-        return css.implementDeepClone(@This(), this, allocator);
-    }
-
-    pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
-        return css.implementEql(@This(), lhs, rhs);
-    }
-};
-pub const MaxSize = union(enum) {
-    /// The `none` keyword.
-    none,
-    /// An explicit length or percentage.
-    length_percentage: LengthPercentage,
-    /// The `min-content` keyword.
-    min_content: css.VendorPrefix,
-    /// The `max-content` keyword.
-    max_content: css.VendorPrefix,
-    /// The `fit-content` keyword.
-    fit_content: css.VendorPrefix,
-    /// The `fit-content()` function.
-    fit_content_function: LengthPercentage,
-    /// The `stretch` keyword, or the `-webkit-fill-available` or `-moz-available` prefixed keywords.
-    stretch: css.VendorPrefix,
-    /// The `contain` keyword.
-    contain,
-
-    pub const parse = parseMaxSize;
-    pub const toCss = toCssMaxSize;
-
-    pub fn isCompatible(this_ms: *const MaxSize, browsers: css.targets.Browsers) bool {
-        const F = css.compat.Feature;
-        return switch (this_ms.*) {
-            .length_percentage => |*l| l.isCompatible(browsers),
-            .min_content => F.isCompatible(.min_content_size, browsers),
-            .max_content => F.isCompatible(.max_content_size, browsers),
-            .fit_content => F.isCompatible(.fit_content_size, browsers),
-            .fit_content_function => |*l| F.isCompatible(F.fit_content_function_size, browsers) and l.isCompatible(browsers),
-            .stretch => |*vp| blk: {
-                const bits = vp.asBits();
-                if (bits == css.VendorPrefix.NONE.asBits()) break :blk F.isCompatible(F.stretch_size, browsers);
-                if (bits == css.VendorPrefix.WEBKIT.asBits()) break :blk F.isCompatible(F.webkit_fill_available_size, browsers);
-                if (bits == css.VendorPrefix.MOZ.asBits()) break :blk F.isCompatible(F.moz_available_size, browsers);
-                break :blk false;
-            },
-            .contain => false, // ??? no data in mdn
-            .none => true,
-        };
-    }
-
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-        return css.implementDeepClone(@This(), this, allocator);
-    }
-
-    pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
-        return css.implementEql(@This(), lhs, rhs);
-    }
-};
 const Allocator = std.mem.Allocator;
 
 pub fn parseSizeKeywordFn(i: *css.Parser) css.Result(Size) {
-        const Enum = enum {
-        auto,
-        @"min-content",
-        @"-webkit-min-content",
-        @"-moz-min-content",
-        @"max-content",
-        @"-webkit-max-content",
-        @"-moz-max-content",
-        stretch,
-        @"-webkit-fill-available",
-        @"-moz-available",
-        @"fit-content",
-        @"-webkit-fit-content",
-        @"-moz-fit-content",
-        contain,
-    };
-        const Map = (comptime bun.ComptimeEnumMap(Enum));
+        const Map = (comptime bun.ComptimeEnumMap(SizeKeywordEnum));
         const ident_res = i.expectIdent();
         if ((ident_res == .err)) {
             return .{ .err = ident_res.err };
@@ -588,23 +602,7 @@ pub fn isCompatibleSize(this_size: *const Size, browsers: css.targets.Browsers) 
 }
 
 pub fn parseMaxSizeKeywordFn(i: *css.Parser) css.Result(MaxSize) {
-        const Ident = enum {
-        none,
-        min_content,
-        webkit_min_content,
-        moz_min_content,
-        max_content,
-        webkit_max_content,
-        moz_max_content,
-        stretch,
-        webkit_fill_available,
-        moz_available,
-        fit_content,
-        webkit_fit_content,
-        moz_fit_content,
-        contain,
-    };
-        const IdentMap = bun.ComptimeStringMap(Ident, .{ .{ "none", .none }, .{ "min-content", .min_content }, .{ "-webkit-min-content", .webkit_min_content }, .{ "-moz-min-content", .moz_min_content }, .{ "max-content", .max_content }, .{ "-webkit-max-content", .webkit_max_content }, .{ "-moz-max-content", .moz_max_content }, .{ "stretch", .stretch }, .{ "-webkit-fill-available", .webkit_fill_available }, .{ "-moz-available", .moz_available }, .{ "fit-content", .fit_content }, .{ "-webkit-fit-content", .webkit_fit_content }, .{ "-moz-fit-content", .moz_fit_content }, .{ "contain", .contain } });
+        const IdentMap = bun.ComptimeStringMap(MaxSizeIdent, .{ .{ "none", .none }, .{ "min-content", .min_content }, .{ "-webkit-min-content", .webkit_min_content }, .{ "-moz-min-content", .moz_min_content }, .{ "max-content", .max_content }, .{ "-webkit-max-content", .webkit_max_content }, .{ "-moz-max-content", .moz_max_content }, .{ "stretch", .stretch }, .{ "-webkit-fill-available", .webkit_fill_available }, .{ "-moz-available", .moz_available }, .{ "fit-content", .fit_content }, .{ "-webkit-fit-content", .webkit_fit_content }, .{ "-moz-fit-content", .moz_fit_content }, .{ "contain", .contain } });
         const ident_res = i.expectIdent();
         if ((ident_res == .err)) {
             return .{ .err = ident_res.err };

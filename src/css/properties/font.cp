@@ -26,64 +26,64 @@ const Percentage = css.css_values.percentage.Percentage;
 const Angle = css.css_values.angle.Angle;
 
 /// A value for the [font-weight](https://www.w3.org/TR/css-fonts-4/#font-weight-prop) property.
-pub const FontWeight = union(enum) {
+pub union(enum) FontWeight {
     /// An absolute font weight.
     absolute: AbsoluteFontWeight,
     /// The `bolder` keyword.
-    bolder,
+    bolder: void,
     /// The `lighter` keyword.
-    lighter,
+    lighter: void,
 
     // TODO: implement this
     pub const parse = css.DeriveParse(@This()).parse;
     pub const toCss = css.DeriveToCss(@This()).toCss;
 
-    pub inline fn default() FontWeight {
-        return .{ .absolute = AbsoluteFontWeight.default() };
+    static inline fn default(): FontWeight {
+        return { absolute: AbsoluteFontWeight.default() };
     }
 
-    pub fn isCompatible(this_fw: *const FontWeight, browsers: bun.css.targets.Browsers) bool {
-        return switch (this_fw.*) {
+    fn isCompatible(browsers: bun.css.targets.Browsers): bool {
+        return switch (_) {
             .absolute => |*a| a.isCompatible(browsers),
             .bolder, .lighter => true,
         };
     }
 
-    pub fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+    fn deepClone(allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), &_, allocator);
     }
-};
+}
 
 /// An [absolute font weight](https://www.w3.org/TR/css-fonts-4/#font-weight-absolute-values),
 /// as used in the `font-weight` property.
 ///
 /// See [FontWeight](FontWeight).
-pub const AbsoluteFontWeight = union(enum) {
+pub union(enum) AbsoluteFontWeight {
     /// An explicit weight.
     weight: CSSNumber,
     /// Same as `400`.
-    normal,
+    normal: void,
     /// Same as `700`.
-    bold,
+    bold: void,
 
     pub const parse = css.DeriveParse(@This()).parse;
 
-    pub fn toCss(this_afw: *const AbsoluteFontWeight, dest: *css.Printer) css.PrintErr!void {
-        return switch (this_afw.*) {
+    fn toCss(dest: *css.Printer): css.PrintErr!void {
+        return switch (_) {
             .weight => |*weight| CSSNumberFns.toCss(weight, dest),
             .normal => try dest.writeStr(if (dest.minify) "400" else "normal"),
             .bold => try dest.writeStr(if (dest.minify) "700" else "bold"),
         };
     }
 
-    pub fn isCompatible(this_afw: *const AbsoluteFontWeight, browsers: bun.css.targets.Browsers) bool {
-        return switch (this_afw.*) {
+    fn isCompatible(browsers: bun.css.targets.Browsers): bool {
+        return switch (_) {
             // Older browsers only supported 100, 200, 300, ...900 rather than arbitrary values.
-            .weight => |*val| if (!((val.* >= 100.0 and val.* <= 900.0) and @mod(val.*, 100.0) == 0.0))
+            .weight => |*val| if (!((val.* >= 100.0 && val.* <= 900.0) && @mod(val.*, 100.0) == 0.0))
                 css.Feature.font_weight_number.isCompatible(browsers)
             else
                 true,
@@ -91,17 +91,17 @@ pub const AbsoluteFontWeight = union(enum) {
         };
     }
 
-    pub inline fn default(): AbsoluteFontWeight {
+    static inline fn default(): AbsoluteFontWeight {
         return .normal;
     }
 
-    pub fn eql(lhs: *const AbsoluteFontWeight, rhs: *const AbsoluteFontWeight): bool {
+    static fn eql(lhs: *const AbsoluteFontWeight, rhs: *const AbsoluteFontWeight): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
-};
+}
 
 /// A value for the [font-size](https://www.w3.org/TR/css-fonts-4/#font-size-prop) property.
-pub const FontSize = union(enum) {
+pub union(enum) FontSize {
     /// An explicit size.
     length: LengthPercentage,
     /// An absolute font size keyword.
@@ -112,8 +112,8 @@ pub const FontSize = union(enum) {
     pub const parse = css.DeriveParse(@This()).parse;
     pub const toCss = css.DeriveToCss(@This()).toCss;
 
-    pub fn isCompatible(this_fs: *const FontSize, browsers: bun.css.targets.Browsers): bool {
-        return switch (this_fs.*) {
+    fn isCompatible(browsers: bun.css.targets.Browsers): bool {
+        return switch (_) {
             .length => |*l| switch (l.*) {
                 .dimension => |*d| switch (d.*) {
                     .rem => css.Feature.font_size_rem.isCompatible(browsers),
@@ -126,14 +126,14 @@ pub const FontSize = union(enum) {
         };
     }
 
-    pub fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+    fn deepClone(allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), &_, allocator);
     }
-};
+}
 
 /// An [absolute font size](https://www.w3.org/TR/css-fonts-3/#absolute-size-value),
 /// as used in the `font-size` property.
@@ -193,7 +193,7 @@ pub enum RelativeFontSize {
 }
 
 /// A value for the [font-stretch](https://www.w3.org/TR/css-fonts-4/#font-stretch-prop) property.
-pub const FontStretch = union(enum) {
+pub union(enum) FontStretch {
     /// A font stretch keyword.
     keyword: FontStretchKeyword,
     /// A percentage.
@@ -202,7 +202,7 @@ pub const FontStretch = union(enum) {
     // TODO: implement this
     pub const parse = css.DeriveParse(@This()).parse;
 
-    pub fn toCss(dest: *css.Printer): css.PrintErr!void {
+    fn toCss(dest: *css.Printer): css.PrintErr!void {
         if (dest.minify) {
             const percentage: Percentage = _.intoPercentage();
             return percentage.toCss(dest);
@@ -214,32 +214,32 @@ pub const FontStretch = union(enum) {
         };
     }
 
-    pub fn intoPercentage(): Percentage {
+    fn intoPercentage(): Percentage {
         return switch (_) {
             .percentage => |*val| val.*,
             .keyword => |*kw| kw.intoPercentage(),
         };
     }
 
-    pub fn isCompatible(this_fs: *const FontStretch, browsers: bun.css.targets.Browsers): bool {
-        return switch (this_fs.*) {
+    fn isCompatible(browsers: bun.css.targets.Browsers): bool {
+        return switch (_) {
             .percentage => css.Feature.font_stretch_percentage.isCompatible(browsers),
             .keyword => true,
         };
     }
 
-    pub fn eql(lhs: *const FontStretch, rhs: *const FontStretch): bool {
+    static fn eql(lhs: *const FontStretch, rhs: *const FontStretch): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+    fn deepClone(allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
-    pub inline fn default(): FontStretch {
+    static inline fn default(): FontStretch {
         return { keyword: FontStretchKeyword.default() };
     }
-};
+}
 
 /// A [font stretch keyword](https://www.w3.org/TR/css-fonts-4/#font-stretch-prop),
 /// as used in the `font-stretch` property.
@@ -384,7 +384,7 @@ pub fn FontFamilyHashMap(comptime V: type): type {
     return std.ArrayHashMapUnmanaged(FontFamily, V, FontFamilyHashMapContext, false);
 }
 
-pub const FontFamily = union(enum) {
+pub union(enum) FontFamily {
     /// A generic family name.
     generic: GenericFontFamily,
     /// A custom family name.
@@ -396,25 +396,25 @@ pub const FontFamily = union(enum) {
 
     pub const toCss = toCssFontFamily;
 
-    pub fn isCompatible(this_ff: *const FontFamily, browsers: bun.css.targets.Browsers) bool {
-        return switch (this_ff.*) {
+    fn isCompatible(browsers: bun.css.targets.Browsers): bool {
+        return switch (_) {
             .generic => |g| g.isCompatible(browsers),
             .family_name => true,
         };
     }
 
-    pub fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+    fn deepClone(allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
-    pub fn hash(this: *const @This(), hasher: anytype) void {
-        return css.implementHash(@This(), this, hasher);
+    fn hash(hasher: auto) {
+        return css.implementHash(@This(), &_, hasher);
     }
-};
+}
 
 /// A [generic font family](https://www.w3.org/TR/css-fonts-4/#generic-font-families) name,
 /// as used in the `font-family` property.
@@ -502,23 +502,23 @@ fn toCssFontStyle(this_fs: *const FontStyle, dest: *Printer): PrintErr!void {
     }
 }
 
-pub const FontStyle = union(enum) {
+pub union(enum) FontStyle {
     /// Normal font style.
-    normal,
+    normal: void,
     /// Italic font style.
-    italic,
+    italic: void,
     /// Oblique font style, with a custom angle.
     oblique: Angle,
 
-    pub fn default(): FontStyle {
+    static fn default(): FontStyle {
         return .normal;
     }
 
     pub const parse = parseFontStyle;
     pub const toCss = toCssFontStyle;
 
-    pub fn isCompatible(this_fs: *const FontStyle, browsers: bun.css.targets.Browsers) bool {
-        return switch (this_fs.*) {
+    fn isCompatible(browsers: bun.css.targets.Browsers): bool {
+        return switch (_) {
             .oblique => |*angle| if (!angle.eql(&FontStyle.defaultObliqueAngle()))
                 css.Feature.font_style_oblique_angle.isCompatible(browsers)
             else
@@ -527,18 +527,18 @@ pub const FontStyle = union(enum) {
         };
     }
 
-    pub fn defaultObliqueAngle(): Angle {
-        return Angle{ .deg = 14.0 };
+    static fn defaultObliqueAngle(): Angle {
+        return Angle{ deg: 14.0 };
     }
 
-    pub fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+    fn deepClone(allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), &_, allocator);
     }
-};
+}
 
 /// A value for the [font-variant-caps](https://www.w3.org/TR/css-fonts-4/#font-variant-caps-prop) property.
 pub enum FontVariantCaps {
@@ -590,9 +590,9 @@ pub enum FontVariantCaps {
 }
 
 /// A value for the [line-height](https://www.w3.org/TR/2020/WD-css-inline-3-20200827/#propdef-line-height) property.
-pub const LineHeight = union(enum) {
+pub union(enum) LineHeight {
     /// The UA sets the line height based on the font.
-    normal,
+    normal: void,
     /// A multiple of the element's font size.
     number: CSSNumber,
     /// An explicit height.
@@ -601,25 +601,25 @@ pub const LineHeight = union(enum) {
     pub const parse = css.DeriveParse(@This()).parse;
     pub const toCss = css.DeriveToCss(@This()).toCss;
 
-    pub fn isCompatible(this_lh: *const LineHeight, browsers: bun.css.targets.Browsers): bool {
-        return switch (this_lh.*) {
+    fn isCompatible(browsers: bun.css.targets.Browsers): bool {
+        return switch (_) {
             .length => |*l| l.isCompatible(browsers),
             .normal, .number => true,
         };
     }
 
-    pub fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+    fn deepClone(allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
-    pub fn default(): LineHeight {
+    static fn default(): LineHeight {
         return .normal;
     }
-};
+}
 
 /// A value for the [font](https://www.w3.org/TR/css-fonts-4/#font-prop) shorthand property.
 pub struct Font {
@@ -782,12 +782,12 @@ pub struct Font {
 
 /// A value for the [vertical align](https://drafts.csswg.org/css2/#propdef-vertical-align) property.
 // TODO: there is a more extensive spec in CSS3 but it doesn't seem any browser implements it? https://www.w3.org/TR/css-inline-3/#transverse-alignment
-pub const VerticalAlign = union(enum) {
+pub union(enum) VerticalAlign {
     /// A vertical align keyword.
     keyword: VerticalAlignKeyword,
     /// An explicit length.
     length: LengthPercentage,
-};
+}
 
 /// A keyword for the [vertical align](https://drafts.csswg.org/css2/#propdef-vertical-align) property.
 pub enum VerticalAlignKeyword {
@@ -838,7 +838,7 @@ pub enum VerticalAlignKeyword {
         @"font-variant-caps": true,
     };
 
-    pub fn tryFromPropertyId(property_id: css.PropertyIdTag): FontProperty? {
+    static fn tryFromPropertyId(property_id: css.PropertyIdTag): FontProperty? {
         inline for (field of std.@"meta".fields(FontProperty)) {
             if (comptime std.mem.eql(u8, field.name, "__unused")) continue;
             const desired = comptime @field(css.PropertyIdTag, field.name);

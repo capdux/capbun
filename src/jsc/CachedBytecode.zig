@@ -112,8 +112,8 @@ pub fn isInstance(allocator_: std.mem.Allocator) bool {
     pub const VTable = (&std.mem.Allocator.VTable{ .alloc = vtableAlloc, .free = vtableFree, .resize = (&std.mem.Allocator.noResize), .remap = (&std.mem.Allocator.noRemap) });
 };
 
-const OptU8Ptr = ?[*]u8;
 pub const BytecodeResult = struct { []const u8, *CachedBytecode };
+const OptU8Ptr = ?[*]u8;
 
 extern "c" fn generateCachedModuleByteCodeFromSourceCode(sourceProviderURL: *bun.String, input_code: [*]const u8, inputSourceCodeSize: usize, outputByteCode: *OptU8Ptr, outputByteCodeSize: *usize, cached_bytecode: *?*CachedBytecode) callconv(.c) bool;
 

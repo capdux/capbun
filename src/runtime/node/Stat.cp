@@ -181,7 +181,7 @@ pub fn createStatsForIno(globalObject: *jsc.JSGlobalObject, callFrame: *jsc.Call
 }
 
 /// Union between `Stats` and `BigIntStats` where the type can be decided at runtime
-pub const Stats = union(enum) {
+pub union(enum) Stats {
     big: StatsBig,
     small: StatsSmall,
 
@@ -205,4 +205,4 @@ pub const Stats = union(enum) {
 
         @compileError("Only use Stats.toJSNewlyCreated() or Stats.toJS() directly on a StatsBig or StatsSmall");
     }
-};
+}

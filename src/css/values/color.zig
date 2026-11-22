@@ -711,7 +711,6 @@ pub fn getFallback(self: CssColor, allocator: Allocator, kind: ColorFallbackKind
 pub fn getFallbacks(self: *CssColor, allocator: Allocator, targets: css.targets.Targets) css.SmallList(CssColor, 2) {
             const fallbacks = self.getNecessaryFallbacks(targets);
             const SmallCssColorList = css.SmallList(CssColor, 2);
-            _ = &SmallCssColorList;
             var res = SmallCssColorList{  };
             _ = &res;
             if (fallbacks.rgb) {
@@ -1844,7 +1843,6 @@ pub fn calcParseIdentFn(t: *@This(), ident: []const u8) ?Calc(Angle) {
                 _ = &value;
                 t.angle = .{ .deg = value };
                 const CalcAngle = Calc(Angle);
-                _ = &CalcAngle;
                 return CalcAngle{ .value = (&t.angle) };
             } else {
                 return null;
@@ -1935,7 +1933,6 @@ pub fn parseIdentFn(closure: *Closure, ident: []const u8) ?Calc(Percentage) {
                 _ = &v;
                 closure.temp = .{ .v = v };
                 const CalcPerc = Calc(Percentage);
-                _ = &CalcPerc;
                 return CalcPerc{ .value = (&closure.temp) };
             } else {
                 return null;
@@ -2649,6 +2646,7 @@ pub const color_conversions = struct {
     const convert_OKLCH = _convert_OKLCH;
 };
 
+const F32x3 = struct { f32, f32, f32 };
 pub const Result = css.Result;
 const Percentage = css.css_values.percentage.Percentage;
 const CSSNumberFns = css.css_values.number.CSSNumberFns;
@@ -2656,7 +2654,6 @@ const Calc = css.css_values.calc.Calc;
 const Angle = css.css_values.angle.Angle;
 const Printer = css.Printer;
 const PrintErr = css.PrintErr;
-const F32x3 = struct { f32, f32, f32 };
 const D50: []const f32 = (&.{ @floatCast((@as(f64, @floatCast(0.3457)) / @as(f64, @floatCast(0.3585)))), 1.0, @floatCast((((@as(f64, @floatCast(1.0)) - @as(f64, @floatCast(0.3457))) - @as(f64, @floatCast(0.3585))) / @as(f64, @floatCast(0.3585)))) });
 const generated_color_conversions = @import("./color_generated.zig").generated_color_conversions;
 const Allocator = std.mem.Allocator;
@@ -2697,9 +2694,7 @@ pub fn clip(color_val: *const T) T {
 
 pub fn checkColorConverted(comptime T: type, color: *const CssColor) css.Result(bool) {
         const Res = css.Result(bool);
-        _ = &Res;
         const ParseErr = css.ParseError(css.ParserError);
-        _ = &ParseErr;
         _ = bun.debugAssert(((color.* != .light_dark) and (color.* != .current_color)));
         return (switch (color.*) {
 .rgba => Res{ .result = (T == RGBA) },
@@ -3242,7 +3237,6 @@ return .{ .err = e };
 },
 });
         const R = Result(f32);
-        _ = &R;
         return (switch (result) {
 .number => |value| R{ .result = (if (@typeInfo(@TypeOf(value)) == .@"enum") @intFromEnum(value) else value.value) },
 .percentage => |value| R{ .result = value.unit_value },
@@ -3458,7 +3452,6 @@ return .{ .err = e };
 },
 });
         const R_hue = Result(HueInterpolationMethod);
-        _ = &R_hue;
         const hue_method_: Result(HueInterpolationMethod) = (if ((switch (method) {
 .hsl, .hwb, .lch, .oklch => true,
 else => false,

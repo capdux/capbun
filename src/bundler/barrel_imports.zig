@@ -101,6 +101,11 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const RequestedExports = union(enum) {
+    all: void,
+    partial: bun.StringArrayHashMapUnmanaged(void),
+};
+
 pub const BarrelExportResolution = struct {
     import_record_index: u32,
     original_alias: ?[]const u8,
@@ -116,10 +121,6 @@ pub const BarrelWorkItem = struct {
 pub const string = []const u8;
 const log = Output.scoped(.barrel, .hidden);
 const DedupFallback = bun.StringArrayHashMapUnmanaged(string);
-pub const RequestedExports = union(enum) {
-    all: void,
-    partial: bun.StringArrayHashMapUnmanaged(void),
-};
 const BundleV2 = bun.bundle_v2.BundleV2;
 const ParseTask = bun.bundle_v2.ParseTask;
 const ImportRecord = bun.ImportRecord;

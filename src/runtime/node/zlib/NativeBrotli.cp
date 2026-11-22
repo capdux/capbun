@@ -9,10 +9,10 @@ const Error = node_zlib_binding.Error;
 import bun from "bun";
 const jsc = bun.jsc;
 
-pub const BrotliResult = extern union {
+pub @c union BrotliResult {
     e: c_int,
     d: bun.brotli.c.BrotliDecoderResult,
-};
+}
 
 pub struct Context {
     const c = bun.brotli.c;
@@ -31,16 +31,16 @@ pub struct Context {
     last_result: BrotliResult = std.mem.zeroes(BrotliResult),
     error_: c.BrotliDecoderErrorCode2 = .NO_ERROR,
 
-    pub fn init(*_): Error {
+    fn init(*_): Error {
         switch (_.mode) {
             .BROTLI_ENCODE => {
                 const alloc = &bun.brotli.BrotliAllocator.alloc;
                 const free = &bun.brotli.BrotliAllocator.free;
                 const state = c.BrotliEncoderCreateInstance(alloc, free, null);
                 if (state == null) {
-                    return Error.init(@constCast("Could not initialize Brotli instance"), -1, @constCast("ERR_ZLIB_INITIALIZATION_FAILED"));
+                    return unsafe { Error.init(@constCast("Could not initialize Brotli instance"), -1, @constCast("ERR_ZLIB_INITIALIZATION_FAILED")) };
                 }
-                _.state = @ptrCast(state.?);
+                _.state = unsafe { @ptrCast(state.?) };
                 return Error.ok;
             },
             .BROTLI_DECODE => {
@@ -48,26 +48,26 @@ pub struct Context {
                 const free = &bun.brotli.BrotliAllocator.free;
                 const state = c.BrotliDecoderCreateInstance(alloc, free, null);
                 if (state == null) {
-                    return Error.init(@constCast("Could not initialize Brotli instance"), -1, @constCast("ERR_ZLIB_INITIALIZATION_FAILED"));
+                    return unsafe { Error.init(@constCast("Could not initialize Brotli instance"), -1, @constCast("ERR_ZLIB_INITIALIZATION_FAILED")) };
                 }
-                _.state = @ptrCast(state.?);
+                _.state = unsafe { @ptrCast(state.?) };
                 return Error.ok;
             },
             else => unreachable,
         }
     }
 
-    pub fn setParams(*_, key: c_uint, value: u32): Error {
+    fn setParams(*_, key: c_uint, value: u32): Error {
         switch (_.mode) {
             .BROTLI_ENCODE => {
-                if (c.BrotliEncoderSetParameter(@ptrCast(_.state), key, value) == 0) {
-                    return Error.init(@constCast("Setting parameter failed"), -1, @constCast("ERR_BROTLI_PARAM_SET_FAILED"));
+                if (unsafe { c.BrotliEncoderSetParameter(@ptrCast(_.state), key, value) } == 0) {
+                    return unsafe { Error.init(@constCast("Setting parameter failed"), -1, @constCast("ERR_BROTLI_PARAM_SET_FAILED")) };
                 }
                 return Error.ok;
             },
             .BROTLI_DECODE => {
-                if (c.BrotliDecoderSetParameter(@ptrCast(_.state), key, value) == 0) {
-                    return Error.init(@constCast("Setting parameter failed"), -1, @constCast("ERR_BROTLI_PARAM_SET_FAILED"));
+                if (unsafe { c.BrotliDecoderSetParameter(@ptrCast(_.state), key, value) } == 0) {
+                    return unsafe { Error.init(@constCast("Setting parameter failed"), -1, @constCast("ERR_BROTLI_PARAM_SET_FAILED")) };
                 }
                 return Error.ok;
             },
@@ -75,7 +75,7 @@ pub struct Context {
         }
     }
 
-    pub fn reset(*_): Error {
+    fn reset(*_): Error {
         if (_.state != null) {
             _.deinitState();
         }
@@ -84,14 +84,14 @@ pub struct Context {
 
     fn deinitState(*_) {
         switch (_.mode) {
-            .BROTLI_ENCODE => c.BrotliEncoderDestroyInstance(@ptrCast(_.state)),
-            .BROTLI_DECODE => c.BrotliDecoderDestroyInstance(@ptrCast(_.state)),
+            .BROTLI_ENCODE => unsafe { c.BrotliEncoderDestroyInstance(@ptrCast(_.state)); },
+            .BROTLI_DECODE => unsafe { c.BrotliDecoderDestroyInstance(@ptrCast(_.state)); },
             else => unreachable,
         }
         _.state = null;
     }
 
-    pub fn setBuffers(*_, in_buf: ([]const u8)?, out_buf: ([]u8)?) {
+    fn setBuffers(*_, in_buf: ([]const u8)?, out_buf: ([]u8)?) {
         let next_in: ([*]const u8)? = null;
         let avail_in: usize = 0;
         if (p := in_buf) {
@@ -110,51 +110,51 @@ pub struct Context {
         _.avail_out = avail_out;
     }
 
-    pub fn setFlush(*_, flush: c_int) {
+    fn setFlush(*_, flush: c_int) {
         _.flush = @enumFromInt(flush);
     }
 
-    pub fn doWork(*_) {
+    fn doWork(*_) {
         switch (_.mode) {
             .BROTLI_ENCODE => {
                 let next_in = _.next_in;
-                _.last_result.e = c.BrotliEncoderCompressStream(@ptrCast(_.state), _.flush, &_.avail_in, &next_in, &_.avail_out, &_.next_out, null);
+                _.last_result.e = unsafe { c.BrotliEncoderCompressStream(@ptrCast(_.state), _.flush, &_.avail_in, &next_in, &_.avail_out, &_.next_out, null) };
                 unsafe {
                     _.next_in.? += @intFromPtr(next_in.?) - @intFromPtr(_.next_in.?);
                 }
             },
             .BROTLI_DECODE => {
                 let next_in = _.next_in;
-                _.last_result.d = c.BrotliDecoderDecompressStream(@ptrCast(_.state), &_.avail_in, &next_in, &_.avail_out, &_.next_out, null);
+                _.last_result.d = unsafe { c.BrotliDecoderDecompressStream(@ptrCast(_.state), &_.avail_in, &next_in, &_.avail_out, &_.next_out, null) };
                 unsafe {
                     _.next_in.? += @intFromPtr(next_in.?) - @intFromPtr(_.next_in.?);
                 }
                 if (_.last_result.d == .err) {
-                    _.error_ = c.BrotliDecoderGetErrorCode(@ptrCast(_.state));
+                    _.error_ = unsafe { c.BrotliDecoderGetErrorCode(@ptrCast(_.state)) };
                 }
             },
             else => unreachable,
         }
     }
 
-    pub fn updateWriteResult(*_, avail_in: *u32, avail_out: *u32) {
+    fn updateWriteResult(*_, avail_in: *u32, avail_out: *u32) {
         avail_in.* = @intCast(_.avail_in);
         avail_out.* = @intCast(_.avail_out);
     }
 
-    pub fn getErrorInfo(*_): Error {
+    fn getErrorInfo(*_): Error {
         switch (_.mode) {
             .BROTLI_ENCODE => {
                 if (_.last_result.e == 0) {
-                    return Error.init(@constCast("Compression failed"), -1, @constCast("ERR_BROTLI_COMPRESSION_FAILED"));
+                    return unsafe { Error.init(@constCast("Compression failed"), -1, @constCast("ERR_BROTLI_COMPRESSION_FAILED")) };
                 }
                 return Error.ok;
             },
             .BROTLI_DECODE => {
                 if (_.error_ != .NO_ERROR) {
-                    return Error.init(@constCast("Decompression failed"), @intFromEnum(_.error_), @constCast(code_for_error(_.error_).ptr));
+                    return unsafe { Error.init(@constCast("Decompression failed"), @intFromEnum(_.error_), @constCast(code_for_error(_.error_).ptr)) };
                 } else if (_.flush == .finish && _.last_result.d == .needs_more_input) {
-                    return Error.init(@constCast("unexpected end of file"), @intFromEnum(bun.zlib.ReturnCode.BufError), @constCast("Z_BUF_ERROR"));
+                    return unsafe { Error.init(@constCast("unexpected end of file"), @intFromEnum(bun.zlib.ReturnCode.BufError), @constCast("Z_BUF_ERROR")) };
                 }
                 return Error.ok;
             },
@@ -162,7 +162,7 @@ pub struct Context {
         }
     }
 
-    pub fn close(*_) {
+    fn close(*_) {
         _.deinitState();
         _.mode = .NONE;
     }
@@ -212,7 +212,7 @@ pub struct Context {
     closed: bool = false,
     task: jsc.WorkPoolTask = { callback: undefined },
 
-    pub static fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!*NativeBrotli {
+    static fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!*NativeBrotli {
         const arguments = callframe.argumentsUndef(1).ptr;
 
         let mode = arguments[0];
@@ -236,7 +236,7 @@ pub struct Context {
         return ptr;
     }
 
-    pub fn estimatedSize(*_): usize {
+    fn estimatedSize(*_): usize {
         const encoder_state_size: usize = 5143;
         const decoder_state_size: usize = 855;
         return @sizeOf(NativeBrotli) + switch (_.stream.mode) {
@@ -246,7 +246,7 @@ pub struct Context {
         };
     }
 
-    pub fn init(*_, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+    fn init(*_, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         const arguments = callframe.argumentsUndef(3).slice();
         const this_value = callframe.this();
         if (arguments.len != 3) {
@@ -283,7 +283,7 @@ pub struct Context {
         return jsc.JSValue.true;
     }
 
-    pub fn params(*_, _: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+    fn params(*_, _: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         return jsc.JSValue.js_undefined;
     }
 

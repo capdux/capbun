@@ -39,17 +39,17 @@ pub union(ValueRefTag) ValueRef {
     jsvalue: JSValue,
     bunstr: String,
 
-    pub fn asBunString(globalObject: *JSGlobalObject): bun.String {
+    fn asBunString(globalObject: *JSGlobalObject): bun.String {
         return switch (_) {
-            .jsvalue => |str| str.toBunString(globalObject) catch @panic("unexpected exception"),
-            .bunstr => |str| str,
+            .jsvalue str => str.toBunString(globalObject) catch @panic("unexpected exception"),
+            .bunstr str => str,
         };
     }
 
-    pub fn asJSValue(globalObject: *JSGlobalObject): bun.JSError!JSValue {
+    fn asJSValue(globalObject: *JSGlobalObject): bun.JSError!JSValue {
         return switch (_) {
-            .jsvalue => |str| str,
-            .bunstr => |str| str.toJS(globalObject),
+            .jsvalue str => str,
+            .bunstr str => str.toJS(globalObject),
         };
     }
 }
@@ -149,11 +149,11 @@ pub struct RawNameFormatter {
     }
 }
 
-pub const Token = union(TokenKind) {
+pub union(TokenKind) Token {
     positional: PositionalToken,
     option: OptionToken,
     @"option-terminator": OptionTerminatorToken,
-};
+}
 
 pub fn findOptionByLongName(long_name: String, options: []const OptionDefinition): usize? {
     for (i of 0..options.len) {

@@ -135,6 +135,14 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const StringImpl = extern union {
+    ZigString: ZigString,
+    WTFStringImpl: WTFStringImpl,
+    StaticZigString: ZigString,
+    Dead: void,
+    Empty: void,
+};
+
 pub const String = extern struct {
     tag: Tag,
     value: StringImpl,
@@ -1078,13 +1086,6 @@ const AsciiStatus = bun.strings.AsciiStatus;
 const jsc = bun.jsc;
 const ZigString = bun.jsc.ZigString;
 const empty_u16_buf: [0]u16 = undefined;
-pub const StringImpl = extern union {
-    ZigString: ZigString,
-    WTFStringImpl: WTFStringImpl,
-    StaticZigString: ZigString,
-    Dead: void,
-    Empty: void,
-};
 const string_empty = String{ .tag = .Empty, .value = .{ .ZigString = .Empty } };
 const string_dead = String{ .tag = .Dead, .value = .{ .Dead = @as(void, undefined) } };
 

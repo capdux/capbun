@@ -29,14 +29,14 @@ pub error CopyFileRangeError {
 
 pub const InputType = if (Environment.isWindows) bun.OSPathSliceZ else bun.FD;
 
-pub const LinuxCopyFileState = packed struct(u8) {
+@packed(u8) pub struct LinuxCopyFileState {
     has_seen_exdev: bool = false,
     has_ioctl_ficlone_failed: bool = false,
     has_copy_file_range_failed: bool = false,
     has_sendfile_failed: bool = false,
     _: u4 = 0,
-};
-pub const EmptyCopyFileState = struct {};
+}
+pub struct EmptyCopyFileState {}
 pub const CopyFileState = if (Environment.isLinux) LinuxCopyFileState else EmptyCopyFileState;
 pub const CopyFileReturnType = bun.sys.Maybe(void);
 
@@ -54,7 +54,7 @@ pub fn copyFileWithState(in_fd: InputType, out_fd: InputType, copy_file_state: *
     }
 
     if (comptime Environment.isLinux) {
-        if (can_use_ioctl_ficlone() and !copy_file_state.has_seen_exdev and !copy_file_state.has_ioctl_ficlone_failed) {
+        if (can_use_ioctl_ficlone() && !copy_file_state.has_seen_exdev && !copy_file_state.has_ioctl_ficlone_failed) {
             // We only check once if the ioctl is supported, and cache the result.
             // EXT4 does not support FICLONE.
             const rc = bun.linux.ioctl_ficlone(out_fd, in_fd);
@@ -119,8 +119,8 @@ pub fn copyFileWithState(in_fd: InputType, out_fd: InputType, copy_file_state: *
     }
 
     if (comptime Environment.isWindows) {
-        if (err := CopyFileReturnType.errnoSys(bun.windows.CopyFileW(in_fd.ptr, out_fd.ptr, 0), .copyfile)) {
-            return err;
+        if (e := CopyFileReturnType.errnoSys(bun.windows.CopyFileW(in_fd.ptr, out_fd.ptr, 0), .copyfile)) {
+            return e;
         }
 
         return CopyFileReturnType.success;
@@ -206,7 +206,7 @@ pub fn can_use_ioctl_ficlone(): bool {
 }
 
 pub fn copyFileRange(in_fd: fd_t, out_fd: fd_t, len: usize, flags: u32, copy_file_state: *CopyFileState): Maybe(usize) {
-    if (canUseCopyFileRangeSyscall() and !copy_file_state.has_seen_exdev and !copy_file_state.has_copy_file_range_failed) {
+    if (canUseCopyFileRangeSyscall() && !copy_file_state.has_seen_exdev && !copy_file_state.has_copy_file_range_failed) {
         while (true) {
             const rc = std.os.linux.copy_file_range(in_fd, null, out_fd, null, len, flags);
             bun.sys.syslog("copy_file_range({d}, {d}, {d}) = {d}", .{ in_fd, out_fd, len, rc });

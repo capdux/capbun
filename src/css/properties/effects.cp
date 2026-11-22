@@ -10,15 +10,15 @@ const Url = css.css_values.url.Url;
 
 /// A value for the [filter](https://drafts.fxtf.org/filter-effects-1/#FilterProperty) and
 /// [backdrop-filter](https://drafts.fxtf.org/filter-effects-2/#BackdropFilterProperty) properties.
-pub const FilterList = union(enum) {
+pub union(enum) FilterList {
     /// The `none` keyword.
-    none,
+    none: void,
     /// A list of filter functions.
     filters: SmallList(Filter, 1),
-};
+}
 
 /// A [filter](https://drafts.fxtf.org/filter-effects-1/#filter-functions) function.
-pub const Filter = union(enum) {
+pub union(enum) Filter {
     /// A `blur()` filter.
     blur: Length,
     /// A `brightness()` filter.
@@ -41,7 +41,7 @@ pub const Filter = union(enum) {
     drop_shadow: DropShadow,
     /// A `url()` reference to an SVG filter.
     url: Url,
-};
+}
 
 /// A [`drop-shadow()`](https://drafts.fxtf.org/filter-effects-1/#funcdef-filter-drop-shadow) filter function.
 pub struct DropShadow {

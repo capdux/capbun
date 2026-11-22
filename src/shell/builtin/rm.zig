@@ -78,6 +78,36 @@ pub const ParseFlagsResult = enum {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
+pub const ParseOptsSubState = enum {
+    normal,
+    wait_write_err,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const ShellJoinStyle = enum {
+    posix,
+    windows,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub fn fromPath(p: bun.PathString) ShellJoinStyle {
+            if (comptime bun.Environment.isPosix) {
+                return .posix;
+            }
+            const backslash = ((std.mem.indexOfScalar(u8, p.slice(), 92)) orelse (std.math.maxInt(usize)));
+            const forwardslash = ((std.mem.indexOfScalar(u8, p.slice(), 47)) orelse (std.math.maxInt(usize)));
+            if ((forwardslash <= backslash)) {
+                return .posix;
+            }
+            return .windows;
+    }
+};
+
 pub const DirTaskEntryKindHint = enum {
     idk,
     dir,
@@ -156,6 +186,12 @@ pub const PromptOnceState = struct {
     removed_count: u32 = 0,
 };
 
+pub const OptsPromptBehaviour = union(enum) {
+    never: void,
+    once: PromptOnceState,
+    always: void,
+};
+
 pub const Opts = struct {
     preserve_root: bool = true,
     force: bool = false,
@@ -174,6 +210,11 @@ pub const ParseOptsState = struct {
 
 pub const WaitingTasksState = struct {
     tasks_done: usize = 0,
+};
+
+pub const ExecSubState = union(enum) {
+    idle: void,
+    waiting: WaitingTasksState,
 };
 
 pub const ExecState = struct {
@@ -209,6 +250,15 @@ pub fn getOutputCount(self: *ExecState, comptime thevar: @Type(.enum_literal)) u
 
 pub const DoneState = struct {
     exit_code: ExitCode,
+};
+
+pub const State = union(enum) {
+    idle: void,
+    parse_opts: ParseOptsState,
+    exec: ExecState,
+    done: DoneState,
+    waiting_write_err: void,
+    e: ExitCode,
 };
 
 pub const ShellDirTask = struct {
@@ -1006,7 +1056,7 @@ var parse_opts = (&self.state.parse_opts);
             _ = &parse_opts;
             switch (parse_opts.state) {
 .normal => {
-if ((parse_opts.idx >= parse_opts.args_slice.len)) {
+if ((parse_opts.idx >= bun.len(parse_opts.args_slice))) {
                 const error_string = Builtin.Kind.usageString(.rm);
                 if (self.bltn().stderr.needsIO()) |safeguard| {
                     _ = &safeguard;
@@ -1076,7 +1126,7 @@ if (self.opts.recursive) {
                     }
                 }
             }
-            const total_tasks = filepath_args.len;
+            const total_tasks = bun.len(filepath_args);
             self.state = .{ .exec = .{ .filepath_args = filepath_args, .total_tasks = total_tasks, .state = .idle, .output_done = std.atomic.Value(usize).init(0), .output_count = std.atomic.Value(usize).init(0) } };
             continue;
 },
@@ -1115,7 +1165,7 @@ const cwd = self.bltn().parentCmd().base.shell.cwd_fd;
                 for (cp_iter_slice(self.state.exec.filepath_args)) |root_raw| {
                     _ = &root_raw;
                     const root = root_raw[0..std.mem.len(root_raw)];
-                    const root_path_string = bun.PathString.init(root[0..root.len]);
+                    const root_path_string = bun.PathString.init(root);
                     const is_absolute = ResolvePath.Platform.auto.isAbsolute(root);
                     var task = ShellRmTask.create(root_path_string, self, cwd, (&self.state.exec.error_signal), is_absolute);
                     _ = &task;
@@ -1192,8 +1242,7 @@ pub fn onShellRmTaskDone(self: *Rm, task: *ShellRmTask) void {
         defer {
         _ = task.decrPendingAndMaybeDeinit();
         }
-        var exec = (&self.state.exec);
-        _ = &exec;
+        const exec = (&self.state.exec);
         var tasks_done: usize = 0;
         _ = &tasks_done;
         switch (exec.state) {
@@ -1298,41 +1347,7 @@ const Maybe = bun.sys.Maybe;
 const Allocator = std.mem.Allocator;
 const log = bun.Output.scoped(.Rm, .hidden);
 const debug = bun.Output.scoped(.AsyncRmTask, .hidden);
-pub const OptsPromptBehaviour = union(enum) {
-    never,
-    once: PromptOnceState,
-    always,
-};
 pub const PromptBehaviour = OptsPromptBehaviour;
-pub const ParseOptsSubState = union(enum) {
-    normal,
-    wait_write_err,
-};
-pub const ExecSubState = union(enum) {
-    idle,
-    waiting: WaitingTasksState,
-};
-pub const State = union(enum) {
-    idle,
-    parse_opts: ParseOptsState,
-    exec: ExecState,
-    done: DoneState,
-    waiting_write_err,
-    e: ExitCode,
-};
-pub const ShellJoinStyle = union(enum) {
-    posix,
-    windows,
-
-    pub fn fromPath(p: bun.PathString) ShellJoinStyle {
-        if (comptime bun.Environment.isPosix) return .posix;
-        const backslash = std.mem.indexOfScalar(u8, p.slice(), '\\') orelse std.math.maxInt(usize);
-        const forwardslash = std.mem.indexOfScalar(u8, p.slice(), '/') orelse std.math.maxInt(usize);
-        if (forwardslash <= backslash)
-            return .posix;
-        return .windows;
-    }
-};
 pub const JoinStyle = ShellJoinStyle;
 pub const EntryKindHint = DirTaskEntryKindHint;
 var dummy_remove_file: DummyRemoveFile = std.mem.zeroes(DummyRemoveFile);

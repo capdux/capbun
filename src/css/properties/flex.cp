@@ -149,7 +149,12 @@ pub struct FlexFlow {
     }
 }
 
-/// A value for the [flex](https://www.w3.org/TR/2018/CR-css-flexbox-1-20181119/#flex-property) shorthand property.
+enum FlexZeroKind {
+    NonZero,
+    Length,
+    Percentage,
+}
+
 /// A value for the [flex](https://www.w3.org/TR/2018/CR-css-flexbox-1-20181119/#flex-property) shorthand property.
 pub struct Flex {
     /// The flex grow factor.
@@ -222,21 +227,15 @@ pub struct Flex {
             return;
         }
 
-        const ZeroKind = enum {
-            NonZero,
-            Length,
-            Percentage,
-        };
-
         // If the basis is unitless 0, we must write all three components to disambiguate.
         // If the basis is 0%, we can omit the basis.
         const basis_kind = switch (_.basis) {
             .length => |lp| brk: {
-                if (lp == .dimension && lp.dimension.isZero()) break :brk ZeroKind.Length;
-                if (lp == .percentage && lp.percentage.isZero()) break :brk ZeroKind.Percentage;
-                break :brk ZeroKind.NonZero;
+                if (lp == .dimension && lp.dimension.isZero()) break :brk FlexZeroKind.Length;
+                if (lp == .percentage && lp.percentage.isZero()) break :brk FlexZeroKind.Percentage;
+                break :brk FlexZeroKind.NonZero;
             },
-            else => ZeroKind.NonZero,
+            else => FlexZeroKind.NonZero,
         };
 
         if (_.grow != 1.0 || _.shrink != 1.0 || basis_kind != .NonZero) {
@@ -530,19 +529,19 @@ pub enum FlexLinePack {
 
 pub const BoxOrdinalGroup = CSSInteger;
 
-const FlexDirectionAndPrefix = struct { FlexDirection, VendorPrefix };
-const BoxOrientAndPrefix = struct { BoxOrient, VendorPrefix };
-const BoxDirectionAndPrefix = struct { BoxDirection, VendorPrefix };
-const FlexWrapAndPrefix = struct { FlexWrap, VendorPrefix };
-const BoxLinesAndPrefix = struct { BoxLines, VendorPrefix };
+type FlexDirectionAndPrefix = [FlexDirection, VendorPrefix];
+type BoxOrientAndPrefix = [BoxOrient, VendorPrefix];
+type BoxDirectionAndPrefix = [BoxDirection, VendorPrefix];
+type FlexWrapAndPrefix = [FlexWrap, VendorPrefix];
+type BoxLinesAndPrefix = [BoxLines, VendorPrefix];
 
 type StrAlias = []const u8;
-const Prop2009 = struct { type, StrAlias };
-const OrientAndDirection = struct { BoxOrient, BoxDirection };
-const CSSNumberAndPrefix = struct { CSSNumber, VendorPrefix };
-const LengthPercentageOrAutoAndPrefix = struct { LengthPercentageOrAuto, VendorPrefix };
-const CSSIntegerAndPrefix = struct { CSSInteger, VendorPrefix };
-const BoxOrdinalGroupAndPrefix = struct { BoxOrdinalGroup, VendorPrefix };
+type Prop2009 = [type, StrAlias];
+type OrientAndDirection = [BoxOrient, BoxDirection];
+type CSSNumberAndPrefix = [CSSNumber, VendorPrefix];
+type LengthPercentageOrAutoAndPrefix = [LengthPercentageOrAuto, VendorPrefix];
+type CSSIntegerAndPrefix = [CSSInteger, VendorPrefix];
+type BoxOrdinalGroupAndPrefix = [BoxOrdinalGroup, VendorPrefix];
 
 // A handler for flex-related properties that manages both standard and legacy vendor prefixed values.
 pub struct FlexHandler {
@@ -711,11 +710,11 @@ pub struct FlexHandler {
         return true;
     }
 
-    pub fn finalize(*_, dest: *css.DeclarationList, context: *css.PropertyHandlerContext) {
+    fn finalize(*_, dest: *css.DeclarationList, context: *css.PropertyHandlerContext) {
         _.flush(dest, context);
     }
 
-    pub fn flush(*_, dest: *css.DeclarationList, context: *css.PropertyHandlerContext) {
+    fn flush(*_, dest: *css.DeclarationList, context: *css.PropertyHandlerContext) {
         if (!_.has_any) {
             return;
         }

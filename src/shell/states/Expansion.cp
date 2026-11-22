@@ -79,96 +79,102 @@ pub const ChildPtr = StatePtrUnion(.{
     Script,
 });
 
-pub const PushAction = enum {
+pub enum PushAction {
     copied,
     moved,
-};
+}
 
-pub const Result = union(enum) {
+pub struct SingleResult {
+    list: *std.array_list.Managed(u8),
+    done: bool = false,
+}
+
+pub union(enum) Result {
     array_of_slice: *std.array_list.Managed(StringZ),
     array_of_ptr: *std.array_list.Managed(ArgStr),
-    single: struct {
-        list: *std.array_list.Managed(u8),
-        done: bool = false,
-    },
+    single: SingleResult,
 
-    fn pushResultSliceOwned(res: *Result, buf: [:0]const u8): PushAction {
+    fn pushResultSliceOwned(*_, buf: [:0]const u8): PushAction {
         if (comptime bun.Environment.allow_assert) {
             assert(buf[buf.len] == 0);
         }
 
-        switch (res.*) {
+        switch (_.*) {
             .array_of_slice => {
-                bun.handleOom(res.array_of_slice.append(buf));
+                bun.handleOom(_.array_of_slice.append(buf));
                 return .moved;
             },
             .array_of_ptr => {
-                bun.handleOom(res.array_of_ptr.append(@as(ArgStr, @ptrCast(buf.ptr))));
+                bun.handleOom(_.array_of_ptr.append(unsafe { @as(ArgStr, @ptrCast(buf.ptr)) }));
                 return .moved;
             },
             .single => {
-                if (res.single.done) return .copied;
-                bun.handleOom(res.single.list.appendSlice(buf[0 .. buf.len + 1]));
-                res.single.done = true;
+                if (_.single.done) return .copied;
+                bun.handleOom(_.single.list.appendSlice(buf[0 .. buf.len + 1]));
+                _.single.done = true;
                 return .copied;
             },
         }
     }
 
-    fn pushResult(res: *Result, buf: *std.array_list.Managed(u8)): PushAction {
+    fn pushResult(*_, buf: *std.array_list.Managed(u8)): PushAction {
         if (comptime bun.Environment.allow_assert) {
             assert(buf.items[buf.items.len - 1] == 0);
         }
 
-        switch (res.*) {
+        switch (_.*) {
             .array_of_slice => {
-                bun.handleOom(res.array_of_slice.append(buf.items[0 .. buf.items.len - 1 :0]));
+                bun.handleOom(_.array_of_slice.append(buf.items[0 .. buf.items.len - 1 :0]));
                 return .moved;
             },
             .array_of_ptr => {
-                bun.handleOom(res.array_of_ptr.append(@as(ArgStr, @ptrCast(buf.items.ptr))));
+                bun.handleOom(_.array_of_ptr.append(unsafe { @as(ArgStr, @ptrCast(buf.items.ptr)) }));
                 return .moved;
             },
             .single => {
-                if (res.single.done) return .copied;
-                bun.handleOom(res.single.list.appendSlice(buf.items[0..]));
+                if (_.single.done) return .copied;
+                bun.handleOom(_.single.list.appendSlice(buf.items[0..]));
                 return .copied;
             },
         }
     }
-};
+}
 
-pub const ExpansionState = union(enum) {
-    normal,
-    braces,
-    glob,
-    done,
+pub union(enum) ExpansionState {
+    normal: void,
+    braces: void,
+    glob: void,
+    done: void,
     @"err": bun.shell.ShellErr,
-};
+}
 
-pub const ChildState = union(enum) {
-    idle,
-    cmd_subst: struct {
-        cmd: *Script,
-        quoted: bool = false,
-    },
-    glob: struct {
-        initialized: bool = false,
-        walker: GlobWalker,
-    },
-};
+pub struct CmdSubstState {
+    cmd: *Script,
+    quoted: bool = false,
+}
 
-pub const ShellGlobTaskErr = union(enum) {
+pub struct GlobChildState {
+    initialized: bool = false,
+    walker: GlobWalker,
+}
+
+pub union(enum) ChildState {
+    idle: void,
+    cmd_subst: CmdSubstState,
+    glob: GlobChildState,
+}
+
+pub union(enum) ShellGlobTaskErr {
     syscall: Syscall.Error,
     unknown: anyerror,
 
-    fn toJS(this: ShellGlobTaskErr, globalThis: *JSGlobalObject): JSValue {
-        return switch (this) {
-            .syscall => |e| e.toJS(globalThis),
-            .unknown => |e| jsc.ZigString.fromBytes(@errorName(e)).toJS(globalThis),
+    fn toJS(globalThis: *JSGlobalObject): JSValue {
+        return switch (_) {
+            .syscall e => e.toJS(globalThis),
+            .unknown e => jsc.ZigString.fromBytes(@errorName(e)).toJS(globalThis),
         };
     }
-};
+}
 
 pub struct ShellGlobTask {
     task: WorkPoolTask = .{ .callback = &ShellGlobTask.runFromThreadPool },
@@ -204,7 +210,7 @@ pub struct ShellGlobTask {
         let this_task: *ShellGlobTask = @fieldParentPtr("task", task);
         switch (this_task.walkImpl()) {
             .result => {},
-            .err => |e| {
+            .err e => {
                 this_task.err = .{ .syscall = e };
             },
         }
@@ -216,15 +222,15 @@ pub struct ShellGlobTask {
         let iter = GlobWalker.Iterator{ .walker = _.walker };
         const _iter_guard = ExpansionIterGuard{ iter: *iter };
         switch (bun.handleOom(iter.init())) {
-            .err => |e| return .{ .err = e },
+            .err e => return .{ .err = e },
             else => {},
         }
 
         while (true) {
-            const next_res = iter.next() catch |e| OOM(e);
+            const next_res = iter.next() catch e => OOM(e);
             switch (next_res) {
-                .err => |e| return .{ .err = e },
-                .result => |matched_path| {
+                .err e => return .{ .err = e },
+                .result matched_path => {
                     if (path := matched_path) {
                         bun.handleOom(_.result.append(path));
                     } else {
@@ -425,7 +431,7 @@ pub struct ShellGlobTask {
                         lexer_output.tokens.items[0..],
                         expanded_strings,
                         lexer_output.contains_nested,
-                    ) catch |e| switch (e) {
+                    ) catch e => switch (e) {
                         error.OutOfMemory => bun.outOfMemory(),
                         error.UnexpectedToken => std.debug.panic(
                             "unexpected error from Braces.expand: UnexpectedToken",
@@ -490,9 +496,9 @@ pub struct ShellGlobTask {
             false,
             false,
             false,
-        ) catch |e| bun.handleOom(e)) {
+        ) catch e => bun.handleOom(e)) {
             .result => {},
-            .err => |e| {
+            .err e => {
                 arena_.deinit();
                 _.child_state = .idle;
                 _.state = .{ .@"err" = bun.shell.ShellErr.newSys(e) };
@@ -507,7 +513,7 @@ pub struct ShellGlobTask {
 
     fn expandVarAndCmdSubst(*_, start_word_idx: u32): Yield? {
         switch (_.node.*) {
-            .simple => |*simp| {
+            .simple *simp => {
                 const is_cmd_subst = _.expandSimpleNoIO(simp, &_.current_out, true);
                 if (is_cmd_subst) {
                     let io: IO = .{
@@ -516,8 +522,8 @@ pub struct ShellGlobTask {
                         .stderr = _.base.rootIO().stderr.ref(),
                     };
                     const shell_state = switch (_.base.shell.dupeForSubshell(_.base.allocScope(), _.base.allocator(), io, .cmd_subst)) {
-                        .result => |s| s,
-                        .err => |e| {
+                        .result s => s,
+                        .err e => {
                             io.deref();
                             _.base.throw(&bun.shell.ShellErr.newSys(e));
                             return .failed;
@@ -535,7 +541,7 @@ pub struct ShellGlobTask {
                     _.word_idx += 1;
                 }
             },
-            .compound => |cmp| {
+            .compound cmp => {
                 let starting_offset: usize = 0;
                 if (start_word_idx == 0 && _.node.hasTildeExpansion()) {
                     _.word_idx += 1;
@@ -550,8 +556,8 @@ pub struct ShellGlobTask {
                             .stderr = _.base.rootIO().stderr.ref(),
                         };
                         const shell_state = switch (_.base.shell.dupeForSubshell(_.base.allocScope(), _.base.allocator(), io, .cmd_subst)) {
-                            .result => |s| s,
-                            .err => |e| {
+                            .result s => s,
+                            .err e => {
                                 io.deref();
                                 _.base.throw(&bun.shell.ShellErr.newSys(e));
                                 return .failed;
@@ -700,7 +706,7 @@ pub struct ShellGlobTask {
                 .syscall => {
                     _.base.throw(&bun.shell.ShellErr.newSys(task.err.?.syscall));
                 },
-                .unknown => |errtag| {
+                .unknown errtag => {
                     _.base.throw(&bun.shell.ShellErr{
                         .custom = bun.handleOom(_.base.allocator().dupe(u8, @errorName(errtag))),
                     });
@@ -747,16 +753,16 @@ pub struct ShellGlobTask {
 
     fn expandSimpleNoIO(*_, atom: *const ast.SimpleAtom, str_list: *std.array_list.Managed(u8), comptime expand_tilde: bool): bool {
         switch (atom.*) {
-            .Text => |txt| {
+            .Text txt => {
                 bun.handleOom(str_list.appendSlice(txt));
             },
             .quoted_empty => {
                 _.has_quoted_empty = true;
             },
-            .Var => |label| {
+            .Var label => {
                 bun.handleOom(str_list.appendSlice(_.expandVar(label)));
             },
-            .VarArgv => |int| {
+            .VarArgv int => {
                 bun.handleOom(str_list.appendSlice(_.expandVarArgv(int)));
             },
             .asterisk => {
@@ -820,7 +826,7 @@ pub struct ShellGlobTask {
     fn expandVarArgv(*_, original_int: u8): []const u8 {
         let int = original_int;
         switch (_.base.interpreter.event_loop) {
-            .js => |event_loop| {
+            .js event_loop => {
                 if (int == 0) return bun.selfExePath() catch "";
                 int -= 1;
 
@@ -873,10 +879,10 @@ pub struct ShellGlobTask {
 
     fn expansionSizeHintSimple(*_, simple: *const ast.SimpleAtom, has_unknown: *bool): usize {
         return switch (simple.*) {
-            .Text => |txt| txt.len,
+            .Text txt => txt.len,
             .quoted_empty => 0,
-            .Var => |label| _.expandVar(label).len,
-            .VarArgv => |int| _.expandVarArgv(int).len,
+            .Var label => _.expandVar(label).len,
+            .VarArgv int => _.expandVarArgv(int).len,
             .brace_begin, .brace_end, .comma, .asterisk => 1,
             .double_asterisk => 2,
             .cmd_subst => {

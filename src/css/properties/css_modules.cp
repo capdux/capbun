@@ -57,7 +57,7 @@ pub struct Composes {
             CustomIdentFns.toCss(name, dest)?;
         }
 
-        if (*from_val := this.@"from") {
+        if (*from_val := _.@"from") {
             dest.writeStr(" from ")?;
             from_val.toCss(dest)?;
         }
@@ -105,15 +105,15 @@ fn parseSpecifier(input: *css.Parser): css.Result(Specifier) {
     return { err: input.newCustomError(css.ParserError.invalid_declaration) };
 }
 
-pub const Specifier = union(enum) {
+pub union(enum) Specifier {
     /// The referenced name is global.
-    global,
+    global: void,
     /// The referenced name comes from the specified file.
     ///
     /// Is an import record index
     import_record_index: u32,
 
-    pub fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 
@@ -121,7 +121,7 @@ pub const Specifier = union(enum) {
     pub const toCss = toCssSpecifier;
     pub const deepClone = deepCloneSpecifier;
     pub const hash = hashSpecifier;
-};
+}
 
 fn toCssSpecifier(this_spec: *const Specifier, dest: *Printer): PrintErr!void {
     return switch (this_spec.*) {

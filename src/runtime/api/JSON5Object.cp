@@ -109,14 +109,14 @@ pub fn parse(
     return exprToJS(root, global);
 }
 
-pub const Space = union(enum) {
-    minified,
+pub union(enum) Space {
+    minified: void,
     number: u32,
     str: bun.String,
 
     pub const init = spaceInit;
     pub const deinit = spaceDeinit;
-};
+}
 
 pub fn spaceInit(global: *jsc.JSGlobalObject, space_value: JSValue): bun.JSError!Space {
     const space = space_value.unwrapBoxedPrimitive(global)?;
@@ -140,7 +140,7 @@ pub fn spaceInit(global: *jsc.JSGlobalObject, space_value: JSValue): bun.JSError
 
 pub fn spaceDeinit(this_space: *Space) {
     switch (this_space.*) {
-        .str => |str| str.deref(),
+        .str str => str.deref(),
         .minified, .number => {},
     }
 }
@@ -228,7 +228,7 @@ struct Stringifier {
         if (gop.found_existing) {
             return global.throw("Converting circular structure to JSON5", {});
         }
-        defer _ = _.visiting.remove(unwrapped);
+        defer * = _.visiting.remove(unwrapped);
 
         if (unwrapped.isArray()) {
             _.stringifyArray(global, unwrapped)?;
@@ -373,7 +373,7 @@ struct Stringifier {
                 0x5c => _.builder.append(.latin1, "\\\\"), // backslash
                 0x2028 => _.builder.append(.latin1, "\\u2028"),
                 0x2029 => _.builder.append(.latin1, "\\u2029"),
-                0x01...0x07, 0x0e...0x1f, 0x7f => {
+                0x01..=0x07, 0x0e..=0x1f, 0x7f => {
                     // Other control chars → \xHH
                     _.builder.append(.latin1, "\\x");
                     _.builder.append(.lchar, hexDigit(c >> 4));
@@ -393,13 +393,13 @@ struct Stringifier {
     fn newline(*_) {
         switch (_.space) {
             .minified => {},
-            .number => |space_num| {
+            .number space_num => {
                 _.builder.append(.lchar, '\n');
                 for (loop_i of 0.._.indent * space_num) {
                     _.builder.append(.lchar, ' ');
                 }
             },
-            .str => |space_str| {
+            .str space_str => {
                 _.builder.append(.lchar, '\n');
                 const clamped = if (space_str.length() > 10)
                     space_str.substringWithLen(0, 10)
@@ -416,12 +416,12 @@ struct Stringifier {
 fn exprToJS(expr: Expr, global: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
     switch (expr.data) {
         .e_null => return JSValue.null,
-        .e_boolean => |boolean| return JSValue.jsBoolean(boolean.value),
-        .e_number => |number| return JSValue.jsNumber(number.value),
-        .e_string => |str| {
+        .e_boolean boolean => return JSValue.jsBoolean(boolean.value),
+        .e_number number => return JSValue.jsNumber(number.value),
+        .e_string str => {
             return str.toJS(bun.default_allocator, global);
         },
-        .e_array => |arr| {
+        .e_array arr => {
             let js_arr = (JSValue.createEmptyArray(global, arr.items.len))?;
             let _i: usize = 0;
             for (item of arr.slice()) {
@@ -432,7 +432,7 @@ fn exprToJS(expr: Expr, global: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
             }
             return js_arr;
         },
-        .e_object => |obj| {
+        .e_object obj => {
             let js_obj = JSValue.createEmptyObject(global, obj.properties.len);
             for (prop of obj.properties.slice()) {
                 const key_expr = prop.key.?;

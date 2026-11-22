@@ -15,19 +15,16 @@ pub struct SupportsDeclaration {
     /// e.g. `@supports (background-image: url('example.png'))`
     value: []const u8,
 
-    pub static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 
-    pub fn deepClone(allocator: std.mem.Allocator): @This() {
+    fn deepClone(allocator: std.mem.Allocator): @This() {
         return css.implementDeepClone(@This(), &_, allocator);
     }
 }
 
-pub const SeenDeclKey = struct {
-    css.PropertyId,
-    []const u8,
-};
+pub type SeenDeclKey = [css.PropertyId, []const u8];
 
 type SeenDeclMap = std.ArrayHashMap(
     SeenDeclKey,

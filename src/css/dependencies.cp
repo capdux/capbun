@@ -11,12 +11,12 @@ pub struct DependencyOptions {
 }
 
 /// A dependency.
-pub const Dependency = union(enum) {
+pub union(enum) Dependency {
     /// An `@import` dependency.
     import: ImportDependency,
     /// A `url()` dependency.
     url: UrlDependency,
-};
+}
 
 /// A line and column position within a source file.
 pub struct Location {
@@ -90,7 +90,7 @@ pub struct ImportDependency {
             media: media,
             loc: SourceRange.new(
                 filename,
-                css.dependencies.Location{ .line = rule.loc.line + 1, .column = rule.loc.column },
+                Location{ line: rule.loc.line + 1, column: rule.loc.column },
                 8,
                 rule.url.len + 2,
             ), // TODO: what about @import url(...)?

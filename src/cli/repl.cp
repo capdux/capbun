@@ -117,51 +117,51 @@ struct Cursor {
 // Key Codes
 // ============================================================================
 
-const Key = union(enum) {
+union(enum) Key {
     // Control keys
-    ctrl_a,
-    ctrl_b,
-    ctrl_c,
-    ctrl_d,
-    ctrl_e,
-    ctrl_f,
-    ctrl_k,
-    ctrl_l,
-    ctrl_n,
-    ctrl_p,
-    ctrl_r,
-    ctrl_t,
-    ctrl_u,
-    ctrl_w,
-    backspace,
-    tab,
-    enter,
-    escape,
+    ctrl_a: void,
+    ctrl_b: void,
+    ctrl_c: void,
+    ctrl_d: void,
+    ctrl_e: void,
+    ctrl_f: void,
+    ctrl_k: void,
+    ctrl_l: void,
+    ctrl_n: void,
+    ctrl_p: void,
+    ctrl_r: void,
+    ctrl_t: void,
+    ctrl_u: void,
+    ctrl_w: void,
+    backspace: void,
+    tab: void,
+    enter: void,
+    escape: void,
 
     // Special keys
-    delete,
-    home,
-    end,
-    page_up,
-    page_down,
-    arrow_up,
-    arrow_down,
-    arrow_right,
-    arrow_left,
+    delete: void,
+    home: void,
+    end: void,
+    page_up: void,
+    page_down: void,
+    arrow_up: void,
+    arrow_down: void,
+    arrow_right: void,
+    arrow_left: void,
 
     // Alt combinations
-    alt_b,
-    alt_d,
-    alt_f,
-    alt_backspace,
-    alt_left,
-    alt_right,
+    alt_b: void,
+    alt_d: void,
+    alt_f: void,
+    alt_backspace: void,
+    alt_left: void,
+    alt_right: void,
 
     // Regular printable character
     char: u8,
 
     // Unknown/unhandled
-    unknown,
+    unknown: void,
 
     const fromByte = keyFromByte;
 }

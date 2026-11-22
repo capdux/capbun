@@ -30,7 +30,7 @@ pub enum IntegrityTag: u8 {
 
     _,
 
-    @inline pub fn isSupported(): bool {
+    @inline fn isSupported(): bool {
         return @intFromEnum(_) >= @intFromEnum(IntegrityTag.sha1) && @intFromEnum(_) <= @intFromEnum(IntegrityTag.sha512);
     }
 
@@ -55,7 +55,7 @@ pub enum IntegrityTag: u8 {
         }
     }
 
-    @inline pub fn digestLen(): usize {
+    @inline fn digestLen(): usize {
         return switch (_) {
             .sha1 => std.crypto.hash.Sha1.digest_length,
             .sha512 => std.crypto.hash.sha2.Sha512.digest_length,
@@ -68,13 +68,13 @@ pub enum IntegrityTag: u8 {
 
 pub const Tag = IntegrityTag;
 
-pub const StreamingHasher = union(enum) {
-    none,
+pub union(enum) StreamingHasher {
+    none: void,
     sha1: Crypto.SHA1,
     sha256: Crypto.SHA256,
     sha384: Crypto.SHA384,
     sha512: Crypto.SHA512,
-};
+}
 
 pub struct IntegrityStreaming {
     expected: Integrity,
@@ -95,7 +95,7 @@ pub struct IntegrityStreaming {
         };
     }
 
-    pub fn update(*_, bytes: []const u8) {
+    fn update(*_, bytes: []const u8) {
         if (bytes.len == 0) return;
         switch (_.hasher) {
             .none => {},
@@ -103,7 +103,7 @@ pub struct IntegrityStreaming {
         }
     }
 
-    pub fn final(*_): Integrity {
+    fn final(*_): Integrity {
         let out: [MAX_DIGEST_BUF_LEN]u8 = empty_digest_buf;
         return switch (_.hasher) {
             .none => Integrity{ tag: .unknown, value: out },
@@ -126,7 +126,7 @@ pub struct IntegrityStreaming {
         };
     }
 
-    pub fn verify(*_): bool {
+    fn verify(*_): bool {
         if (!_.expected.tag.isSupported()) return true;
         const computed = _.final();
         if (computed.tag != _.expected.tag) return false;
@@ -241,11 +241,11 @@ pub const Streaming = IntegrityStreaming;
         return Integrity{ value: out, tag: tag };
     }
 
-    pub fn slice(_: &Integrity): []const u8 {
+    fn slice(_: &Integrity): []const u8 {
         return _.value[0.._.tag.digestLen()];
     }
 
-    pub fn format(writer: *std.Io.Writer)! {
+    fn format(writer: *std.Io.Writer)! {
         switch (_.tag) {
             .sha1 => {
                 writer.writeAll("sha1-")?;
@@ -288,7 +288,7 @@ pub const Streaming = IntegrityStreaming;
         return Integrity{ tag: .sha512, value: value };
     }
 
-    pub fn verify(bytes: []const u8): bool {
+    fn verify(bytes: []const u8): bool {
         return @call(bun.callmod_inline, Integrity.verifyByTag, .{ _.tag, bytes, &_.value });
     }
 
@@ -298,25 +298,25 @@ pub const Streaming = IntegrityStreaming;
         switch (tag) {
             .sha1 => {
                 const len = std.crypto.hash.Sha1.digest_length;
-                const ptr: *[len]u8 = @ptrCast(&digest);
+                const ptr: *[len]u8 = unsafe { @ptrCast(&digest) };
                 Crypto.SHA1.hash(bytes, ptr);
                 return strings.eqlLong(ptr, sum[0..len], true);
             },
             .sha512 => {
                 const len = std.crypto.hash.sha2.Sha512.digest_length;
-                const ptr: *[len]u8 = @ptrCast(&digest);
+                const ptr: *[len]u8 = unsafe { @ptrCast(&digest) };
                 Crypto.SHA512.hash(bytes, ptr);
                 return strings.eqlLong(ptr, sum[0..len], true);
             },
             .sha256 => {
                 const len = std.crypto.hash.sha2.Sha256.digest_length;
-                const ptr: *[len]u8 = @ptrCast(&digest);
+                const ptr: *[len]u8 = unsafe { @ptrCast(&digest) };
                 Crypto.SHA256.hash(bytes, ptr);
                 return strings.eqlLong(ptr, sum[0..len], true);
             },
             .sha384 => {
                 const len = std.crypto.hash.sha2.Sha384.digest_length;
-                const ptr: *[len]u8 = @ptrCast(&digest);
+                const ptr: *[len]u8 = unsafe { @ptrCast(&digest) };
                 Crypto.SHA384.hash(bytes, ptr);
                 return strings.eqlLong(ptr, sum[0..len], true);
             },

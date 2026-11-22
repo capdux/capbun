@@ -137,6 +137,17 @@ pub const HoistPlacement = struct {
     bundled: bool = false,
 };
 
+pub const HoistDependencyResult = union(enum) {
+    dependency_loop: void,
+    hoisted: void,
+    resolve: PackageID,
+    resolve_replace: ResolveReplace,
+    resolve_later: void,
+    placement: Placement,
+    pub const ResolveReplace = HoistResolveReplace;
+    pub const Placement = HoistPlacement;
+};
+
 pub const IteratorNext = struct {
     relative_path: stringZ,
     dependencies: []const DependencyID,
@@ -432,17 +443,6 @@ pub const external_size = (((@sizeOf(Id) + @sizeOf(PackageID)) + @sizeOf(Id)) + 
 pub const External = [external_size]u8;
 pub const Slice = ExternalSlice(Tree);
 pub const List = std.ArrayListUnmanaged(Tree);
-pub const HoistDependencyResult = union(enum) {
-    dependency_loop,
-    hoisted,
-    resolve: PackageID,
-    resolve_replace: ResolveReplace,
-    resolve_later,
-    placement: Placement,
-
-    pub const ResolveReplace = HoistResolveReplace;
-    pub const Placement = HoistPlacement;
-};
 pub const max_depth = ((bun.MAX_PATH_BYTES / "node_modules".len) + 1);
 pub const DepthBuf = [max_depth]Id;
 

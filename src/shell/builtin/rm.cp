@@ -50,11 +50,11 @@ pub struct PromptOnceState {
     removed_count: u32 = 0,
 }
 
-pub const OptsPromptBehaviour = union(enum) {
-    never,
+pub union(enum) OptsPromptBehaviour {
+    never: void,
     once: PromptOnceState,
-    always,
-};
+    always: void,
+}
 
 pub struct Opts {
     preserve_root: bool = true,
@@ -76,10 +76,10 @@ pub enum ParseFlagsResult {
     illegal_option_with_flag,
 }
 
-pub const ParseOptsSubState = union(enum) {
+pub enum ParseOptsSubState {
     normal,
     wait_write_err,
-};
+}
 
 pub struct ParseOptsState {
     args_slice: []const [*:0]const u8,
@@ -91,10 +91,10 @@ pub struct WaitingTasksState {
     tasks_done: usize = 0,
 }
 
-pub const ExecSubState = union(enum) {
-    idle,
+pub union(enum) ExecSubState {
+    idle: void,
     waiting: WaitingTasksState,
-};
+}
 
 pub struct ExecState {
     filepath_args: []const [*:0]const u8,
@@ -129,20 +129,20 @@ pub struct DoneState {
     exit_code: ExitCode,
 }
 
-pub const State = union(enum) {
-    idle,
+pub union(enum) State {
+    idle: void,
     parse_opts: ParseOptsState,
     exec: ExecState,
     done: DoneState,
-    waiting_write_err,
+    waiting_write_err: void,
     e: ExitCode,
-};
+}
 
-pub const ShellJoinStyle = union(enum) {
+pub enum ShellJoinStyle {
     posix,
     windows,
 
-    pub fn fromPath(p: bun.PathString): ShellJoinStyle {
+    static fn fromPath(p: bun.PathString): ShellJoinStyle {
         if (comptime bun.Environment.isPosix) return .posix;
         const backslash = std.mem.indexOfScalar(u8, p.slice(), '\\') orelse std.math.maxInt(usize);
         const forwardslash = std.mem.indexOfScalar(u8, p.slice(), '/') orelse std.math.maxInt(usize);
@@ -150,7 +150,7 @@ pub const ShellJoinStyle = union(enum) {
             return .posix;
         return .windows;
     }
-};
+}
 
 pub const JoinStyle = ShellJoinStyle;
 
@@ -949,7 +949,7 @@ fn parseFlag(opts: *Opts, _: *Builtin, flag: []const u8): ParseFlagsResult {
                     let parse_opts = &_.state.parse_opts;
                     switch (parse_opts.state) {
                         .normal => {
-                            if (parse_opts.idx >= parse_opts.args_slice.len) {
+                            if (parse_opts.idx >= bun.len(parse_opts.args_slice)) {
                                 const error_string = Builtin.Kind.usageString(.rm);
                                 if (safeguard := _.bltn().stderr.needsIO()) {
                                     parse_opts.state = .wait_write_err;
@@ -1031,7 +1031,7 @@ fn parseFlag(opts: *Opts, _: *Builtin, flag: []const u8): ParseFlagsResult {
                                         }
                                     }
 
-                                    const total_tasks = filepath_args.len;
+                                    const total_tasks = bun.len(filepath_args);
                                     _.state = {
                                         exec: {
                                             filepath_args: filepath_args,
@@ -1080,7 +1080,7 @@ fn parseFlag(opts: *Opts, _: *Builtin, flag: []const u8): ParseFlagsResult {
                         _.state.exec.state = { waiting: {} };
                         for (root_raw of _.state.exec.filepath_args) {
                             const root = root_raw[0..std.mem.len(root_raw)];
-                            const root_path_string = bun.PathString.init(root[0..root.len]);
+                            const root_path_string = bun.PathString.init(root);
                             const is_absolute = ResolvePath.Platform.auto.isAbsolute(root);
                             let task = ShellRmTask.create(root_path_string, _, cwd, &_.state.exec.error_signal, is_absolute);
                             task.schedule();
@@ -1139,7 +1139,7 @@ fn parseFlag(opts: *Opts, _: *Builtin, flag: []const u8): ParseFlagsResult {
 
     pub fn onShellRmTaskDone(*_, task: *ShellRmTask) {
         defer task.decrPendingAndMaybeDeinit();
-        let exec = &_.state.exec;
+        const exec = *_.state.exec;
         let tasks_done: usize = 0;
         switch (exec.state) {
             .idle => @panic("Invalid state"),

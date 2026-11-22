@@ -44,10 +44,140 @@ fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @Type
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
 fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == __CpErr) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return __CpErr{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return __CpErr{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return __CpErr{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return __CpErr.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return __CpErr.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return __CpErr{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
 fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 pub const options_jsc = @import("../runtime/dns_jsc/options_jsc.zig");
+pub const GetAddrInfoFamily = enum(u2) {
+    unspecified,
+    inet,
+    inet6,
+    unix,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub fn toLibC(self: GetAddrInfoFamily) i32 {
+            return (switch (self) {
+.unspecified => 0,
+.inet => std.posix.AF.INET,
+.inet6 => std.posix.AF.INET6,
+.unix => std.posix.AF.UNIX,
+});
+    }
+    
+    pub const map = bun.ComptimeStringMap(GetAddrInfoFamily, .{ .{ "IPv4", GetAddrInfoFamily.inet }, .{ "IPv6", GetAddrInfoFamily.inet6 }, .{ "ipv4", GetAddrInfoFamily.inet }, .{ "ipv6", GetAddrInfoFamily.inet6 }, .{ "any", GetAddrInfoFamily.unspecified } });
+    
+    pub const FromJSError = (JSError || error{
+            InvalidFamily,
+        });
+    
+    pub const fromJS = options_jsc.familyFromJS;
+};
+
+pub const GetAddrInfoSocketType = enum(u2) {
+    unspecified,
+    stream,
+    dgram,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub fn toLibC(self: GetAddrInfoSocketType) i32 {
+            switch (self) {
+.unspecified => {
+return 0;
+},
+.stream => {
+return std.posix.SOCK.STREAM;
+},
+.dgram => {
+return std.posix.SOCK.DGRAM;
+},
+}
+    }
+    
+    pub const map = bun.ComptimeStringMap(GetAddrInfoSocketType, .{ .{ "stream", GetAddrInfoSocketType.stream }, .{ "dgram", GetAddrInfoSocketType.dgram } });
+    
+    pub const FromJSError = (JSError || error{
+            InvalidSocketType,
+        });
+    
+    pub const fromJS = options_jsc.socketTypeFromJS;
+};
+
+pub const GetAddrInfoProtocol = enum(u2) {
+    unspecified,
+    tcp,
+    udp,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub fn toLibC(self: GetAddrInfoProtocol) i32 {
+            switch (self) {
+.unspecified => {
+return 0;
+},
+.tcp => {
+return std.posix.IPPROTO.TCP;
+},
+.udp => {
+return std.posix.IPPROTO.UDP;
+},
+}
+    }
+    
+    pub const map = bun.ComptimeStringMap(GetAddrInfoProtocol, .{ .{ "tcp", GetAddrInfoProtocol.tcp }, .{ "udp", GetAddrInfoProtocol.udp } });
+    
+    pub const FromJSError = (JSError || error{
+            InvalidProtocol,
+        });
+    
+    pub const fromJS = options_jsc.protocolFromJS;
+};
+
+pub const GetAddrInfoBackend = enum(u2) {
+    c_ares,
+    system,
+    libc,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+    
+    pub const label = bun.ComptimeStringMap(GetAddrInfoBackend, .{ .{ "c-ares", .c_ares }, .{ "c_ares", .c_ares }, .{ "cares", .c_ares }, .{ "async", .c_ares }, .{ "libc", .libc }, .{ "system", .system }, .{ "getaddrinfo", .libc } });
+    
+    pub const default: GetAddrInfoBackend = (switch (bun.Environment.os) {
+    .mac, .windows => .system,
+    else => (if (bun.Environment.isAndroid) .system else .c_ares),
+    });
+    
+    pub const FromJSError = (JSError || error{
+            InvalidBackend,
+        });
+    
+    pub const fromJS = options_jsc.backendFromJS;
+};
+
 pub fn FreeGuard(comptime T: type) type {
     return struct {
         allocator: std.mem.Allocator,
@@ -62,22 +192,95 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
-const JSError = bun.JSError;
-const String = bun.String;
-const default_allocator = bun.default_allocator;
-pub const AI_V4MAPPED: c_int = (if (bun.Environment.isWindows) 2048 else bun.c.AI_V4MAPPED);
-pub const AI_ADDRCONFIG: c_int = (if (bun.Environment.isWindows) 1024 else bun.c.AI_ADDRCONFIG);
-pub const AI_ALL: c_int = (if (bun.Environment.isWindows) 256 else bun.c.AI_ALL);
+pub const GetAddrInfoOptions = packed struct(u64) {
+    family: GetAddrInfoFamily = .unspecified,
+    socktype: GetAddrInfoSocketType = .stream,
+    protocol: GetAddrInfoProtocol = .unspecified,
+    backend: GetAddrInfoBackend = GetAddrInfoBackend.default,
+    flags: std.c.AI = .{},
+    _: u24 = 0,
+
+pub fn toLibC(self: GetAddrInfoOptions) ?std.c.addrinfo {
+            if (((((self.family == .unspecified) and (self.socktype == .unspecified)) and (self.protocol == .unspecified)) and (self.flags == std.c.AI{  }))) {
+                return null;
+            }
+            var hints: std.c.addrinfo = undefined;
+            _ = &hints;
+            _ = @memset(std.mem.asBytes((&hints))[0..@sizeOf(std.c.addrinfo)], 0);
+            hints.family = self.family.toLibC();
+            hints.socktype = self.socktype.toLibC();
+            hints.protocol = self.protocol.toLibC();
+            hints.flags = self.flags;
+            return hints;
+    }
+    pub const FromJSError = ((((GetAddrInfoFamily.FromJSError || GetAddrInfoSocketType.FromJSError) || GetAddrInfoProtocol.FromJSError) || GetAddrInfoBackend.FromJSError) || error{
+            InvalidFlags,
+            InvalidOptions,
+        });
+    pub const fromJS = options_jsc.optionsFromJS;
+};
+
+pub const GetAddrInfoResultAny = union(enum) {
+    addrinfo: ?*std.c.addrinfo,
+    list: std.array_list.Managed(GetAddrInfoResult),
+
+pub fn deinit(self: GetAddrInfoResultAny) void {
+            switch (self) {
+.addrinfo => |addrinfo| {
+if (addrinfo) |a| {
+                _ = &a;
+                _ = std.c.freeaddrinfo(a);
+            }
+},
+.list => |list_| {
+var list = list_;
+            _ = &list;
+            _ = list.clearAndFree();
+},
+}
+    }
+    pub const toJS = options_jsc.resultAnyToJS;
+};
+
+pub const GetAddrInfoResult = struct {
+    address: std.net.Address,
+    ttl: i32 = 0,
+
+pub fn toList(allocator: std.mem.Allocator, addrinfo: *std.c.addrinfo) !List {
+            var list = try List.initCapacity(allocator, addrInfoCount(addrinfo));
+            _ = &list;
+            var addr: ?*std.c.addrinfo = addrinfo;
+            _ = &addr;
+            while (addr) |a| : (addr = a.next) {
+                if (fromAddrInfo(a)) |res| {
+                    _ = &res;
+                    _ = list.appendAssumeCapacity(res);
+                }
+            }
+            return list;
+    }
+
+pub fn fromAddrInfo(addrinfo: *std.c.addrinfo) ?GetAddrInfoResult {
+            if ((addrinfo.addr == null)) {
+                return null;
+            }
+            return GetAddrInfoResult{ .address = std.net.Address.initPosix(@alignCast(addrinfo.addr.?)), .ttl = 0 };
+    }
+    pub const List = std.array_list.Managed(GetAddrInfoResult);
+    pub const Any = GetAddrInfoResultAny;
+    pub const toJS = options_jsc.resultToJS;
+};
+
 pub const GetAddrInfo = struct {
     name: []const u8 = "",
     port: u16 = 0,
-    options: Options = Options{  },
+    options: GetAddrInfoOptions = GetAddrInfoOptions{  },
 
-pub fn clone(self: @This()) GetAddrInfo {
+pub fn clone(self: GetAddrInfo) GetAddrInfo {
             return GetAddrInfo{ .name = ((bun.default_allocator.dupe(u8, self.name)) catch unreachable), .port = self.port, .options = self.options };
     }
 
-pub fn toCAres(self: @This()) bun.c_ares.AddrInfo_hints {
+pub fn toCAres(self: GetAddrInfo) bun.c_ares.AddrInfo_hints {
             var hints: bun.c_ares.AddrInfo_hints = undefined;
             _ = &hints;
             _ = @memset(std.mem.asBytes((&hints))[0..@sizeOf(bun.c_ares.AddrInfo_hints)], 0);
@@ -88,7 +291,7 @@ pub fn toCAres(self: @This()) bun.c_ares.AddrInfo_hints {
             return hints;
     }
 
-pub fn hash(self: @This()) u64 {
+pub fn hash(self: GetAddrInfo) u64 {
             var hasher = std.hash.Wyhash.init(0);
             _ = &hasher;
             const bytes = (std.mem.asBytes((&self.port)) ++ std.mem.asBytes((&self.options)));
@@ -96,191 +299,20 @@ pub fn hash(self: @This()) u64 {
             _ = hasher.update(self.name);
             return hasher.final();
     }
-    pub const Options = packed struct(u64) {
-            family: Family = .unspecified,
-            socktype: SocketType = .stream,
-            protocol: Protocol = .unspecified,
-            backend: Backend = Backend.default,
-            flags: std.c.AI = .{},
-            _: u24 = 0,
-    
-            pub fn toLibC(options: Options) ?std.c.addrinfo {
-                if (options.family == .unspecified and options.socktype == .unspecified and options.protocol == .unspecified and options.flags == std.c.AI{}) {
-                    return null;
-                }
-    
-                var hints: std.c.addrinfo = undefined;
-                @memset(std.mem.asBytes(&hints)[0..@sizeOf(std.c.addrinfo)], 0);
-    
-                hints.family = options.family.toLibC();
-                hints.socktype = options.socktype.toLibC();
-                hints.protocol = options.protocol.toLibC();
-                hints.flags = options.flags;
-                return hints;
-            }
-    
-            pub const FromJSError = Family.FromJSError ||
-                SocketType.FromJSError ||
-                Protocol.FromJSError ||
-                Backend.FromJSError || error{
-                InvalidFlags,
-                InvalidOptions,
-            };
-    
-            pub const fromJS = options_jsc.optionsFromJS;
-        };
-    pub const Family = enum(u2) {
-            unspecified,
-            inet,
-            inet6,
-            unix,
-    
-            pub const map = bun.ComptimeStringMap(Family, .{
-                .{ "IPv4", Family.inet },
-                .{ "IPv6", Family.inet6 },
-                .{ "ipv4", Family.inet },
-                .{ "ipv6", Family.inet6 },
-                .{ "any", Family.unspecified },
-            });
-    
-            pub const FromJSError = JSError || error{
-                InvalidFamily,
-            };
-    
-            pub const fromJS = options_jsc.familyFromJS;
-    
-            pub fn toLibC(family: Family) i32 {
-                return switch (family) {
-                    .unspecified => 0,
-                    .inet => std.posix.AF.INET,
-                    .inet6 => std.posix.AF.INET6,
-                    .unix => std.posix.AF.UNIX,
-                };
-            }
-        };
-    pub const SocketType = enum(u2) {
-            unspecified,
-            stream,
-            dgram,
-    
-            pub const map = bun.ComptimeStringMap(SocketType, .{
-                .{ "stream", SocketType.stream },
-                .{ "dgram", SocketType.dgram },
-            });
-    
-            pub fn toLibC(socktype: SocketType) i32 {
-                switch (socktype) {
-                    .unspecified => return 0,
-                    .stream => return std.posix.SOCK.STREAM,
-                    .dgram => return std.posix.SOCK.DGRAM,
-                }
-            }
-    
-            pub const FromJSError = JSError || error{
-                InvalidSocketType,
-            };
-    
-            pub const fromJS = options_jsc.socketTypeFromJS;
-        };
-    pub const Protocol = enum(u2) {
-            unspecified,
-            tcp,
-            udp,
-    
-            pub const map = bun.ComptimeStringMap(Protocol, .{
-                .{ "tcp", Protocol.tcp },
-                .{ "udp", Protocol.udp },
-            });
-    
-            pub const FromJSError = JSError || error{
-                InvalidProtocol,
-            };
-    
-            pub const fromJS = options_jsc.protocolFromJS;
-    
-            pub fn toLibC(protocol: Protocol) i32 {
-                switch (protocol) {
-                    .unspecified => return 0,
-                    .tcp => return std.posix.IPPROTO.TCP,
-                    .udp => return std.posix.IPPROTO.UDP,
-                }
-            }
-        };
-    pub const Backend = enum(u2) {
-            c_ares,
-            system,
-            libc,
-    
-            pub const label = bun.ComptimeStringMap(GetAddrInfo.Backend, .{
-                .{ "c-ares", .c_ares },
-                .{ "c_ares", .c_ares },
-                .{ "cares", .c_ares },
-                .{ "async", .c_ares },
-                .{ "libc", .libc },
-                .{ "system", .system },
-                .{ "getaddrinfo", .libc },
-            });
-    
-            pub const default: GetAddrInfo.Backend = switch (bun.Environment.os) {
-                .mac, .windows => .system,
-                else => if (bun.Environment.isAndroid) .system else .c_ares,
-            };
-    
-            pub const FromJSError = JSError || error{
-                InvalidBackend,
-            };
-    
-            pub const fromJS = options_jsc.backendFromJS;
-        };
-    pub const Result = struct {
-        address: std.net.Address,
-        ttl: i32 = 0,
-    
-    pub fn toList(allocator: std.mem.Allocator, addrinfo: *std.c.addrinfo) !List {
-                var list = try List.initCapacity(allocator, addrInfoCount(addrinfo));
-                _ = &list;
-                var addr: ?*std.c.addrinfo = addrinfo;
-                _ = &addr;
-                while (addr) |a| : (addr = a.next) {
-                    if (fromAddrInfo(a)) |res| {
-                        _ = &res;
-                        _ = list.appendAssumeCapacity(res);
-                    }
-                }
-                return list;
-        }
-    
-    pub fn fromAddrInfo(addrinfo: *std.c.addrinfo) ?Result {
-                if ((addrinfo.addr == null)) {
-                    return null;
-                }
-                return Result{ .address = std.net.Address.initPosix(@alignCast(addrinfo.addr.?)), .ttl = 0 };
-        }
-        pub const List = std.array_list.Managed(Result);
-        pub const Any = union(enum) {
-            addrinfo: ?*std.c.addrinfo,
-            list: List,
-        
-        pub fn deinit(self: @This()) void {
-                    switch (self) {
-        .addrinfo => |addrinfo| {
-        if (addrinfo) |a| {
-                        _ = &a;
-                        _ = std.c.freeaddrinfo(a);
-                    }
-        },
-        .list => |list_| {
-        var list = list_;
-                    _ = &list;
-                    _ = list.clearAndFree();
-        },
-        }
-            }
-            pub const toJS = options_jsc.resultAnyToJS;
-        };
-        pub const toJS = options_jsc.resultToJS;
-    };
+    pub const Options = GetAddrInfoOptions;
+    pub const Family = GetAddrInfoFamily;
+    pub const SocketType = GetAddrInfoSocketType;
+    pub const Protocol = GetAddrInfoProtocol;
+    pub const Backend = GetAddrInfoBackend;
+    pub const Result = GetAddrInfoResult;
 };
+
+const JSError = bun.JSError;
+const String = bun.String;
+const default_allocator = bun.default_allocator;
+pub const AI_V4MAPPED: c_int = (if (bun.Environment.isWindows) 2048 else bun.c.AI_V4MAPPED);
+pub const AI_ADDRCONFIG: c_int = (if (bun.Environment.isWindows) 1024 else bun.c.AI_ADDRCONFIG);
+pub const AI_ALL: c_int = (if (bun.Environment.isWindows) 256 else bun.c.AI_ALL);
 pub const addressToJS = options_jsc.addressToJS;
 pub const addrInfoToJSArray = options_jsc.addrInfoToJSArray;
 pub const internal = bun.api.dns.internal;

@@ -2,7 +2,7 @@ import bun from "bun";
 const JSError = bun.JSError;
 const Output = bun.Output;
 const jsc = bun.jsc;
-pub const AllocResult = struct { jsc.JSValue, []u8 };
+pub type AllocResult = [jsc.JSValue, []u8];
 
 pub struct ArrayBufferStrong {
     array_buffer: ArrayBuffer,
@@ -42,7 +42,7 @@ pub enum ArrayBufferBinaryType: u4 {
     BigInt64Array,
     BigUint64Array,
 
-    pub fn toJSType(): jsc.JSValue.JSType {
+    fn toJSType(): jsc.JSValue.JSType {
         return switch (_) {
             .ArrayBuffer => .ArrayBuffer,
             .Buffer => .Uint8Array,
@@ -61,7 +61,7 @@ pub enum ArrayBufferBinaryType: u4 {
         };
     }
 
-    pub fn toTypedArrayType(): ArrayBufferTypedArrayType {
+    fn toTypedArrayType(): ArrayBufferTypedArrayType {
         return switch (_) {
             .Buffer => .TypeNone,
             .ArrayBuffer => .TypeNone,
@@ -119,7 +119,7 @@ pub enum ArrayBufferBinaryType: u4 {
         return null;
     }
 
-    pub fn toJS(bytes: []const u8, globalThis: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
+    fn toJS(bytes: []const u8, globalThis: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
         switch (_) {
             .Buffer => return ArrayBuffer.createBuffer(globalThis, bytes),
             .ArrayBuffer => return ArrayBuffer.create(globalThis, bytes, .ArrayBuffer),
@@ -148,7 +148,7 @@ pub enum ArrayBufferTypedArrayType: u8 {
     TypeBigUint64,
     TypeDataView,
 
-    pub fn toC(): jsc.C.JSTypedArrayType {
+    fn toC(): jsc.C.JSTypedArrayType {
         return switch (_) {
             .TypeNone => .kJSTypedArrayTypeNone,
             .TypeInt8 => .kJSTypedArrayTypeInt8Array,
@@ -167,7 +167,7 @@ pub enum ArrayBufferTypedArrayType: u8 {
         };
     }
 
-    pub fn toNapi(): bun.api.napi.napi_typedarray_type? {
+    fn toNapi(): bun.api.napi.napi_typedarray_type? {
         return switch (_) {
             .TypeNone => null,
             .TypeInt8 => .int8_array,
@@ -219,11 +219,11 @@ extern fn Bun__makeTypedArrayWithBytesNoCopy(globalObject: *jsc.JSGlobalObject, 
     pub const fromArrayBuffer = fromTypedArray;
     pub const slice = byteSlice;
 
-    pub fn isDetached(): bool {
+    fn isDetached(): bool {
         return _.ptr == null;
     }
 
-    pub fn bytesPerElement(): u8? {
+    fn bytesPerElement(): u8? {
         return switch (_.typed_array_type) {
             .ArrayBuffer, .DataView => null,
             .Uint8Array, .Uint8ClampedArray, .Int8Array => 1,
@@ -316,7 +316,7 @@ extern fn Bun__makeTypedArrayWithBytesNoCopy(globalObject: *jsc.JSGlobalObject, 
         }
     }
 
-    pub inline fn stream(): Stream {
+    inline fn stream(): Stream {
         return Stream{ .pos = 0, .buffer = _.slice() };
     }
 
@@ -380,7 +380,7 @@ extern fn Bun__makeTypedArrayWithBytesNoCopy(globalObject: *jsc.JSGlobalObject, 
         return ArrayBuffer{ len: @as(u32, @intCast(bytes.len)), byte_len: @as(u32, @intCast(bytes.len)), typed_array_type: typed_array_type, ptr: bytes.ptr };
     }
 
-    pub fn toJSUnchecked(ctx: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
+    fn toJSUnchecked(ctx: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
         if (_.byte_len == 0) {
             if (_.typed_array_type == .ArrayBuffer) {
                 return create(ctx, "", .ArrayBuffer);
@@ -411,7 +411,7 @@ extern fn Bun__makeTypedArrayWithBytesNoCopy(globalObject: *jsc.JSGlobalObject, 
         );
     }
 
-    pub fn toJS(ctx: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
+    fn toJS(ctx: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
         if (_.value != .zero) {
             return _.value;
         }
@@ -442,8 +442,7 @@ extern fn Bun__makeTypedArrayWithBytesNoCopy(globalObject: *jsc.JSGlobalObject, 
         return _.toJSUnchecked(ctx);
     }
 
-    pub fn toJSWithContext(
-        *_,
+    fn toJSWithContext(
         ctx: *jsc.JSGlobalObject,
         deallocator: *!?,
         callback: jsc.C.JSTypedArrayBytesDeallocator,
@@ -472,29 +471,29 @@ extern fn Bun__makeTypedArrayWithBytesNoCopy(globalObject: *jsc.JSGlobalObject, 
         );
     }
 
-    pub inline fn byteSlice(): []u8 {
+    inline fn byteSlice(): []u8 {
         if (_.isDetached()) {
             return [];
         }
         return unsafe { _.ptr.?[0.._.byte_len] };
     }
 
-    pub inline fn asU16(): []u16 {
+    inline fn asU16(): []u16 {
         return unsafe { @alignCast(_.asU16Unaligned()) };
     }
 
-    pub inline fn asU16Unaligned(): []align(1) u16 {
+    inline fn asU16Unaligned(): []align(1) u16 {
         if (_.isDetached()) {
             return [];
         }
         return unsafe { @ptrCast(_.ptr.?[0 .. _.byte_len / @sizeOf(u16) * @sizeOf(u16)]) };
     }
 
-    pub inline fn asU32(): []u32 {
+    inline fn asU32(): []u32 {
         return unsafe { @alignCast(_.asU32Unaligned()) };
     }
 
-    pub inline fn asU32Unaligned(): []align(1) u32 {
+    inline fn asU32Unaligned(): []align(1) u32 {
         if (_.isDetached()) {
             return [];
         }
@@ -506,7 +505,7 @@ pub struct MarkedArrayBuffer {
     buffer: ArrayBuffer = ArrayBuffer{},
     allocator: std.mem.Allocator? = null,
 
-    inline fn stream(*_): ArrayBuffer.Stream {
+    inline fn stream(): ArrayBuffer.Stream {
         return _.buffer.stream();
     }
 
@@ -560,11 +559,11 @@ pub struct MarkedArrayBuffer {
         }
     }
 
-    pub fn toNodeBuffer(ctx: *jsc.JSGlobalObject): jsc.JSValue {
+    fn toNodeBuffer(ctx: *jsc.JSGlobalObject): jsc.JSValue {
         return jsc.JSValue.createBuffer(ctx, _.buffer.byteSlice());
     }
 
-    pub fn toJS(globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
+    fn toJS(globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
         if (!_.buffer.value.isEmptyOrUndefinedOrNull()) {
             return _.buffer.value;
         }

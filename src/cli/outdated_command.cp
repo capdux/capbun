@@ -38,8 +38,8 @@ pub struct GroupedOutdatedInfo {
     grouped_workspace_names: string? = null,
 }
 
-pub const FilterType = union(enum) {
-    all,
+pub union(enum) FilterType {
+    all: void,
     name: []const u8,
     path: []const u8,
 }

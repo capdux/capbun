@@ -53,6 +53,28 @@ pub const ScriptExecutionContext = @import("./webcore/ScriptExecutionContext.zig
 pub const streams = @import("./webcore/streams.zig");
 pub const websocket_http_client = @import("../http/websocket_http_client.zig");
 pub const bun = @import("bun");
+pub const Lifetime = enum {
+    clone,
+    transfer,
+    share,
+    temporary,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const PathOrFileDescriptor = union(enum) {
+    path: jsc.ZigString.Slice,
+    fd: bun.FD,
+
+pub fn deinit(self: *PathOrFileDescriptor) void {
+            if ((self.* == .path)) {
+                _ = self.path.deinit();
+            }
+    }
+};
+
 pub const Pipe = struct {
     ctx: ?*void = null,
     onPipe: ?Function = null,
@@ -78,11 +100,23 @@ pub fn init(ptr: *Type) Pipe {
     }
 };
     }
-    pub const Function = *const fn(
+    const Function = *const fn(
             ctx: *void,
             stream: streams.Result,
             allocator: std.mem.Allocator,
         ) void;
+};
+
+pub const _DrainResultOwned = struct {
+    list: std.array_list.Managed(u8),
+    size_hint: usize,
+};
+
+pub const DrainResult = union(enum) {
+    owned: _DrainResultOwned,
+    estimated_size: usize,
+    empty: void,
+    aborted: void,
 };
 
 pub const DOMExceptionCode = JSErrorCodeMod.DOMExceptionCode;
@@ -101,32 +135,6 @@ pub const HTTPResponseSink = streams.HTTPResponseSink;
 pub const HTTPSResponseSink = streams.HTTPSResponseSink;
 pub const H3ResponseSink = streams.H3ResponseSink;
 pub const HTTPServerWritable = streams.HTTPServerWritable;
-pub const PathOrFileDescriptor = union(enum) {
-    path: jsc.ZigString.Slice,
-    fd: bun.FD,
-
-pub fn deinit(self: *@This()) void {
-            if ((self.* == .path)) {
-                _ = self.path.deinit();
-            }
-    }
-};
-pub const DrainResult = union(enum) {
-    owned: struct {
-        list: std.array_list.Managed(u8),
-        size_hint: usize,
-    },
-    estimated_size: usize,
-    empty: void,
-    aborted: void,
-};
-pub const Lifetime = enum {
-    clone,
-    transfer,
-    share,
-    /// When reading from a fifo like STDIN/STDERR
-    temporary,
-};
 const WebSocketClient = websocket_http_client.WebSocketClient;
 const WebSocketClientTLS = websocket_http_client.WebSocketClientTLS;
 const WebSocketHTTPClient = websocket_http_client.WebSocketHTTPClient;

@@ -123,6 +123,11 @@ pub fn __cp_deinit(self: *SliceFreeGuard) void {
     }
 };
 
+pub const DateResult = struct {
+    numeric_day: u64,
+    date: []const u8,
+};
+
 pub const S3SignResult = struct {
     amz_date: []const u8,
     host: []const u8,
@@ -497,22 +502,7 @@ pub fn call(buf: []u8, method: []const u8, path: []const u8, query: []const u8, 
 pub fn format(buf: []u8, key: SignedHeaders.Key, method: []const u8, path: []const u8, query: []const u8, content_disposition: ?[]const u8, content_encoding: ?[]const u8, content_md5: ?[]const u8, host: []const u8, acl: ?[]const u8, hash: []const u8, date: []const u8, session_token: ?[]const u8, storage_class: ?[]const u8, signed_headers: []const u8) ![]u8 {
             return format_table[@as(usize, @intCast(@as(u7, @bitCast(key))))](buf, method, path, query, content_disposition, content_encoding, content_md5, host, acl, hash, date, session_token, storage_class, signed_headers);
     }
-    const FormatFn = *const fn(
-            []u8,
-            []const u8,
-            []const u8,
-            []const u8,
-            ?[]const u8,
-            ?[]const u8,
-            ?[]const u8,
-            []const u8,
-            ?[]const u8,
-            []const u8,
-            []const u8,
-            ?[]const u8,
-            ?[]const u8,
-            []const u8,
-        ) anyerror![]u8;
+    const FormatFn = _CanonicalRequestFormatFn;
     const format_table = init: {
             var t: [128]FormatFn = undefined;
             _ = &t;
@@ -525,14 +515,11 @@ pub fn format(buf: []u8, key: SignedHeaders.Key, method: []const u8, path: []con
     };
 };
 
+const _CanonicalRequestFormatFn = *const fn ([]u8, []const u8, []const u8, []const u8, ?[]const u8, ?[]const u8, ?[]const u8, []const u8, ?[]const u8, []const u8, []const u8, ?[]const u8, ?[]const u8, []const u8) std.fmt.BufPrintError![]u8;
 const MultiPartUploadOptions = multipart_options.MultiPartUploadOptions;
 const jsc = bun.jsc;
 const picohttp = bun.picohttp;
 const strings = bun.strings;
-const DateResult = struct {
-    numeric_day: u64,
-    date: []const u8,
-};
 
 pub fn s3CredentialsSignRequest(creds: *const S3Credentials, signOptions: S3Credentials.SignOptions, comptime allow_empty_path: bool, signQueryOption: ?S3Credentials.SignQueryOptions) !S3Credentials.SignResult {
         const method = signOptions.method;

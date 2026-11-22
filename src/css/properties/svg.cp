@@ -4,35 +4,37 @@ const LengthPercentage = css.css_values.length.LengthPercentage;
 const CssColor = css.css_values.color.CssColor;
 const Url = css.css_values.url.Url;
 
+struct SVGPaintUrl {
+    /// The url of the paint server.
+    url: Url,
+    /// A fallback to be used in case the paint server cannot be resolved.
+    fallback: SVGPaintFallback?,
+}
+
 /// An SVG [`<paint>`](https://www.w3.org/TR/SVG2/painting.html#SpecifyingPaint) value
 /// used in the `fill` and `stroke` properties.
-const SVGPaint = union(enum) {
+union(enum) SVGPaint {
     /// A URL reference to a paint server element, e.g. `linearGradient`, `radialGradient`, and `pattern`.
-    Url: struct {
-        /// The url of the paint server.
-        url: Url,
-        /// A fallback to be used in case the paint server cannot be resolved.
-        fallback: ?SVGPaintFallback,
-    },
+    Url: SVGPaintUrl,
     /// A solid color paint.
     Color: CssColor,
     /// Use the paint value of fill from a context element.
-    ContextFill,
+    ContextFill: void,
     /// Use the paint value of stroke from a context element.
-    ContextStroke,
+    ContextStroke: void,
     /// No paint.
-    None,
-};
+    None: void,
+}
 
 /// A fallback for an SVG paint in case a paint server `url()` cannot be resolved.
 ///
 /// See [SVGPaint](SVGPaint).
-const SVGPaintFallback = union(enum) {
+union(enum) SVGPaintFallback {
     /// No fallback.
-    None,
+    None: void,
     /// A solid color.
     Color: CssColor,
-};
+}
 
 /// A value for the [stroke-linecap](https://www.w3.org/TR/SVG2/painting.html#LineCaps) property.
 pub const StrokeLinecap = css.DefineEnumProperty(@compileError(css.todo_stuff.depth));
@@ -41,20 +43,20 @@ pub const StrokeLinecap = css.DefineEnumProperty(@compileError(css.todo_stuff.de
 pub const StrokeLinejoin = css.DefineEnumProperty(@compileError(css.todo_stuff.depth));
 
 /// A value for the [stroke-dasharray](https://www.w3.org/TR/SVG2/painting.html#StrokeDashing) property.
-const StrokeDasharray = union(enum) {
+union(enum) StrokeDasharray {
     /// No dashing is used.
-    None,
+    None: void,
     /// Specifies a dashing pattern to use.
     Values: ArrayList(LengthPercentage),
-};
+}
 
 /// A value for the [marker](https://www.w3.org/TR/SVG2/painting.html#VertexMarkerProperties) properties.
-const Marker = union(enum) {
+union(enum) Marker {
     /// No marker.
-    None,
+    None: void,
     /// A url reference to a `<marker>` element.
     Url: Url,
-};
+}
 
 /// A value for the [color-interpolation](https://www.w3.org/TR/SVG2/painting.html#ColorInterpolation) property.
 pub const ColorInterpolation = css.DefineEnumProperty(@compileError(css.todo_stuff.depth));

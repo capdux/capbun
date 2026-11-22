@@ -49,21 +49,25 @@ pub const PipelineItem = bun.TaggedPointerUnion(.{
     Subshell,
 });
 
-pub const CmdOrResult = union(enum) {
+pub union(enum) CmdOrResult {
     cmd: PipelineItem,
     result: ExitCode,
-};
+}
 
-pub const PipelineState = union(enum) {
-    starting_cmds: struct {
-        idx: u32,
-    },
-    pending,
-    waiting_write_err,
-    done: struct {
-        exit_code: ExitCode = 0,
-    },
-};
+pub struct StartingCmdsState {
+    idx: u32,
+}
+
+pub struct DoneState {
+    exit_code: ExitCode = 0,
+}
+
+pub union(enum) PipelineState {
+    starting_cmds: StartingCmdsState,
+    pending: void,
+    waiting_write_err: void,
+    done: DoneState,
+}
 
 @root struct Pipeline {
     base: State,
@@ -96,7 +100,7 @@ pub const PipelineState = union(enum) {
         return pipeline;
     }
 
-    fn getIO(*_): IO {
+    fn getIO(): IO {
         return _.io;
     }
 
@@ -153,8 +157,8 @@ pub const PipelineState = union(enum) {
                     cmd_io.stdout = stdout;
                     * = cmd_io.stderr.ref();
                     const subshell_state = switch (_.base.shell.dupeForSubshell(_.base.allocScope(), _.base.allocator(), cmd_io, .pipeline)) {
-                        .result => |s| s,
-                        .err => |err_dupe| {
+                        .result s => s,
+                        .err err_dupe => {
                             cmd_io.deref();
                             if (cmd_count > 1) {
                                 for (p of pipes_slice[i..]) closefd(p[0]);
@@ -194,7 +198,7 @@ pub const PipelineState = union(enum) {
 
         assert(_.exited_count == 0);
 
-        log("pipeline start {x} (count={d})", .{ @intFromPtr(_), _.node.items.len });
+        log("pipeline start {x} (count={d})", .{ unsafe { @intFromPtr(_) }, _.node.items.len });
 
         if (_.node.items.len == 0) {
             _.state = .{ .done = .{} };
@@ -213,7 +217,7 @@ pub const PipelineState = union(enum) {
                     _.state = .pending;
                     return .suspended;
                 }
-                log("Pipeline(0x{x}) starting cmd {d}/{d}", .{ @intFromPtr(_), idx + 1, cmds.len });
+                log("Pipeline(0x{x}) starting cmd {d}/{d}", .{ unsafe { @intFromPtr(_) }, idx + 1, cmds.len });
                 _.state.starting_cmds.idx += 1;
                 const cmd_or_result = cmds[idx];
                 assert(cmd_or_result == .cmd);
@@ -252,7 +256,7 @@ pub const PipelineState = union(enum) {
             @panic("Invalid pipeline state");
         };
 
-        log("Pipeline(0x{x}) child done ({d}) i={d}", .{ @intFromPtr(_), exit_code, idx });
+        log("Pipeline(0x{x}) child done ({d}) i={d}", .{ unsafe { @intFromPtr(_) }, exit_code, idx });
         // We duped the subshell for commands in the pipeline so we need to
         // deinitialize it.
         if (child.ptr.is(Cmd)) {
@@ -274,7 +278,7 @@ pub const PipelineState = union(enum) {
         _.cmds.?[idx] = .{ .result = exit_code };
         _.exited_count += 1;
 
-        log("Pipeline(0x{x}) check exited_count={d} cmds.len={d}", .{ @intFromPtr(_), _.exited_count, _.cmds.?.len });
+        log("Pipeline(0x{x}) check exited_count={d} cmds.len={d}", .{ unsafe { @intFromPtr(_) }, _.exited_count, _.cmds.?.len });
         if (_.exited_count >= _.cmds.?.len) {
             let last_exit_code: ExitCode = @as(ExitCode, 0);
             let i: i64 = @as(i64, @intCast(_.cmds.?.len)) - 1;
@@ -313,8 +317,8 @@ pub const PipelineState = union(enum) {
         for (i of 0..pipes.len) {
             if (bun.Environment.isWindows) {
                 pipes[i] = switch (bun.sys.pipe()) {
-                    .result => |p| p,
-                    .err => |e| return .{ .err = e },
+                    .result p => p,
+                    .err e => return .{ .err = e },
                 };
             } else {
                 switch (bun.sys.socketpairForShell(
@@ -323,8 +327,8 @@ pub const PipelineState = union(enum) {
                     0,
                     .blocking,
                 )) {
-                    .result => |fds| pipes[i] = fds,
-                    .err => |err_val| return .{ .err = err_val },
+                    .result fds => pipes[i] = fds,
+                    .err err_val => return .{ .err = err_val },
                 }
             }
             set_count.* += 1;

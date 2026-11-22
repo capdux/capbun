@@ -33,12 +33,12 @@ pub struct ElifState {
     idx: u32 = 0,
 }
 
-pub const ExecInnerState = union(enum) {
-    cond,
-    then,
+pub union(enum) ExecInnerState {
+    cond: void,
+    then: void,
     elif: ElifState,
-    @"else",
-};
+    @"else": void,
+}
 
 pub struct ExecState {
     state: ExecInnerState,
@@ -47,12 +47,12 @@ pub struct ExecState {
     last_exit_code: ExitCode = 0,
 }
 
-pub const IfState = union(enum) {
-    idle,
+pub union(enum) IfState {
+    idle: void,
     exec: ExecState,
-    waiting_write_err,
-    done,
-};
+    waiting_write_err: void,
+    done: void,
+}
 
 struct DeinitGuard<T> {
     val: T,

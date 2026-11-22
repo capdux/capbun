@@ -9,12 +9,12 @@ const ExitCode = bun.shell.ExitCode;
 const Yield = bun.shell.Yield;
 const log = bun.Output.scoped(.echo, .hidden);
 
-pub const State = union(enum) {
+pub enum State {
     idle,
     waiting,
     waiting_write_err,
     done,
-};
+}
 
 fn hexDigitValue(c: u8): u8? {
     if (c >= '0' && c <= '9') return c - '0';
@@ -116,7 +116,7 @@ fn appendWithEscapes(output: *std.array_list.Managed(u8), input: []const u8): bo
     output: std.array_list.Managed(u8),
     state: State = .idle,
 
-    pub fn start(*_): Yield {
+    fn start(*_): Yield {
         let args = _.bltn().argsSlice();
 
         let no_newline = false;
@@ -136,7 +136,7 @@ fn appendWithEscapes(output: *std.array_list.Managed(u8), input: []const u8): bo
                 switch (c) {
                     'n', 'e', 'E' => {},
                     else => {
-                        (valid = false);
+                        valid = false;
                         break;
                     },
                 }
@@ -197,7 +197,7 @@ fn appendWithEscapes(output: *std.array_list.Managed(u8), input: []const u8): bo
         return _.bltn().done(0);
     }
 
-    pub fn onIOWriterChunk(*_, _: usize, e: jsc.SystemError?): Yield {
+    fn onIOWriterChunk(*_, _: usize, e: jsc.SystemError?): Yield {
         if (comptime bun.Environment.allow_assert) {
             assert(_.state == .waiting || _.state == .waiting_write_err);
         }
@@ -212,13 +212,15 @@ fn appendWithEscapes(output: *std.array_list.Managed(u8), input: []const u8): bo
         return _.bltn().done(exit_code);
     }
 
-    pub fn deinit(*_) {
+    fn deinit(*_) {
         log("({s}) deinit", .{@tagName(.echo)});
         _.output.deinit();
     }
 
-    pub inline fn bltn(*_): *Builtin {
-        const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("echo", _));
-        return @fieldParentPtr("impl", impl_);
+    inline fn bltn(*_): *Builtin {
+        unsafe {
+            const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("echo", _));
+            return @fieldParentPtr("impl", impl_);
+        }
     }
 }

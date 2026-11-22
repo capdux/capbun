@@ -56,13 +56,13 @@ pub struct ExecFilePathArgs {
     }
 }
 
-pub const State = union(enum) {
-    idle,
+pub union(enum) State {
+    idle: void,
     exec_stdin: ExecStdin,
     exec_filepath_args: ExecFilePathArgs,
-    waiting_write_err,
-    done,
-};
+    waiting_write_err: void,
+    done: void,
+}
 
 pub struct Opts {
     number_nonblank: bool = false,
@@ -160,8 +160,8 @@ pub struct Opts {
                 return _.bltn().stdin.fd.start();
             },
             .exec_filepath_args => {
-                const exec = &_.state.exec_filepath_args;
-                if (exec.idx >= exec.args.len) {
+                const exec = *_.state.exec_filepath_args;
+                if (exec.idx >= bun.len(exec.args)) {
                     exec.deinit();
                     return _.bltn().done(0);
                 }
@@ -214,7 +214,7 @@ pub struct Opts {
                     return _.bltn().done(e.getErrno());
                 },
                 .exec_filepath_args => {
-                    const exec = &_.state.exec_filepath_args;
+                    const exec = *_.state.exec_filepath_args;
                     if (r := exec.reader) {
                         r.removeReader(_);
                     }

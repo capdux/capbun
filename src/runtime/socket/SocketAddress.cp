@@ -42,25 +42,25 @@ pub struct SocketAddressOptions {
     port: u16 = 0,
     flowlabel: u32? = null,
 
-    pub static fn fromJS(global: *jsc.JSGlobalObject, obj: JSValue): bun.JSError!SocketAddressOptions {
+    static fn fromJS(global: *jsc.JSGlobalObject, obj: JSValue): SocketAddressOptions ! bun.JSError {
         if (!obj.isObject()) return global.throwInvalidArgumentTypeValue("options", "object", obj);
 
         let address_str: bun.String? = null;
-        if (a := try obj.get(global, "address")) {
+        if (a := obj.get(global, "address")?) {
             if (!a.isString()) return global.throwInvalidArgumentTypeValue("options.address", "string", a);
-            address_str = try bun.String.fromJS(a, global);
+            address_str = bun.String.fromJS(a, global)?;
         }
 
         let _family: AF = AF.INET;
-        if (fam := try obj.get(global, "family")) {
-            _family = try AF.fromJS(global, fam);
+        if (fam := obj.get(global, "family")?) {
+            _family = AF.fromJS(global, fam)?;
         }
 
         let _port: u16 = 0;
-        if (p := try obj.get(global, "port")) {
+        if (p := obj.get(global, "port")?) {
             if (!p.isFinite()) return throwBadPort(global, p);
             const port32 = p.toInt32();
-            if (port32 < 0 or port32 > std.math.maxInt(u16)) {
+            if (port32 < 0 || port32 > std.math.maxInt(u16)) {
                 return throwBadPort(global, p);
             }
             _port = @intCast(port32);
@@ -405,17 +405,17 @@ fn pton(global: *jsc.JSGlobalObject, comptime af: c_int, addr: [:0]const u8, dst
 const ipv4: bun.String = .{ .tag = .WTFStringImpl, .value = .{ .WTFStringImpl = IPv4 } };
 const ipv6: bun.String = .{ .tag = .WTFStringImpl, .value = .{ .WTFStringImpl = IPv6 } };
 
-pub const AF = enum(inet.sa_family_t) {
+pub enum AF: inet.sa_family_t {
     INET = @intCast(inet.AF_INET),
     INET6 = @intCast(inet.AF_INET6),
 
-    pub fn int(self: AF): inet.sa_family_t {
-        return @intFromEnum(self);
+    fn int(): inet.sa_family_t {
+        return @intFromEnum(_);
     }
 
-    pub fn fromJS(global: *jsc.JSGlobalObject, value: JSValue): !AF {
+    static fn fromJS(global: *jsc.JSGlobalObject, value: JSValue): AF! {
         if (value.isString()) {
-            const fam_str = try bun.String.fromJS(value, global);
+            const fam_str = bun.String.fromJS(value, global)?;
             defer fam_str.deref();
             if (fam_str.length() != 4) return global.throwInvalidArgumentPropertyValue("options.family", "'ipv4' or 'ipv6'", value);
 
@@ -425,8 +425,8 @@ pub const AF = enum(inet.sa_family_t) {
                 if (std.ascii.eqlIgnoreCase(slice[0..4], "ipv6")) return AF.INET6;
                 return global.throwInvalidArgumentPropertyValue("options.family", "'ipv4' or 'ipv6'", value);
             } else {
-                if (fam_str.eqlComptime("ipv4") or fam_str.eqlComptime("IPv4")) return AF.INET;
-                if (fam_str.eqlComptime("ipv6") or fam_str.eqlComptime("IPv6")) return AF.INET6;
+                if (fam_str.eqlComptime("ipv4") || fam_str.eqlComptime("IPv4")) return AF.INET;
+                if (fam_str.eqlComptime("ipv6") || fam_str.eqlComptime("IPv6")) return AF.INET6;
                 return global.throwInvalidArgumentPropertyValue("options.family", "'ipv4' or 'ipv6'", value);
             }
         } else if (value.isUInt32AsAnyInt()) {
@@ -440,19 +440,22 @@ pub const AF = enum(inet.sa_family_t) {
         }
     }
 
-    pub fn upper(self: AF): [:0]const u8 {
-        return switch (self) {
+    fn upper(): [:0]const u8 {
+        return switch (_) {
             .INET => "IPv4",
             .INET6 => "IPv6",
         };
     }
-};
+}
 
-pub const sockaddr = extern union {
+const AddrBuf = [inet.INET6_ADDRSTRLEN]u8;
+const _loopback_v4_addr: u32 = @bitCast(@as([4]u8, [ 127, 0, 0, 1 ]));
+
+@c pub union sockaddr {
     sin: inet.sockaddr_in,
     sin6: inet.sockaddr_in6,
 
-    pub fn v4(port_: inet.in_port_t, addr: u32): sockaddr {
+    static fn v4(port_: inet.in_port_t, addr: u32): sockaddr {
         return .{ .sin = .{
             .family = AF.INET.int(),
             .port = port_,
@@ -460,7 +463,7 @@ pub const sockaddr = extern union {
         } };
     }
 
-    pub fn v6(
+    static fn v6(
         port_: inet.in_port_t,
         addr: [16]u8,
         flowinfo: u32,
@@ -475,40 +478,43 @@ pub const sockaddr = extern union {
         } };
     }
 
-    pub fn as_v4(this: *const sockaddr): ?u32 {
-        if (this.sin.family == std.posix.AF.INET) return this.sin.addr;
-        if (this.sin.family == std.posix.AF.INET6) {
-            if (!std.mem.allEqual(u8, this.sin6.addr[0..10], 0)) return null;
-            if (this.sin6.addr[10] != 255) return null;
-            if (this.sin6.addr[11] != 255) return null;
-            return @bitCast(this.sin6.addr[12..16].*);
+    fn as_v4(): u32? {
+        if (_.sin.family == std.posix.AF.INET) return _.sin.addr;
+        if (_.sin.family == std.posix.AF.INET6) {
+            if (!std.mem.allEqual(u8, _.sin6.addr[0..10], 0)) return null;
+            if (_.sin6.addr[10] != 255) return null;
+            if (_.sin6.addr[11] != 255) return null;
+            return @bitCast(_.sin6.addr[12..16].*);
         }
         return null;
     }
 
-    pub fn family(this: *const sockaddr): AF {
-        return switch (this.sin.family) {
+    fn family(): AF {
+        return switch (_.sin.family) {
             std.posix.AF.INET => .INET,
             std.posix.AF.INET6 => .INET6,
             else => unreachable,
         };
     }
 
-    pub fn fmt(this: *const sockaddr, buf: *[inet.INET6_ADDRSTRLEN]u8): [:0]const u8 {
-        const addr_src: *const void = if (this.family() == AF.INET) @ptrCast(&this.sin.addr) else @ptrCast(&this.sin6.addr);
-        const formatted = std.mem.sliceTo(ares.ares_inet_ntop(this.family().int(), addr_src, buf, buf.len) orelse {
+    fn fmt(buf: *AddrBuf): [:0]const u8 {
+        let addr_src: *const void = undefined;
+        unsafe {
+            addr_src = if (_.family() == AF.INET) @ptrCast(&_.sin.addr) else @ptrCast(&_.sin6.addr);
+        }
+        const formatted = std.mem.sliceTo(ares.ares_inet_ntop(_.family().int(), addr_src, buf, buf.len) orelse {
             std.debug.panic("Invariant violation: SocketAddress created with invalid IPv6 address", .{});
         }, 0);
         if (comptime bun.Environment.isDebug) bun.assertWithLocation(bun.strings.isAllASCII(formatted), @src());
         return formatted;
     }
 
-    pub const @"127.0.0.1": sockaddr = sockaddr.v4(0, @bitCast([_]u8{ 127, 0, 0, 1 }));
+    pub const @"127.0.0.1": sockaddr = sockaddr.v4(0, _loopback_v4_addr);
     pub const @"::": sockaddr = sockaddr.v6(0, inet.IN6ADDR_ANY_INIT, 0, 0);
 
-    pub const in = inet.sockaddr_in;
+    pub const @"in" = inet.sockaddr_in;
     pub const in6 = inet.sockaddr_in6;
-};
+}
 
 pub const inet = if (bun.Environment.isWindows)
     ({

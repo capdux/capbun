@@ -460,7 +460,7 @@ pub fn toJS(self: ArrayBuffer, ctx: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue
             return self.toJSUnchecked(ctx);
     }
 
-pub fn toJSWithContext(self: *ArrayBuffer, ctx: *jsc.JSGlobalObject, deallocator: ?*anyopaque, callback: jsc.C.JSTypedArrayBytesDeallocator) bun.JSError!jsc.JSValue {
+pub fn toJSWithContext(self: ArrayBuffer, ctx: *jsc.JSGlobalObject, deallocator: ?*anyopaque, callback: jsc.C.JSTypedArrayBytesDeallocator) bun.JSError!jsc.JSValue {
             if ((self.value != .zero)) {
                 return self.value;
             }
@@ -531,7 +531,7 @@ pub const MarkedArrayBuffer = struct {
     buffer: ArrayBuffer = ArrayBuffer{  },
     allocator: ?std.mem.Allocator = null,
 
-pub inline fn stream(self: *MarkedArrayBuffer) ArrayBuffer.Stream {
+pub inline fn stream(self: MarkedArrayBuffer) ArrayBuffer.Stream {
             return self.buffer.stream();
     }
 
@@ -607,10 +607,10 @@ pub fn asArrayBuffer(self: *JSCArrayBuffer) ArrayBuffer {
     pub const external_shared_descriptor = JSCArrayBufferExternalSharedDescriptor;
 };
 
+pub const AllocResult = struct { jsc.JSValue, []u8 };
 const JSError = bun.JSError;
 const Output = bun.Output;
 const jsc = bun.jsc;
-pub const AllocResult = struct { jsc.JSValue, []u8 };
 pub const BinaryType = ArrayBufferBinaryType;
 pub const TypedArrayType = ArrayBufferTypedArrayType;
 

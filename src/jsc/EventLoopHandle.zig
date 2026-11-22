@@ -38,7 +38,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -59,53 +59,46 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
-const Allocator = std.mem.Allocator;
-const Async = bun.Async;
-const jsc = bun.jsc;
-const AnyEventLoop = jsc.AnyEventLoop;
-const EventLoopKind = jsc.EventLoopKind;
-const MiniEventLoop = jsc.MiniEventLoop;
-const VirtualMachine = jsc.VirtualMachine;
 pub const EventLoopHandle = union(EventLoopKind) {
     js: *jsc.EventLoop,
     mini: *MiniEventLoop,
 
-pub fn globalObject(self: @This()) ?*jsc.JSGlobalObject {
-            return (switch (self) {
+pub fn globalObject(self: *const EventLoopHandle) ?*jsc.JSGlobalObject {
+            return (switch (self.*) {
 .js => self.js.global,
 .mini => null,
 });
     }
 
-pub fn stdout(self: @This()) *jsc.WebCore.Blob.Store {
-            return (switch (self) {
+pub fn stdout(self: *const EventLoopHandle) *jsc.WebCore.Blob.Store {
+            return (switch (self.*) {
 .js => self.js.virtual_machine.rareData().stdout(),
 .mini => self.mini.stdout(),
 });
     }
 
-pub fn bunVM(self: @This()) ?*VirtualMachine {
-            if ((self == .js)) {
+pub fn bunVM(self: *const EventLoopHandle) ?*VirtualMachine {
+            if ((self.* == .js)) {
                 return self.js.virtual_machine;
             }
             return null;
     }
 
-pub fn stderr(self: @This()) *jsc.WebCore.Blob.Store {
-            return (switch (self) {
+pub fn stderr(self: *const EventLoopHandle) *jsc.WebCore.Blob.Store {
+            return (switch (self.*) {
 .js => self.js.virtual_machine.rareData().stderr(),
 .mini => self.mini.stderr(),
 });
     }
 
-pub fn cast(self: @This(), comptime tag: EventLoopKind) tag.Type() {
+pub fn cast(self: EventLoopHandle, comptime tag: EventLoopKind) tag.Type() {
             return @field(self, @tagName(tag));
     }
 
-pub fn enter(self: @This()) void {
+pub fn enter(self: EventLoopHandle) void {
             switch (self) {
 .js => {
 _ = self.js.enter();
@@ -116,7 +109,7 @@ _ = self.js.enter();
 }
     }
 
-pub fn exit(self: @This()) void {
+pub fn exit(self: EventLoopHandle) void {
             switch (self) {
 .js => {
 _ = self.js.exit();
@@ -135,14 +128,14 @@ pub fn init(context: anytype) EventLoopHandle {
 }) else if (Context == EventLoopHandle) context else @compileError(("Invalid context type for EventLoopHandle.init " ++ @typeName(Context))));
     }
 
-pub fn filePolls(self: @This()) *bun.Async.FilePoll.Store {
-            return (switch (self) {
+pub fn filePolls(self: *const EventLoopHandle) *bun.Async.FilePoll.Store {
+            return (switch (self.*) {
 .js => self.js.virtual_machine.rareData().filePolls(self.js.virtual_machine),
 .mini => self.mini.filePolls(),
 });
     }
 
-pub fn putFilePoll(self: *@This(), poll: *Async.FilePoll) void {
+pub fn putFilePoll(self: *EventLoopHandle, poll: *Async.FilePoll) void {
             switch (self.*) {
 .js => {
 _ = self.js.virtual_machine.rareData().filePolls(self.js.virtual_machine).put(poll, self.js.virtual_machine, poll.flags.contains(.was_ever_registered));
@@ -153,7 +146,7 @@ _ = self.mini.filePolls().put(poll, self.mini, poll.flags.contains(.was_ever_reg
 }
     }
 
-pub fn enqueueTaskConcurrent(self: @This(), context: EventLoopTaskPtr) void {
+pub fn enqueueTaskConcurrent(self: EventLoopHandle, context: EventLoopTaskPtr) void {
             switch (self) {
 .js => {
 _ = self.js.enqueueTaskConcurrent(context.js);
@@ -164,51 +157,51 @@ _ = self.mini.enqueueTaskConcurrent(context.mini);
 }
     }
 
-pub fn loop(self: @This()) *bun.uws.Loop {
-            return (switch (self) {
+pub fn loop(self: *const EventLoopHandle) *bun.uws.Loop {
+            return (switch (self.*) {
 .js => self.js.usocketsLoop(),
 .mini => self.mini.loop,
 });
     }
 
-pub fn pipeReadBuffer(self: @This()) []u8 {
-            return (switch (self) {
+pub fn pipeReadBuffer(self: *const EventLoopHandle) []u8 {
+            return (switch (self.*) {
 .js => self.js.pipeReadBuffer(),
 .mini => self.mini.pipeReadBuffer(),
 });
     }
 
-pub fn ref(self: @This()) void {
+pub fn ref(self: EventLoopHandle) void {
             _ = self.loop().ref();
     }
 
-pub fn unref(self: @This()) void {
+pub fn unref(self: EventLoopHandle) void {
             _ = self.loop().unref();
     }
 
-pub inline fn createNullDelimitedEnvMap(self: @This(), alloc: Allocator) !NullDelimitedEnvMap {
+pub inline fn createNullDelimitedEnvMap(self: EventLoopHandle, alloc: Allocator) !NullDelimitedEnvMap {
             return (switch (self) {
 .js => self.js.virtual_machine.transpiler.env.map.createNullDelimitedEnvMap(alloc),
 .mini => self.mini.env.?.map.createNullDelimitedEnvMap(alloc),
 });
     }
 
-pub inline fn allocator(self: @This()) Allocator {
+pub inline fn allocator(self: EventLoopHandle) Allocator {
             return (switch (self) {
 .js => self.js.virtual_machine.allocator,
 .mini => self.mini.allocator,
 });
     }
 
-pub inline fn topLevelDir(self: @This()) []const u8 {
-            return (switch (self) {
+pub inline fn topLevelDir(self: *const EventLoopHandle) []const u8 {
+            return (switch (self.*) {
 .js => self.js.virtual_machine.transpiler.fs.top_level_dir,
 .mini => self.mini.top_level_dir,
 });
     }
 
-pub inline fn env(self: @This()) *bun.DotEnv.Loader {
-            return (switch (self) {
+pub inline fn env(self: *const EventLoopHandle) *bun.DotEnv.Loader {
+            return (switch (self.*) {
 .js => self.js.virtual_machine.transpiler.env,
 .mini => self.mini.env.?,
 });
@@ -217,6 +210,7 @@ pub inline fn env(self: @This()) *bun.DotEnv.Loader {
     const NullDelimitedEnvElem = ?[*:0]const u8;
     pub const NullDelimitedEnvMap = [:null]NullDelimitedEnvElem;
 };
+
 pub const EventLoopTask = union(EventLoopKind) {
     js: jsc.ConcurrentTask,
     mini: jsc.AnyTaskWithExtraContext,
@@ -243,7 +237,16 @@ return .{ .mini = .{} };
 }
     }
 };
+
 pub const EventLoopTaskPtr = union {
     js: *jsc.ConcurrentTask,
     mini: *jsc.AnyTaskWithExtraContext,
 };
+
+const Allocator = std.mem.Allocator;
+const Async = bun.Async;
+const jsc = bun.jsc;
+const AnyEventLoop = jsc.AnyEventLoop;
+const EventLoopKind = jsc.EventLoopKind;
+const MiniEventLoop = jsc.MiniEventLoop;
+const VirtualMachine = jsc.VirtualMachine;

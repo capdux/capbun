@@ -16,7 +16,7 @@ err SysError {
     Sys,
 }
 
-const AllocScope = union(enum) {
+union(enum) AllocScope {
     owned: bun.AllocationScope,
     borrowed: *bun.AllocationScope,
 
@@ -28,26 +28,26 @@ const AllocScope = union(enum) {
 
     fn allocator(*_): std.mem.Allocator {
         return switch (_.*) {
-            .borrowed => |scope| scope.allocator(),
-            .owned => |*scope| scope.allocator(),
+            .borrowed scope => scope.allocator(),
+            .owned => _.owned.allocator(),
         };
     }
 
     fn scopedAllocator(*_): *bun.AllocationScope {
         return switch (_.*) {
-            .borrowed => |scope| scope,
-            .owned => |*scope| scope,
+            .borrowed scope => scope,
+            .owned => &_.owned,
         };
     }
 
     fn leakSlice(*_, memory: auto) {
         if (comptime bun.Environment.enableAllocScopes) {
             * = @typeInfo(@TypeOf(memory)).pointer;
-            _.scopedAllocator().trackExternalFree(memory, null) catch |e|
+            _.scopedAllocator().trackExternalFree(memory, null) catch e =>
                 std.debug.panic("invalid free: {}", .{e});
         }
     }
-};
+}
 
 @root struct Base {
     kind: StateKind,

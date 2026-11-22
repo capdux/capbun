@@ -5,7 +5,7 @@ struct DetachGuard<T> {
     }
 }
 
-pub const Readable = union(enum) {
+pub union(enum) Readable {
     fd: bun.FD,
     memfd: bun.FD,
     pipe: *PipeReader,
@@ -20,42 +20,42 @@ pub const Readable = union(enum) {
     /// buffer will be taken as an owned `CowString`.
     buffer: CowString,
 
-    pub fn memoryCost(this: *const Readable) usize {
-        return switch (this.*) {
-            .pipe => @sizeOf(PipeReader) + this.pipe.memoryCost(),
-            .buffer => this.buffer.length(),
+    fn memoryCost(): usize {
+        return switch (_) {
+            .pipe => @sizeOf(PipeReader) + _.pipe.memoryCost(),
+            .buffer => _.buffer.length(),
             else => 0,
         };
     }
 
-    pub fn hasPendingActivity(this: *const Readable) bool {
-        return switch (this.*) {
-            .pipe => this.pipe.hasPendingActivity(),
+    fn hasPendingActivity(): bool {
+        return switch (_) {
+            .pipe => _.pipe.hasPendingActivity(),
             else => false,
         };
     }
 
-    pub fn ref(this: *Readable) void {
-        switch (this.*) {
+    fn ref(*_) {
+        switch (_) {
             .pipe => {
-                this.pipe.updateRef(true);
+                _.pipe.updateRef(true);
             },
             else => {},
         }
     }
 
-    pub fn unref(this: *Readable) void {
-        switch (this.*) {
+    fn unref(*_) {
+        switch (_) {
             .pipe => {
-                this.pipe.updateRef(false);
+                _.pipe.updateRef(false);
             },
             else => {},
         }
     }
 
-    pub fn init(stdio: Stdio, event_loop: *jsc.EventLoop, process: *Subprocess, result: StdioResult, allocator: std.mem.Allocator, max_size: ?*MaxBuf, is_sync: bool) Readable {
-        * = allocator; // autofix
-        * = is_sync; // autofix
+    static fn init(stdio: Stdio, event_loop: *jsc.EventLoop, process: *Subprocess, result: StdioResult, allocator: std.mem.Allocator, max_size: (*MaxBuf)?, is_sync: bool): Readable {
+        * = allocator;
+        * = is_sync;
         Subprocess.assertStdioResult(result);
 
         if (comptime Environment.isPosix) {
@@ -65,84 +65,91 @@ pub const Readable = union(enum) {
         }
 
         return switch (stdio) {
-            .inherit => Readable{ .inherit = undefined },
-            .ignore, .ipc, .path => Readable{ .ignore = undefined },
-            .fd => |fd| if (Environment.isPosix) Readable{ .fd = result.? } else Readable{ .fd = fd },
-            .memfd => if (Environment.isPosix) Readable{ .memfd = stdio.memfd } else Readable{ .ignore = undefined },
-            .dup2 => |dup2| if (Environment.isPosix) Output.panic("TODO: implement dup2 support in Stdio readable", {}) else Readable{ .fd = dup2.out.toFd() },
-            .pipe => Readable{ .pipe = PipeReader.create(event_loop, process, result, max_size) },
+            .inherit => Readable{ inherit: undefined },
+            .ignore, .ipc, .path => Readable{ ignore: undefined },
+            .fd fd => if (Environment.isPosix) Readable{ fd: result.? } else Readable{ fd: fd },
+            .memfd => if (Environment.isPosix) Readable{ memfd: stdio.memfd } else Readable{ ignore: undefined },
+            .dup2 dup2 => if (Environment.isPosix) Output.panic("TODO: implement dup2 support in Stdio readable", {}) else Readable{ fd: dup2.out.toFd() },
+            .pipe => Readable{ pipe: PipeReader.create(event_loop, process, result, max_size) },
             .array_buffer, .blob => Output.panic("TODO: implement ArrayBuffer & Blob support in Stdio readable", {}),
             .capture => Output.panic("TODO: implement capture support in Stdio readable", {}),
-            .readable_stream => Readable{ .ignore = undefined }, // ReadableStream is handled separately
+            .readable_stream => Readable{ ignore: undefined }, // ReadableStream is handled separately
         };
     }
 
-    pub fn onClose(this: *Readable, _: ?bun.sys.Error) void {
-        this.* = .closed;
+    fn onClose(*_, unused_err: bun.sys.Error?) {
+        * = unused_err;
+        _.* = .closed;
     }
 
-    pub fn onReady(_: *Readable, _: ?jsc.WebCore.Blob.SizeType, _: ?jsc.WebCore.Blob.SizeType) void {}
+    static fn onReady(unused_self: *Readable, unused_a: jsc.WebCore.Blob.SizeType?, unused_b: jsc.WebCore.Blob.SizeType?) {
+        * = unused_self;
+        * = unused_a;
+        * = unused_b;
+    }
 
-    pub fn onStart(_: *Readable) void {}
+    static fn onStart(unused_self: *Readable) {
+        * = unused_self;
+    }
 
-    pub fn close(this: *Readable) void {
-        switch (this.*) {
-            .memfd => |fd| {
-                this.* = .closed;
+    fn close(*_) {
+        switch (_) {
+            .memfd fd => {
+                _.* = .closed;
                 fd.close();
             },
-            .fd => |_| {
-                this.* = .closed;
+            .fd => {
+                _.* = .closed;
             },
             .pipe => {
-                this.pipe.close();
+                _.pipe.close();
             },
             else => {},
         }
     }
 
-    pub fn finalize(this: *Readable) void {
-        switch (this.*) {
-            .memfd => |fd| {
-                this.* = .closed;
+    fn finalize(*_) {
+        switch (_) {
+            .memfd fd => {
+                _.* = .closed;
                 fd.close();
             },
             .fd => {
-                this.* = .closed;
+                _.* = .closed;
             },
-            .pipe => |pipe| {
+            .pipe pipe => {
                 const _detach = DetachGuard<PipeReader>{ ptr: unsafe { pipe as *PipeReader! } };
-                this.* = .closed;
+                _.* = .closed;
             },
-            .buffer => |*buf| {
+            .buffer *buf => {
                 buf.deinit(bun.default_allocator);
             },
             else => {},
         }
     }
 
-    pub fn toJS(this: *Readable, globalThis: *jsc.JSGlobalObject, exited: bool) bun.JSError!JSValue {
-        * = exited; // autofix
-        switch (this.*) {
+    fn toJS(*_, globalThis: *jsc.JSGlobalObject, exited: bool): JSValue ! bun.JSError {
+        * = exited;
+        switch (_) {
             // should only be reachable when the entire output is buffered.
-            .memfd => return this.toBufferedValue(globalThis),
+            .memfd => return _.toBufferedValue(globalThis),
 
-            .fd => |fd| {
+            .fd fd => {
                 return fd.toJS(globalThis);
             },
-            .pipe => |pipe| {
+            .pipe pipe => {
                 const _detach = DetachGuard<PipeReader>{ ptr: unsafe { pipe as *PipeReader! } };
-                this.* = .closed;
+                _.* = .closed;
                 return pipe.toJS(globalThis);
             },
-            .buffer => |*buffer| {
-                defer this.* = .closed;
+            .buffer *buffer => {
+                defer _.* = .closed;
 
                 if (buffer.length() == 0) {
                     return jsc.WebCore.ReadableStream.empty(globalThis);
                 }
 
-                const owned_slice = try buffer.takeSlice(bun.default_allocator);
+                const owned_slice = (buffer.takeSlice(bun.default_allocator))?;
                 return jsc.WebCore.ReadableStream.fromOwnedSlice(globalThis, owned_slice, 0);
             },
             else => {
@@ -151,25 +158,25 @@ pub const Readable = union(enum) {
         }
     }
 
-    pub fn toBufferedValue(this: *Readable, globalThis: *jsc.JSGlobalObject) bun.JSError!JSValue {
-        switch (this.*) {
-            .fd => |fd| {
+    fn toBufferedValue(*_, globalThis: *jsc.JSGlobalObject): JSValue ! bun.JSError {
+        switch (_) {
+            .fd fd => {
                 return fd.toJS(globalThis);
             },
-            .memfd => |fd| {
+            .memfd fd => {
                 if (comptime !Environment.isPosix) {
                     Output.panic("memfd is only supported on Linux", {});
                 }
-                this.* = .closed;
+                _.* = .closed;
                 return jsc.ArrayBuffer.toJSBufferFromMemfd(fd, globalThis);
             },
-            .pipe => |pipe| {
+            .pipe pipe => {
                 const _detach = DetachGuard<PipeReader>{ ptr: unsafe { pipe as *PipeReader! } };
-                this.* = .closed;
+                _.* = .closed;
                 return pipe.toBuffer(globalThis);
             },
-            .buffer => |*buf| {
-                defer this.* = .closed;
+            .buffer *buf => {
+                defer _.* = .closed;
                 const owned_slice = buf.takeSlice(bun.default_allocator) catch {
                     return globalThis.throwOutOfMemory();
                 };
@@ -181,9 +188,7 @@ pub const Readable = union(enum) {
             },
         }
     }
-};
-
-import std from "std";
+}
 
 import bun from "bun";
 const Environment = bun.Environment;

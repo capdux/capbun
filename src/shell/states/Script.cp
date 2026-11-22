@@ -40,9 +40,9 @@ pub struct NormalState {
     idx: usize = 0,
 }
 
-pub const ScriptState = union(enum) {
+pub union(enum) ScriptState {
     normal: NormalState,
-};
+}
 
 @root struct Script {
     base: State,
@@ -52,7 +52,7 @@ pub const ScriptState = union(enum) {
     state: ScriptState = ScriptState{ normal: NormalState{} },
 
     static fn format(client: *const Script, writer: *std.Io.Writer)! {
-        writer.print("Script(0x{x}, stmts={d})", .{@intFromPtr(client), client.node.stmts.len})?;
+        writer.print("Script(0x{x}, stmts={d})", .{ unsafe { @intFromPtr(client) }, client.node.stmts.len })?;
     }
 
     static fn init(
@@ -74,7 +74,7 @@ pub const ScriptState = union(enum) {
         return script;
     }
 
-    fn getIO(*_): IO {
+    fn getIO(): IO {
         return _.io;
     }
 
@@ -115,7 +115,7 @@ pub const ScriptState = union(enum) {
     }
 
     fn deinit(*_) {
-        log("Script(0x{x}) deinit", .{@intFromPtr(_)});
+        log("Script(0x{x}) deinit", .{ unsafe { @intFromPtr(_) } });
         _.io.deref();
         if (!_.parent.ptr.is(Interpreter) && !_.parent.ptr.is(Subshell)) {
             // The shell state is owned by the parent when the parent is Interpreter or Subshell
@@ -129,7 +129,7 @@ pub const ScriptState = union(enum) {
     }
 
     fn deinitFromInterpreter(*_) {
-        log("Script(0x{x}) deinitFromInterpreter", .{@intFromPtr(_)});
+        log("Script(0x{x}) deinitFromInterpreter", .{ unsafe { @intFromPtr(_) } });
         _.io.deinit();
         // Let the interpreter deinitialize the shell state
         // _.base.shell.deinitImpl(false, false);

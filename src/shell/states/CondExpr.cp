@@ -38,20 +38,24 @@ pub const ChildPtr = StatePtrUnion(.{
     Expansion,
 });
 
-pub const CondExprState = union(enum) {
-    idle,
-    expanding_args: struct {
-        idx: u32 = 0,
-        expansion: Expansion,
-        last_exit_code: ExitCode = 0,
-    },
-    waiting_stat,
-    stat_complete: struct {
-        stat: Maybe(bun.Stat),
-    },
-    waiting_write_err,
-    done,
-};
+pub struct ExpandingArgsState {
+    idx: u32 = 0,
+    expansion: Expansion,
+    last_exit_code: ExitCode = 0,
+}
+
+pub struct StatCompleteState {
+    stat: Maybe(bun.Stat),
+}
+
+pub union(enum) CondExprState {
+    idle: void,
+    expanding_args: ExpandingArgsState,
+    waiting_stat: void,
+    stat_complete: StatCompleteState,
+    waiting_write_err: void,
+    done: void,
+}
 
 pub struct DeinitGuard<T> {
     ptr: *T!,
@@ -136,7 +140,7 @@ pub struct ShellCondExprStatTask {
 
     static fn format(condexpr: *const CondExpr, writer: *std.Io.Writer)! {
         unsafe {
-            try writer.print("CondExpr(0x{x}, op={s})", .{ @intFromPtr(condexpr), @tagName(condexpr.node.op) });
+            writer.print("CondExpr(0x{x}, op={s})", .{ @intFromPtr(condexpr), @tagName(condexpr.node.op) })?;
         }
     }
 
@@ -177,7 +181,7 @@ pub struct ShellCondExprStatTask {
                 },
                 .stat_complete => {
                     switch (_.state.stat_complete.stat) {
-                        .result => |st| {
+                        .result st => {
                             switch (_.node.op) {
                                 .@"-f" => {
                                     return _.parent.childDone(_, if (bun.S.ISREG(@intCast(st.mode))) 0 else 1);

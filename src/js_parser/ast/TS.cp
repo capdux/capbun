@@ -102,9 +102,9 @@ pub struct TSNamespaceScope {
 
 pub const TSNamespaceMemberMap = bun.StringArrayHashMapUnmanaged(TSNamespaceMember);
 
-pub const TSNamespaceMemberData = union(enum) {
+pub union(enum) TSNamespaceMemberData {
     /// "namespace ns { export let it }"
-    property,
+    property: void,
     /// "namespace ns { export namespace it {} }"
     namespace: *TSNamespaceMemberMap,
     /// "enum ns { it }"
@@ -114,12 +114,13 @@ pub const TSNamespaceMemberData = union(enum) {
     /// "enum ns { it = something() }"
     enum_property: void,
 
-    pub fn isEnum(data: TSNamespaceMemberData) bool {
-        return switch (data) {
-            inline else => |_, tag| comptime std.mem.startsWith(u8, @tagName(tag), "enum_"),
+    fn isEnum(): bool {
+        return switch (_) {
+            .enum_number, .enum_string, .enum_property => true,
+            else => false,
         };
     }
-};
+}
 
 pub struct TSNamespaceMember {
     loc: logger.Loc,

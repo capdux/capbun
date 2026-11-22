@@ -80,6 +80,11 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const ExternColumnIdentifierValue = extern union {
+    index: u32,
+    name: bun.String,
+};
+
 pub const _ExternColumnIdentifier = extern struct {
     tag: u8 = 0,
     value: ExternColumnIdentifierValue,
@@ -208,10 +213,6 @@ const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 const ZigString = jsc.ZigString;
-pub const ExternColumnIdentifierValue = extern union {
-    index: u32,
-    name: bun.String,
-};
 
 pub fn _initCbProto(_: *anyopaque, _: *JSObject, _: *JSGlobalObject) callconv(.c) void {
 }

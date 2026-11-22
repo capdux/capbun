@@ -151,7 +151,8 @@ pub fn OOM(e: anyerror): noreturn {
     bun.outOfMemory();
 }
 
-pub const SmallList = @import("./small_list.zig").SmallList;
+import small_list from "./small_list.zig";
+pub const SmallList = small_list.SmallList;
 
 pub struct todo_stuff {
     pub const think_mem_mgmt = "TODO: think about memory management";
@@ -3130,7 +3131,7 @@ pub fn fillPropertyBitSet(allocator: Allocator, bitset: *PropertyBitset, block: 
     }
 }
 
-pub const OptionalString = ?[]const u8;
+pub type OptionalString = ([]const u8)?;
 pub const CustomMediaMap = std.StringArrayHashMapUnmanaged(css_rules.custom_media.CustomMediaRule);
 
 pub type OptionalBundlerTailwindState = (*BundlerTailwindState)?;
@@ -4707,7 +4708,7 @@ enum BlockType {
     }
 }
 
-pub const NthResult = struct { i32, i32 };
+pub type NthResult = [i32, i32];
 
 pub struct nth {
     static fn parse_number_saturate(allocator: Allocator, str: []const u8): Maybe(i32, void) {

@@ -90,6 +90,12 @@ pub const GroupedOutdatedInfo = struct {
     grouped_workspace_names: ?[]const u8 = null,
 };
 
+pub const FilterType = union(enum) {
+    all: void,
+    name: []const u8,
+    path: []const u8,
+};
+
 pub const CatalogKey = struct {
     name_hash: u64,
     catalog_name_hash: u64,
@@ -227,11 +233,6 @@ const invalid_package_id = Install.invalid_package_id;
 const Behavior = Install.Dependency.Behavior;
 const PackageManager = Install.PackageManager;
 const WorkspaceFilter = PackageManager.WorkspaceFilter;
-pub const FilterType = union(enum) {
-    all,
-    name: []const u8,
-    path: []const u8,
-};
 
 pub fn filterTypeInit(pattern: []const u8, is_path: bool) FilterType {
         return (if (is_path) FilterType{ .path = pattern } else FilterType{ .name = pattern });

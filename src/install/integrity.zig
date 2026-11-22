@@ -82,7 +82,7 @@ fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
     }
     return val >> shift;
 }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 pub const sha_mod = @import("../sha_hmac/sha.zig");
@@ -136,6 +136,14 @@ pub inline fn digestLen(self: IntegrityTag) usize {
 else => 0,
 });
     }
+};
+
+pub const StreamingHasher = union(enum) {
+    none: void,
+    sha1: Crypto.SHA1,
+    sha256: Crypto.SHA256,
+    sha384: Crypto.SHA384,
+    sha512: Crypto.SHA512,
 };
 
 pub const IntegrityStreaming = struct {
@@ -359,25 +367,37 @@ pub fn verifyByTag(tag: IntegrityTag, bytes: []const u8, sum: []const u8) bool {
             switch (tag) {
 .sha1 => {
 const len = std.crypto.hash.Sha1.digest_length;
-            const ptr: *[len]u8 = @ptrCast((&digest));
+            const ptr: *[len]u8 = (blk: {
+            break :blk @ptrCast((&digest));
+
+});
             _ = Crypto.SHA1.hash(bytes, ptr);
             return strings.eqlLong(ptr, sum[0..len], true);
 },
 .sha512 => {
 const len = std.crypto.hash.sha2.Sha512.digest_length;
-            const ptr: *[len]u8 = @ptrCast((&digest));
+            const ptr: *[len]u8 = (blk: {
+            break :blk @ptrCast((&digest));
+
+});
             _ = Crypto.SHA512.hash(bytes, ptr);
             return strings.eqlLong(ptr, sum[0..len], true);
 },
 .sha256 => {
 const len = std.crypto.hash.sha2.Sha256.digest_length;
-            const ptr: *[len]u8 = @ptrCast((&digest));
+            const ptr: *[len]u8 = (blk: {
+            break :blk @ptrCast((&digest));
+
+});
             _ = Crypto.SHA256.hash(bytes, ptr);
             return strings.eqlLong(ptr, sum[0..len], true);
 },
 .sha384 => {
 const len = std.crypto.hash.sha2.Sha384.digest_length;
-            const ptr: *[len]u8 = @ptrCast((&digest));
+            const ptr: *[len]u8 = (blk: {
+            break :blk @ptrCast((&digest));
+
+});
             _ = Crypto.SHA384.hash(bytes, ptr);
             return strings.eqlLong(ptr, sum[0..len], true);
 },
@@ -399,11 +419,4 @@ pub const MAX_DIGEST_BUF_LEN: usize = @max(std.crypto.hash.Sha1.digest_length, s
 pub const digest_buf_len: usize = MAX_DIGEST_BUF_LEN;
 const empty_digest_buf: [MAX_DIGEST_BUF_LEN]u8 = @splat(0);
 pub const Tag = IntegrityTag;
-pub const StreamingHasher = union(enum) {
-    none,
-    sha1: Crypto.SHA1,
-    sha256: Crypto.SHA256,
-    sha384: Crypto.SHA384,
-    sha512: Crypto.SHA512,
-};
 pub const Streaming = IntegrityStreaming;

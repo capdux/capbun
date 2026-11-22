@@ -37,16 +37,18 @@ pub const ChildPtr = StatePtrUnion(.{
     Expansion,
 });
 
-pub const AssignState = union(enum) {
-    idle,
-    expanding: struct {
-        idx: u32 = 0,
-        current_expansion_result: std.array_list.Managed([:0]const u8),
-        expansion: Expansion,
-    },
+pub struct AssignExpandingState {
+    idx: u32 = 0,
+    current_expansion_result: std.array_list.Managed([:0]const u8),
+    expansion: Expansion,
+}
+
+pub union(enum) AssignState {
+    idle: void,
+    expanding: AssignExpandingState,
     err: bun.shell.ShellErr,
-    done,
-};
+    done: void,
+}
 
 @root struct Assigns {
     base: State,
@@ -58,10 +60,10 @@ pub const AssignState = union(enum) {
     io: IO,
 
     fn deinit(*_) {
-        switch (_.state) {
-            .expanding => |*e| e.current_expansion_result.deinit(),
-            .err => |*e| e.deinit(bun.default_allocator),
-            .idle, .done => {},
+        if (_.state == .expanding) {
+            _.state.expanding.current_expansion_result.deinit();
+        } else if (_.state == .err) {
+            _.state.err.deinit(bun.default_allocator);
         }
         _.io.deinit();
         _.base.endScope();
@@ -81,7 +83,7 @@ pub const AssignState = union(enum) {
         io: IO,
     ): *Assigns {
         let this_assigns = parent.create(Assigns);
-        log("Assigns(0x{x}) init", .{@intFromPtr(this_assigns)});
+        unsafe { log("Assigns(0x{x}) init", .{@intFromPtr(this_assigns)}); }
         this_assigns.* = .{
             .base = State.initWithNewAllocScope(.assign, interpreter, shell_state),
             .node = node,

@@ -121,6 +121,22 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const ContentsOrFd_Fd = struct {
+    dir: FD,
+    file: FD,
+};
+
+pub const ContentsOrFd = union(enum) {
+    fd: ContentsOrFd_Fd,
+    contents: []const u8,
+    const Tag = @typeInfo(ContentsOrFd).@"union".tag_type.?;
+};
+
+pub const ParseTaskStage = union(enum) {
+    needs_source_code: void,
+    needs_parse: CacheEntry,
+};
+
 pub const ResultWatcherData = struct {
     fd: bun.FD,
     dir_fd: bun.FD,
@@ -146,6 +162,16 @@ pub const ResultError = struct {
     target: options.Target,
     source_index: Index,
     pub const Step = ResultErrorStep;
+};
+
+pub const ResultValue_Empty = struct {
+    source_index: Index,
+};
+
+pub const ResultValue = union(enum) {
+    success: ResultSuccess,
+    @"err": ResultError,
+    empty: ResultValue_Empty,
 };
 
 pub const ParseTaskResult = struct {
@@ -521,25 +547,6 @@ pub const Index = bun.ast.Index;
 pub const DeferredBatchTask = bun.bundle_v2.DeferredBatchTask;
 pub const ThreadPool = bun.bundle_v2.ThreadPool;
 const debug = Output.scoped(.ParseTask, .hidden);
-pub const ContentsOrFd = union(enum) {
-    fd: struct {
-        dir: FD,
-        file: FD,
-    },
-    contents: []const u8,
-    const Tag = @typeInfo(ContentsOrFd).@"union".tag_type.?;
-};
-const ParseTaskStage = union(enum) {
-    needs_source_code,
-    needs_parse: CacheEntry,
-};
-pub const ResultValue = union(enum) {
-    success: ResultSuccess,
-    @"err": ResultError,
-    empty: struct {
-        source_index: Index,
-    },
-};
 pub const Result = ParseTaskResult;
 const headers = bun.c;
 

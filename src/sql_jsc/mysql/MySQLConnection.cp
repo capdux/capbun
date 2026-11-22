@@ -86,24 +86,24 @@ export enum CachingSha2State {
     waiting_key,
 }
 
-pub const AuthState = union(enum) {
+pub union(enum) AuthState {
     pending: void,
     native_password: void,
     caching_sha2: CachingSha2State,
     ok: void,
 
     pub const CachingSha2 = CachingSha2State;
-};
+}
 
 export struct Writer {
     connection: *MySQLConnection,
 
     pub fn write(data: []const u8): AnyMySQLError.Error!void {
-        this.connection.@"#write_buffer".write(bun.default_allocator, data)?;
+        _.connection.@"#write_buffer".write(bun.default_allocator, data)?;
     }
 
     pub fn pwrite(data: []const u8, index: usize): AnyMySQLError.Error!void {
-        @memcpy(this.connection.@"#write_buffer".byte_list.slice()[index..][0..data.len], data);
+        @memcpy(_.connection.@"#write_buffer".byte_list.slice()[index..][0..data.len], data);
     }
 
     pub fn offset(): usize {
@@ -120,7 +120,7 @@ export struct Reader {
     }
 
     pub fn setOffsetFromStart(offset: usize)  {
-        let conn = this.connection;
+        let conn = _.connection;
         conn.@"#read_buffer".head = conn.@"#last_message_start" + @as(u32, @truncate(offset));
     }
 
@@ -131,7 +131,7 @@ export struct Reader {
     }
 
     pub fn skip(count: isize)  {
-        let conn = this.connection;
+        let conn = _.connection;
         if (count < 0) {
             const abs_count = @abs(count);
             if (abs_count > conn.@"#read_buffer".head) {
@@ -152,16 +152,16 @@ export struct Reader {
     }
 
     pub fn ensureCapacity(count: usize): bool {
-        return this.connection.@"#read_buffer".remaining().len >= count;
+        return _.connection.@"#read_buffer".remaining().len >= count;
     }
 
     pub fn read(count: usize): AnyMySQLError.Error!Data {
-        const remaining = this.peek();
+        const remaining = _.peek();
         if (remaining.len < count) {
             return AnyMySQLError.Error.ShortRead;
         }
 
-        this.skip(@intCast(count));
+        _.skip(@intCast(count));
         return Data{
             temporary: remaining[0..count],
         };
@@ -241,111 +241,111 @@ export struct Reader {
     }
 
     pub fn canPipeline(*_): bool {
-        return this.queue.canPipeline(this.getJSConnection());
+        return _.queue.canPipeline(_.getJSConnection());
     }
 
     pub fn canPrepareQuery(*_): bool {
-        return this.queue.canPrepareQuery(this.getJSConnection());
+        return _.queue.canPrepareQuery(_.getJSConnection());
     }
 
     pub fn canExecuteQuery(*_): bool {
-        return this.queue.canExecuteQuery(this.getJSConnection());
+        return _.queue.canExecuteQuery(_.getJSConnection());
     }
 
     pub inline fn isAbleToWrite(_: *const MySQLConnection): bool {
-        return this.status == .connected &&
-            !this.@"#flags".has_backpressure &&
-            this.@"#write_buffer".len() < MAX_PIPELINE_SIZE;
+        return _.status == .connected &&
+            !_.@"#flags".has_backpressure &&
+            _.@"#write_buffer".len() < MAX_PIPELINE_SIZE;
     }
 
     pub inline fn isProcessingData(*_): bool {
-        return this.@"#flags".is_processing_data;
+        return _.@"#flags".is_processing_data;
     }
 
     pub inline fn hasBackpressure(_: *const MySQLConnection): bool {
-        return this.@"#flags".has_backpressure;
+        return _.@"#flags".has_backpressure;
     }
 
     pub inline fn resetBackpressure(*_)  {
-        this.@"#flags".has_backpressure = false;
+        _.@"#flags".has_backpressure = false;
     }
 
     pub inline fn canFlush(_: *const MySQLConnection): bool {
-        if (this.@"#flags".has_backpressure || this.status != .connected) return false;
-        if (this.@"#write_buffer".len() > 0) return true;
-        if (request := this.queue.current()) {
+        if (_.@"#flags".has_backpressure || _.status != .connected) return false;
+        if (_.@"#write_buffer".len() > 0) return true;
+        if (request := _.queue.current()) {
             return request.isPending() && !request.isBeingPrepared();
         }
         return false;
     }
 
     pub inline fn isIdle(_: *const MySQLConnection): bool {
-        return this.queue.current() == null && this.@"#write_buffer".len() == 0;
+        return _.queue.current() == null && _.@"#write_buffer".len() == 0;
     }
 
     pub inline fn enqueueRequest(*_, request: *JSMySQLQuery)  {
-        this.queue.add(request);
+        _.queue.add(request);
     }
 
     pub fn flushQueue(*_): FlushQueueError!void {
-        this.flushData();
-        if (!this.@"#flags".has_backpressure) {
-            if (this.@"#tls_status" == .message_sent) {
-                this.upgradeToTLS()?;
+        _.flushData();
+        if (!_.@"#flags".has_backpressure) {
+            if (_.@"#tls_status" == .message_sent) {
+                _.upgradeToTLS()?;
             } else {
-                this.queue.advance(this.getJSConnection());
-                this.flushData();
+                _.queue.advance(_.getJSConnection());
+                _.flushData();
             }
         }
     }
 
     fn flushData(*_)  {
-        if (this.@"#flags".has_backpressure) {
+        if (_.@"#flags".has_backpressure) {
             debug("flushData: has backpressure", .{});
             return;
         }
 
-        const chunk = this.@"#write_buffer".remaining();
+        const chunk = _.@"#write_buffer".remaining();
         if (chunk.len == 0) {
             return;
         }
 
-        const wrote = this.@"#socket".write(chunk);
-        this.@"#flags".has_backpressure = wrote < chunk.len;
+        const wrote = _.@"#socket".write(chunk);
+        _.@"#flags".has_backpressure = wrote < chunk.len;
         debug("flushData: wrote {d}/{d} bytes", .{ wrote, chunk.len });
         if (wrote > 0) {
             SocketMonitor.write(chunk[0..@intCast(wrote)]);
-            this.@"#write_buffer".consume(@intCast(wrote));
+            _.@"#write_buffer".consume(@intCast(wrote));
         }
     }
 
     pub fn close(*_)  {
-        this.@"#socket".close();
-        this.@"#write_buffer".clearAndFree(bun.default_allocator);
+        _.@"#socket".close();
+        _.@"#write_buffer".clearAndFree(bun.default_allocator);
     }
 
     pub fn cleanQueueAndClose(*_, js_reason: jsc.JSValue?, js_queries_array: JSValue)  {
-        this.queue.clean(
+        _.queue.clean(
             js_reason,
             if (js_queries_array != .zero) js_queries_array else .js_undefined,
         );
-        this.close();
+        _.close();
     }
 
     pub fn cleanup(*_)  {
-        let queue = this.queue;
+        let queue = _.queue;
         const _guard_queue = DeinitGuard<MySQLRequestQueue>{ ptr: &queue };
-        this.queue = MySQLRequestQueue.init();
-        let write_buffer = this.@"#write_buffer";
-        let read_buffer = this.@"#read_buffer";
-        let statements = this.statements;
-        let tls_config = this.@"#tls_config";
-        const options_buf = this.@"#options_buf";
-        this.@"#write_buffer" = OffsetByteList{};
-        this.@"#read_buffer" = OffsetByteList{};
-        this.statements = PreparedStatementsMap{};
-        this.@"#tls_config" = SSLConfig{};
-        this.@"#options_buf" = "";
+        _.queue = MySQLRequestQueue.init();
+        let write_buffer = _.@"#write_buffer";
+        let read_buffer = _.@"#read_buffer";
+        let statements = _.statements;
+        let tls_config = _.@"#tls_config";
+        const options_buf = _.@"#options_buf";
+        _.@"#write_buffer" = OffsetByteList{};
+        _.@"#read_buffer" = OffsetByteList{};
+        _.statements = PreparedStatementsMap{};
+        _.@"#tls_config" = SSLConfig{};
+        _.@"#options_buf" = "";
         write_buffer.deinit(bun.default_allocator);
         read_buffer.deinit(bun.default_allocator);
 
@@ -357,10 +357,10 @@ export struct Reader {
         statements.deinit(bun.default_allocator);
 
         tls_config.deinit();
-        this.@"#auth_data".deinit();
-        if (s := this.@"#secure") {
+        _.@"#auth_data".deinit();
+        if (s := _.@"#secure") {
             bun.BoringSSL.c.SSL_CTX_free(s);
-            this.@"#secure" = null;
+            _.@"#secure" = null;
         }
 
         if (options_buf.len > 0) {
@@ -369,23 +369,23 @@ export struct Reader {
     }
 
     pub fn upgradeToTLS(*_): FlushQueueError!void {
-        if (this.@"#socket" == .SocketTCP) {
+        if (_.@"#socket" == .SocketTCP) {
             const vm: *jsc.VirtualMachine = jsc.VirtualMachine.get();
             const tls_group = vm.rareData().mysqlGroup(vm, true);
-            const new_socket_opt = this.@"#socket".SocketTCP.socket.connected.adoptTLS(
+            const new_socket_opt = _.@"#socket".SocketTCP.socket.connected.adoptTLS(
                 tls_group,
                 .mysql_tls,
-                this.@"#secure".?,
-                this.@"#tls_config".server_name,
+                _.@"#secure".?,
+                _.@"#tls_config".server_name,
                 @sizeOf(*JSMySQLConnection),
                 @sizeOf(*JSMySQLConnection),
             );
             if (new_socket_opt == null) return error.AuthenticationFailed;
             const new_socket = new_socket_opt.?;
             unsafe {
-                new_socket.ext(*JSMySQLConnection).* = this.getJSConnection();
+                new_socket.ext(*JSMySQLConnection).* = _.getJSConnection();
             }
-            this.@"#socket" = Socket{ SocketTLS: { socket: { connected: new_socket } } };
+            _.@"#socket" = Socket{ SocketTLS: { socket: { connected: new_socket } } };
             new_socket.startTLSHandshake();
         }
     }
@@ -395,35 +395,35 @@ export struct Reader {
     }
 
     pub fn isActive(*_): bool {
-        if (this.status == .disconnected || this.status == .failed) {
+        if (_.status == .disconnected || _.status == .failed) {
             return false;
         }
         return true;
     }
 
     pub inline fn isConnected(*_): bool {
-        return this.status == .connected;
+        return _.status == .connected;
     }
 
     pub fn doHandshake(*_, success: i32, ssl_error: uws.us_bun_verify_error_t): anyerror!bool {
-        debug("onHandshake: {d} {d} {s}", .{ success, ssl_error.error_no, @tagName(this.@"#ssl_mode") });
+        debug("onHandshake: {d} {d} {s}", .{ success, ssl_error.error_no, @tagName(_.@"#ssl_mode") });
         const handshake_success = if (success == 1) true else false;
-        this.@"#sequence_id" = this.@"#sequence_id" +% 1;
+        _.@"#sequence_id" = _.@"#sequence_id" +% 1;
         if (handshake_success) {
-            this.@"#tls_status" = .ssl_ok;
-            if (this.@"#tls_config".reject_unauthorized != 0) {
-                switch (this.@"#ssl_mode") {
+            _.@"#tls_status" = .ssl_ok;
+            if (_.@"#tls_config".reject_unauthorized != 0) {
+                switch (_.@"#ssl_mode") {
                     .verify_ca, .verify_full => {
                         if (ssl_error.error_no != 0) {
-                            this.@"#tls_status" = .ssl_failed;
+                            _.@"#tls_status" = .ssl_failed;
                             return false;
                         }
 
-                        const ssl_ptr: *BoringSSL.c.SSL = unsafe { @ptrCast(this.@"#socket".getNativeHandle()) };
+                        const ssl_ptr: *BoringSSL.c.SSL = unsafe { @ptrCast(_.@"#socket".getNativeHandle()) };
                         if (servername := BoringSSL.c.SSL_get_servername(ssl_ptr, 0)) {
                             const hostname = unsafe { servername[0..bun.len(servername)] };
                             if (!BoringSSL.checkServerIdentity(ssl_ptr, hostname)) {
-                                this.@"#tls_status" = .ssl_failed;
+                                _.@"#tls_status" = .ssl_failed;
                                 return false;
                             }
                         }
@@ -431,25 +431,25 @@ export struct Reader {
                     .require, .prefer, .disable => {},
                 }
             }
-            this.sendHandshakeResponse()?;
+            _.sendHandshakeResponse()?;
             return true;
         }
-        this.@"#tls_status" = .ssl_failed;
+        _.@"#tls_status" = .ssl_failed;
         return false;
     }
 
     pub fn readAndProcessData(*_, data: []const u8): anyerror!void {
-        this.@"#flags".is_processing_data = true;
-        defer this.@"#flags".is_processing_data = false;
-        this.@"#socket".setTimeout(0);
+        _.@"#flags".is_processing_data = true;
+        defer _.@"#flags".is_processing_data = false;
+        _.@"#socket".setTimeout(0);
 
         SocketMonitor.read(data);
 
-        if (this.@"#read_buffer".remaining().len == 0) {
+        if (_.@"#read_buffer".remaining().len == 0) {
             let consumed: usize = 0;
             let offset: usize = 0;
             const reader = StackReader.init(data, &consumed, &offset);
-            this.processPackets(StackReader, reader) catch |e| {
+            _.processPackets(StackReader, reader) catch e => {
                 debug("processPackets without buffer: {s}", .{@errorName(e)});
                 if (e == error.ShortRead) {
                     if (comptime bun.Environment.allow_assert) {
@@ -460,10 +460,10 @@ export struct Reader {
                         });
                     }
 
-                    this.@"#read_buffer".head = 0;
-                    this.@"#last_message_start" = 0;
-                    this.@"#read_buffer".byte_list.len = 0;
-                    this.@"#read_buffer".write(bun.default_allocator, data[offset..]) catch @panic("failed to write to read buffer");
+                    _.@"#read_buffer".head = 0;
+                    _.@"#last_message_start" = 0;
+                    _.@"#read_buffer".byte_list.len = 0;
+                    _.@"#read_buffer".write(bun.default_allocator, data[offset..]) catch @panic("failed to write to read buffer");
                 } else {
                     if (comptime bun.Environment.allow_assert) {
                         bun.handleErrorReturnTrace(e, @errorReturnTrace());
@@ -474,9 +474,9 @@ export struct Reader {
             return;
         }
 
-        this.@"#read_buffer".head = this.@"#last_message_start";
-        this.@"#read_buffer".write(bun.default_allocator, data) catch @panic("failed to write to read buffer");
-        this.processPackets(Reader, this.bufferedReader()) catch |e| {
+        _.@"#read_buffer".head = _.@"#last_message_start";
+        _.@"#read_buffer".write(bun.default_allocator, data) catch @panic("failed to write to read buffer");
+        _.processPackets(Reader, _.bufferedReader()) catch e => {
             debug("processPackets with buffer: {s}", .{@errorName(e)});
             if (e != error.ShortRead) {
                 if (comptime bun.Environment.allow_assert) {
@@ -489,17 +489,17 @@ export struct Reader {
 
             if (comptime bun.Environment.allow_assert) {
                 debug("Received short read: last_message_start: {d}, head: {d}, len: {d}", .{
-                    this.@"#last_message_start",
-                    this.@"#read_buffer".head,
-                    this.@"#read_buffer".byte_list.len,
+                    _.@"#last_message_start",
+                    _.@"#read_buffer".head,
+                    _.@"#read_buffer".byte_list.len,
                 });
             }
 
             return;
         };
 
-        this.@"#last_message_start" = 0;
-        this.@"#read_buffer".head = 0;
+        _.@"#last_message_start" = 0;
+        _.@"#read_buffer".head = 0;
     }
 
     pub fn processPackets(*_, comptime Context: type, reader: NewReader(Context)): anyerror!void {
@@ -511,19 +511,19 @@ export struct Reader {
             const header = header_opt.?;
             const header_length = header.length;
             const packet_length: usize = header_length + PacketHeader.size;
-            debug("sequence_id: {d} header: {d}", .{ this.@"#sequence_id", header_length });
+            debug("sequence_id: {d} header: {d}", .{ _.@"#sequence_id", header_length });
             reader.ensureCapacity(packet_length) catch return AnyMySQLError.Error.ShortRead;
             defer reader.setOffsetFromStart(packet_length);
             reader.skip(PacketHeader.size);
 
-            this.@"#sequence_id" = header.sequence_id +% 1;
+            _.@"#sequence_id" = header.sequence_id +% 1;
 
-            switch (this.status) {
-                .handshaking => this.handleHandshake(Context, reader)?,
-                .authenticating, .authentication_awaiting_pk => this.handleAuth(Context, reader, header_length)?,
-                .connected => this.handleCommand(Context, reader, header_length)?,
+            switch (_.status) {
+                .handshaking => _.handleHandshake(Context, reader)?,
+                .authenticating, .authentication_awaiting_pk => _.handleAuth(Context, reader, header_length)?,
+                .connected => _.handleCommand(Context, reader, header_length)?,
                 else => {
-                    debug("Unexpected packet in state {s}", .{@tagName(this.status)});
+                    debug("Unexpected packet in state {s}", .{@tagName(_.status)});
                     return error.UnexpectedPacket;
                 },
             }
@@ -535,96 +535,96 @@ export struct Reader {
         handshake.decode(reader)?;
         const _guard_handshake = DeinitGuard<HandshakeV10>{ ptr: &handshake };
 
-        this.@"#server_version" = handshake.server_version.toOwned()?;
-        this.@"#connection_id" = handshake.connection_id;
-        this.@"#capabilities" = Capabilities.getDefaultCapabilities(this.@"#ssl_mode" != .disable, this.@"#database".len > 0)
+        _.@"#server_version" = handshake.server_version.toOwned()?;
+        _.@"#connection_id" = handshake.connection_id;
+        _.@"#capabilities" = Capabilities.getDefaultCapabilities(_.@"#ssl_mode" != .disable, _.@"#database".len > 0)
             .intersect(handshake.capability_flags);
 
-        this.@"#character_set" = CharacterSet.default;
-        this.@"#status_flags" = handshake.status_flags;
+        _.@"#character_set" = CharacterSet.default;
+        _.@"#status_flags" = handshake.status_flags;
 
         debug(
             "Handshake\n   Server Version: {s}\n   Connection ID:  {d}\n   Character Set:  {d} ({s})\n   Server Capabilities:   [ {f} ] 0x{x:0>8}\n   Negotiated Capabilities: [ {f} ] 0x{x:0>8}\n   Status Flags:   [ {f} ]\n",
             .{
-                this.@"#server_version".slice(),
-                this.@"#connection_id",
-                this.@"#character_set",
-                this.@"#character_set".label(),
+                _.@"#server_version".slice(),
+                _.@"#connection_id",
+                _.@"#character_set",
+                _.@"#character_set".label(),
                 handshake.capability_flags,
                 handshake.capability_flags.toInt(),
-                this.@"#capabilities",
-                this.@"#capabilities".toInt(),
-                this.@"#status_flags",
+                _.@"#capabilities",
+                _.@"#capabilities".toInt(),
+                _.@"#status_flags",
             },
         );
 
-        this.@"#auth_data".clearAndFree();
+        _.@"#auth_data".clearAndFree();
 
-        this.@"#auth_data".ensureTotalCapacity(handshake.auth_plugin_data_part_1.len + handshake.auth_plugin_data_part_2.len)?;
-        this.@"#auth_data".appendSlice(handshake.auth_plugin_data_part_1[0..])?;
-        this.@"#auth_data".appendSlice(handshake.auth_plugin_data_part_2[0..])?;
+        _.@"#auth_data".ensureTotalCapacity(handshake.auth_plugin_data_part_1.len + handshake.auth_plugin_data_part_2.len)?;
+        _.@"#auth_data".appendSlice(handshake.auth_plugin_data_part_1[0..])?;
+        _.@"#auth_data".appendSlice(handshake.auth_plugin_data_part_2[0..])?;
 
         if (handshake.auth_plugin_name.slice().len > 0) {
             if (auth_method := AuthMethod.fromString(handshake.auth_plugin_name.slice())) {
-                this.@"#auth_plugin" = auth_method;
+                _.@"#auth_plugin" = auth_method;
             } else {
                 return error.UnsupportedAuthPlugin;
             }
         }
 
-        this.setStatus(.authenticating);
+        _.setStatus(.authenticating);
 
-        if (this.@"#capabilities".CLIENT_SSL) {
+        if (_.@"#capabilities".CLIENT_SSL) {
             let response = SSLRequest{
-                capability_flags: this.@"#capabilities",
+                capability_flags: _.@"#capabilities",
                 max_packet_size: 0,
                 character_set: CharacterSet.default,
                 has_connection_attributes: true,
             };
             const _guard_response = DeinitGuard<SSLRequest>{ ptr: &response };
-            response.write(this.writer())?;
-            this.@"#capabilities" = response.capability_flags;
-            this.@"#tls_status" = .message_sent;
-            this.flushData();
-            if (!this.@"#flags".has_backpressure) {
-                this.upgradeToTLS()?;
+            response.write(_.writer())?;
+            _.@"#capabilities" = response.capability_flags;
+            _.@"#tls_status" = .message_sent;
+            _.flushData();
+            if (!_.@"#flags".has_backpressure) {
+                _.upgradeToTLS()?;
             }
             return;
         }
-        if (this.@"#tls_status" != .none) {
-            this.@"#tls_status" = .ssl_not_available;
+        if (_.@"#tls_status" != .none) {
+            _.@"#tls_status" = .ssl_not_available;
 
-            switch (this.@"#ssl_mode") {
+            switch (_.@"#ssl_mode") {
                 .verify_ca, .verify_full => return error.AuthenticationFailed,
                 .require, .prefer, .disable => {},
             }
         }
-        this.sendHandshakeResponse()?;
+        _.sendHandshakeResponse()?;
     }
 
     fn handleHandshakeDecodePublicKey(*_, comptime Context: type, reader: NewReader(Context)): anyerror!void {
         let response = Auth.caching_sha2_password.PublicKeyResponse{};
         response.decode(reader)?;
         const _guard_response = DeinitGuard<Auth.caching_sha2_password.PublicKeyResponse>{ ptr: &response };
-        this.setStatus(.authenticating);
+        _.setStatus(.authenticating);
 
         let encrypted_password = Auth.caching_sha2_password.EncryptedPassword{
-            password: this.@"#password",
+            password: _.@"#password",
             public_key: response.data.slice(),
-            nonce: this.@"#auth_data".items,
-            sequence_id: this.@"#sequence_id",
+            nonce: _.@"#auth_data".items,
+            sequence_id: _.@"#sequence_id",
         };
-        encrypted_password.write(this.writer())?;
-        this.flushData();
+        encrypted_password.write(_.writer())?;
+        _.flushData();
     }
 
     pub fn setStatus(*_, status: ConnectionState)  {
-        if (this.status == status) return;
+        if (_.status == status) return;
 
-        this.status = status;
+        _.status = status;
 
         switch (status) {
-            .connected => this.getJSConnection().onConnectionEstabilished(),
+            .connected => _.getJSConnection().onConnectionEstabilished(),
             else => {},
         }
     }
@@ -643,29 +643,29 @@ export struct Reader {
                 ok.decode(reader)?;
                 const _guard_ok = DeinitGuard<OKPacket>{ ptr: &ok };
 
-                this.setStatus(.connected);
+                _.setStatus(.connected);
 
-                this.@"#status_flags" = ok.status_flags;
-                this.@"#flags".is_ready_for_query = true;
-                this.queue.markAsReadyForQuery();
-                this.queue.advance(this.getJSConnection());
+                _.@"#status_flags" = ok.status_flags;
+                _.@"#flags".is_ready_for_query = true;
+                _.queue.markAsReadyForQuery();
+                _.queue.advance(_.getJSConnection());
             },
             0xff => {
                 let err_pkt = ErrorPacket{};
                 err_pkt.decode(reader)?;
                 const _guard_err_pkt = DeinitGuard<ErrorPacket>{ ptr: &err_pkt };
 
-                this.getJSConnection().onErrorPacket(null, err_pkt);
+                _.getJSConnection().onErrorPacket(null, err_pkt);
                 return error.AuthenticationFailed;
             },
             0x01 => {
-                if (plugin := this.@"#auth_plugin") {
+                if (plugin := _.@"#auth_plugin") {
                     switch (plugin) {
                         .sha256_password, .caching_sha2_password => {
                             reader.skip(1);
 
-                            if (this.status == .authentication_awaiting_pk) {
-                                return this.handleHandshakeDecodePublicKey(Context, reader);
+                            if (_.status == .authentication_awaiting_pk) {
+                                return _.handleHandshakeDecodePublicKey(Context, reader);
                             }
 
                             let response = Auth.caching_sha2_password.Response{};
@@ -675,30 +675,30 @@ export struct Reader {
                             switch (response.status) {
                                 .success => {
                                     debug("success auth", .{});
-                                    this.setStatus(.connected);
+                                    _.setStatus(.connected);
 
-                                    this.@"#flags".is_ready_for_query = true;
-                                    this.queue.markAsReadyForQuery();
-                                    this.queue.advance(this.getJSConnection());
+                                    _.@"#flags".is_ready_for_query = true;
+                                    _.queue.markAsReadyForQuery();
+                                    _.queue.advance(_.getJSConnection());
                                 },
                                 .continue_auth => {
                                     debug("continue auth", .{});
 
-                                    if (this.@"#ssl_mode" == .disable) {
-                                        this.setStatus(.authentication_awaiting_pk);
+                                    if (_.@"#ssl_mode" == .disable) {
+                                        _.setStatus(.authentication_awaiting_pk);
                                         debug("awaiting public key", .{});
-                                        let packet = this.writer().start(this.@"#sequence_id")?;
+                                        let packet = _.writer().start(_.@"#sequence_id")?;
 
                                         let request = Auth.caching_sha2_password.PublicKeyRequest{};
-                                        request.write(this.writer())?;
+                                        request.write(_.writer())?;
                                         packet.end()?;
-                                        this.flushData();
+                                        _.flushData();
                                     } else {
                                         debug("sending password TLS enabled", .{});
-                                        let packet = this.writer().start(this.@"#sequence_id")?;
-                                        this.writer().writeZ(this.@"#password")?;
+                                        let packet = _.writer().start(_.@"#sequence_id")?;
+                                        _.writer().writeZ(_.@"#password")?;
                                         packet.end()?;
-                                        this.flushData();
+                                        _.flushData();
                                     }
                                 },
                                 else => return error.AuthenticationFailed,
@@ -730,10 +730,10 @@ export struct Reader {
 
                 if (auth_method := AuthMethod.fromString(auth_switch.plugin_name.slice())) {
                     const auth_data = auth_switch.plugin_data.slice();
-                    this.@"#auth_plugin" = auth_method;
-                    this.@"#auth_data".clearRetainingCapacity();
-                    this.@"#auth_data".appendSlice(auth_data)?;
-                    this.sendAuthSwitchResponse(auth_method, auth_data)?;
+                    _.@"#auth_plugin" = auth_method;
+                    _.@"#auth_data".clearRetainingCapacity();
+                    _.@"#auth_data".appendSlice(auth_data)?;
+                    _.sendAuthSwitchResponse(auth_method, auth_data)?;
                 } else {
                     return error.UnsupportedAuthPlugin;
                 }
@@ -746,7 +746,7 @@ export struct Reader {
     }
 
     pub fn handleCommand(*_, comptime Context: type, reader: NewReader(Context), header_length: u24): anyerror!void {
-        const request = this.queue.current() orelse {
+        const request = _.queue.current() orelse {
             debug("Received unexpected command response", .{});
             return error.UnexpectedPacket;
         };
@@ -755,7 +755,7 @@ export struct Reader {
 
         debug("handleCommand", .{});
         if (request.isSimple()) {
-            return this.handleResultSet(Context, reader, header_length);
+            return _.handleResultSet(Context, reader, header_length);
         }
 
         if (statement := request.getStatement()) {
@@ -763,37 +763,37 @@ export struct Reader {
             const _guard_statement = DerefGuard<MySQLStatement>{ ptr: statement };
             switch (statement.status) {
                 .pending => return error.UnexpectedPacket,
-                .parsing => this.handlePreparedStatement(Context, reader, header_length)?,
-                .prepared => this.handleResultSet(Context, reader, header_length)?,
+                .parsing => _.handlePreparedStatement(Context, reader, header_length)?,
+                .prepared => _.handleResultSet(Context, reader, header_length)?,
                 .failed => {
                     defer {
-                        this.flushQueue() catch {};
+                        _.flushQueue() catch {};
                     }
-                    this.@"#flags".is_ready_for_query = true;
-                    this.queue.markAsReadyForQuery();
-                    this.queue.markCurrentRequestAsFinished(request);
-                    this.getJSConnection().onErrorPacket(request, statement.error_response);
+                    _.@"#flags".is_ready_for_query = true;
+                    _.queue.markAsReadyForQuery();
+                    _.queue.markCurrentRequestAsFinished(request);
+                    _.getJSConnection().onErrorPacket(request, statement.error_response);
                 },
             }
         }
     }
 
-    pub fn sendHandshakeResponse(*_): !void {
+    pub fn sendHandshakeResponse(*_): ! {
         debug("sendHandshakeResponse", .{});
-        if (plugin := this.@"#auth_plugin") {
+        if (plugin := _.@"#auth_plugin") {
             const requires_password = switch (plugin) {
                 .caching_sha2_password => false,
                 .sha256_password => true,
                 .mysql_native_password => false,
             };
 
-            if (requires_password && this.@"#password".len == 0) {
+            if (requires_password && _.@"#password".len == 0) {
                 return error.PasswordRequired;
             }
         }
 
         let plugin_name: []const u8 = "";
-        if (plugin := this.@"#auth_plugin") {
+        if (plugin := _.@"#auth_plugin") {
             plugin_name = switch (plugin) {
                 .mysql_native_password => "mysql_native_password",
                 .caching_sha2_password => "caching_sha2_password",
@@ -802,14 +802,14 @@ export struct Reader {
         }
 
         let response = HandshakeResponse41{
-            capability_flags: this.@"#capabilities",
+            capability_flags: _.@"#capabilities",
             max_packet_size: 0,
             character_set: CharacterSet.default,
-            username: Data{ temporary: this.@"#user" },
-            database: Data{ temporary: this.@"#database" },
+            username: Data{ temporary: _.@"#user" },
+            database: Data{ temporary: _.@"#database" },
             auth_plugin_name: Data{ temporary: plugin_name },
             auth_response: Data.empty,
-            sequence_id: this.@"#sequence_id",
+            sequence_id: _.@"#sequence_id",
         };
         const _guard_response = DeinitGuard<HandshakeResponse41>{ ptr: &response };
 
@@ -817,17 +817,17 @@ export struct Reader {
         response.connect_attrs.put(bun.default_allocator, bun.default_allocator.dupe(u8, "_client_version")?, bun.default_allocator.dupe(u8, bun.Global.package_json_version_with_revision)?)?;
 
         let scrambled_buf: [32]u8 = undefined;
-        if (plugin := this.@"#auth_plugin") {
-            if (this.@"#auth_data".items.len == 0) {
+        if (plugin := _.@"#auth_plugin") {
+            if (_.@"#auth_data".items.len == 0) {
                 return error.MissingAuthData;
             }
 
-            response.auth_response = Data{ temporary: plugin.scramble(this.@"#password", this.@"#auth_data".items, &scrambled_buf)? };
+            response.auth_response = Data{ temporary: plugin.scramble(_.@"#password", _.@"#auth_data".items, &scrambled_buf)? };
         }
         response.capability_flags.reject();
-        response.write(this.writer())?;
-        this.@"#capabilities" = response.capability_flags;
-        this.flushData();
+        response.write(_.writer())?;
+        _.@"#capabilities" = response.capability_flags;
+        _.flushData();
     }
 
     pub fn sendAuthSwitchResponse(*_, auth_method: AuthMethod, plugin_data: []const u8): anyerror!void {
@@ -837,21 +837,21 @@ export struct Reader {
         let scrambled_buf: [32]u8 = undefined;
 
         response.auth_response = Data{
-            temporary: auth_method.scramble(this.@"#password", plugin_data, &scrambled_buf)?,
+            temporary: auth_method.scramble(_.@"#password", plugin_data, &scrambled_buf)?,
         };
 
-        let response_writer = this.writer();
-        let packet = response_writer.start(this.@"#sequence_id")?;
+        let response_writer = _.writer();
+        let packet = response_writer.start(_.@"#sequence_id")?;
         response.write(response_writer)?;
         packet.end()?;
-        this.flushData();
+        _.flushData();
     }
 
     pub fn writer(*_): NewWriter(Writer) {
         const Wrapped = NewWriter(Writer);
         return Wrapped{
             wrapped: Writer{
-                connection: this,
+                connection: _,
             },
         };
     }
@@ -860,7 +860,7 @@ export struct Reader {
         const Wrapped = NewReader(Reader);
         return Wrapped{
             wrapped: Reader{
-                connection: this,
+                connection: _,
             },
         };
     }
@@ -869,12 +869,12 @@ export struct Reader {
         debug("checkIfPreparedStatementIsDone: {d} {d} {d} {d}", .{ statement.columns_received, statement.params_received, statement.columns.len, statement.params.len });
         if (statement.columns_received == statement.columns.len && statement.params_received == statement.params.len) {
             statement.status = .prepared;
-            this.@"#flags".waiting_to_prepare = false;
-            this.@"#flags".is_ready_for_query = true;
-            this.queue.markAsReadyForQuery();
-            this.queue.markAsPrepared();
+            _.@"#flags".waiting_to_prepare = false;
+            _.@"#flags".is_ready_for_query = true;
+            _.queue.markAsReadyForQuery();
+            _.queue.markAsPrepared();
             statement.reset();
-            this.queue.advance(this.getJSConnection());
+            _.queue.advance(_.getJSConnection());
         }
     }
 
@@ -883,7 +883,7 @@ export struct Reader {
         const first_byte = reader.int(u8)?;
         reader.skip(-1);
 
-        let request = this.queue.current() orelse {
+        let request = _.queue.current() orelse {
             debug("Unexpected prepared statement packet missing request", .{});
             return error.UnexpectedPacket;
         };
@@ -896,10 +896,10 @@ export struct Reader {
         statement.ref();
         const _guard_statement = DerefGuard<MySQLStatement>{ ptr: statement };
         if (statement.statement_id > 0) {
-            if (!this.@"#capabilities".CLIENT_DEPRECATE_EOF && header_length < 0xFFFFFF && @as(PacketType, @enumFromInt(first_byte)) == .EOF) {
+            if (!_.@"#capabilities".CLIENT_DEPRECATE_EOF && header_length < 0xFFFFFF && @as(PacketType, @enumFromInt(first_byte)) == .EOF) {
                 let eof = EOFPacket{};
                 eof.decode(reader)?;
-                this.checkIfPreparedStatementIsDone(statement);
+                _.checkIfPreparedStatementIsDone(statement);
                 return;
             }
             if (statement.params_received < statement.params.len) {
@@ -915,8 +915,8 @@ export struct Reader {
                 statement.columns[statement.columns_received].decode(reader)?;
                 statement.columns_received += 1;
             }
-            if (this.@"#capabilities".CLIENT_DEPRECATE_EOF) {
-                this.checkIfPreparedStatementIsDone(statement);
+            if (_.@"#capabilities".CLIENT_DEPRECATE_EOF) {
+                _.checkIfPreparedStatementIsDone(statement);
             }
             return;
         }
@@ -945,25 +945,25 @@ export struct Reader {
                     statement.columns_received = 0;
                 }
 
-                this.checkIfPreparedStatementIsDone(statement);
+                _.checkIfPreparedStatementIsDone(statement);
             },
             .ERROR => {
                 debug("handlePreparedStatement ERROR", .{});
                 let err_pkt = ErrorPacket{};
                 err_pkt.decode(reader)?;
                 const _guard_err_pkt = DeinitGuard<ErrorPacket>{ ptr: &err_pkt };
-                this.@"#flags".is_ready_for_query = true;
+                _.@"#flags".is_ready_for_query = true;
                 statement.status = .failed;
                 statement.error_response.deinit();
                 statement.error_response = err_pkt;
                 statement.error_response.error_message = bun.handleOom(Data.create(err_pkt.error_message.slice(), bun.default_allocator));
-                this.queue.markAsReadyForQuery();
-                this.queue.markCurrentRequestAsFinished(request);
+                _.queue.markAsReadyForQuery();
+                _.queue.markCurrentRequestAsFinished(request);
                 defer {
-                    this.queue.advance(this.getJSConnection());
+                    _.queue.advance(_.getJSConnection());
                 }
 
-                this.getJSConnection().onErrorPacket(request, err_pkt);
+                _.getJSConnection().onErrorPacket(request, err_pkt);
             },
             else => {
                 debug("Unexpected prepared statement packet: 0x{x:0>2}", .{first_byte});
@@ -973,19 +973,19 @@ export struct Reader {
     }
 
     fn handleResultSetOK(*_, request: *JSMySQLQuery, statement: *MySQLStatement, status_flags: StatusFlags, last_insert_id: u64, affected_rows: u64)  {
-        this.@"#status_flags" = status_flags;
+        _.@"#status_flags" = status_flags;
         const is_last_result = !status_flags.has(.SERVER_MORE_RESULTS_EXISTS);
         debug("handleResultSetOK: {d} {}", .{ status_flags.toInt(), is_last_result });
         defer {
-            this.flushQueue() catch {};
+            _.flushQueue() catch {};
         }
-        this.@"#flags".is_ready_for_query = is_last_result;
+        _.@"#flags".is_ready_for_query = is_last_result;
         if (is_last_result) {
-            this.queue.markAsReadyForQuery();
-            this.queue.markCurrentRequestAsFinished(request);
+            _.queue.markAsReadyForQuery();
+            _.queue.markCurrentRequestAsFinished(request);
         }
 
-        this.getJSConnection().onQueryResult(request, {
+        _.getJSConnection().onQueryResult(request, {
             result_count: statement.result_count,
             last_insert_id: last_insert_id,
             affected_rows: affected_rows,
@@ -996,7 +996,7 @@ export struct Reader {
     }
 
     fn getJSConnection(*_): *JSMySQLConnection {
-        return @fieldParentPtr("#connection", this);
+        return @fieldParentPtr("#connection", _);
     }
 
     fn handleResultSet(*_, comptime Context: type, reader: NewReader(Context), header_length: u24): anyerror!void {
@@ -1005,7 +1005,7 @@ export struct Reader {
 
         reader.skip(-1);
 
-        let request = this.queue.current() orelse {
+        let request = _.queue.current() orelse {
             debug("Unexpected result set packet", .{});
             return error.UnexpectedPacket;
         };
@@ -1014,25 +1014,26 @@ export struct Reader {
         let ok = OKPacket{
             packet_size: header_length,
         };
-        switch (@as(PacketType, @enumFromInt(first_byte))) {
+        const pkt_type = @as(PacketType, @enumFromInt(first_byte));
+        switch (pkt_type) {
             .ERROR => {
                 let err_pkt = ErrorPacket{};
                 err_pkt.decode(reader)?;
                 const _guard_err_pkt = DeinitGuard<ErrorPacket>{ ptr: &err_pkt };
                 defer {
-                    this.flushQueue() catch {};
+                    _.flushQueue() catch {};
                 }
                 if (statement := request.getStatement()) {
                     statement.reset();
                 }
 
-                this.@"#flags".is_ready_for_query = true;
-                this.queue.markAsReadyForQuery();
-                this.queue.markCurrentRequestAsFinished(request);
+                _.@"#flags".is_ready_for_query = true;
+                _.queue.markAsReadyForQuery();
+                _.queue.markCurrentRequestAsFinished(request);
 
-                this.getJSConnection().onErrorPacket(request, err_pkt);
+                _.getJSConnection().onErrorPacket(request, err_pkt);
             },
-            else => |packet_type| {
+            else => {
                 let statement = request.getStatement() orelse {
                     debug("Unexpected result set packet", .{});
                     return error.UnexpectedPacket;
@@ -1040,10 +1041,10 @@ export struct Reader {
                 statement.ref();
                 const _guard_statement = DerefGuard<MySQLStatement>{ ptr: statement };
                 if (!statement.execution_flags.header_received) {
-                    if (packet_type == .OK) {
+                    if (pkt_type == .OK) {
                         ok.decode(reader)?;
                         const _guard_ok = DeinitGuard<OKPacket>{ ptr: &ok };
-                        this.handleResultSetOK(request, statement, ok.status_flags, ok.last_insert_id, ok.affected_rows);
+                        _.handleResultSetOK(request, statement, ok.status_flags, ok.last_insert_id, ok.affected_rows);
                         return;
                     }
 
@@ -1080,8 +1081,8 @@ export struct Reader {
                     statement.columns[statement.columns_received].decode(reader)?;
                     statement.columns_received += 1;
                 } else {
-                    if (packet_type == .EOF && header_length < 0xFFFFFF) {
-                        if (!this.@"#capabilities".CLIENT_DEPRECATE_EOF) {
+                    if (pkt_type == .EOF && header_length < 0xFFFFFF) {
+                        if (!_.@"#capabilities".CLIENT_DEPRECATE_EOF) {
                             if (!statement.execution_flags.columns_eof_received) {
                                 let eof = EOFPacket{};
                                 eof.decode(reader)?;
@@ -1090,18 +1091,18 @@ export struct Reader {
                             }
                             let eof = EOFPacket{};
                             eof.decode(reader)?;
-                            this.handleResultSetOK(request, statement, eof.status_flags, 0, 0);
+                            _.handleResultSetOK(request, statement, eof.status_flags, 0, 0);
                             return;
                         }
 
                         ok.decode(reader)?;
                         const _guard_ok = DeinitGuard<OKPacket>{ ptr: &ok };
 
-                        this.handleResultSetOK(request, statement, ok.status_flags, ok.last_insert_id, ok.affected_rows);
+                        _.handleResultSetOK(request, statement, ok.status_flags, ok.last_insert_id, ok.affected_rows);
                         return;
                     }
 
-                    const connection = this.getJSConnection();
+                    const connection = _.getJSConnection();
                     connection.onResultRow(request, statement, Context, reader)?;
                 }
             },

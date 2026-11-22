@@ -137,6 +137,7 @@ pub fn __cp_deinit(self: *RootScriptsNameGuard) void {
     }
 };
 
+pub const WorkspaceFilterResult = struct { []const WorkspaceFilter, bool };
 const installHoistedPackages = @import("../hoisted_install.zig").installHoistedPackages;
 const installIsolatedPackages = @import("../isolated_install.zig").installIsolatedPackages;
 const Environment = bun.Environment;
@@ -166,10 +167,6 @@ const Package = Lockfile.Package;
 const PackageManager = bun.install.PackageManager;
 const Options = PackageManager.Options;
 const WorkspaceFilter = PackageManager.WorkspaceFilter;
-pub const WorkspaceFilterResult = struct {
-    []const WorkspaceFilter,
-    bool,
-};
 
 pub fn getWorkspaceFilters(manager: *PackageManager, original_cwd: []const u8) !WorkspaceFilterResult {
         const path_buf = bun.path_buffer_pool.get();

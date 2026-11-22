@@ -87,61 +87,62 @@
 /// Common pattern: Start strong, downgrade to weak when idle, upgrade to strong when active.
 /// See ServerWebSocket, UDPSocket, MySQLConnection, and ValkeyClient for examples.
 ///
-pub const JSRef = union(enum) {
+pub union(enum) JSRef {
     weak: jsc.JSValue,
     strong: jsc.Strong.Optional,
     finalized: void,
 
-    pub fn initWeak(value: jsc.JSValue): @This() {
+    static fn initWeak(value: jsc.JSValue): @This() {
         bun.assert(!value.isEmptyOrUndefinedOrNull());
         return { weak: value };
     }
 
-    pub fn initStrong(value: jsc.JSValue, globalThis: *jsc.JSGlobalObject): @This() {
+    static fn initStrong(value: jsc.JSValue, globalThis: *jsc.JSGlobalObject): @This() {
         bun.assert(!value.isEmptyOrUndefinedOrNull());
         return { strong: .create(value, globalThis) };
     }
 
-    pub fn empty(): @This() {
+    static fn empty(): @This() {
         return { weak: .js_undefined };
     }
 
-    pub fn tryGet(this: *const @This()): jsc.JSValue? {
-        return switch (this.*) {
-            .weak => if (this.weak.isEmptyOrUndefinedOrNull()) null else this.weak,
-            .strong => this.strong.get(),
+    fn tryGet(): jsc.JSValue? {
+        return switch (_) {
+            .weak => if (_.weak.isEmptyOrUndefinedOrNull()) null else _.weak,
+            .strong => _.strong.get(),
             .finalized => null,
         };
     }
-    pub fn setWeak(this: *@This(), value: jsc.JSValue) {
+
+    fn setWeak(*_, value: jsc.JSValue) {
         bun.assert(!value.isEmptyOrUndefinedOrNull());
-        switch (this.*) {
+        switch (_.*) {
             .weak => {},
             .strong => {
-                this.strong.deinit();
+                _.strong.deinit();
             },
             .finalized => {
                 return;
             },
         }
-        this.* = { weak: value };
+        _.* = { weak: value };
     }
 
-    pub fn setStrong(this: *@This(), value: jsc.JSValue, globalThis: *jsc.JSGlobalObject) {
+    fn setStrong(*_, value: jsc.JSValue, globalThis: *jsc.JSGlobalObject) {
         bun.assert(!value.isEmptyOrUndefinedOrNull());
-        if (this.* == .strong) {
-            this.strong.set(globalThis, value);
+        if (_.* == .strong) {
+            _.strong.set(globalThis, value);
             return;
         }
-        this.* = { strong: .create(value, globalThis) };
+        _.* = { strong: .create(value, globalThis) };
     }
 
-    pub fn upgrade(this: *@This(), globalThis: *jsc.JSGlobalObject) {
-        switch (this.*) {
+    fn upgrade(*_, globalThis: *jsc.JSGlobalObject) {
+        switch (_.*) {
             .weak => {
-                bun.assert(!this.weak.isEmptyOrUndefinedOrNull());
-                const weak = this.weak;
-                this.* = { strong: .create(weak, globalThis) };
+                bun.assert(!_.weak.isEmptyOrUndefinedOrNull());
+                const weak = _.weak;
+                _.* = { strong: .create(weak, globalThis) };
             },
             .strong => {},
             .finalized => {
@@ -150,66 +151,66 @@ pub const JSRef = union(enum) {
         }
     }
 
-    pub fn downgrade(this: *@This()) {
-        switch (this.*) {
+    fn downgrade(*_) {
+        switch (_.*) {
             .weak => {},
-            .strong => |*strong| {
+            .strong *strong => {
                 const value = strong.trySwap() ?? .js_undefined;
                 value.ensureStillAlive();
                 strong.deinit();
-                this.* = { weak: value };
+                _.* = { weak: value };
             },
             .finalized => {},
         }
     }
 
-    pub fn isEmpty(this: *const @This()): bool {
-        return switch (this.*) {
-            .weak => this.weak.isEmptyOrUndefinedOrNull(),
-            .strong => !this.strong.has(),
+    fn isEmpty(): bool {
+        return switch (_) {
+            .weak => _.weak.isEmptyOrUndefinedOrNull(),
+            .strong => !_.strong.has(),
             .finalized => true,
         };
     }
 
-    pub fn isNotEmpty(this: *const @This()): bool {
-        return switch (this.*) {
-            .weak => !this.weak.isEmptyOrUndefinedOrNull(),
-            .strong => this.strong.has(),
+    fn isNotEmpty(): bool {
+        return switch (_) {
+            .weak => !_.weak.isEmptyOrUndefinedOrNull(),
+            .strong => _.strong.has(),
             .finalized => false,
         };
     }
 
     /// Test whether this reference is a strong reference.
-    pub fn isStrong(this: *const @This()): bool {
-        return this.* == .strong;
+    fn isStrong(): bool {
+        return _ == .strong;
     }
 
-    pub fn deinit(this: *@This()) {
-        switch (this.*) {
+    fn deinit(*_) {
+        switch (_.*) {
             .weak => {
-                this.weak = .js_undefined;
+                _.weak = .js_undefined;
             },
             .strong => {
-                this.strong.deinit();
+                _.strong.deinit();
             },
             .finalized => {},
         }
     }
 
-    pub fn finalize(this: *@This()) {
-        this.deinit();
-        this.* = .finalized;
+    fn finalize(*_) {
+        _.deinit();
+        _.* = .finalized;
     }
 
-    pub fn update(this: *@This(), globalThis: *jsc.JSGlobalObject, value: JSValue) {
-        switch (this.*) {
+    fn update(*_, globalThis: *jsc.JSGlobalObject, value: JSValue) {
+        switch (_.*) {
             .weak => {
                 bun.debugAssert(!value.isEmptyOrUndefinedOrNull());
-                this.weak = value;
+                _.weak = value;
             },
             .strong => {
-                if (this.strong.get() != value) {
-                    this.strong.set(globalThis, value);
+                if (_.strong.get() != value) {
+                    _.strong.set(globalThis, value);
                 }
             },
             .finalized => {
@@ -217,7 +218,7 @@ pub const JSRef = union(enum) {
             },
         }
     }
-};
+}
 
 import bun from "bun";
 

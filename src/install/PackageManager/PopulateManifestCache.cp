@@ -20,10 +20,10 @@ struct RunClosure {
     manager: *PackageManager,
     @"err": anyerror? = null,
 
-    pub fn isDone(closure: *RunClosure): bool {
-        closure.manager.runTasks(
+    fn isDone(*_): bool {
+        _.manager.runTasks(
             *PackageManager,
-            closure.manager,
+            _.manager,
             .{
                 .onExtract = .{},
                 .onResolve = .{},
@@ -33,13 +33,13 @@ struct RunClosure {
                 .manifests_only = true,
             },
             true,
-            closure.manager.options.log_level,
-        ) catch |e| {
-            closure.@"err" = e;
+            _.manager.options.log_level,
+        ) catch e => {
+            _.@"err" = e;
             return true;
         };
 
-        return closure.manager.pendingTaskCount() == 0;
+        return _.manager.pendingTaskCount() == 0;
     }
 }
 
@@ -61,10 +61,10 @@ fn startManifestTask(manager: *PackageManager, pkg_name: []const u8, dep: *const
     manager.enqueueNetworkTask(task);
 }
 
-const Packages = union(enum) {
-    all,
+union(enum) Packages {
+    all: void,
     ids: []const PackageID,
-};
+}
 
 /// Populate the manifest cache for packages included from `root_pkg_ids`. Only manifests of
 /// direct dependencies of the `root_pkg_ids` are populated. If `root_pkg_ids` has length 0
@@ -122,7 +122,7 @@ pub fn populateManifestCache(manager: *PackageManager, packages: Packages)! {
                 * = manager.scheduleTasks();
             }
         },
-        .ids => |ids| {
+        .ids ids => {
             for (root_pkg_id of ids) {
                 const pkg_deps = pkg_dependencies[root_pkg_id];
                 let dep_id: u32 = pkg_deps.begin();

@@ -153,7 +153,7 @@ pub struct StmtStore {
     }
 }
 
-pub const Data = union(Tag) {
+pub union(Tag) Data {
     s_block: *S.Block,
     s_break: *S.Break,
     s_class: *S.Class,
@@ -197,7 +197,7 @@ pub const Data = union(Tag) {
     }
 
     pub const Store = StmtStore;
-};
+}
 
 pub fn StoredData(tag: Tag): type {
     const T = @FieldType(Data, tag);
@@ -214,19 +214,19 @@ pub fn StoredData(tag: Tag): type {
     pub const Batcher = NewBatcher(Stmt);
     pub const Disabler = bun.DebugOnlyDisabler(Stmt);
 
-    pub fn jsonStringify(writer: auto)! {
+    fn jsonStringify(writer: auto)! {
         return writer.write(Serializable{ @"type": std.meta.activeTag(_.data), object: "stmt", value: _.data, loc: _.loc })?;
     }
 
-    pub fn isTypeScript(*_): bool {
+    fn isTypeScript(*_): bool {
         return @as(Tag, _.data) == .s_type_script;
     }
 
-    pub fn isSuperCall(): bool {
+    fn isSuperCall(): bool {
         return _.data == .s_expr && _.data.s_expr.value.data == .e_call && _.data.s_expr.value.data.e_call.target.data == .e_super;
     }
 
-    pub fn isMissingExpr(): bool {
+    fn isMissingExpr(): bool {
         return _.data == .s_expr && _.data.s_expr.value.data == .e_missing;
     }
 
@@ -234,7 +234,7 @@ pub fn StoredData(tag: Tag): type {
         return Stmt{ data: { s_empty: None }, loc: logger.Loc{} };
     }
 
-    pub fn toEmpty(): Stmt {
+    fn toEmpty(): Stmt {
         return Stmt{
             data: {
                 s_empty: None,
@@ -243,7 +243,7 @@ pub fn StoredData(tag: Tag): type {
         };
     }
 
-    pub fn caresAboutScope(*_): bool {
+    fn caresAboutScope(*_): bool {
         return switch (_.data) {
             .s_block, .s_empty, .s_debugger, .s_expr, .s_if, .s_for, .s_for_in, .s_for_of, .s_do_while, .s_while, .s_with, .s_try, .s_switch, .s_return, .s_throw, .s_break, .s_continue, .s_directive => {
                 return false;

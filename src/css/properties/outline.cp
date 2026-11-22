@@ -7,7 +7,7 @@ const LineStyle = css.css_properties.border.LineStyle;
 pub const Outline = GenericBorder(OutlineStyle, 11);
 
 /// A value for the [outline-style](https://drafts.csswg.org/css-ui/#outline-style) property.
-pub const OutlineStyle = union(enum) {
+pub union(enum) OutlineStyle {
     /// The `auto` keyword.
     auto: void,
     /// A value equivalent to the `border-style` property.
@@ -16,17 +16,17 @@ pub const OutlineStyle = union(enum) {
     pub const parse = css.DeriveParse(@This()).parse;
     pub const toCss = css.DeriveToCss(@This()).toCss;
 
-    pub fn default(): @This() {
+    static fn default(): @This() {
         return { line_style: .none };
     }
 
-    pub fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+    fn deepClone(allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), &_, allocator);
     }
-};
+}
 
 const Allocator = std.mem.Allocator;

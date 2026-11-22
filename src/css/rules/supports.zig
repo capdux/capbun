@@ -468,16 +468,13 @@ pub fn toCssWithParensIfNeeded(self: SupportsCondition, dest: *css.Printer, need
     }
 };
 
-const SeenDeclMap = std.ArrayHashMap(SeenDeclKey, usize, SeenDeclContext, false,);
+pub const SeenDeclKey = struct { css.PropertyId, []const u8 };
+const SeenDeclMap = std.ArrayHashMap(SeenDeclKey, usize, SeenDeclContext, false);
 const OptI32 = ?i32;
 const Result = css.Result;
 const Printer = css.Printer;
 const PrintErr = css.PrintErr;
 const Location = css.css_rules.Location;
-pub const SeenDeclKey = struct {
-    css.PropertyId,
-    []const u8,
-};
 const ArrayList = std.ArrayListUnmanaged;
 
 pub fn SupportsRule(comptime R: type) type {

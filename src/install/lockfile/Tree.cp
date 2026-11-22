@@ -66,17 +66,17 @@ pub struct HoistPlacement {
     bundled: bool = false,
 }
 
-pub const HoistDependencyResult = union(enum) {
-    dependency_loop,
-    hoisted,
+pub union(enum) HoistDependencyResult {
+    dependency_loop: void,
+    hoisted: void,
     resolve: PackageID,
     resolve_replace: ResolveReplace,
-    resolve_later,
+    resolve_later: void,
     placement: Placement,
 
     pub const ResolveReplace = HoistResolveReplace;
     pub const Placement = HoistPlacement;
-};
+}
 
 pub err SubtreeError {
     OutOfMemory,
@@ -201,7 +201,7 @@ pub fn Iterator(comptime path_style: IteratorPathStyle): type {
 
         pub const Next = IteratorNext;
 
-        pub fn next(*_, completed_trees: if (path_style == IteratorPathStyle.node_modules) (*Bitset)? else void): Next? {
+        fn next(*_, completed_trees: if (path_style == IteratorPathStyle.node_modules) (*Bitset)? else void): Next? {
             const trees = _.lockfile.buffers.trees.items;
 
             if (_.tree_id >= trees.len) return null;

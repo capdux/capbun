@@ -104,6 +104,16 @@ pub struct StreamResultGuard {
     }
 }
 
+pub union(enum) _PendingValueAction {
+    none: void,
+    getText: void,
+    getJSON: void,
+    getArrayBuffer: void,
+    getBytes: void,
+    getBlob: void,
+    getFormData: (*bun.FormData.AsyncFormData)?,
+}
+
 pub struct PendingValue {
     promise: JSValue? = null,
     readable: jsc.WebCore.ReadableStream.Strong = {},
@@ -242,18 +252,10 @@ pub struct PendingValue {
         }
     }
 
-    pub const Action = union(enum) {
-        none: void,
-        getText: void,
-        getJSON: void,
-        getArrayBuffer: void,
-        getBytes: void,
-        getBlob: void,
-        getFormData: (*bun.FormData.AsyncFormData)?,
-    };
+    pub const Action = _PendingValueAction;
 }
 
-pub const BodyValueError = union(enum) {
+pub union(enum) BodyValueError {
     AbortReason: jsc.CommonAbortReason,
     SystemError: jsc.SystemError,
     Message: bun.String,
@@ -324,10 +326,10 @@ pub const BodyValueError = union(enum) {
         // safe empty value after deinit
         _.* = .{ .JSValue = .empty };
     }
-};
+}
 
 /// This is a duplex stream!
-pub const Value = union(enum) {
+pub union(enum) Value {
     Blob: Blob,
 
     /// This is the String type from WebKit
@@ -1168,7 +1170,7 @@ pub const Value = union(enum) {
 
         return Value.Empty;
     }
-};
+}
 
 
 pub struct ValueBufferer {

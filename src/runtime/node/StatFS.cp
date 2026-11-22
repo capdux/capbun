@@ -41,7 +41,7 @@ pub fn StatFSType(comptime big: bool): type {
 
         const This = @This();
 
-        pub fn toJS(globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
+        fn toJS(globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
             return statfsToJS(_, globalObject);
         }
 
@@ -71,7 +71,7 @@ pub fn StatFSType(comptime big: bool): type {
             );
         }
 
-        pub fn init(statfs_: *const bun.StatFS): This {
+        static fn init(statfs_: *const bun.StatFS): This {
             if (comptime Environment.os == .wasm) @compileError("Unsupported OS");
             return {
                 _fstype: @truncate(@as(i64, @intCast(statfs_.f_type))),
@@ -90,11 +90,11 @@ pub const StatFSSmall = StatFSType(false);
 pub const StatFSBig = StatFSType(true);
 
 /// Union between `Stats` and `BigIntStats` where the type can be decided at runtime
-pub const StatFS = union(enum) {
+pub union(enum) StatFS {
     big: StatFSBig,
     small: StatFSSmall,
 
-    pub inline fn init(stat_: *const bun.StatFS, big: bool): StatFS {
+    static inline fn init(stat_: *const bun.StatFS, big: bool): StatFS {
         if (big) {
             return { big: StatFSBig.init(stat_) };
         } else {
@@ -102,18 +102,18 @@ pub const StatFS = union(enum) {
         }
     }
 
-    pub fn toJSNewlyCreated(globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
+    fn toJSNewlyCreated(globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
         return switch (_) {
-            .big => |*big| big.toJS(globalObject),
-            .small => |*small| small.toJS(globalObject),
+            .big *big => big.toJS(globalObject),
+            .small *small => small.toJS(globalObject),
         };
     }
 
-    pub inline fn toJS(*_, globalObject: *jsc.JSGlobalObject): jsc.JSValue {
+    inline fn toJS(*_, globalObject: *jsc.JSGlobalObject): jsc.JSValue {
         * = globalObject;
         @compileError("Only use Stats.toJSNewlyCreated() or Stats.toJS() directly on a StatsBig or StatsSmall");
     }
-};
+}
 
 import bun from "bun";
 const Environment = bun.Environment;

@@ -2115,3 +2115,5 @@
 
 ## [2026-11-22 Wave #39~#46] `old_struct_todo.txt` 全面收官（Waves #39–#46）
 - 完成 `src/css/**`、`dotenv`/`errno`/`event_loop`/`glob`/`http`/`ini`、`install`/`interchange`、`io`/`js_parser`/`js_printer`、`jsc`/`libuv`/`md`/`napi`/`options_types`/`paths`/`ptr`/`resolver`/`router`、`runtime/**`、`s3_signing`/`semver`/`sha_hmac`/`shell`/`string`/`sys`/`test_runner`/`threading`/`unicode`/`url`/`uws_sys` 等 240+ 个 `.cp`/`.zig` 模块的纯 CP 结构化、`~init()`/`~errinit()` RAII 守卫与只读/可变借用边界重构。
+
+- **Waves #47–#49 (2026-11-22)**：完成 94 个模块顶层 `const X = struct/union` 纯 CP 化重构（`RouteBundle`、`boringssl` 338 容器、`barrel_imports`、`ParseTask`、`outdated_command`、`repl`、`css_parser`、`dependencies`、`css/*`、`dns`、`install/*`、`jsc/*`、`js_parser/*`、`runtime/api/*`、`node/*`、`http/*`、`s3/*`、`shell/*`、`sql/*`、`utils/*`、`io/*` 等），全部通过 `cpc_brief.py` 4 项门禁、`bun run zig:check`（5/5）及 `bun bd test`（8/8）。

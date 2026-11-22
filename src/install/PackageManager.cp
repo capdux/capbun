@@ -543,7 +543,7 @@ fn httpThreadOnInitError(e: HTTP.InitError, opts: HTTP.HTTPThread.InitOpts): nor
     Global.crash();
 }
 
-pub const InitResult_ = struct { *PackageManager, string };
+pub type InitResult_ = [*PackageManager, string];
 
 pub fn init(
     ctx: Command.Context,

@@ -1238,9 +1238,6 @@ const Package = Lockfile.Package;
 const PackageManager = bun.install.PackageManager;
 const Options = PackageManager.Options;
 const WorkspaceFilter = PackageManager.WorkspaceFilter;
-pub const WorkspaceFilterResult = struct {
-    []const WorkspaceFilter,
-    bool,
-};
+pub type WorkspaceFilterResult = [[]const WorkspaceFilter, bool];
 
 

@@ -194,6 +194,45 @@ pub const Cursor = struct {
     const clear_scrollback = (CSI ++ "3J");
 };
 
+pub const Key = union(enum) {
+    ctrl_a: void,
+    ctrl_b: void,
+    ctrl_c: void,
+    ctrl_d: void,
+    ctrl_e: void,
+    ctrl_f: void,
+    ctrl_k: void,
+    ctrl_l: void,
+    ctrl_n: void,
+    ctrl_p: void,
+    ctrl_r: void,
+    ctrl_t: void,
+    ctrl_u: void,
+    ctrl_w: void,
+    backspace: void,
+    tab: void,
+    enter: void,
+    escape: void,
+    delete: void,
+    home: void,
+    end: void,
+    page_up: void,
+    page_down: void,
+    arrow_up: void,
+    arrow_down: void,
+    arrow_right: void,
+    arrow_left: void,
+    alt_b: void,
+    alt_d: void,
+    alt_f: void,
+    alt_backspace: void,
+    alt_left: void,
+    alt_right: void,
+    char: u8,
+    unknown: void,
+    const fromByte = keyFromByte;
+};
+
 pub const History = struct {
     entries: ArrayList(string),
     position: usize = 0,
@@ -1825,54 +1864,6 @@ const HISTORY_FILENAME = ".bun_repl_history";
 const TAB_WIDTH: usize = 2;
 const ESC = "\x1b";
 const CSI = (ESC ++ "[");
-const Key = union(enum) {
-    // Control keys
-    ctrl_a,
-    ctrl_b,
-    ctrl_c,
-    ctrl_d,
-    ctrl_e,
-    ctrl_f,
-    ctrl_k,
-    ctrl_l,
-    ctrl_n,
-    ctrl_p,
-    ctrl_r,
-    ctrl_t,
-    ctrl_u,
-    ctrl_w,
-    backspace,
-    tab,
-    enter,
-    escape,
-
-    // Special keys
-    delete,
-    home,
-    end,
-    page_up,
-    page_down,
-    arrow_up,
-    arrow_down,
-    arrow_right,
-    arrow_left,
-
-    // Alt combinations
-    alt_b,
-    alt_d,
-    alt_f,
-    alt_backspace,
-    alt_left,
-    alt_right,
-
-    // Regular printable character
-    char: u8,
-
-    // Unknown/unhandled
-    unknown,
-
-    const fromByte = keyFromByte;
-};
 const repl_commands: [9]ReplCommand = .{ ReplCommand{ .name = ".help", .help = "Print this help message", .handler = cmdHelp }, ReplCommand{ .name = ".exit", .help = "Exit the REPL", .handler = cmdExit }, ReplCommand{ .name = ".clear", .help = "Clear the screen", .handler = cmdClear }, ReplCommand{ .name = ".copy", .help = "Copy result to clipboard (.copy [expr])", .handler = cmdCopy }, ReplCommand{ .name = ".load", .help = "Load a file into the REPL session", .handler = cmdLoad }, ReplCommand{ .name = ".save", .help = "Save REPL history to a file", .handler = cmdSave }, ReplCommand{ .name = ".editor", .help = "Enter multi-line editor mode", .handler = cmdEditor }, ReplCommand{ .name = ".break", .help = "Cancel current input", .handler = cmdBreak }, ReplCommand{ .name = ".history", .help = "Show command history", .handler = cmdHistory } };
 var sigint_vm: ?*jsc.VM = null;
 const Allocator = std.mem.Allocator;

@@ -3,8 +3,6 @@ import bun from "bun";
 
 const log = bun.Output.scoped(.Cd, .hidden);
 
-const std = @import("std");
-
 const Interpreter = interpreter.Interpreter;
 const Builtin = Interpreter.Builtin;
 
@@ -15,12 +13,12 @@ const jsc = bun.jsc;
 const shell = bun.shell;
 const Yield = shell.Yield;
 
-const State = union(enum) {
-    idle,
-    waiting_write_stderr,
-    done,
+union(enum) State {
+    idle: void,
+    waiting_write_stderr: void,
+    done: void,
     @"err": Syscall.Error,
-};
+}
 
 @root struct Cd {
     state: State = .idle,
@@ -36,7 +34,7 @@ const State = union(enum) {
         return _.bltn().done(1);
     }
 
-    pub fn start(*_): Yield {
+    fn start(*_): Yield {
         const args = _.bltn().argsSlice();
         if (args.len > 1) {
             return _.writeStderrNonBlocking("too many arguments\n", .{});
@@ -48,7 +46,7 @@ const State = union(enum) {
                 '-' => {
                     switch (_.bltn().parentCmd().base.shell.changePrevCwd(_.bltn().parentCmd().base.interpreter)) {
                         .result => {},
-                        .err => |e| {
+                        .err e => {
                             return _.handleChangeCwdErr(
                                 e,
                                 _.bltn().parentCmd().base.shell.prevCwdZ(),
@@ -61,7 +59,7 @@ const State = union(enum) {
                     homedir.deref();
                     switch (_.bltn().parentCmd().base.shell.changeCwd(_.bltn().parentCmd().base.interpreter, homedir.slice())) {
                         .result => {},
-                        .err => |e| {
+                        .err e => {
                             return _.handleChangeCwdErr(e, homedir.slice());
                         },
                     }
@@ -69,7 +67,7 @@ const State = union(enum) {
                 else => {
                     switch (_.bltn().parentCmd().base.shell.changeCwd(_.bltn().parentCmd().base.interpreter, first_arg)) {
                         .result => {},
-                        .err => |e| {
+                        .err e => {
                             return _.handleChangeCwdErr(e, first_arg);
                         },
                     }
@@ -114,7 +112,7 @@ const State = union(enum) {
         }
     }
 
-    pub fn onIOWriterChunk(*_, _: usize, e: jsc.SystemError?): Yield {
+    fn onIOWriterChunk(*_, _: usize, e: jsc.SystemError?): Yield {
         if (comptime bun.Environment.allow_assert) {
             assert(_.state == .waiting_write_stderr);
         }
@@ -128,12 +126,12 @@ const State = union(enum) {
         return _.bltn().done(1);
     }
 
-    pub inline fn bltn(*_): *Builtin {
-        const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("cd", _));
+    inline fn bltn(*_): *Builtin {
+        const impl_: *Builtin.Impl = unsafe { @alignCast(@fieldParentPtr("cd", _)) };
         return @fieldParentPtr("impl", impl_);
     }
 
-    pub fn deinit(*_) {
+    fn deinit(*_) {
         log("({s}) deinit", .{@tagName(.cd)});
         * = _.state;
     }

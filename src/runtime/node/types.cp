@@ -57,45 +57,45 @@ struct PathBufferPoolGuard<T> {
     }
 };
 
-pub const BlobOrStringOrBuffer = union(enum) {
+pub union(enum) BlobOrStringOrBuffer {
     blob: jsc.WebCore.Blob,
     string_or_buffer: StringOrBuffer,
 
-    pub fn deinit() {
+    fn deinit() {
         switch (_) {
-            .blob => |blob| {
+            .blob blob => {
                 if (store := blob.store) {
                     store.deref();
                 }
             },
-            .string_or_buffer => |*str| {
+            .string_or_buffer *str => {
                 str.deinit();
             },
         }
     }
 
-    pub fn slice(): []const u8 {
+    fn slice(): []const u8 {
         return switch (_) {
-            .blob => |*blob| blob.sharedView(),
-            .string_or_buffer => |*str| str.slice(),
+            .blob *blob => blob.sharedView(),
+            .string_or_buffer *str => str.slice(),
         };
     }
 
-    pub fn protect() {
+    fn protect() {
         switch (_) {
-            .string_or_buffer => |sob| {
+            .string_or_buffer sob => {
                 sob.protect();
             },
             else => {},
         }
     }
 
-    pub fn deinitAndUnprotect(*_) {
+    fn deinitAndUnprotect(*_) {
         switch (_.*) {
-            .string_or_buffer => |*sob| {
+            .string_or_buffer *sob => {
                 sob.deinitAndUnprotect();
             },
-            .blob => |blob| {
+            .blob blob => {
                 // `.blob` is populated via a raw bitwise copy of a live JS Blob
                 // (see fromJSMaybeFileMaybeAsync / fromJSWithEncodingValueAllowRequestResponse),
                 // so it does not own `content_type` or `name`. Only release the
@@ -107,7 +107,7 @@ pub const BlobOrStringOrBuffer = union(enum) {
         }
     }
 
-    pub fn byteLength(): usize {
+    fn byteLength(): usize {
         return _.slice().len;
     }
 
@@ -200,9 +200,9 @@ pub const BlobOrStringOrBuffer = union(enum) {
         }
         return null;
     }
-};
+}
 
-pub const StringOrBuffer = union(enum) {
+pub union(enum) StringOrBuffer {
     string: bun.SliceWithUnderlyingString,
     threadsafe_string: bun.SliceWithUnderlyingString,
     encoded_slice: jsc.ZigString.Slice,
@@ -210,7 +210,7 @@ pub const StringOrBuffer = union(enum) {
 
     pub const empty = StringOrBuffer{ .encoded_slice = jsc.ZigString.Slice.empty };
 
-    pub fn toThreadSafe(*_) {
+    fn toThreadSafe(*_) {
         switch (_.*) {
             .string => {
                 _.string.toThreadSafe();
@@ -244,9 +244,9 @@ pub const StringOrBuffer = union(enum) {
         return result;
     }
 
-    pub fn toJS(*_, ctx: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
+    fn toJS(*_, ctx: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
         return switch (_.*) {
-            inline .threadsafe_string, .string => |*str| {
+            inline .threadsafe_string, .string *str => {
                 return str.transferToJS(ctx);
             },
             .encoded_slice => {
@@ -264,33 +264,33 @@ pub const StringOrBuffer = union(enum) {
         };
     }
 
-    pub fn slice(): []const u8 {
+    fn slice(): []const u8 {
         return switch (_) {
-            inline else => |*str| str.slice(),
+            inline else *str => str.slice(),
         };
     }
 
-    pub fn deinit() {
+    fn deinit() {
         switch (_) {
-            inline .threadsafe_string, .string => |*str| {
+            inline .threadsafe_string, .string *str => {
                 str.deinit();
             },
-            .encoded_slice => |*encoded| {
+            .encoded_slice *encoded => {
                 encoded.deinit();
             },
             else => {},
         }
     }
 
-    pub fn deinitAndUnprotect() {
+    fn deinitAndUnprotect() {
         switch (_) {
-            inline .threadsafe_string, .string => |*str| {
+            inline .threadsafe_string, .string *str => {
                 str.deinit();
             },
-            .buffer => |buffer| {
+            .buffer buffer => {
                 buffer.buffer.value.unprotect();
             },
-            .encoded_slice => |*encoded| {
+            .encoded_slice *encoded => {
                 encoded.deinit();
             },
         }
@@ -305,10 +305,11 @@ pub const StringOrBuffer = union(enum) {
                 if (!allow_string_object && str_type != .String) {
                     return null;
                 }
-                let str = bun.String.fromJS(value, global)?;
-                const _guard_str = DerefGuard<bun.String>{ ptr: &str };
+                let bun_str = bun.String.fromJS(value, global)?;
+                const str_ptr: *const bun.String = &bun_str;
+                const _guard_str = DerefGuard<bun.String>{ ptr: str_ptr };
                 if (is_async) {
-                    let possible_clone = str;
+                    let possible_clone = bun_str;
                     let sliced = possible_clone.toThreadSafeSlice(allocator)?;
                     sliced.reportExtraMemory(global.vm());
 
@@ -318,7 +319,7 @@ pub const StringOrBuffer = union(enum) {
 
                     return .{ threadsafe_string: sliced };
                 } else {
-                    return .{ string: str.toSlice(allocator) };
+                    return .{ string: bun_str.toSlice(allocator) };
                 }
             },
 
@@ -371,13 +372,14 @@ pub const StringOrBuffer = union(enum) {
         }
 
         if (value.isString()) {
-            let str = bun.String.fromJS(value, global)?;
-            const _guard_str = DerefGuard<bun.String>{ ptr: &str };
-            if (str.isEmpty()) {
+            let bun_str = bun.String.fromJS(value, global)?;
+            const str_ptr: *const bun.String = &bun_str;
+            const _guard_str = DerefGuard<bun.String>{ ptr: str_ptr };
+            if (bun_str.isEmpty()) {
                 return StringOrBuffer.fromJSMaybeAsync(global, allocator, value, is_async, allow_string_object);
             }
 
-            const out = str.encode(encoding);
+            const out = bun_str.encode(encoding);
             const vm = global.vm();
             const _guard_mem = ReportExtraMemoryGuard<@TypeOf(vm)>{ vm: vm, len: out.len };
 
@@ -406,7 +408,7 @@ pub const StringOrBuffer = union(enum) {
         const is_async = false;
         return StringOrBuffer.fromJSWithEncodingMaybeAsync(global, allocator, value, encoding, is_async, allow_string_object);
     }
-};
+}
 
 /// https://github.com/nodejs/node/blob/master/lib/buffer.js#L587
 /// See `jsc.WebCore.encoding` for encoding and decoding functions.
@@ -602,14 +604,14 @@ pub fn CallbackTask(comptime Result: type): type {
     };
 }
 
-pub const PathLike = union(enum) {
+pub union(enum) PathLike {
     string: bun.PathString,
     buffer: Buffer,
     slice_with_underlying_string: bun.SliceWithUnderlyingString,
     threadsafe_string: bun.SliceWithUnderlyingString,
     encoded_slice: jsc.ZigString.Slice,
 
-    pub fn estimatedSize(): usize {
+    fn estimatedSize(): usize {
         return switch (_) {
             .string => _.string.estimatedSize(),
             .buffer => _.buffer.slice().len,
@@ -618,16 +620,16 @@ pub const PathLike = union(enum) {
         };
     }
 
-    pub fn deinit() {
+    fn deinit() {
         switch (_) {
             .string, .buffer => {},
-            inline else => |*str| {
+            inline else *str => {
                 str.deinit();
             },
         }
     }
 
-    pub fn toThreadSafe(*_) {
+    fn toThreadSafe(*_) {
         switch (_.*) {
             .slice_with_underlying_string => {
                 _.slice_with_underlying_string.toThreadSafe();
@@ -641,21 +643,21 @@ pub const PathLike = union(enum) {
         }
     }
 
-    pub fn deinitAndUnprotect() {
+    fn deinitAndUnprotect() {
         switch (_) {
-            inline .encoded_slice, .threadsafe_string, .slice_with_underlying_string => |*val| {
+            inline .encoded_slice, .threadsafe_string, .slice_with_underlying_string *val => {
                 val.deinit();
             },
-            .buffer => |val| {
+            .buffer val => {
                 val.buffer.value.unprotect();
             },
             else => {},
         }
     }
 
-    pub inline fn slice(): string {
+    inline fn slice(): string {
         return switch (_) {
-            inline else => |*str| str.slice(),
+            inline else *str => str.slice(),
         };
     }
 
@@ -729,19 +731,19 @@ pub const PathLike = union(enum) {
             // Device paths (\\.\, \\?\) and NT object paths (\??\) should not be normalized
             // because the "." in \\.\pipe\name would be incorrectly stripped as a "current directory" component.
             if (s.len >= 4 && bun.path.isSepAny(s[0]) && bun.path.isSepAny(s[1]) && (s[2] == '.' || s[2] == '?') && bun.path.isSepAny(s[3])) {
-                return strings.toKernel32Path(@alignCast(std.mem.bytesAsSlice(u16, buf)), s);
+                return strings.toKernel32Path(unsafe { @alignCast(std.mem.bytesAsSlice(u16, buf)) }, s);
             }
             if (s.len > 0 && bun.path.isSepAny(s[0])) {
                 const resolve = path_handler.PosixToWinNormalizer.resolveCWDWithExternalBuf(buf, s) catch @panic("Error while resolving path.");
                 const normal = path_handler.normalizeBuf(resolve, b, .windows);
-                return strings.toKernel32Path(@alignCast(std.mem.bytesAsSlice(u16, buf)), normal);
+                return strings.toKernel32Path(unsafe { @alignCast(std.mem.bytesAsSlice(u16, buf)) }, normal);
             }
             // Handle "." specially since normalizeStringBuf strips it to an empty string
             if (s.len == 1 && s[0] == '.') {
-                return strings.toKernel32Path(@alignCast(std.mem.bytesAsSlice(u16, buf)), ".");
+                return strings.toKernel32Path(unsafe { @alignCast(std.mem.bytesAsSlice(u16, buf)) }, ".");
             }
             const normal = path_handler.normalizeStringBuf(s, b, true, .windows, false);
-            return strings.toKernel32Path(@alignCast(std.mem.bytesAsSlice(u16, buf)), normal);
+            return strings.toKernel32Path(unsafe { @alignCast(std.mem.bytesAsSlice(u16, buf)) }, normal);
         }
 
         return _.sliceZWithForceCopy(buf, false);
@@ -852,7 +854,7 @@ pub const PathLike = union(enum) {
             return .{ encoded_slice: sliced.utf8 };
         }
     }
-};
+}
 
 pub struct Valid {
     const MAX_PATH_BYTES = bun.MAX_PATH_BYTES;
@@ -984,51 +986,54 @@ pub fn modeFromJS(ctx: *jsc.JSGlobalObject, value: jsc.JSValue): bun.JSError!Mod
     return @as(Mode, @intCast(mode_int & 0o777));
 }
 
-pub const PathOrFileDescriptor = union(Tag) {
+pub enum _PathOrFileDescriptorTag { fd, path }
+pub enum _PathOrFileDescriptorSerializeTag: u8 { fd, path }
+
+pub union(_PathOrFileDescriptorTag) PathOrFileDescriptor {
     fd: bun.FD,
     path: PathLike,
 
-    pub const Tag = enum { fd, path };
-    pub const SerializeTag = enum(u8) { fd, path };
+    const Tag = _PathOrFileDescriptorTag;
+    const SerializeTag = _PathOrFileDescriptorSerializeTag;
 
     /// This will unref() the path string if it is a PathLike.
     /// Does nothing for file descriptors, **does not** close file descriptors.
-    pub fn deinit() {
+    fn deinit() {
         if (_ == .path) {
             _.path.deinit();
         }
     }
 
-    pub fn estimatedSize(): usize {
+    fn estimatedSize(): usize {
         return switch (_) {
             .path => _.path.estimatedSize(),
             .fd => 0,
         };
     }
 
-    pub fn toThreadSafe(*_) {
+    fn toThreadSafe(*_) {
         if (_.* == .path) {
             _.path.toThreadSafe();
         }
     }
 
-    pub fn deinitAndUnprotect() {
+    fn deinitAndUnprotect() {
         if (_ == .path) {
             _.path.deinitAndUnprotect();
         }
     }
 
-    pub fn hash(): u64 {
+    fn hash(): u64 {
         return switch (_) {
             .path => bun.hash(_.path.slice()),
             .fd => bun.hash(std.mem.asBytes(&_.fd)),
         };
     }
 
-    pub fn format(writer: *std.Io.Writer)! {
+    fn format(writer: *std.Io.Writer)! {
         switch (_) {
-            .path => |p| writer.writeAll(p.slice())?,
-            .fd => |fd| writer.print("{}", .{fd})?,
+            .path p => writer.writeAll(p.slice())?,
+            .fd fd => writer.print("{}", .{fd})?,
         }
     }
 
@@ -1048,7 +1053,7 @@ pub const PathOrFileDescriptor = union(Tag) {
             path: path_opt.?,
         };
     }
-};
+}
 
 pub enum FileModeKind {
     access,
@@ -1312,7 +1317,7 @@ pub struct Dirent {
     }
 }
 
-pub const PathOrBlob = union(enum) {
+pub union(enum) PathOrBlob {
     path: jsc.Node.PathOrFileDescriptor,
     blob: Blob,
 
@@ -1337,7 +1342,7 @@ pub const PathOrBlob = union(enum) {
         }
         return ctx.throwInvalidArgumentTypeValue("destination", "path, file descriptor, or Blob", arg);
     }
-};
+}
 
 type string = []const u8;
 

@@ -379,6 +379,11 @@ pub const DecodeIPCMessageResult = struct {
     message: DecodedIPCMessage,
 };
 
+pub const AdvancedVersionPacket = extern struct {
+    type: AdvancedIPCMessageType align(1) = .Version,
+    version: u32 align(1) = 1,
+};
+
 pub const advanced = struct {
 
 pub fn decodeIPCMessage(data: []const u8, global: *jsc.JSGlobalObject) IPCDecodeError!DecodeIPCMessageResult {
@@ -1361,10 +1366,6 @@ const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 pub const log = Output.scoped(.IPC, .visible);
-pub const AdvancedVersionPacket = extern struct {
-    type: AdvancedIPCMessageType align(1) = .Version,
-    version: u32 align(1) = 1,
-};
 pub const Socket = uws.NewSocketHandler(false);
 pub const IPCSocketType = (if (Environment.isWindows) *uv.Pipe else Socket);
 pub const WindowsQueueState = (if (Environment.isWindows) WindowsState else NonWindowsState);

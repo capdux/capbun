@@ -424,7 +424,7 @@ pub struct DependencyTarballInfo {
     }
 }
 
-pub const DependencyVersionValue = union {
+pub union DependencyVersionValue {
     uninitialized: void,
 
     npm: DependencyNpmInfo,
@@ -442,14 +442,14 @@ pub const DependencyVersionValue = union {
     // dep version without 'catalog:' protocol
     // empty string == default catalog
     catalog: String,
-};
+}
 pub struct DependencyVersion {
     tag: DependencyVersionTag = .uninitialized,
     literal: String = {},
     value: DependencyVersionValue = { uninitialized: std.mem.zeroes(void) },
 
     pub const toJS = dependency_jsc.versionToJS;
-    pub inline fn npm(): DependencyNpmInfo? {
+    inline fn npm(): DependencyNpmInfo? {
         return if (_.tag == .npm) _.value.npm else null;
     }
 
@@ -464,7 +464,7 @@ pub struct DependencyVersion {
 
     pub const zeroed = DependencyVersion{};
 
-    pub fn clone(
+    fn clone(
         buf: []const u8,
         comptime StringBuilder: type,
         builder: StringBuilder,
