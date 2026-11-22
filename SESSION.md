@@ -647,3 +647,70 @@
   - 补充 `unsafe {}` 消除全仓最后 21 个 `E0209`：`WatcherAtomics.cp`、`NullableAllocator.cp`、`output_file_jsc.cp`、`AnyEventLoop.cp`、`AutoFlusher.cp`、`pipes.cp`、`RefString.cp`、`Strong.cp`、`TextCodec.cp`、`EnvStr.cp`、`IOReader.cp`、`RefCountedStr.cp`、`Binary.cp`、`Stmt.cp`、`LineOffsetTable.cp`、`PathString.cp`、`SmolStr.cp`、`wtf.cp`、`error_jsc.cp`、`InternalLoopData.cp`、`udp.cp`。
 - 验证：`inspect.test.js` **72/72 全绿通过**；Batch 2a（`test/js/web/fetch` 46 文件）9,820 pass / 255 fail（`fetch.test.ts` `AbortAfterFinish` 处触发 `StructureID::decode` `decontaminate()` SIGABRT）；`bun run zig:check` 5/5 通过（29s）。
 - 推导下一阶段 Wave #73：Subagent 1 验证 `-0.0` 修复（`expect.test.js` / `test-test.test.ts` / `moremore.test.ts` / `jest-extended.test.js`）及 `fetch.test.ts` 独立复现；Subagent 2 只读排查 `fetch.test.ts` `decontaminate()` SIGABRT 与 `fetch.stream.test.ts` 108 超时的根因。
+
+### [2026-11-23] 向 `cp_agy` 提交收录 `cpc_brief.py` 工具工单
+- `task-bun-20261123-adopt-cpc-brief` (`/data/dev/bun/scripts/cpc_brief.py`)：请 `cp_agy` 将 `cpc_brief.py` 收录至 `/data/dev/cp/scripts/cpc_brief.py` 并在 `/data/dev/cp/cp_agent_ref.md` 中说明用法；`cp/scripts` 版本请改用系统通用 `zig`，`bun` 仓本地继续保留 `vendor/zig/zig`。
+
+### [2026-11-23] 收到 `cp_agy` 结单验收通知（`task-bun-20261123-adopt-cpc-brief`）
+- 已收录至 `/data/dev/cp/scripts/cpc_brief.py`（默认调用 PATH 中的通用 `zig`，并支持 `--zig`/`--require-backup`/`--keep-zig` 选项），已实测通过并在 `/data/dev/cp/cp_agent_ref.md` 补齐调用规范；已验证 `--help` 并执行 `ack`（`bun` 仓本地继续使用 `scripts/cpc_brief.py` + `vendor/zig/zig`）。
+
+## [2026-11-23] 补齐用户交互与跨 AGY 通信逐条对齐审计记录（Wave #58 ~ Wave #73，严禁错配）
+
+### 一、 用户指令 <-> 主智能体回应逐条对齐补录
+1. **用户**：`纯化还有多少工作量? 还剩哪些需要纯化?`
+   - **主智能体回应**：汇报全仓残余待纯化项分布（`orelse`、`and`/`or`、`try`、`const X = struct/enum/union`、`?T`、`: void`、裸接收者、`if/while |capture|`），估算分波次清扫工作量并保持 2 路并行推进。
+2. **用户**：`为何大量修改未git 提交?`
+   - **主智能体回应**：说明此前多波次子智能体并行修改后处于集中验证窗口，立即按 `SESSION/CHANGELOG/DEVLOG` + 单次原子 `git commit` 规范清理未提交积压并恢复每波原子提交节奏。
+3. **用户**：`保持两个子智能体与主智能体一起并行工作, 加快进度` / `一直要保持两个子智能体与主智能体一起并行工作, 加快进度, 牢记`
+   - **主智能体回应**：确认严格保持最多 2 路短生命周期子智能体并行调度，主智能体负责编排、验收、`zig:check` 与原子提交，不空转等待。
+4. **用户**：`你做了很多文件的cp净化, 这些错误语法之前是如何通过 cpc 编译的? 是不是说明 cpc 存在bug, 放行了大量错误语法? cpc 是否需要优化? 列出cpc 需要优化的功能点!`
+   - **主智能体回应**：分析旧版 `cpc` 对 `return struct` 透传、类型/表达式 `?` 歧义、`&const_var`、零字段结构体接收者与旧语法缺少严苛拦截等原因，列出 6 项 `cpc` 核心改进点。
+5. **用户**：`将你上面列出的: 基于本轮实测，核心改进点, 每个改进点做成一个工单,发给 cp agy 进行cpc加强/改进.`
+   - **主智能体回应**：将 6 项改进逐一提炼 `<=10` 行最小复现 `.cp` 并发起工单提交给 `cp_agy`（`task-bun-20261123-passthrough-factory-lowering` 等 6 条）。
+6. **用户**：`已重启agy并切换了配额账号，已恢复当前会话上下文...重开2个子智能体...读取 COMM.md，本阶段工作完成更新文档并 git 提交，自主推导下一阶段工作，持续工作`
+   - **主智能体回应**：确认遵循 `COMM.md`，立即重开 2 路全新子智能体推进语法纯化与测试验证，每波完成后更新四线文档并原子提交。
+7. **用户**：`收到新的上游结单验收通知(3条: passthrough-factory-lowering, optional-type-vs-try-disambig, addr-of-const-var-vs-type)...验收适配并 ack`
+   - **主智能体回应**：执行 `task_queue.py unacked --agent bun_agy --json`，逐条验证复现文件通过新 `cpc` 编译并执行 `ack`。
+8. **用户**：`收到新的上游结单验收通知(3条: as-enum-tag-union, zero-field-struct-method-recv, strict-purification-flag)...验收适配并 ack`
+   - **主智能体回应**：执行 `task_queue.py unacked`，本地复现验证通过（含 `cpc check --strict` E0301..E0311），执行 `ack` 并记录至 `SESSION.md`。
+9. **用户**：`task-19033 bun bd test 需要这么久吗?` / `主智能体不要陷入长时间任务, 长时间任务交给子智能体运行` / `刚才你执行的 bun bd test 结果如何, 没有看到你汇报呢`
+   - **主智能体回应**：解释首次构建调试二进制耗时原因，汇报 `bun bd test` 精确结果，并明确主智能体不再阻塞在长耗时 `bun bd test`，改为全部交给子智能体运行。
+10. **用户**：`建议后续 一个子智能体做完整性抽查, 一个做 bun bd test。完整性抽查 是什么意思? 为何是抽查?`
+    - **主智能体回应**：解释在语法纯化收敛后需对照 `_.zig` 检查是否遗漏生产逻辑，说明抽查高风险模块的原因。
+11. **用户**：`先用脚本对全仓 1280 对 (.cp, _.zig) 做一次自动化普查（对比函数数量/行数/导出符号/switch 区间），再针对有差异的模块精准深挖...你看 是主智能体完成,还是临时 开一个子智能体来完成`
+    - **主智能体回应**：建议派发临时子智能体执行全仓 1,280 对 `(.cp, _.zig)` 脚本普查（产出 `temp/full_census.txt`），再逐批深挖修复（Wave #65~#66）。
+12. **用户**：`收到新的上游结单验收通知(1条: task-bun-20261123-silent-drop-comptime-auto-dotted-err)...验收并 ack`
+    - **主智能体回应**：读取结单详情（`is_builtin_runtime_stub_fn` 收敛过滤），本地验证 `yaml.cp` `pub fn print` 正常生成后执行 `ack`。
+13. **用户**：`收到新的上游结单验收通知(1条: task-bun-20261123-ptr-to-optional-lowering)...验收并 ack`
+    - **主智能体回应**：验证 `repro_ptr_opt.cp` 已正确输出 `p: *?u8`（`inner_is_paren` 区分 `*(T?)` 与 `*T?`），执行 `ack`。
+14. **用户**：`收到新的上游结单验收通知(1条: task-bun-20261123-as-ptr-field-addr-of)...验收并 ack`
+    - **主智能体回应**：验证 `repro_as_ptr_field.cp` 已输出 `@as(*u64, @ptrCast(@alignCast(self.p)))`，执行 `ack` 并重编全仓 4 处 `@ptrCast(&(` 受影响文件。
+15. **用户**：`汇报成果与项目进度`
+    - **主智能体回应**：汇总 Wave #66~#70 成果（`DevServer`/`fmt`/`Blob`/`subprocess`/`HTMLImportManifest`/`Installer`/`yaml` 修复与 `Batch 1a/1b/1c` 测试进度）及 Wave #71 进行中任务。
+16. **用户**：`zig:check 5/5； 5/5 是什么意思? 对 170 个 .cp mtime 晚于 .zig 的文件, zig 是 cp 编译产生的, 为何 会晚?`
+    - **主智能体回应**：解释 `build.zig` `check` 步骤对应 5 个构建图节点（前置依赖 + `compile obj bun-debug` 语义检查）；解释 `.cp` mtime 晚于 `.zig` 源于 Git 写入时间戳顺序及早期仅 `check`/批改未重编（169/170 已预检通过，余下 1 个已修复）。
+17. **用户**：`收到新的上游结单验收通知(1条: task-bun-20261123-unary-neg-zero-float)...验收并 ack`
+    - **主智能体回应**：验证 `repro_unary_neg_zero.cp` 已原生输出 `return (-x);`（保留 `-0.0` 符号位），执行 `ack` 并重编 `visitExpr.cp` 与 `toBeCloseTo.cp`。
+18. **用户**：`1. 如果 struct 内都是静态方法, 只需 定义 static struct 即可... 2. cpc_brief.py 是 cp agy 提供给你的吗?`
+    - **主智能体回应**：确认后续纯命名空间结构体优先使用 `static struct`；澄清 `scripts/cpc_brief.py` 为 `bun` 仓本地编写的省 Token 封装脚本（底层调用 `cpc check --json` / `cpc --lib` + `vendor/zig/zig ast-check`）。
+19. **用户**：`把这个 scripts/cpc_brief.py 工具, 通过工单告知 cp agy 拷贝/收录到 cp/scripts 中, 改用系统通用 zig 并在 cp_agent_ref.md 中说明, bun 仓保留 vendor/zig/zig`
+    - **主智能体回应**：向 `cp_agy` 提交 `task-bun-20261123-adopt-cpc-brief`。
+20. **用户**：`收到新的上游结单验收通知(1条: task-bun-20261123-adopt-cpc-brief)...验收并 ack`
+    - **主智能体回应**：验证 `/data/dev/cp/scripts/cpc_brief.py --help`（默认调用 PATH 通用 `zig`，支持 `--zig`/`--require-backup`/`--keep-zig`）可用并执行 `ack`。
+21. **用户**：`1. 检查发现 SESSION.md SESSION_H.md 丢失了用户交互及与其他 agy 通信记录! 2. 立刻检查并补齐丢失记录、确保严格对齐不要错配；将此规则写入 GEMINI.md 铁律`
+    - **主智能体回应**：核查 `transcript.jsonl` 与 `/root/.agy/comm/queue.db`，确认 11 条 `task-bun-20261123-*` 通信均已闭环但用户指令与回应成对记录缺失；已在 `GEMINI.md` 固化“用户交互与跨 AGY 通信必须逐条对齐实时写入 `SESSION.md`”铁律，并在本节补齐全部对齐记录。
+
+### 二、 `bun_agy <-> cp_agy`（2026-11-23）全量 11 条通信逐条对齐总表
+| # | Task ID | `bun_agy` 发送问题与 repro | `cp_agy` 结单修复说明 | `bun_agy` 验收与 `ack` |
+| :--- | :--- | :--- | :--- | :--- |
+| 1 | `task-bun-20261123-passthrough-factory-lowering` | `return struct/union/enum` 泛型工厂未做 CP lowering (`repro_passthrough_factory.cp`) | 支持泛型工厂返回体与嵌套容器完整 CP 解析与递归 lowering | 本地验证通过，已 `ack` |
+| 2 | `task-bun-20261123-optional-type-vs-try-disambig` | 类型位置 `?` 与表达式 `?` 歧义 (`repro_opt_type_disambig.cp`) | 消除 `T?` / `(*Owner)?` 误生成 `try` | 本地验证通过，已 `ack` |
+| 3 | `task-bun-20261123-addr-of-const-var-vs-type` | `&ident` 误判 `*const ident` 及 `const *!` (`repro_addr_of_const_var.cp`) | 修复 `&const_var` 判别与指针修饰符 | 本地验证通过，已 `ack` |
+| 4 | `task-bun-20261123-as-enum-tag-union` | `union(EnumTag)` 上 `@as(EnumTag, _)` 误生成 `@enumFromInt` (`repro_as_enum_tag_union.cp`) | 修复 `@as(EnumTag, _)` tag 转换 | 本地验证通过，已 `ack` |
+| 5 | `task-bun-20261123-zero-field-struct-method-recv` | 无字段结构体方法未用 `_` 时丢失 `self` (`repro_zero_field_method.cp`) | 保留无字段结构体方法接收者 `self` | 本地验证通过，已 `ack` |
+| 6 | `task-bun-20261123-strict-purification-flag` | 需要 `cpc check --strict` 门禁 (`repro_strict_purification.cp`) | 新增 `cpc check --strict` (E0301..E0311) | 本地验证通过，已 `ack` |
+| 7 | `task-bun-20261123-silent-drop-comptime-auto-dotted-err` | `comptime`+`auto`+点号错误联合顶层 `print` 被静默丢弃 (`repro_silent_drop_comptime_auto_err.cp`) | `codegen/actor.rs` 仅过滤内建委托桩 `is_builtin_runtime_stub_fn` | 验证 `yaml.cp` 通过，已 `ack` |
+| 8 | `task-bun-20261123-ptr-to-optional-lowering` | `*(u8?)` 被误降低为 `?*u8` 而非 `*?u8` (`repro_ptr_opt.cp`) | `parser/types.rs`+`map_type.rs` 按 `inner_is_paren` 精确区分 | 验证输出 `p: *?u8`，已 `ack` |
+| 9 | `task-bun-20261123-as-ptr-field-addr-of` | `_.p as *u64` 误生成 `@ptrCast(&(self.p))` (`repro_as_ptr_field.cp`) | `codegen/expr/ops.rs` 修正 `is_src_ptr` 与切片/定长数组判定 | 验证输出 `@ptrCast(@alignCast(self.p))`，已 `ack` |
+| 10 | `task-bun-20261123-unary-neg-zero-float` | 一元 `-x` 误生成 `(0 - x)` 丢失 `-0.0` (`repro_unary_neg_zero.cp`) | 全链路新增 `Expr::Neg` 原生生成 `(-x)` | 验证输出 `return (-x);`，已 `ack` |
+| 11 | `task-bun-20261123-adopt-cpc-brief` | 收录 `scripts/cpc_brief.py` 至 `cp/scripts` 并改用系统 `zig` | 已收录 `/data/dev/cp/scripts/cpc_brief.py` 并更新 `cp_agent_ref.md` | 验证 `--help` 通过，已 `ack` |
