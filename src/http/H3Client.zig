@@ -4,11 +4,17 @@
 const std = @import("std");
 const string = []const u8;
 
+pub const _Stream = @import("./h3_client/Stream.zig");
+pub const _ClientSession = @import("./h3_client/ClientSession.zig");
+pub const _ClientContext = @import("./h3_client/ClientContext.zig");
+pub const _PendingConnect = @import("./h3_client/PendingConnect.zig");
+pub const _AltSvc = @import("./h3_client/AltSvc.zig");
+pub const headers_jsc = @import("../http_jsc/headers_jsc.zig");
 pub var live_sessions = std.atomic.Value(u32).init(0);
 pub var live_streams = std.atomic.Value(u32).init(0);
-pub const Stream = @import("./h3_client/Stream.zig");
-pub const ClientSession = @import("./h3_client/ClientSession.zig");
-pub const ClientContext = @import("./h3_client/ClientContext.zig");
-pub const PendingConnect = @import("./h3_client/PendingConnect.zig");
-pub const AltSvc = @import("./h3_client/AltSvc.zig");
-pub const TestingAPIs = @import("../http_jsc/headers_jsc.zig").H3TestingAPIs;
+pub const Stream = _Stream;
+pub const ClientSession = _ClientSession;
+pub const ClientContext = _ClientContext;
+pub const PendingConnect = _PendingConnect;
+pub const AltSvc = _AltSvc;
+pub const TestingAPIs = headers_jsc.H3TestingAPIs;

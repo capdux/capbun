@@ -1155,7 +1155,7 @@ pub fn OptionalTracking(comptime Optional: type): type {
             * = allocator;
         }
 
-        pub fn track(self: *Self, opt: ?T) void {
+        pub fn track(self: *Self, opt: T?) void {
             if (opt) |value| {
                 const d: isize = switch (@typeInfo(T)) {
                     .int => value,

@@ -1,11 +1,11 @@
 // src/http/h3_client/AltSvc.cp
 // Alt-Svc (RFC 7838) header handling for the HTTP/3 client in CP language
 
-const bun = @import("bun");
+import bun from "bun";
 
 let cache: bun.StringHashMapUnmanaged(Record) = {};
 
-export struct Entry {
+pub struct Entry {
     port: u16,
     ma: u32 = 86400,
 }
@@ -33,7 +33,7 @@ fn sweepExpired(now: i64) {
     }
 }
 
-export fn parse(field_value: string): !Entry? {
+pub fn parse(field_value: string): !Entry? {
     const value = bun.strings.trim(field_value, " \t");
     if (value.len == 0) return null;
     if (std.ascii.eqlIgnoreCase(value, "clear")) return error.Clear;
@@ -75,7 +75,7 @@ export fn parse(field_value: string): !Entry? {
     return null;
 }
 
-export fn record(origin_host: string, origin_port: u16, field_value: string) {
+pub fn record(origin_host: string, origin_port: u16, field_value: string) {
     let buf: [u8; 264] = undefined;
     if (origin_host.len > 256) return;
     const k = key(&buf, origin_host, origin_port);
@@ -103,7 +103,7 @@ export fn record(origin_host: string, origin_port: u16, field_value: string) {
     }
 }
 
-export fn lookup(origin_host: string, origin_port: u16): u16? {
+pub fn lookup(origin_host: string, origin_port: u16): u16? {
     let buf: [u8; 264] = undefined;
     if (origin_host.len > 256) return null;
     const k = key(&buf, origin_host, origin_port);

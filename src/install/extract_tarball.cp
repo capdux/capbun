@@ -7,13 +7,15 @@ const default_allocator = bun.default_allocator;
 const logger = bun.logger;
 const strings = bun.strings;
 
-const FileSystem = @import("../resolver/fs.zig").FileSystem;
-const Integrity = @import("./integrity.zig").Integrity;
-const Resolution = @import("./resolution.zig").Resolution;
-const Install = @import("./install.zig");
+import fs from "../resolver/fs.zig";
+const FileSystem = fs.FileSystem;
+import { Integrity } from "./integrity.zig";
+import { Resolution } from "./resolution.zig";
+import Install from "./install.zig";
 const DependencyID = Install.DependencyID;
 const PackageManager = Install.PackageManager;
-const Npm = @import("./npm.zig");
+import Npm from "./npm.zig";
+import Zlib from "../zlib/zlib.zig";
 
 type string = []const u8;
 
@@ -251,7 +253,6 @@ struct DirnameReader {
         let _extract_dest_guard = CloseGuard<@TypeOf(extract_destination)>{ ptr: unsafe { &extract_destination } };
 
         const Archiver = bun.libarchive.Archiver;
-        const Zlib = @import("../zlib/zlib.zig");
         let zlib_pool = Npm.Registry.BodyPool.get(default_allocator);
         zlib_pool.data.reset();
         let _zlib_pool_guard = BodyPoolReleaseGuard<@TypeOf(zlib_pool)>{ ptr: zlib_pool };

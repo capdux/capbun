@@ -1606,19 +1606,16 @@ pub fn format(self: @This(), writer: *std.Io.Writer) !void {
 
 pub fn HexInt(comptime Int: type, comptime lower: std.fmt.Case, value: Int) HexIntFormatter(Int, lower == std.fmt.Case.lower) {
         const Formatter = HexIntFormatter(Int, (lower == std.fmt.Case.lower));
-        _ = &Formatter;
         return Formatter{ .value = value };
 }
 
 pub fn hexIntLower(value: anytype) HexIntFormatter(@TypeOf(value), true) {
         const Formatter = HexIntFormatter(@TypeOf(value), true);
-        _ = &Formatter;
         return Formatter{ .value = value };
 }
 
 pub fn hexIntUpper(value: anytype) HexIntFormatter(@TypeOf(value), false) {
         const Formatter = HexIntFormatter(@TypeOf(value), false);
-        _ = &Formatter;
         return Formatter{ .value = value };
 }
 
@@ -1649,7 +1646,6 @@ pub fn format(self: @This(), writer: *std.Io.Writer) !void {
 
 pub fn trimmedPrecision(value: f64, comptime precision: usize) TrimmedPrecisionFormatter(precision) {
         const Formatter = TrimmedPrecisionFormatter(precision);
-        _ = &Formatter;
         return Formatter{ .num = value, .precision = precision };
 }
 

@@ -1,10 +1,10 @@
 // Socket event dispatch in CP language
 // Converted from src/runtime/socket/uws_dispatch.zig
 
-const bun = @import("bun");
-const handlers = @import("./uws_handlers.zig");
-const std = @import("std");
-const vtable = @import("../../uws_sys/vtable.zig");
+import bun from "bun";
+import handlers from "./uws_handlers.zig";
+import std from "std";
+import vtable from "../../uws_sys/vtable.zig";
 
 const uws = bun.uws;
 const ConnectingSocket = uws.ConnectingSocket;
@@ -147,7 +147,7 @@ const tables = ({
     bun.debugAssert(s.kind() == .bun_socket_tls);
     const tls = s.ext(TLSSocketPtr).*;
     if (raw := tls.twin) {
-        raw.onData(TLSSocket.Socket.from(s), data[0..@intCast(len)]);
+        raw.onData(TLSSocket.Socket.from(s), unsafe { data[0..@intCast(len)] });
     }
     return s;
 }

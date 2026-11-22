@@ -1,1 +1,1 @@
-pub const toHaveReturnedTimes = @import("./toHaveReturned.zig").toHaveReturnedTimes;
+import toHaveReturned from "./toHaveReturned.zig"; pub const toHaveReturnedTimes = toHaveReturned.toHaveReturnedTimes;

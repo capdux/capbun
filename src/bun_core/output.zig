@@ -81,6 +81,8 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 pub const Environment = @import("./env.zig");
 pub const root = @import("root");
 pub const bun = @import("bun");
+pub const system_timer = @import("../perf/system_timer.zig");
+pub const fd_internals = @import("../sys/fd.zig");
 pub const SourceColorDepth = enum {
     none,
     @"16",
@@ -376,8 +378,6 @@ pub fn init() void {
             const stdin = (blk_catch_0: { break :blk_catch_0 ((std.os.windows.GetStdHandle(std.os.windows.STD_INPUT_HANDLE)) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 WindowsStdio.w.INVALID_HANDLE_VALUE; }); });
             const stdout = (blk_catch_1: { break :blk_catch_1 ((std.os.windows.GetStdHandle(std.os.windows.STD_OUTPUT_HANDLE)) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 WindowsStdio.w.INVALID_HANDLE_VALUE; }); });
             const stderr = (blk_catch_2: { break :blk_catch_2 ((std.os.windows.GetStdHandle(std.os.windows.STD_ERROR_HANDLE)) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 WindowsStdio.w.INVALID_HANDLE_VALUE; }); });
-            var fd_internals = @import("../sys/fd.zig");
-            _ = &fd_internals;
             const INVALID_HANDLE_VALUE = std.os.windows.INVALID_HANDLE_VALUE;
             fd_internals.windows_cached_stderr = (if ((stderr != INVALID_HANDLE_VALUE)) .fromSystem(stderr) else .invalid);
             fd_internals.windows_cached_stdout = (if ((stdout != INVALID_HANDLE_VALUE)) .fromSystem(stdout) else .invalid);
@@ -579,7 +579,7 @@ pub fn end(self: Synchronized) void {
 const ByteSlice = []u8;
 const IoWriterPtr = *std.Io.Writer;
 const StdinBufferedReader = bun.deprecated.BufferedReader(4096, File.Reader);
-const SystemTimer = @import("../perf/system_timer.zig").Timer;
+const SystemTimer = system_timer.Timer;
 const ComptimeStringMap = bun.ComptimeStringMap;
 const Global = bun.Global;
 const c = bun.c;

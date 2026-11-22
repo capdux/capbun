@@ -431,7 +431,7 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
         poll_ref: Async.KeepAlive = Async.KeepAlive.init(),
         state: UpgradeState = .initializing,
         subprotocols: bun.StringSet,
-        proxy: ?WebSocketProxy = null,
+        proxy: WebSocketProxy? = null,
         ssl_config: (*SSLConfig)? = null,
         secure: (*uws.SslCtx)? = null,
         expected_accept: [28]u8 = [0; 28],
@@ -491,15 +491,15 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
             const _guard_pathname_slice = DeinitGuard<ZigSlice>{ ptr: &pathname_slice };
             const _guard_client_protocol_slice = DeinitGuard<ZigSlice>{ ptr: &client_protocol_slice };
 
-            let proxy_host_slice: ?ZigSlice = null;
+            let proxy_host_slice: ZigSlice? = null;
             const _guard_proxy_host_slice = OptDeinitGuard<ZigSlice?>{ ptr: &proxy_host_slice };
             if (ph := proxy_host) proxy_host_slice = ph.toUTF8(allocator);
 
-            let target_authorization_slice: ?ZigSlice = null;
+            let target_authorization_slice: ZigSlice? = null;
             const _guard_target_auth_slice = OptDeinitGuard<ZigSlice?>{ ptr: &target_authorization_slice };
             if (ta := target_authorization) target_authorization_slice = ta.toUTF8(allocator);
 
-            let unix_socket_path_slice: ?ZigSlice = null;
+            let unix_socket_path_slice: ZigSlice? = null;
             const _guard_unix_socket_slice = OptDeinitGuard<ZigSlice?>{ ptr: &unix_socket_path_slice };
             if (usp := unix_socket_path) unix_socket_path_slice = usp.toUTF8(allocator);
 
@@ -517,7 +517,7 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
                 }
             }
 
-            const target_auth_str: ?[]const u8 = if (target_authorization_slice != null) target_authorization_slice.?.slice() else null;
+            const target_auth_str: ([]const u8)? = if (target_authorization_slice != null) target_authorization_slice.?.slice() else null;
             const request_result = buildRequestBody(
                 vm,
                 pathname_slice.slice(),
@@ -531,11 +531,11 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
             ) catch return null;
             const req_body = request_result.body;
 
-            let proxy_state: ?WebSocketProxy = null;
+            let proxy_state: WebSocketProxy? = null;
             let connect_request: []u8 = empty_u8[0..0];
             if (using_proxy) {
-                let proxy_auth_slice: ?[]const u8 = null;
-                let proxy_auth_decoded: ?ZigSlice = null;
+                let proxy_auth_slice: ([]const u8)? = null;
+                let proxy_auth_decoded: ZigSlice? = null;
                 const _guard_proxy_auth_decoded = OptDeinitGuard<ZigSlice?>{ ptr: &proxy_auth_decoded };
 
                 if (auth := proxy_authorization) {
@@ -543,7 +543,7 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
                     proxy_auth_slice = proxy_auth_decoded.?.slice();
                 }
 
-                let proxy_hdrs: ?Headers = null;
+                let proxy_hdrs: Headers? = null;
                 const _guard_proxy_hdrs = OptDeinitGuard<Headers?>{ ptr: &proxy_hdrs };
 
                 let proxy_extra_headers = Headers8Bit.init(allocator, proxy_header_names, proxy_header_values, proxy_header_count) catch |e| bun.handleOom(e);

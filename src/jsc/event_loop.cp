@@ -671,31 +671,47 @@ pub fn getActiveTasks(globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame): jsc
     return result;
 }
 
-pub const AnyEventLoop = @import("../event_loop/AnyEventLoop.zig").AnyEventLoop;
-pub const ConcurrentPromiseTask = @import("./ConcurrentPromiseTask.zig").ConcurrentPromiseTask;
-pub const WorkTask = @import("./WorkTask.zig").WorkTask;
-pub const AnyTask = @import("../event_loop/AnyTask.zig");
-pub const ManagedTask = @import("../event_loop/ManagedTask.zig");
-pub const AnyTaskWithExtraContext = @import("../event_loop/AnyTaskWithExtraContext.zig");
-pub const CppTask = @import("./CppTask.zig").CppTask;
-pub const ConcurrentCppTask = @import("./CppTask.zig").ConcurrentCppTask;
-pub const JSCScheduler = @import("./JSCScheduler.zig");
-pub const Task = @import("./Task.zig").Task;
-pub const ConcurrentTask = @import("../event_loop/ConcurrentTask.zig").ConcurrentTask;
-pub const GarbageCollectionController = @import("./GarbageCollectionController.zig");
-pub const DeferredTaskQueue = @import("../event_loop/DeferredTaskQueue.zig");
+import _AnyEventLoopMod from "../event_loop/AnyEventLoop.zig";
+import _ConcurrentPromiseTaskMod from "./ConcurrentPromiseTask.zig";
+import _WorkTaskMod from "./WorkTask.zig";
+import _AnyTaskMod from "../event_loop/AnyTask.zig";
+import _ManagedTaskMod from "../event_loop/ManagedTask.zig";
+import _AnyTaskWithExtraContextMod from "../event_loop/AnyTaskWithExtraContext.zig";
+import _CppTaskMod from "./CppTask.zig";
+import _JSCSchedulerMod from "./JSCScheduler.zig";
+import _ConcurrentTaskMod from "../event_loop/ConcurrentTask.zig";
+import _GarbageCollectionControllerMod from "./GarbageCollectionController.zig";
+import _DeferredTaskQueueMod from "../event_loop/DeferredTaskQueue.zig";
+import _PosixSignalHandleMod from "./PosixSignalHandle.zig";
+import _MiniEventLoopMod from "../event_loop/MiniEventLoop.zig";
+import _EventLoopHandleMod from "./EventLoopHandle.zig";
+import _WorkPoolMod from "../threading/work_pool.zig";
+
+pub const AnyEventLoop = _AnyEventLoopMod.AnyEventLoop;
+pub const ConcurrentPromiseTask = _ConcurrentPromiseTaskMod.ConcurrentPromiseTask;
+pub const WorkTask = _WorkTaskMod.WorkTask;
+pub const AnyTask = _AnyTaskMod;
+pub const ManagedTask = _ManagedTaskMod;
+pub const AnyTaskWithExtraContext = _AnyTaskWithExtraContextMod;
+pub const CppTask = _CppTaskMod.CppTask;
+pub const ConcurrentCppTask = _CppTaskMod.ConcurrentCppTask;
+pub const JSCScheduler = _JSCSchedulerMod;
+pub const Task = TaskMod.Task;
+pub const ConcurrentTask = _ConcurrentTaskMod.ConcurrentTask;
+pub const GarbageCollectionController = _GarbageCollectionControllerMod;
+pub const DeferredTaskQueue = _DeferredTaskQueueMod;
 pub const DeferredRepeatingTask = DeferredTaskQueue.DeferredRepeatingTask;
-pub const PosixSignalHandle = @import("./PosixSignalHandle.zig");
+pub const PosixSignalHandle = _PosixSignalHandleMod;
 pub const PosixSignalTask = PosixSignalHandle.PosixSignalTask;
-pub const MiniEventLoop = @import("../event_loop/MiniEventLoop.zig");
+pub const MiniEventLoop = _MiniEventLoopMod;
 pub const MiniVM = MiniEventLoop.MiniVM;
 pub const JsVM = MiniEventLoop.JsVM;
 pub const EventLoopKind = MiniEventLoop.EventLoopKind;
 pub const AbstractVM = MiniEventLoop.AbstractVM;
 
-pub const EventLoopHandle = @import("./EventLoopHandle.zig").EventLoopHandle;
-pub const EventLoopTask = @import("./EventLoopHandle.zig").EventLoopTask;
-pub const EventLoopTaskPtr = @import("./EventLoopHandle.zig").EventLoopTaskPtr;
+pub const EventLoopHandle = _EventLoopHandleMod.EventLoopHandle;
+pub const EventLoopTask = _EventLoopHandleMod.EventLoopTask;
+pub const EventLoopTaskPtr = _EventLoopHandleMod.EventLoopTaskPtr;
 
-pub const WorkPool = @import("../threading/work_pool.zig").WorkPool;
-pub const WorkPoolTask = @import("../threading/work_pool.zig").Task;
+pub const WorkPool = _WorkPoolMod.WorkPool;
+pub const WorkPoolTask = _WorkPoolMod.Task;

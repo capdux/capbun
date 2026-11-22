@@ -399,7 +399,6 @@ pub fn init() !*FSEventsLoop {
             var loop = ((bun.default_allocator.create(FSEventsLoop)) catch unreachable);
             _ = &loop;
             const CF = CoreFoundation.get();
-            _ = &CF;
             var ctx = CFRunLoopSourceContext{ .info = loop, .perform = CFLoopCallback };
             _ = &ctx;
             const signal_source = CF.RunLoopSourceCreate(null, 0, (&ctx));
@@ -415,7 +414,6 @@ pub fn init() !*FSEventsLoop {
 
 pub fn enqueueTaskConcurrent(self: *FSEventsLoop, task: Task) void {
             const CF = CoreFoundation.get();
-            _ = &CF;
             var concurrent = ((bun.default_allocator.create(ConcurrentTask)) catch unreachable);
             _ = &concurrent;
             _ = self.tasks.push(concurrent.@"from"(task, true));
@@ -640,7 +638,6 @@ pub fn unregisterWatcher(self: *FSEventsLoop, watcher: *FSEventsWatcher) void {
 
 pub fn _stop(self: *FSEventsLoop) void {
             const CF = CoreFoundation.get();
-            _ = &CF;
             _ = CF.RunLoopStop(self.loop);
     }
 
@@ -648,7 +645,6 @@ pub fn deinit(self: *FSEventsLoop) void {
             _ = self.enqueueTaskConcurrent(Task.New(FSEventsLoop, FSEventsLoop._stop).init(self));
             _ = self.thread.join();
             const CF = CoreFoundation.get();
-            _ = &CF;
             _ = CF.Release(self.signal_source);
             self.signal_source = null;
             if ((self.watcher_count > 0)) {
@@ -733,7 +729,7 @@ pub const FSEventsWatcherCallback = *const fn (?*anyopaque, Event, bool) void;
 pub const FSEventsWatcherUpdateEndCallback = *const fn (?*anyopaque) void;
 pub const CFAbsoluteTime = f64;
 pub const CFTimeInterval = f64;
-pub const CFArrayCallBacks = anyopaque;
+pub const CFArrayCallBacks = void;
 pub const FSEventStreamEventFlags = c_int;
 pub const OSStatus = c_int;
 pub const CFIndex = c_long;

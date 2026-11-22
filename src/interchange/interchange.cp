@@ -1,4 +1,9 @@
-pub const json = @import("./json.zig");
-pub const json5 = @import("./json5.zig");
-pub const toml = @import("./toml.zig");
-pub const yaml = @import("./yaml.zig");
+import _json from "./json.zig";
+import _json5 from "./json5.zig";
+import _toml from "./toml.zig";
+import _yaml from "./yaml.zig";
+
+pub const json = _json;
+pub const json5 = _json5;
+pub const toml = _toml;
+pub const yaml = _yaml;

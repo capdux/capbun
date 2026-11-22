@@ -1551,9 +1551,9 @@ pub struct CommandLineReporter {
 
 pub struct TestCommand {
     pub const name = "test";
-    pub const CodeCoverageOptions = @import("../options_types/CodeCoverageOptions.zig").CodeCoverageOptions;
-    pub const Reporter = @import("../options_types/CodeCoverageOptions.zig").Reporter;
-    const Reporters = @import("../options_types/CodeCoverageOptions.zig").Reporters;
+    pub const CodeCoverageOptions = CodeCoverageOptionsMod.CodeCoverageOptions;
+    pub const Reporter = CodeCoverageOptionsMod.Reporter;
+    const Reporters = CodeCoverageOptionsMod.Reporters;
 
     static fn exec(ctx: Command.Context)! {
         Output.is_github_action = Output.isGithubAction();
@@ -2392,6 +2392,7 @@ import fs_mod from "../resolver/fs.zig";
 const FileSystem = fs_mod.FileSystem;
 import which_mod from "../which/which.zig";
 const which = which_mod.which;
+import CodeCoverageOptionsMod from "../options_types/CodeCoverageOptions.zig";
 
 import bun from "bun";
 const Environment = bun.Environment;

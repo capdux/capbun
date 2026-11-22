@@ -14,6 +14,7 @@ comptime {
 const Environment = @import("bun").Environment;
 const Output = @import("bun").Output;
 const jsc = @import("bun").jsc;
+pub const bun = @import("bun");
 pub const PosixSignalHandle = @This();
 
 signals: [buffer_size]u8 = undefined,
@@ -78,7 +79,6 @@ pub fn runFromJSThread(number: u8, globalObject: *jsc.JSGlobalObject) void {
 };
 
 const VirtualMachine = jsc.VirtualMachine;
-const bun = @import("bun");
 const buffer_size: usize = 8192;
 const log = Output.scoped(.PosixSignalHandle, .hidden);
 

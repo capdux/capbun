@@ -1,7 +1,7 @@
 //! This is a slower wrapper around a function pointer.
 //! Prefer adding a task type directly to `Task` instead of using this.
 
-const bun = @import("bun");
+import bun from "bun";
 const jsc = bun.jsc;
 const Task = jsc.Task;
 

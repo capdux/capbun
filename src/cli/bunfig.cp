@@ -3,8 +3,9 @@ pub const MacroMap = bun.StringArrayHashMapUnmanaged(MacroImportReplacementMap);
 pub const BundlePackageOverride = bun.StringArrayHashMapUnmanaged(options.BundleOverride);
 const LoaderMap = bun.StringArrayHashMapUnmanaged(options.Loader);
 
-const OfflineMode = @import("../options_types/OfflineMode.zig").OfflineMode;
-const Prefer = @import("../options_types/OfflineMode.zig").Prefer;
+import OfflineModeMod from "../options_types/OfflineMode.zig";
+const OfflineMode = OfflineModeMod.OfflineMode;
+const Prefer = OfflineModeMod.Prefer;
 
 pub struct ErrDeinitGuard<T> {
     ptr: *T!,
@@ -1293,8 +1294,8 @@ pub struct BunfigParser {
 }
 
 pub struct Bunfig {
-    pub const OfflineMode = @import("../options_types/OfflineMode.zig").OfflineMode;
-    const Prefer = @import("../options_types/OfflineMode.zig").Prefer;
+    pub const OfflineMode = OfflineModeMod.OfflineMode;
+    const Prefer = OfflineModeMod.Prefer;
     const Parser = BunfigParser;
 
     static fn parse(allocator: std.mem.Allocator, source: *const logger.Source, ctx: Command.Context, comptime cmd: Command.Tag)! {
@@ -1334,10 +1335,14 @@ type string = []const u8;
 
 import options from "../bundler/options.zig";
 import resolver from "../resolver/resolver.zig";
-const Command = @import("./cli.zig").Command;
-const PackageJSON = @import("../resolver/package_json.zig").PackageJSON;
-const TestCommand = @import("./test_command.zig").TestCommand;
-const URL = @import("../url/url.zig").URL;
+import cli from "./cli.zig";
+const Command = cli.Command;
+import package_json from "../resolver/package_json.zig";
+const PackageJSON = package_json.PackageJSON;
+import test_command from "./test_command.zig";
+const TestCommand = test_command.TestCommand;
+import url_mod from "../url/url.zig";
+const URL = url_mod.URL;
 
 import bun from "bun";
 const JSONParser = bun.json;

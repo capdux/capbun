@@ -465,7 +465,7 @@ export class SocketHandler<const is_ssl: bool> {
         @comptime socket_field_name: ([]const u8)?,
         is_ipc: bool,
     ): Self? {
-        const ThisPtr = ?*This;
+        const ThisPtr = ?@TypeOf(this_ptr);
         const raw = g.fromFd(k, null, @sizeOf(ThisPtr), handle, is_ipc) orelse return null;
         const socket_ = Self { socket = InternalSocket.connected(raw) };
 

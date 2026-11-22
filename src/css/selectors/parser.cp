@@ -1,4 +1,5 @@
 import css from "../css_parser.zig";
+import selector_builder from "./builder.zig";
 const CSSStringFns = css.CSSStringFns;
 
 pub const Printer = css.Printer;
@@ -2816,7 +2817,7 @@ pub fn parse_one_simple_selector(
     parser: *SelectorParser,
     input: *css.Parser,
     state: *SelectorParsingState,
-): Result(?SimpleSelectorParseResult(Impl)) {
+): Result(SimpleSelectorParseResult(Impl)?) {
     const S = SimpleSelectorParseResult(Impl);
 
     const start = input.state();
@@ -3755,7 +3756,6 @@ pub fn parse_attribute_flags(input: *css.Parser): Result(AttributeFlags) {
     }
 }
 
-const selector_builder = @import("./builder.zig");
 const SelectorBuilder = selector_builder.SelectorBuilder;
 
 import bun from "bun";

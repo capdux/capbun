@@ -33,16 +33,16 @@ fn is_cp_result(comptime __T: type) bool {
 }
 fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 comptime {
-    _ = (&@import("./jsc/bindings/GeneratedJS2Native.zig"));
+    _ = (&generated_js2native_mod);
     _ = (&gen);
     _ = (&uws.dispatch);
 
 }
 comptime {
-    _ = @import("./runtime/node/buffer.zig").BufferVectorized.fill;
-    _ = @import("./cli/upgrade_command.zig").Version;
-    _ = @import("./jsc/resolve_path_jsc.zig");
-    _ = @import("./jsc/resolver_jsc.zig");
+    _ = node_buffer_mod.BufferVectorized.fill;
+    _ = upgrade_command_mod.Version;
+    _ = &resolve_path_jsc_mod;
+    _ = &resolver_jsc_mod;
 
 }
 comptime {
@@ -176,6 +176,31 @@ pub const safety = @import("./safety/safety.zig");
 pub const deprecated = @import("./bun_core/deprecated.zig");
 pub const CopyFile = @import("./sys/copy_file.zig");
 pub const builtin = @import("builtin");
+pub const build_options = @import("build_options");
+pub const package_json_mod = @import("./resolver/package_json.zig");
+pub const generated_js2native_mod = @import("./jsc/bindings/GeneratedJS2Native.zig");
+pub const fd_mod = @import("./sys/fd.zig");
+pub const identity_context_mod = @import("./collections/identity_context.zig");
+pub const linear_fifo_mod = @import("./collections/linear_fifo.zig");
+pub const pool_mod = @import("./collections/pool.zig");
+pub const bunfig_mod = @import("./cli/bunfig.zig");
+pub const signal_code_mod = @import("./sys/SignalCode.zig");
+pub const run_command_mod = @import("./cli/run_command.zig");
+pub const which_mod = @import("./which/which.zig");
+pub const url_mod = @import("./url/url.zig");
+pub const form_data_mod = @import("./runtime/webcore/FormData.zig");
+pub const import_record_mod = @import("./options_types/import_record.zig");
+pub const node_buffer_mod = @import("./runtime/node/buffer.zig");
+pub const upgrade_command_mod = @import("./cli/upgrade_command.zig");
+pub const resolve_path_jsc_mod = @import("./jsc/resolve_path_jsc.zig");
+pub const resolver_jsc_mod = @import("./jsc/resolver_jsc.zig");
+pub const standalone_module_graph_mod = @import("./standalone_graph/StandaloneModuleGraph.zig");
+pub const wyhash_mod = @import("./wyhash/wyhash.zig");
+pub const posix_spawn_mod = @import("./runtime/api/bun/spawn.zig");
+pub const handle_oom_mod = @import("./crash_handler/handle_oom.zig");
+pub const tmpfile_mod = @import("./sys/tmp.zig");
+pub const cli_arguments_mod = @import("./cli/Arguments.zig");
+pub const config_version_mod = @import("./install/ConfigVersion.zig");
 pub const PollFlag = enum {
     ready,
     not_ready,
@@ -1274,7 +1299,7 @@ pub const @"meta" = meta_mod;
 pub const @"trait" = trait_mod;
 pub const @"string" = string_mod;
 pub const feature_flag = env_var.feature_flag;
-pub const use_mimalloc = @import("build_options").use_mimalloc;
+pub const use_mimalloc = build_options.use_mimalloc;
 pub const default_allocator: std.mem.Allocator = allocators.c_allocator;
 pub const DefaultAllocator = allocators.Default;
 pub const z_allocator: std.mem.Allocator = allocators.z_allocator;
@@ -1303,13 +1328,13 @@ pub const JSOOM = (OOM || JSError);
 pub const S = sys.S;
 pub const O = sys.O;
 pub const Mode = sys.Mode;
-pub const PackageJSON = @import("./resolver/package_json.zig").PackageJSON;
+pub const PackageJSON = package_json_mod.PackageJSON;
 pub const ComptimeStringMap = comptime_string_map.ComptimeStringMap;
 pub const ComptimeStringMap16 = comptime_string_map.ComptimeStringMap16;
 pub const ComptimeStringMapWithKeyType = comptime_string_map.ComptimeStringMapWithKeyType;
 pub const SmallList = css.SmallList;
-pub const FD = @import("./sys/fd.zig").FD;
-pub const MovableIfWindowsFd = @import("./sys/fd.zig").MovableIfWindowsFd;
+pub const FD = fd_mod.FD;
+pub const MovableIfWindowsFd = fd_mod.MovableIfWindowsFd;
 pub const PlatformIOVec = (if (Environment.isWindows) windows.libuv.uv_buf_t else std.posix.iovec);
 pub const PlatformIOVecConst = (if (Environment.isWindows) windows.libuv.uv_buf_t else std.posix.iovec_const);
 pub const MAX_PATH_BYTES = paths.MAX_PATH_BYTES;
@@ -1330,8 +1355,8 @@ pub const path_buffer_pool = paths.path_buffer_pool;
 pub const w_path_buffer_pool = paths.w_path_buffer_pool;
 pub const os_path_buffer_pool = paths.os_path_buffer_pool;
 threadlocal var threadlocal_buffers_head: ?*ThreadlocalBuffersNode = null;
-pub const IdentityContext = @import("./collections/identity_context.zig").IdentityContext;
-pub const ArrayIdentityContext = @import("./collections/identity_context.zig").ArrayIdentityContext;
+pub const IdentityContext = identity_context_mod.IdentityContext;
+pub const ArrayIdentityContext = identity_context_mod.ArrayIdentityContext;
 pub const MultiArrayList = bun.collections.MultiArrayList;
 pub const BabyList = collections.BabyList;
 pub const ByteList = collections.ByteList;
@@ -1339,12 +1364,12 @@ pub const OffsetByteList = collections.OffsetByteList;
 pub const bit_set = collections.bit_set;
 pub const HiveArray = collections.HiveArray;
 pub const BoundedArray = collections.BoundedArray;
-pub const LinearFifo = @import("./collections/linear_fifo.zig").LinearFifo;
-pub const LinearFifoBufferType = @import("./collections/linear_fifo.zig").LinearFifoBufferType;
-pub const ObjectPool = @import("./collections/pool.zig").ObjectPool;
+pub const LinearFifo = linear_fifo_mod.LinearFifo;
+pub const LinearFifoBufferType = linear_fifo_mod.LinearFifoBufferType;
+pub const ObjectPool = pool_mod.ObjectPool;
 const global_scope_log = sys.syslog;
-pub const Bunfig = @import("./cli/bunfig.zig").Bunfig;
-pub const HTTPThread = @import("./http/http.zig").HTTPThread;
+pub const Bunfig = bunfig_mod.Bunfig;
+pub const HTTPThread = http.HTTPThread;
 pub const TaggedPointer = ptr.TaggedPointer;
 pub const TaggedPointerUnion = ptr.TaggedPointerUnion;
 pub const mimalloc = allocators.mimalloc;
@@ -1369,20 +1394,20 @@ pub const disable_ioctl_ficlone = CopyFile.disable_ioctl_ficlone;
 pub const copyFile = CopyFile.copyFile;
 pub const copyFileWithState = CopyFile.copyFileWithState;
 pub const CopyFileState = CopyFile.CopyFileState;
-pub const SignalCode = @import("./sys/SignalCode.zig").SignalCode;
+pub const SignalCode = signal_code_mod.SignalCode;
 var is_missing_io_uring_cache: ?bool = null;
 pub const PackageManager = install.PackageManager;
-pub const RunCommand = @import("./cli/run_command.zig").RunCommand;
+pub const RunCommand = run_command_mod.RunCommand;
 pub const Transpiler = transpiler.Transpiler;
-pub const which = @import("./which/which.zig").which;
+pub const which = which_mod.which;
 pub const json = interchange.json;
-pub const URL = @import("./url/url.zig").URL;
-pub const FormData = @import("./runtime/webcore/FormData.zig").FormData;
+pub const URL = url_mod.URL;
+pub const FormData = form_data_mod.FormData;
 var needs_proc_self_workaround: bool = false;
 pub const getcwd = std.posix.getcwd;
 var proc_self_workaround_has_checked = false;
-pub const ImportRecord = @import("./options_types/import_record.zig").ImportRecord;
-pub const ImportKind = @import("./options_types/import_record.zig").ImportKind;
+pub const ImportRecord = import_record_mod.ImportRecord;
+pub const ImportKind = import_record_mod.ImportKind;
 pub const failing_allocator = std.mem.Allocator{ .ptr = undefined, .vtable = (&.{ .alloc = FailingAllocator.alloc, .resize = FailingAllocator.resize, .free = FailingAllocator.free }) };
 var __reload_in_progress__ = std.atomic.Value(bool).init(false);
 threadlocal var __reload_in_progress__on_current_thread = false;
@@ -1398,7 +1423,7 @@ pub const threadlocalAllocator = threadLocalAllocator;
 pub const trace = tracy.trace;
 pub const Generation = u16;
 pub const StringPointer = schema.api.StringPointer;
-pub const StandaloneModuleGraph = @import("./standalone_graph/StandaloneModuleGraph.zig").StandaloneModuleGraph;
+pub const StandaloneModuleGraph = standalone_module_graph_mod.StandaloneModuleGraph;
 pub const String = string.String;
 pub const ZigString = jsc.ZigString;
 pub const StringJoiner = string.StringJoiner;
@@ -1409,7 +1434,7 @@ pub const MutableString = string.MutableString;
 pub const StringBuilder = string.StringBuilder;
 pub const strings = string.immutable;
 pub const CodePoint = strings.CodePoint;
-pub const Wyhash11 = @import("./wyhash/wyhash.zig").Wyhash11;
+pub const Wyhash11 = wyhash_mod.Wyhash11;
 const TODO_LOG = Output.scoped(.TODO, .visible);
 pub const HOST_NAME_MAX = (if (Environment.isWindows) 256 else std.posix.HOST_NAME_MAX);
 pub const Stat = (if (Environment.isWindows) windows.libuv.uv_stat_t else std.posix.Stat);
@@ -1420,9 +1445,9 @@ pub const StatFS = (switch (Environment.os) {
 });
 pub var argv: [][:0]const u8 = &.{};
 pub var bun_options_argc: usize = 0;
-pub const spawn = @import("./runtime/api/bun/spawn.zig").PosixSpawn;
-pub const handleOom = @import("./crash_handler/handle_oom.zig").handleOom;
-pub const Tmpfile = @import("./sys/tmp.zig").Tmpfile;
+pub const spawn = posix_spawn_mod.PosixSpawn;
+pub const handleOom = handle_oom_mod.handleOom;
+pub const Tmpfile = tmpfile_mod.Tmpfile;
 const errno_map = errno_map: {
     var max_value: i32 = 0;
     _ = &max_value;
@@ -1451,7 +1476,7 @@ pub const bytecode_extension = ".jsc";
 pub const Maybe = jsc.Node.Maybe;
 pub const mach_port = (if (Environment.isMac) std.c.mach_port_t else u32);
 pub const JSC = @compileError("Deprecated: Use @import(\"bun\").jsc instead");
-pub const ConfigVersion = @import("./install/ConfigVersion.zig").ConfigVersion;
+pub const ConfigVersion = config_version_mod.ConfigVersion;
 const Allocator = std.mem.Allocator;
 
 pub extern "c" fn powf(x: f32, y: f32) callconv(.c) f32;
@@ -3616,6 +3641,6 @@ pub fn contains(item: anytype, list: *const std.ArrayListUnmanaged(@TypeOf(item)
 pub fn getUseSystemCA(globalObject: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) UseSystemCAError!jsc.JSValue {
         _ = &globalObject;
         _ = &callFrame;
-        const Arguments = @import("./cli/Arguments.zig");
+        const Arguments = cli_arguments_mod;
         return jsc.JSValue.jsBoolean(Arguments.Bun__Node__UseSystemCA);
 }

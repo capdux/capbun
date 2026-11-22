@@ -98,6 +98,7 @@ pub const jest_pkg = @import("../../test_runner/jest.zig");
 pub const btjs = @import("../../jsc/btjs.zig");
 pub const js_valkey = @import("../valkey_jsc/js_valkey.zig");
 pub const csrf_jsc = @import("./csrf_jsc.zig");
+pub const cron_mod = @import("./cron.zig");
 pub const JSZlibLibrary = enum {
     zlib,
     libdeflate,
@@ -411,7 +412,7 @@ pub fn exportAll() void {
     pub const YAML = toJSLazyPropertyCallback(Bun.getYAMLObject);
     pub const Transpiler = toJSLazyPropertyCallback(Bun.getTranspilerConstructor);
     pub const argv = toJSLazyPropertyCallback(Bun.getArgv);
-    pub const cron = toJSLazyPropertyCallback(@import("./cron.zig").getCronObject);
+    pub const cron = toJSLazyPropertyCallback(cron_mod.getCronObject);
     pub const cwd = toJSLazyPropertyCallback(Bun.getCWD);
     pub const embeddedFiles = toJSLazyPropertyCallback(Bun.getEmbeddedFiles);
     pub const enableANSIColors = toJSLazyPropertyCallback(Bun.enableANSIColors);

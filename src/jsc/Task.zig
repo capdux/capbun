@@ -67,6 +67,9 @@ const TaggedPointerUnion = @import("bun").TaggedPointerUnion;
 const Async = @import("bun").Async;
 const shell = @import("bun").shell;
 const jsc = @import("bun").jsc;
+pub const bun = @import("bun");
+pub const JSCScheduler = @import("../jsc/JSCScheduler.zig");
+pub const Fetch = @import("../runtime/webcore/fetch.zig");
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         ptr: *T,
@@ -81,10 +84,7 @@ pub fn __cp_deinit(self: *@This()) void {
 }
 
 pub const VirtualMachine = jsc.VirtualMachine;
-const bun = @import("bun");
-const JSCScheduler = @import("../jsc/JSCScheduler.zig");
 const JSCDeferredWorkTask = JSCScheduler.JSCDeferredWorkTask;
-const Fetch = @import("../runtime/webcore/fetch.zig");
 const FetchTasklet = Fetch.FetchTasklet;
 const FlushPendingFileSinkTask = bun.webcore.FileSink.FlushPendingTask;
 const ServerAllConnectionsClosedTask = bun.api.server.ServerAllConnectionsClosedTask;

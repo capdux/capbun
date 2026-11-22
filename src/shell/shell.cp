@@ -2,6 +2,7 @@ import interpret from "./interpreter.zig";
 import subproc from "./subproc.zig";
 
 import AllocScope from "./AllocScope.zig";
+import YieldMod from "./Yield.zig";
 
 pub const EnvMap = interpret.EnvMap;
 pub const EnvStr = interpret.EnvStr;
@@ -14,7 +15,7 @@ pub const IOReader = Interpreter.IOReader;
 // pub const IOWriter = interpret.IOWriter;
 // pub const SubprocessMini = subproc.ShellSubprocessMini;
 
-pub const Yield = @import("./Yield.zig").Yield;
+pub const Yield = YieldMod.Yield;
 pub const unreachableState = interpret.unreachableState;
 
 const GlobWalker = bun.glob.GlobWalker(null, true);
@@ -4652,7 +4653,7 @@ pub struct TestingAPIs {
     }
 }
 
-pub const ShellSubprocess = @import("./subproc.zig").ShellSubprocess;
+pub const ShellSubprocess = subproc.ShellSubprocess;
 
 import Syscall from "../sys/sys.zig";
 import builtin from "builtin";

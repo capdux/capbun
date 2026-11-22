@@ -371,7 +371,8 @@ pub struct Json {
 type string = []const u8;
 
 import fs from "../resolver/fs.zig";
-const Define = @import("./defines.zig").Define;
+import defines_mod from "./defines.zig";
+const Define = defines_mod.Define;
 
 import bun from "bun";
 const Environment = bun.Environment;

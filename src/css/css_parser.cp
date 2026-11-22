@@ -413,9 +413,9 @@ pub fn DefineShorthand(comptime T: type, comptime property_name: PropertyIdTag, 
     return struct {
         /// Returns a shorthand from the longhand properties defined in the given declaration block.
         pub fn fromLonghands(allocator: Allocator, decls: *const DeclarationBlock, vendor_prefix: VendorPrefix) ?struct { T, bool } {
-            _ = allocator; // autofix
-            _ = decls; // autofix
-            _ = vendor_prefix; // autofix
+            * = allocator; // autofix
+            * = decls; // autofix
+            * = vendor_prefix; // autofix
             // var count: usize = 0;
             // var important_count: usize = 0;
             // var this: T = undefined;
@@ -531,7 +531,7 @@ pub fn DefineShorthand(comptime T: type, comptime property_name: PropertyIdTag, 
 
         /// Returns a shorthand from the longhand properties defined in the given declaration block.
         pub fn longhands(vendor_prefix: VendorPrefix) []const PropertyId {
-            _ = vendor_prefix; // autofix
+            * = vendor_prefix; // autofix
             // const out: []const PropertyId = comptime out: {
             //     var out: [std.meta.fields(@TypeOf(T.PropertyFieldMap)).len]PropertyId = undefined;
 
@@ -551,10 +551,10 @@ pub fn DefineShorthand(comptime T: type, comptime property_name: PropertyIdTag, 
         }
 
         /// Returns a longhand property for this shorthand.
-        pub fn longhand(this: *const T, allocator: Allocator, property_id: *const PropertyId) ?Property {
-            _ = this; // autofix
-            _ = allocator; // autofix
-            _ = property_id; // autofix
+        pub fn longhand(this: *const T, allocator: Allocator, property_id: *const PropertyId) Property? {
+            * = this; // autofix
+            * = allocator; // autofix
+            * = property_id; // autofix
             // inline for (std.meta.fields(@TypeOf(T.PropertyFieldMap))) |field| {
             //     if (@as(PropertyIdTag, property_id.*) == @field(T.PropertyFieldMap, field.name)) {
             //         const val = if (@hasDecl(@TypeOf(@field(T, field.namee)), "clone"))
@@ -577,9 +577,9 @@ pub fn DefineShorthand(comptime T: type, comptime property_name: PropertyIdTag, 
 
         /// Updates this shorthand from a longhand property.
         pub fn setLonghand(this: *T, allocator: Allocator, property: *const Property) bool {
-            _ = this; // autofix
-            _ = allocator; // autofix
-            _ = property; // autofix
+            * = this; // autofix
+            * = allocator; // autofix
+            * = property; // autofix
             // inline for (std.meta.fields(T.PropertyFieldMap)) |field| {
             //     if (@as(PropertyIdTag, property.*) == @field(T.PropertyFieldMap, field.name)) {
             //         const val = if (@hasDecl(@TypeOf(@field(T, field.name)), "clone"))
@@ -1871,7 +1871,7 @@ pub fn TopLevelRuleParser(comptime AtRuleParserT: type): type {
                                 .result => |v| v,
                             };
 
-                            const layer: ?ImportPreludeLayer =
+                            const layer: ImportPreludeLayer? =
                                 if (input.tryParse(Parser.expectIdentMatching, .{"layer"}) == .result)
                                     .{ .value = null }
                                 else if (input.tryParse(Parser.expectFunctionMatching, .{"layer"}) == .result) brk: {
@@ -3221,7 +3221,7 @@ pub fn StyleSheet(comptime AtRule: type): type {
 
             // @custom-media rules may be defined after they are referenced, but may only be defined at the top level
             // of a stylesheet. Do a pre-scan here and create a lookup table by name.
-            let custom_media: ?CustomMediaMap = if (self.options.flags.custom_media and options.targets.shouldCompileSame(.custom_media_queries)) brk: {
+            let custom_media: CustomMediaMap? = if (self.options.flags.custom_media and options.targets.shouldCompileSame(.custom_media_queries)) brk: {
                 let custom_media = CustomMediaMap{};
 
                 for (self.rules.v.items) |*rule| {
@@ -3261,8 +3261,8 @@ pub fn StyleSheet(comptime AtRule: type): type {
             allocator: Allocator,
             writer: *std.Io.Writer,
             options: css_printer.PrinterOptions,
-            import_info: ?bun.css.ImportInfo,
-            local_names: ?*const LocalsResultsMap,
+            import_info: bun.css.ImportInfo?,
+            local_names: (*const LocalsResultsMap)?,
             symbols: *const bun.ast.Symbol.Map,
         ) PrintResult(ToCssResultInternal) {
             let printer = Printer.new(allocator, std.array_list.Managed(u8).init(allocator), writer, options, import_info, local_names, symbols);
@@ -3330,8 +3330,8 @@ pub fn StyleSheet(comptime AtRule: type): type {
             self: *const @This(),
             allocator: Allocator,
             options: css_printer.PrinterOptions,
-            import_info: ?bun.css.ImportInfo,
-            local_names: ?*const LocalsResultsMap,
+            import_info: bun.css.ImportInfo?,
+            local_names: (*const LocalsResultsMap)?,
             symbols: *const bun.ast.Symbol.Map,
         ) PrintResult(ToCssResult) {
             // TODO: this is not necessary
@@ -3359,7 +3359,7 @@ pub fn StyleSheet(comptime AtRule: type): type {
             };
         }
 
-        pub fn parse(allocator: Allocator, code: []const u8, options: ParserOptions, import_records: ?*bun.BabyList(ImportRecord), source_index: SrcIndex) Maybe(struct { This, StylesheetExtra }, Err(ParserError)) {
+        pub fn parse(allocator: Allocator, code: []const u8, options: ParserOptions, import_records: (*bun.BabyList(ImportRecord))?, source_index: SrcIndex) Maybe(struct { This, StylesheetExtra }, Err(ParserError)) {
             let default_at_rule_parser = DefaultAtRuleParser{};
             return parseWith(allocator, code, options, DefaultAtRuleParser, &default_at_rule_parser, import_records, source_index);
         }
@@ -3381,7 +3381,7 @@ pub fn StyleSheet(comptime AtRule: type): type {
             options: ParserOptions,
             comptime P: type,
             at_rule_parser: *P,
-            import_records: ?*bun.BabyList(ImportRecord),
+            import_records: (*bun.BabyList(ImportRecord))?,
             source_index: SrcIndex,
         ) Maybe(struct { This, StylesheetExtra }, Err(ParserError)) {
             let composes = ComposesMap{};

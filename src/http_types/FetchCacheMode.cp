@@ -1,4 +1,5 @@
 import bun from "bun";
+import fetch_enums_jsc from "../http_jsc/fetch_enums_jsc.zig";
 
 /// https://developer.mozilla.org/en-US/docs/Web/API/Request/cache
 export enum FetchCacheMode: u3 {
@@ -18,5 +19,5 @@ export enum FetchCacheMode: u3 {
         .{ "only-if-cached", .@"only-if-cached" },
     });
 
-    pub const toJS = @import("../http_jsc/fetch_enums_jsc.zig").fetchCacheModeToJS;
+    pub const toJS = fetch_enums_jsc.fetchCacheModeToJS;
 }

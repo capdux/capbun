@@ -1,7 +1,7 @@
 const debug = bun.Output.scoped(.HTMLBundle, .hidden);
-const StaticRoute = @import("./StaticRoute.zig");
-const std = @import("std");
-const bun = @import("bun");
+import StaticRoute from "./StaticRoute.zig";
+import std from "std";
+import bun from "bun";
 const strings = bun.strings;
 const RefPtr = bun.ptr.RefPtr;
 const jsc = bun.jsc;

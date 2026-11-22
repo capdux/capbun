@@ -1514,12 +1514,7 @@ pub fn diffCommonOverlap(text1_in: []const Unit, text2_in: []const Unit) usize {
             }
     }
 
-pub fn testDiffHalfMatch(allocator: std.mem.Allocator, params: struct {
-                dmp: DiffMatchPatch,
-                before: []const Unit,
-                after: []const Unit,
-                expected: ?HalfMatchResult,
-            }) !void {
+pub fn testDiffHalfMatch(allocator: std.mem.Allocator, params: TestDiffHalfMatchParams) !void {
             var maybe_result = try params.dmp.diffHalfMatch(allocator, params.before, params.after);
             _ = &maybe_result;
             var _guard_res = DeinitWithAllocGuard(HalfMatchResult){ .ptr = (if (maybe_result) |*r| (blk: {
@@ -1843,6 +1838,12 @@ _ = @compileError("Return type must be !void");
     const HalfMatchResult = DmpHalfMatchResult(Unit);
     const LinesToCharsResult = DmpLinesToCharsResult(Unit);
     const DMPUsize = DMP(usize);
+    const TestDiffHalfMatchParams = struct {
+        dmp: DiffMatchPatch,
+        before: []const Unit,
+        after: []const Unit,
+        expected: ?HalfMatchResult,
+    };
     test diffCommonPrefix {
             _ = try testing.expectEqual((if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(usize, @intFromEnum(0)) else cp_cast_int(usize, 0)), diffCommonPrefix("abc", "xyz"));
             _ = try testing.expectEqual((if (comptime @typeInfo(@TypeOf(4)) == .@"enum") cp_cast_int(usize, @intFromEnum(4)) else cp_cast_int(usize, 4)), diffCommonPrefix("1234abcdef", "1234xyz"));

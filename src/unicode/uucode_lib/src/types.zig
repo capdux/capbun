@@ -62,7 +62,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const config = @import("./config.zig");
 pub const get_mod = @import("./get.zig");
@@ -819,238 +819,164 @@ pub fn Slice(comptime c: config.Field) type {
             _ = @compileError("Slice with max_offset == 0 is only supported if embedded_len is max_len, || max_len is 1 with shift");
         }
         return struct {
-        data: union {
+    data: union {
             offset: Offset,
             embedded: [embedded_len]T,
             shift: ShiftSingleItem,
         },
-        len: Len,
+    len: Len,
 
-        const Self = @This();
-        pub const T = @typeInfo(c.type).pointer.child;
-        const Offset = std.math.IntFittingRange(0, max_offset);
-        const ShiftSingleItem = if (c.cp_packing == .shift) Shift(c, .unpacked) else void;
-        const Len = std.math.IntFittingRange(0, max_len);
-
-        pub const Tracking = SliceTracking(T, max_len);
-        pub const BackingBuffer = []const T;
-        pub const MutableBackingBuffer = []T;
-        pub const empty = Self{ .len = 0, .data = .{ .offset = 0 } };
-
-        inline fn _init(
-            allocator: Allocator,
-            backing: []T,
-            tracking: *Tracking,
-            s: []const T,
-        ) Allocator.Error!Self {
+pub inline fn _init(allocator: Allocator, backing: []T, tracking: *Tracking, s: []const T) Allocator.Error!Self {
             tracking.max_len = @max(tracking.max_len, s.len);
-
-            if (either(embedded_len == 0, s.len > embedded_len)) {
-                if (s.len == 0) {
+            if (either((embedded_len == 0), (s.len > embedded_len))) {
+                if ((s.len == 0)) {
                     return .empty;
                 }
-
                 const len: Len = @intCast(s.len);
                 const gop = try tracking.offset_map.getOrPut(allocator, s);
-
                 if (gop.found_existing) {
-                    return .{
-                        .len = len,
-                        .data = .{
-                            .offset = @intCast(gop.value_ptr.*),
-                        },
-                    };
+                    return .{ .len = len, .data = .{ .offset = @intCast(gop.value_ptr.*) } };
                 }
-
                 const offset = tracking.max_offset;
                 gop.value_ptr.* = offset;
-                @memcpy(backing[offset .. offset + s.len], s);
-                gop.key_ptr.* = backing[offset .. offset + s.len];
-                tracking.len_counts[s.len - 1] += 1;
-                tracking.max_offset += s.len;
-
-                return .{
-                    .len = len,
-                    .data = .{
-                        .offset = @intCast(offset),
-                    },
-                };
+                _ = @memcpy(backing[offset..(offset + s.len)], s);
+                gop.key_ptr.* = backing[offset..(offset + s.len)];
+                tracking.len_counts[cp_cast_int(usize, (s.len - 1))] = (tracking.len_counts[@as(usize, @intCast((s.len - 1)))] + 1);
+                tracking.max_offset = (tracking.max_offset + s.len);
+                return .{ .len = len, .data = .{ .offset = @intCast(offset) } };
             } else {
                 var embedded: [embedded_len]T = undefined;
-                @memcpy(embedded[0..s.len], s);
+                _ = &embedded;
+                _ = @memcpy(embedded[0..s.len], s);
                 switch (@typeInfo(T)) {
-                    .@"struct" => {
-                        @memset(embedded[s.len..], 0);
-                    },
-                    .@"enum" => {
-                        @memset(embedded[s.len..], @enumFromInt(0));
-                    },
-                    else => {
-                        @memset(embedded[s.len..], 0);
-                    },
-                }
-
-                return .{
-                    .len = @intCast(s.len),
-                    .data = .{
-                        .embedded = embedded,
-                    },
-                };
+.@"struct" => {
+_ = @memset(embedded[s.len..], 0);
+},
+.@"enum" => {
+_ = @memset(embedded[s.len..], @enumFromInt(0));
+},
+else => {
+_ = @memset(embedded[s.len..], 0);
+},
+}
+                return .{ .len = @intCast(s.len), .data = .{ .embedded = embedded } };
             }
-        }
+    }
 
-        pub fn init(
-            allocator: Allocator,
-            backing: []T,
-            tracking: *Tracking,
-            s: []const T,
-        ) Allocator.Error!Self {
-            if (c.cp_packing != .direct) {
-                @compileError("init is only supported for direct packing: use initFor instead");
+pub fn init(allocator: Allocator, backing: []T, tracking: *Tracking, s: []const T) Allocator.Error!Self {
+            if ((c.cp_packing != .direct)) {
+                _ = @compileError("init is only supported for direct packing: use initFor instead");
             }
+            return .{ ._init = .{ allocator, backing, tracking, s } };
+    }
 
-            return ._init(allocator, backing, tracking, s);
-        }
-
-        pub fn initFor(
-            allocator: Allocator,
-            backing: []T,
-            tracking: *Tracking,
-            s: []const T,
-            cp: u21,
-        ) Allocator.Error!Self {
-            if (s.len == 1) {
-                tracking.shift.track(cp, s[0]);
+pub fn initFor(allocator: Allocator, backing: []T, tracking: *Tracking, s: []const T, cp: u21) Allocator.Error!Self {
+            if ((s.len == 1)) {
+                _ = tracking.shift.track(cp, s[0]);
             }
-
-            if (both(c.cp_packing == .shift, s.len == 1)) {
+            if (both((c.cp_packing == .shift), (s.len == 1))) {
                 tracking.max_len = @max(tracking.max_len, 1);
-
-                return .{
-                    .len = 1,
-                    .data = .{
-                        .shift = .init(cp, s[0]),
-                    },
-                };
+                return .{ .len = 1, .data = .{ .shift = .init(cp, s[0]) } };
             } else {
-                return ._init(allocator, backing, tracking, s);
+                return .{ ._init = .{ allocator, backing, tracking, s } };
             }
-        }
+    }
 
-        fn _slice(
-            self: *const Self,
-            backing: []const T,
-        ) []const T {
-            // Repeat the two return cases, first with two `comptime` checks,
-            // then with a runtime if/else
-            if (comptime embedded_len == max_len) {
-                return self.data.embedded[0..self.len];
-            } else if (comptime embedded_len == 0) {
-                return backing[self.data.offset .. @as(usize, self.data.offset) + @as(usize, self.len)];
-            } else if (self.len <= embedded_len) {
+pub fn _slice(self: *const @This(), backing: []const T) []const T {
+            if (comptime (embedded_len == max_len)) {
                 return self.data.embedded[0..self.len];
             } else {
-                return backing[self.data.offset .. @as(usize, self.data.offset) + @as(usize, self.len)];
+                if (comptime (embedded_len == 0)) {
+                    return backing[self.data.offset..((if (comptime @typeInfo(@TypeOf(self.data.offset)) == .@"enum") cp_cast_int(usize, @intFromEnum(self.data.offset)) else cp_cast_int(usize, self.data.offset)) + (if (comptime @typeInfo(@TypeOf(self.len)) == .@"enum") cp_cast_int(usize, @intFromEnum(self.len)) else cp_cast_int(usize, self.len)))];
+                } else {
+                    if ((self.len <= embedded_len)) {
+                        return self.data.embedded[0..self.len];
+                    } else {
+                        return backing[self.data.offset..((if (comptime @typeInfo(@TypeOf(self.data.offset)) == .@"enum") cp_cast_int(usize, @intFromEnum(self.data.offset)) else cp_cast_int(usize, self.data.offset)) + (if (comptime @typeInfo(@TypeOf(self.len)) == .@"enum") cp_cast_int(usize, @intFromEnum(self.len)) else cp_cast_int(usize, self.len)))];
+                    }
+                }
             }
-        }
+    }
 
-        pub fn sliceWith(
-            self: *const Self,
-            backing: []const T,
-            single_item_buffer: *[1]T,
-            cp: u21,
-        ) []const T {
-            if (both(c.cp_packing == .shift, self.len == 1)) {
-                single_item_buffer[0] = self.data.shift.unshift(cp);
+pub fn sliceWith(self: *const @This(), backing: []const T, single_item_buffer: *[1]T, cp: u21) []const T {
+            if (both((c.cp_packing == .shift), (self.len == 1))) {
+                single_item_buffer[cp_cast_int(usize, 0)] = self.data.shift.unshift(cp);
                 return single_item_buffer[0..1];
             } else {
                 return self._slice(backing);
             }
-        }
+    }
 
-        pub const slice = if (c.cp_packing == .direct)
-            _slice
-        else
-            void_val;
-
-        // Note: while it would be better for modularity to pass `backing`
-        // in, this makes for a nicer API without having to wrap Slice.
-        const hardcoded_backing = get_mod.backingFor(c.name);
-
-        fn _value(self: *const Self) []const T {
+pub fn _value(self: *const @This()) []const T {
             return self._slice(hardcoded_backing);
-        }
+    }
 
-        pub fn with(
-            self: *const Self,
-            single_item_buffer: *[1]T,
-            cp: u21,
-        ) []const T {
+pub fn with(self: *const @This(), single_item_buffer: *[1]T, cp: u21) []const T {
             return self.sliceWith(hardcoded_backing, single_item_buffer, cp);
-        }
+    }
 
-        pub const value = if (c.cp_packing == .direct)
-            _value
-        else
-            void_val;
-
-        pub fn autoHash(self: Self, hasher: anytype) void {
-            // Repeat the two return cases, first with two `comptime` checks,
-            // then with a runtime if/else
-            std.hash.autoHash(hasher, self.len);
-            if (both(c.cp_packing == .shift, self.len == 1)) {
-                std.hash.autoHash(hasher, self.data.shift);
-            } else if (either(embedded_len == 0, self.len > embedded_len)) {
-                std.hash.autoHash(hasher, self.data.offset);
+pub fn autoHash(self: @This(), hasher: anytype) void {
+            _ = std.hash.autoHash(hasher, self.len);
+            if (both((c.cp_packing == .shift), (self.len == 1))) {
+                _ = std.hash.autoHash(hasher, self.data.shift);
             } else {
-                std.hash.autoHash(hasher, self.data.embedded);
+                if (either((embedded_len == 0), (self.len > embedded_len))) {
+                    _ = std.hash.autoHash(hasher, self.data.offset);
+                } else {
+                    _ = std.hash.autoHash(hasher, self.data.embedded);
+                }
             }
-        }
+    }
 
-        pub fn eql(a: Self, b: Self) bool {
-            if (a.len != b.len) {
+pub fn eql(a: Self, b: Self) bool {
+            if ((a.len != b.len)) {
                 return false;
             }
-            if (both(c.cp_packing == .shift, a.len == 1)) {
+            if (both((c.cp_packing == .shift), (a.len == 1))) {
                 return a.data.shift.eql(b.data.shift);
-            } else if (either(embedded_len == 0, a.len > embedded_len)) {
-                return a.data.offset == b.data.offset;
             } else {
-                return std.mem.eql(T, &a.data.embedded, &b.data.embedded);
-            }
-        }
-
-        pub fn write(self: Self, writer: *std.Io.Writer) !void {
-            try writer.print(
-                ".{{\n    .len = {},\n\n"
-            , .{self.len});
-
-            if (both(c.cp_packing == .shift, self.len == 1)) {
-                try writer.writeAll("    .data = .{ .shift = ");
-                try self.data.shift.write(writer);
-                try writer.writeAll("},\n");
-            } else if (either(embedded_len == 0, self.len > embedded_len)) {
-                try writer.print(
-                    "    .data = .{{ .offset = {} }},\n\n"
-                , .{self.data.offset});
-            } else {
-                try writer.writeAll(
-                    "    .data = .{ .embedded = .{\n"
-                );
-                for (self.data.embedded) |item| {
-                    try writeDataField(T, writer, item);
-                    try writer.writeAll(",");
+                if (either((embedded_len == 0), (a.len > embedded_len))) {
+                    return (a.data.offset == b.data.offset);
+                } else {
+                    return std.mem.eql(T, (&a.data.embedded), (&b.data.embedded));
                 }
-                try writer.writeAll(
-                    "} },\n\n"
-                );
             }
+    }
 
-            try writer.writeAll(
-                "}\n\n"
-            );
-        }
-    };
+pub fn write(self: @This(), writer: *std.Io.Writer) !void {
+            _ = try writer.print(".{{\n    .len = {},\n\n", .{ self.len });
+            if (both((c.cp_packing == .shift), (self.len == 1))) {
+                _ = try writer.writeAll("    .data = .{ .shift = ");
+                _ = try self.data.shift.write(writer);
+                _ = try writer.writeAll("},\n");
+            } else {
+                if (either((embedded_len == 0), (self.len > embedded_len))) {
+                    _ = try writer.print("    .data = .{{ .offset = {} }},\n\n", .{ self.data.offset });
+                } else {
+                    _ = try writer.writeAll("    .data = .{ .embedded = .{\n");
+                    for (self.data.embedded) |item| {
+                        _ = &item;
+                        _ = try writeDataField(T, writer, item);
+                        _ = try writer.writeAll(",");
+                    }
+                    _ = try writer.writeAll("} },\n\n");
+                }
+            }
+            _ = try writer.writeAll("}\n\n");
+    }
+    const Self = @This();
+    pub const T = @typeInfo(c.type).pointer.child;
+    const Offset = std.math.IntFittingRange(0, max_offset);
+    const ShiftSingleItem = (if ((c.cp_packing == .shift)) Shift(c, .unpacked) else void);
+    const Len = std.math.IntFittingRange(0, max_len);
+    pub const Tracking = SliceTracking(T, max_len);
+    pub const BackingBuffer = []const T;
+    pub const MutableBackingBuffer = []T;
+    pub const empty = Self{ .len = 0, .data = .{ .offset = 0 } };
+    pub const slice = (if ((c.cp_packing == .direct)) _slice else void_val);
+    const hardcoded_backing = get_mod.backingFor((if (@typeInfo(@TypeOf(c)) == .@"enum" or @typeInfo(@TypeOf(c)) == .@"union") @tagName(c) else c.name));
+    pub const value = (if ((c.cp_packing == .direct)) _value else void_val);
+};
 }
 
 pub fn SliceTracking(comptime T: type, comptime max_len: usize) type {
@@ -1267,6 +1193,7 @@ pub fn initOptional(cp: u21, o: ?u21) Self {
                 _ = &d;
                 return .init(cp, d);
             } else {
+                return .null;
             }
     }
 
@@ -1282,8 +1209,7 @@ pub fn _unshiftOptional(self: @This(), cp: u21) ?u21 {
             }
     }
 
-pub fn eql(self: @This(), a: Self, b: Self) bool {
-        _ = self;
+pub fn eql(a: Self, b: Self) bool {
             return (a.data == b.data);
     }
 

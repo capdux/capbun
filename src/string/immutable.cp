@@ -1,3 +1,5 @@
+import exact_size_matcher_mod from "./immutable/exact_size_matcher.zig";
+
 pub struct TextRange {
     offset: usize,
     len: usize,
@@ -2015,7 +2017,7 @@ pub fn moveSlice(slice: string, from_slice: string, to: string): string {
     return result;
 }
 
-pub const ExactSizeMatcher = @import("./immutable/exact_size_matcher.zig").ExactSizeMatcher;
+pub const ExactSizeMatcher = exact_size_matcher_mod.ExactSizeMatcher;
 
 pub const unicode_replacement = 0xFFFD;
 pub const unicode_replacement_str: [3]u8 = [ 0xEF, 0xBF, 0xBD ];

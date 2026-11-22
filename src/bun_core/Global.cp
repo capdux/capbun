@@ -71,7 +71,7 @@ pub inline fn getStartTime(): i128 {
 
 pub fn setThreadName(name: [:0]const u8) {
     if (Environment.isLinux) {
-        * = std.posix.prctl(.SET_NAME, [@intFromPtr(name.ptr)]) catch 0;
+        unsafe { * = std.posix.prctl(.SET_NAME, [@intFromPtr(name.ptr)]) catch 0; }
     } else if (Environment.isMac) {
         * = std.c.pthread_setname_np(name);
     } else if (Environment.isFreeBSD) {

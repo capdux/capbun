@@ -1,5 +1,5 @@
 // HTTP stream decompressor in pure CP language
-const bun = @import("bun");
+import bun from "bun";
 
 import { Encoding } from "../http_types/Encoding.cp";
 
@@ -94,7 +94,7 @@ export enum Decompressor {
                     body_out_str.list.expandToCapacity();
                 }
                 reader.list = body_out_str.list;
-                reader.zlib.next_out = @ptrCast(&body_out_str.list.items[initial]);
+                reader.zlib.next_out = unsafe { @ptrCast(&body_out_str.list.items[initial]) };
                 reader.zlib.avail_out = @as(u32, @truncate(body_out_str.list.capacity - initial));
                 reader.zlib.total_out = @truncate(initial);
             },

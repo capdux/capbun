@@ -862,7 +862,6 @@ pub struct RunCommand {
     }
 
     pub const Filter = _RunFilter;
-    const DirInfo = @import("../resolver/dir_info.zig");
     static fn configureEnvForRun(
         ctx: Command.Context,
         this_transpiler: *transpiler.Transpiler,
@@ -2085,7 +2084,6 @@ pub struct RunCommand {
 }
 
 pub struct BunXFastPath {
-    const shim_impl = @import("../install/windows-shim/bun_shim_impl.zig");
     const debug = Output.scoped(.BunXFastPath, .visible);
 
     static let direct_launch_buffer: bun.WPathBuffer = undefined;
@@ -2266,9 +2264,14 @@ import DotEnv from "../dotenv/env_loader.zig";
 import ShellCompletions from "./shell_completions.zig";
 import options from "../bundler/options.zig";
 import resolve_path from "../paths/resolve_path.zig";
-const PackageJSON = @import("../resolver/package_json.zig").PackageJSON;
-const which = @import("../which/which.zig").which;
-const yarn_commands = @import("./list-of-yarn-commands.zig").all_yarn_commands;
+import DirInfo from "../resolver/dir_info.zig";
+import shim_impl from "../install/windows-shim/bun_shim_impl.zig";
+import package_json_mod from "../resolver/package_json.zig";
+const PackageJSON = package_json_mod.PackageJSON;
+import which_mod from "../which/which.zig";
+const which = which_mod.which;
+import list_of_yarn_commands_mod from "./list-of-yarn-commands.zig";
+const yarn_commands = list_of_yarn_commands_mod.all_yarn_commands;
 const windows = std.os.windows;
 
 import bun from "bun";

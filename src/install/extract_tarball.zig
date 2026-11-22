@@ -63,6 +63,12 @@ fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .ar
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub const fs = @import("../resolver/fs.zig");
+const Integrity = @import("./integrity.zig").Integrity;
+const Resolution = @import("./resolution.zig").Resolution;
+pub const Install = @import("./install.zig");
+pub const Npm = @import("./npm.zig");
+pub const Zlib = @import("../zlib/zlib.zig");
 pub fn CloseGuard(comptime T: type) type {
     return struct {
         ptr: ?*T,
@@ -283,7 +289,6 @@ pub fn extract(self: ExtractTarball, log: *logger.Log, tgz_bytes: []const u8) !I
         var ___extract_dest_guard_moved = false; _ = &___extract_dest_guard_moved;
         defer if (!___extract_dest_guard_moved) { ___extract_dest_guard_moved = true; const __T = @TypeOf(_extract_dest_guard); if (@typeInfo(__T) == .optional) { if (_extract_dest_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _extract_dest_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _extract_dest_guard; _drop_val.__cp_deinit(); } };
         const Archiver = bun.libarchive.Archiver;
-        const Zlib = @import("../zlib/zlib.zig");
         var zlib_pool = Npm.Registry.BodyPool.get(default_allocator);
         _ = &zlib_pool;
         _ = zlib_pool.data.reset();
@@ -539,13 +544,9 @@ const Semver = bun.Semver;
 const default_allocator = bun.default_allocator;
 const logger = bun.logger;
 const strings = bun.strings;
-const FileSystem = @import("../resolver/fs.zig").FileSystem;
-const Integrity = @import("./integrity.zig").Integrity;
-const Resolution = @import("./resolution.zig").Resolution;
-const Install = @import("./install.zig");
+const FileSystem = fs.FileSystem;
 const DependencyID = Install.DependencyID;
 const PackageManager = Install.PackageManager;
-const Npm = @import("./npm.zig");
 const tl_bufs = bun.ThreadlocalBuffers(struct {
     final_path_buf: bun.PathBuffer = undefined,
     folder_name_buf: bun.PathBuffer = undefined,

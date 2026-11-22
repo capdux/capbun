@@ -7,6 +7,7 @@ import * as Error from "../../../s3_signing/error.zig";
 import * as Credentials from "../../../s3_signing/credentials.zig";
 import * as S3SimpleRequest from "./simple_request.zig";
 import * as S3ListObjects from "./list_objects.zig";
+import * as ResumableSinkMod from "../ResumableSink.zig";
 import bun from "bun";
 const default_allocator = bun.default_allocator;
 const handleOom = bun.handleOom;
@@ -419,7 +420,7 @@ export class S3UploadStreamWrapper {
     const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, .{});
     pub const ref = RefCount.ref;
     pub const deref = RefCount.deref;
-    pub const ResumableSink = @import("../ResumableSink.zig").ResumableS3UploadSink;
+    pub const ResumableSink = ResumableSinkMod.ResumableS3UploadSink;
 
     ref_count: RefCount;
     sink: (*ResumableSink)? = null;

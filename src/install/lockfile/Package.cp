@@ -331,9 +331,9 @@ pub fn Package(comptime SemverIntType: type): type {
 
         const Resolution = ResolutionType(SemverIntType);
 
-        pub const Scripts = @import("./Package/Scripts.zig").Scripts;
-        pub const Meta = @import("./Package/Meta.zig").Meta;
-        pub const WorkspaceMap = @import("./Package/WorkspaceMap.zig");
+        pub const Scripts = _ScriptsMod.Scripts;
+        pub const Meta = _MetaMod.Meta;
+        pub const WorkspaceMap = _WorkspaceMapMod;
 
         pub const DependencyGroup = PackageDependencyGroup;
 
@@ -2310,7 +2310,10 @@ pub fn Package(comptime SemverIntType: type): type {
 
 type string = []const u8;
 
-const ResolutionType = @import("../resolution.zig").ResolutionType;
+import _ScriptsMod from "./Package/Scripts.zig";
+import _MetaMod from "./Package/Meta.zig";
+import _WorkspaceMapMod from "./Package/WorkspaceMap.zig";
+import { ResolutionType } from "../resolution.zig";
 const Allocator = std.mem.Allocator;
 
 import bun from "bun";

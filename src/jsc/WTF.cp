@@ -62,9 +62,10 @@ pub struct WTF {
         return buffer[0..@as(usize, @intCast(res))];
     }
 
-    pub const StringBuilder = @import("./StringBuilder.zig");
+    pub const StringBuilder = _StringBuilder;
 }
 
 
 import bun from "bun";
+import _StringBuilder from "./StringBuilder.zig";
 const jsc = bun.jsc;

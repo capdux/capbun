@@ -1,10 +1,11 @@
 // Bun DNS JSC implementation in CP language
 // Converted from src/runtime/dns_jsc/dns.zig
 
-const std = @import("std");
+import std from "std";
 const Allocator = std.mem.Allocator;
 
-const bun = @import("bun");
+import bun from "bun";
+import cares_jsc from "./cares_jsc.zig";
 const Async = bun.Async;
 const Environment = bun.Environment;
 const Global = bun.Global;
@@ -1894,7 +1895,7 @@ pub struct internal {
 pub const InternalDNSRequest = internal.Request;
 
 comptime {
-    * = @import("./cares_jsc.zig");
+    * = cares_jsc;
     @export(&internal.us_getaddrinfo_set, .{ .name = "Bun__addrinfo_set" });
     @export(&internal.us_getaddrinfo_cancel, .{ .name = "Bun__addrinfo_cancel" });
     @export(&internal.us_getaddrinfo, .{ .name = "Bun__addrinfo_get" });

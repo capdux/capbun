@@ -2,8 +2,10 @@ import Environment from "./env.zig";
 import root from "root";
 import std from "std";
 import bun from "bun";
+import system_timer from "../perf/system_timer.zig";
+import fd_internals from "../sys/fd.zig";
 
-const SystemTimer = @import("../perf/system_timer.zig").Timer;
+const SystemTimer = system_timer.Timer;
 const ComptimeStringMap = bun.ComptimeStringMap;
 const Global = bun.Global;
 const c = bun.c;
@@ -378,7 +380,6 @@ struct WindowsStdio {
         const stdout = std.os.windows.GetStdHandle(std.os.windows.STD_OUTPUT_HANDLE) catch WindowsStdio.w.INVALID_HANDLE_VALUE;
         const stderr = std.os.windows.GetStdHandle(std.os.windows.STD_ERROR_HANDLE) catch WindowsStdio.w.INVALID_HANDLE_VALUE;
 
-        let fd_internals = @import("../sys/fd.zig");
         const INVALID_HANDLE_VALUE = std.os.windows.INVALID_HANDLE_VALUE;
         fd_internals.windows_cached_stderr = if (stderr != INVALID_HANDLE_VALUE) .fromSystem(stderr) else .invalid;
         fd_internals.windows_cached_stdout = if (stdout != INVALID_HANDLE_VALUE) .fromSystem(stdout) else .invalid;
@@ -418,8 +419,8 @@ struct WindowsStdio {
 }
 
 extern let bun_is_stdio_null: [3]i32;
-pub extern fn bun_initialize_process(): void;
-pub extern fn bun_restore_stdio(): void;
+pub extern fn bun_initialize_process();
+pub extern fn bun_restore_stdio();
 
 struct SourceStdio {
     pub static fn isStderrNull(): bool {

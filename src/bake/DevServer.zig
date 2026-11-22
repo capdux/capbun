@@ -107,6 +107,7 @@ pub const Assets = @import("./DevServer/Assets.zig");
 pub const SourceMapStore = @import("./DevServer/SourceMapStore.zig");
 pub const ErrorReportRequest = @import("./DevServer/ErrorReportRequest.zig");
 pub const bun = @import("bun");
+pub const IncrementalGraphMod = @import("./DevServer/IncrementalGraph.zig");
 pub const MagicDebug = enum(u128) {
     valid = 2305058228798446610,
     pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
@@ -1460,7 +1461,7 @@ pub const memoryCostArrayList = MemoryCost.memoryCostArrayList;
 pub const memoryCostSlice = MemoryCost.memoryCostSlice;
 const script_unref_payload = (((((((("<script>" ++ "((a)=>{") ++ "document.addEventListener('visibilitychange',") ++ "globalThis[Symbol.for('bun:loadData')]=()=>") ++ "document.visibilityState==='hidden'&&") ++ "navigator.sendBeacon('/_bun/unref',a)") ++ ");") ++ "})(document.querySelector('[data-bun-dev-server-script]').src.slice(-11,-3))") ++ "</script>");
 const debugLog = bun.Output.Scoped("DeferredRequest", .hidden).log;
-pub const IncrementalGraph = @import("./DevServer/IncrementalGraph.zig").IncrementalGraph;
+pub const IncrementalGraph = IncrementalGraphMod.IncrementalGraph;
 var dev_server_deinit_count_for_testing: usize = 0;
 const Environment = bun.Environment;
 const Output = bun.Output;

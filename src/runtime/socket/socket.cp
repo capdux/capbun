@@ -1,4 +1,12 @@
-pub const SocketAddress = @import("./SocketAddress.zig");
+import std from "std";
+import bun from "bun";
+import _SocketAddress from "./SocketAddress.zig";
+import _Handlers from "./Handlers.zig";
+import _Listener from "./Listener.zig";
+import tls_socket_functions from "./tls_socket_functions.zig";
+import _h2_frame_parser from "../api/bun/h2_frame_parser.zig";
+
+pub const SocketAddress = _SocketAddress;
 
 fn JSSocketType(comptime ssl: bool): type {
     if (!ssl) {
@@ -22,10 +30,10 @@ fn selectALPNCallback(ssl: (*BoringSSL.SSL)?, out: [*c][*c]const u8, outlen: [*c
     }
 }
 
-pub const Handlers = @import("./Handlers.zig");
+pub const Handlers = _Handlers;
 pub const SocketConfig = Handlers.SocketConfig;
 
-pub const Listener = @import("./Listener.zig");
+pub const Listener = _Listener;
 pub const WindowsNamedPipeContext = if (Environment.isWindows) @import("./WindowsNamedPipeContext.zig") else void;
 
 pub struct DerefGuard<T> {
@@ -2091,11 +2099,8 @@ pub fn jsSetSocketOptions(global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
     return JSValue.js_undefined;
 }
 
-const std = @import("std");
-const tls_socket_functions = @import("./tls_socket_functions.zig");
-const H2FrameParser = @import("../api/bun/h2_frame_parser.zig").H2FrameParser;
+const H2FrameParser = _h2_frame_parser.H2FrameParser;
 
-const bun = @import("bun");
 const Async = bun.Async;
 const Environment = bun.Environment;
 const Output = bun.Output;

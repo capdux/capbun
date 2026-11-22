@@ -64,10 +64,15 @@ fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .poi
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
+pub const bun = @import("bun");
 pub const DirInfo = @import("../resolver/dir_info.zig");
 pub const Options = @import("../bundler/options.zig");
 pub const URLPath = @import("../http_types/URLPath.zig");
 pub const Fs = @import("../resolver/fs.zig");
+pub const url_mod = @import("../url/url.zig");
+pub const route_types = @import("./route_types.zig");
+pub const ParamMapModule = @import("./ParamMap.zig");
+pub const RouteModule = @import("./Route.zig");
 pub const Routes = struct {
     list: RouteIndex.List = RouteIndex.List.empty,
     dynamic: []*Route = (&&.{}),
@@ -473,7 +478,6 @@ pub const MatchContextType = RouteModule.MatchContextType;
 pub const MatchContextTypePtr = RouteModule.MatchContextTypePtr;
 pub const RoutePtr = *Route;
 const DedupeDynamicMap = std.AutoArrayHashMap(u32, string);
-const bun = @import("bun");
 const Environment = bun.Environment;
 const FD = bun.FD;
 const HashedString = bun.HashedString;
@@ -484,14 +488,11 @@ const api = bun.schema.api;
 const strings = bun.strings;
 const CodepointIterator = bun.strings.CodepointIterator;
 const FileSystem = Fs.FileSystem;
-const PathnameScanner = @import("../url/url.zig").PathnameScanner;
-const route_types = @import("./route_types.zig");
+const PathnameScanner = url_mod.PathnameScanner;
 pub const index_route_hash = route_types.index_route_hash;
 pub const banned_dirs = route_types.banned_dirs;
 pub const PatternValidationResult = route_types.PatternValidationResult;
-const ParamMapModule = @import("./ParamMap.zig");
 pub const ParamList = ParamMapModule.ParamList;
-const RouteModule = @import("./Route.zig");
 pub const RouteSorter = RouteModule.RouteSorter;
 pub const RouteIndexList = RouteModule.RouteIndexList;
 threadlocal var params_list: Param.List = undefined;

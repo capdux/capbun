@@ -80,6 +80,7 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 pub const interpret = @import("./interpreter.zig");
 pub const subproc = @import("./subproc.zig");
 pub const AllocScope = @import("./AllocScope.zig");
+pub const YieldMod = @import("./Yield.zig");
 pub const Syscall = @import("../sys/sys.zig");
 pub const builtin = @import("builtin");
 pub const bun = @import("bun");
@@ -2881,7 +2882,7 @@ pub const Subprocess = subproc.ShellSubprocess;
 pub const ExitCode = interpret.ExitCode;
 pub const IOWriter = Interpreter.IOWriter;
 pub const IOReader = Interpreter.IOReader;
-pub const Yield = @import("./Yield.zig").Yield;
+pub const Yield = YieldMod.Yield;
 pub const unreachableState = interpret.unreachableState;
 const GlobWalker = bun.glob.GlobWalker(null, true);
 pub const SUBSHELL_TODO_ERROR = "Subshells are not implemented, please open GitHub issue!";
@@ -2917,7 +2918,7 @@ const SPECIAL_CHARS_TABLE: bun.bit_set.IntegerBitSet(256) = brk: {
     break :brk table;
 };
 const BACKSLASHABLE_CHARS = .{ 36, 96, 34, 92 };
-pub const ShellSubprocess = @import("./subproc.zig").ShellSubprocess;
+pub const ShellSubprocess = subproc.ShellSubprocess;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.array_list.Managed;
 const assert = bun.assert;

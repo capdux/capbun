@@ -63,6 +63,10 @@ fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .poi
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
+pub const _ScriptsMod = @import("./Package/Scripts.zig");
+pub const _MetaMod = @import("./Package/Meta.zig");
+pub const _WorkspaceMapMod = @import("./Package/WorkspaceMap.zig");
+const ResolutionType = @import("../resolution.zig").ResolutionType;
 pub const bun = @import("bun");
 pub const PackageDiffOp = enum {
     add,
@@ -350,7 +354,6 @@ pub fn loadFields(stream: *Stream, end_at: u64, comptime ListType: type, list: *
 }
 
 const string = []const u8;
-const ResolutionType = @import("../resolution.zig").ResolutionType;
 const Allocator = std.mem.Allocator;
 const ArrayIdentityContext = bun.ArrayIdentityContext;
 const Environment = bun.Environment;
@@ -1547,9 +1550,9 @@ else => .init(.uninitialized),
     }
     const PackageType = @This();
     const Resolution = ResolutionType(SemverIntType);
-    pub const Scripts = @import("./Package/Scripts.zig").Scripts;
-    pub const Meta = @import("./Package/Meta.zig").Meta;
-    pub const WorkspaceMap = @import("./Package/WorkspaceMap.zig");
+    pub const Scripts = _ScriptsMod.Scripts;
+    pub const Meta = _MetaMod.Meta;
+    pub const WorkspaceMap = _WorkspaceMapMod;
     pub const DependencyGroup = PackageDependencyGroup;
     pub const Alphabetizer = PackageAlphabetizer(Resolution);
     const debug = Output.scoped(.Lockfile, .hidden);

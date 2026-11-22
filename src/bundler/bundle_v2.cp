@@ -484,7 +484,7 @@ pub struct BundleV2 {
         ct.setAllocator(alloc);
         ct.linker.resolver = &ct.resolver;
         ct.macro_context = js_ast.Macro.MacroContext.init(ct);
-        const CacheSet = @import("./cache.zig");
+        const CacheSet = cache_mod;
         ct.resolver.caches = CacheSet.Set.init(alloc);
 
         ct.configureDefines()?;
@@ -2009,14 +2009,14 @@ pub struct BundleV2 {
         }
     }
 
-    pub const JSBundleThread = @import("../bundler_jsc/JSBundleCompletionTask.zig").JSBundleThread;
-    pub const createAndScheduleCompletionTask = @import("../bundler_jsc/JSBundleCompletionTask.zig").createAndScheduleCompletionTask;
-    pub const generateFromJavaScript = @import("../bundler_jsc/JSBundleCompletionTask.zig").generateFromJavaScript;
+    pub const JSBundleThread = js_bundle_completion_mod.JSBundleThread;
+    pub const createAndScheduleCompletionTask = js_bundle_completion_mod.createAndScheduleCompletionTask;
+    pub const generateFromJavaScript = js_bundle_completion_mod.generateFromJavaScript;
 
     pub const BuildResult = BuildResult_;
     pub const Result = BundleResult_;
 
-    pub const JSBundleCompletionTask = @import("../bundler_jsc/JSBundleCompletionTask.zig").JSBundleCompletionTask;
+    pub const JSBundleCompletionTask = js_bundle_completion_mod.JSBundleCompletionTask;
 
     fn onLoadAsync(*_, load: *bun.jsc.API.JSBundler.Load) {
         switch (_.loop().*) {
@@ -3960,11 +3960,11 @@ pub struct BundleV2 {
     }
 }
 
-pub const BundleThread = @import("./BundleThread.zig").BundleThread;
+pub const BundleThread = bundle_thread_mod.BundleThread;
 
 pub const UseDirective = js_ast.UseDirective;
 pub const ServerComponentBoundary = js_ast.ServerComponentBoundary;
-pub const ServerComponentParseTask = @import("./ServerComponentParseTask.zig").ServerComponentParseTask;
+pub const ServerComponentParseTask = server_component_parse_task_mod.ServerComponentParseTask;
 
 const RefVoidMap = std.ArrayHashMapUnmanaged(Ref, void, Ref.ArrayHashCtx, false);
 pub const RefImportData = std.ArrayHashMapUnmanaged(Ref, ImportData, Ref.ArrayHashCtx, false);
@@ -4260,8 +4260,8 @@ pub struct ImportTrackerIterator_ {
 
 pub const PathTemplate = options.PathTemplate;
 
-pub const Chunk = @import("./Chunk.zig").Chunk;
-pub const ChunkImport = @import("./Chunk.zig").ChunkImport;
+pub const Chunk = chunk_mod.Chunk;
+pub const ChunkImport = chunk_mod.ChunkImport;
 
 pub struct CrossChunkImportItem_ {
     export_alias: string = "",
@@ -4506,7 +4506,7 @@ pub fn targetFromHashbang(buffer: []const u8): options.Target? {
     return null;
 }
 
-pub const AstBuilder = @import("./AstBuilder.zig").AstBuilder;
+pub const AstBuilder = ast_builder_mod.AstBuilder;
 
 pub struct CssEntryPointMeta {
     /// When this is true, a stub file is added to the Server's IncrementalGraph
@@ -4626,8 +4626,8 @@ pub const OOM = bun.OOM;
 import HTMLScanner from "./HTMLScanner.zig";
 pub const isPackagePath = _resolver.isPackagePath;
 import NodeFallbackModules from "../resolver/node_fallbacks.zig";
-pub const CacheEntry = @import("./cache.zig").Fs.Entry;
-pub const URL = @import("../url/url.zig").URL;
+pub const CacheEntry = cache_mod.Fs.Entry;
+pub const URL = url_mod.URL;
 pub const Resolver = _resolver.Resolver;
 pub const TOML = bun.interchange.toml.TOML;
 pub const Dependency = js_ast.Dependency;
@@ -4657,14 +4657,26 @@ pub const Async = bun.Async;
 pub const Loc = Logger.Loc;
 pub const bake = bun.bake;
 pub const lol = bun.LOLHTML;
-pub const DataURL = @import("../resolver/resolver.zig").DataURL;
+pub const DataURL = _resolver.DataURL;
 import IndexStringMap from "./IndexStringMap.zig";
-pub const DeferredBatchTask = @import("./DeferredBatchTask.zig").DeferredBatchTask;
-pub const ThreadPool = @import("./ThreadPool.zig").ThreadPool;
-pub const ParseTask = @import("./ParseTask.zig").ParseTask;
-pub const LinkerContext = @import("./LinkerContext.zig").LinkerContext;
-pub const LinkerGraph = @import("./LinkerGraph.zig").LinkerGraph;
+pub const DeferredBatchTask = deferred_batch_task_mod.DeferredBatchTask;
+pub const ThreadPool = thread_pool_mod.ThreadPool;
+pub const ParseTask = parse_task_mod.ParseTask;
+pub const LinkerContext = linker_context_mod.LinkerContext;
+pub const LinkerGraph = linker_graph_mod.LinkerGraph;
 import Graph from "./Graph.zig";
+import cache_mod from "./cache.zig";
+import js_bundle_completion_mod from "../bundler_jsc/JSBundleCompletionTask.zig";
+import bundle_thread_mod from "./BundleThread.zig";
+import server_component_parse_task_mod from "./ServerComponentParseTask.zig";
+import chunk_mod from "./Chunk.zig";
+import ast_builder_mod from "./AstBuilder.zig";
+import url_mod from "../url/url.zig";
+import deferred_batch_task_mod from "./DeferredBatchTask.zig";
+import thread_pool_mod from "./ThreadPool.zig";
+import parse_task_mod from "./ParseTask.zig";
+import linker_context_mod from "./LinkerContext.zig";
+import linker_graph_mod from "./LinkerGraph.zig";
 
 
 // C++ binding for lazy metafile getter (defined in BundlerMetafile.cpp)

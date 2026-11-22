@@ -1,8 +1,9 @@
 // src/http/AsyncHTTP.cp
 // Fast asynchronous HTTP task orchestration in CP language
 
-const bun = @import("bun");
-pub const PercentEncoding = @import("../url/url.zig").PercentEncoding;
+import bun from "bun";
+import * as url_mod from "../url/url.zig";
+pub const PercentEncoding = url_mod.PercentEncoding;
 
 import { Headers } from "./Headers.cp";
 import { HTTPThread } from "./HTTPThread.cp";

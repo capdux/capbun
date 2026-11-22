@@ -64,6 +64,9 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 
 pub const bun = @import("bun");
 pub const Fs = @import("../resolver/fs.zig");
+pub const url_mod = @import("../url/url.zig");
+pub const route_types = @import("./route_types.zig");
+pub const ParamMapModule = @import("./ParamMap.zig");
 pub const FileCloseGuard = struct {
     file: *std.fs.File,
     needs_close: *bool,
@@ -351,11 +354,9 @@ const default_allocator = bun.default_allocator;
 const api = bun.schema.api;
 const strings = bun.strings;
 const FileSystem = Fs.FileSystem;
-const PathnameScanner = @import("../url/url.zig").PathnameScanner;
-const route_types = @import("./route_types.zig");
+const PathnameScanner = url_mod.PathnameScanner;
 pub const index_route_hash = route_types.index_route_hash;
 pub const PatternValidationResult = route_types.PatternValidationResult;
-const ParamMapModule = @import("./ParamMap.zig");
 pub const ParamList = ParamMapModule.ParamList;
 pub const RouteIndexList = RouteIndex.List;
 

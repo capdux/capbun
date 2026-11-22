@@ -1,5 +1,6 @@
 import bun from "bun";
 import std from "std";
+import fd_jsc from "../sys_jsc/fd_jsc.zig";
 
 const Environment = bun.Environment;
 const allow_assert = Environment.allow_assert;
@@ -413,10 +414,10 @@ else
             return result;
         }
 
-        pub const fromJS = @import("../sys_jsc/fd_jsc.zig").fromJS;
-        pub const fromJSValidated = @import("../sys_jsc/fd_jsc.zig").fromJSValidated;
-        pub const toJS = @import("../sys_jsc/fd_jsc.zig").toJS;
-        pub const toJSWithoutMakingLibUVOwned = @import("../sys_jsc/fd_jsc.zig").toJSWithoutMakingLibUVOwned;
+        pub const fromJS = fd_jsc.fromJS;
+        pub const fromJSValidated = fd_jsc.fromJSValidated;
+        pub const toJS = fd_jsc.toJS;
+        pub const toJSWithoutMakingLibUVOwned = fd_jsc.toJSWithoutMakingLibUVOwned;
 
         pub const Stdio = FDStdio;
         fn stdioTag(): Stdio? {

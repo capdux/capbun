@@ -1846,10 +1846,10 @@ pub extern fn PKCS7_get_PEM_CRLs(out_crls: (*struct_stack_st_X509_CRL)?, pem_bio
     cert: Opt__struct_stack_st_X509,
     crl: Opt__struct_stack_st_X509_CRL,
 }
-pub const PKCS7_ENVELOPE = anyopaque;
-pub const PKCS7_DIGEST = anyopaque;
-pub const PKCS7_ENCRYPT = anyopaque;
-pub const PKCS7_SIGNER_INFO = anyopaque;
+@opaque pub struct PKCS7_ENVELOPE {}
+@opaque pub struct PKCS7_DIGEST {}
+@opaque pub struct PKCS7_ENCRYPT {}
+@opaque pub struct PKCS7_SIGNER_INFO {}
 @c union union_unnamed_7 {
     ptr: [*c]u8,
     data: [*c]ASN1_OCTET_STRING,
@@ -6674,7 +6674,7 @@ pub extern fn d2i_PKCS8PrivateKey_bio(bp: [*c]BIO, x: [*c][*c]EVP_PKEY, cb: (*co
 // pub extern fn d2i_PKCS8PrivateKey_fp(fp: [*c]FILE, x: [*c][*c]EVP_PKEY, cb: (*const pem_password_cb)?, u: *!?) [*c]EVP_PKEY;
 // pub extern fn PEM_write_PKCS8PrivateKey(fp: [*c]FILE, x: [*c]EVP_PKEY, enc: (*const EVP_CIPHER)?, kstr: [*c]u8, klen: c_int, cd: (*const pem_password_cb)?, u: *!?) c_int;
 
-pub extern fn HMAC(evp_md: *const EVP_MD, key: *const anyopaque, key_len: usize, data: [*]const u8, data_len: usize, out: [*]u8, out_len: *c_uint): ([*]u8)?;
+pub extern fn HMAC(evp_md: *const EVP_MD, key: *const !, key_len: usize, data: [*]const u8, data_len: usize, out: [*]u8, out_len: *c_uint): ([*]u8)?;
 pub extern fn HMAC_CTX_init(ctx: [*c]HMAC_CTX);
 pub extern fn HMAC_CTX_new(): [*c]HMAC_CTX;
 pub extern fn HMAC_CTX_cleanup(ctx: [*c]HMAC_CTX);
@@ -7534,7 +7534,7 @@ pub extern fn SSL_library_init(): c_int;
 pub extern fn SSL_CIPHER_description(cipher: (*const SSL_CIPHER)?, buf: [*c]u8, len: c_int): [*c]const u8;
 pub extern fn SSL_CIPHER_get_version(cipher: (*const SSL_CIPHER)?): [*c]const u8;
 pub extern fn SSL_CIPHER_get_rfc_name(cipher: (*const SSL_CIPHER)?): [*c]u8;
-pub const COMP_METHOD = anyopaque;
+@opaque pub struct COMP_METHOD {}
 @c pub struct struct_ssl_comp_st {
     id: c_int,
     name: [*c]const u8,
@@ -7894,7 +7894,7 @@ pub const OPENSSL_APPLE = "";
 pub const OPENSSL_MACOS = "";
 pub const OPENSSL_THREADS = "";
 pub const OPENSSL_IS_BORINGSSL = "";
-pub const OPENSSL_VERSION_NUMBER = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x1010107f, .hex);
+pub const OPENSSL_VERSION_NUMBER = std.zig.c_translation.promoteIntLiteral(c_int, 0x1010107f, .hex);
 pub const SSLEAY_VERSION_NUMBER = OPENSSL_VERSION_NUMBER;
 pub const BORINGSSL_API_VERSION = @as(c_int, 18);
 pub const OPENSSL_EXPORT = "";
@@ -7928,7 +7928,7 @@ pub const __SNPT = @as(c_int, 0x0800);
 pub const __SOFF = @as(c_int, 0x1000);
 pub const __SMOD = @as(c_int, 0x2000);
 pub const __SALC = @as(c_int, 0x4000);
-pub const __SIGN = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x8000, .hex);
+pub const __SIGN = std.zig.c_translation.promoteIntLiteral(c_int, 0x8000, .hex);
 pub const _IOFBF = @as(c_int, 0);
 pub const _IOLBF = @as(c_int, 1);
 pub const _IONBF = @as(c_int, 2);
@@ -7938,7 +7938,7 @@ pub const FOPEN_MAX = @as(c_int, 20);
 pub const FILENAME_MAX = @as(c_int, 1024);
 pub const P_tmpdir = "/var/tmp/";
 pub const L_tmpnam = @as(c_int, 1024);
-pub const TMP_MAX = @import("std").zig.c_translation.promoteIntLiteral(c_int, 308915776, .decimal);
+pub const TMP_MAX = std.zig.c_translation.promoteIntLiteral(c_int, 308915776, .decimal);
 pub const SEEK_SET = @as(c_int, 0);
 pub const SEEK_CUR = @as(c_int, 1);
 pub const SEEK_END = @as(c_int, 2);
@@ -7952,13 +7952,13 @@ pub const OPENSSL_HEADER_ERR_H = "";
 pub inline fn ERR_GET_LIB(packed_error: anytype): c_int {
     unsafe {
 
-    return @import("std").zig.c_translation.cast(c_int, (packed_error >> @as(c_int, 24)) & @as(c_int, 0xff));
+    return std.zig.c_translation.cast(c_int, (packed_error >> @as(c_int, 24)) & @as(c_int, 0xff));
     }
 }
 pub inline fn ERR_GET_REASON(packed_error: anytype): c_int {
     unsafe {
 
-    return @import("std").zig.c_translation.cast(c_int, packed_error & @as(c_int, 0xfff));
+    return std.zig.c_translation.cast(c_int, packed_error & @as(c_int, 0xfff));
     }
 }
 pub const ERR_FLAG_STRING = @as(c_int, 1);
@@ -8012,10 +8012,10 @@ pub inline fn ERR_GET_FUNC(packed_error: anytype): @TypeOf(@as(c_int, 0)) {
 pub const ERR_TXT_STRING = ERR_FLAG_STRING;
 pub const ERR_TXT_MALLOCED = ERR_FLAG_MALLOCED;
 pub const ERR_NUM_ERRORS = @as(c_int, 16);
-pub inline fn ERR_PACK(lib: anytype, reason: anytype): @TypeOf(((@import("std").zig.c_translation.cast(u32, lib) & @as(c_int, 0xff)) << @as(c_int, 24)) | (@import("std").zig.c_translation.cast(u32, reason) & @as(c_int, 0xfff))) {
+pub inline fn ERR_PACK(lib: anytype, reason: anytype): @TypeOf(((std.zig.c_translation.cast(u32, lib) & @as(c_int, 0xff)) << @as(c_int, 24)) | (std.zig.c_translation.cast(u32, reason) & @as(c_int, 0xfff))) {
     unsafe {
 
-    return ((@import("std").zig.c_translation.cast(u32, lib) & @as(c_int, 0xff)) << @as(c_int, 24)) | (@import("std").zig.c_translation.cast(u32, reason) & @as(c_int, 0xfff));
+    return ((std.zig.c_translation.cast(u32, lib) & @as(c_int, 0xff)) << @as(c_int, 24)) | (std.zig.c_translation.cast(u32, reason) & @as(c_int, 0xfff));
     }
 }
 pub const OPENSSL_HEADER_EX_DATA_H = "";
@@ -18618,8 +18618,8 @@ pub const B_ASN1_BMPSTRING = @as(c_int, 0x0800);
 pub const B_ASN1_UNKNOWN = @as(c_int, 0x1000);
 pub const B_ASN1_UTF8STRING = @as(c_int, 0x2000);
 pub const B_ASN1_UTCTIME = @as(c_int, 0x4000);
-pub const B_ASN1_GENERALIZEDTIME = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x8000, .hex);
-pub const B_ASN1_SEQUENCE = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x10000, .hex);
+pub const B_ASN1_GENERALIZEDTIME = std.zig.c_translation.promoteIntLiteral(c_int, 0x8000, .hex);
+pub const B_ASN1_SEQUENCE = std.zig.c_translation.promoteIntLiteral(c_int, 0x10000, .hex);
 pub inline fn ASN1_ITEM_ptr(iptr: anytype): @TypeOf(iptr) {
     unsafe {
 
@@ -19158,7 +19158,7 @@ pub const RSA_FLAG_OPAQUE = @as(c_int, 1);
 pub const RSA_FLAG_NO_BLINDING = @as(c_int, 8);
 pub const RSA_FLAG_EXT_PKEY = @as(c_int, 0x20);
 pub const RSA_3 = @as(c_int, 0x3);
-pub const RSA_F4 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x10001, .hex);
+pub const RSA_F4 = std.zig.c_translation.promoteIntLiteral(c_int, 0x10001, .hex);
 pub const RSA_METHOD_FLAG_NO_CHECK = RSA_FLAG_OPAQUE;
 pub const RSA_R_BAD_ENCODING = @as(c_int, 100);
 pub const RSA_R_BAD_E_VALUE = @as(c_int, 101);
@@ -19258,8 +19258,8 @@ pub const X509v3_KU_KEY_AGREEMENT = @as(c_int, 0x0008);
 pub const X509v3_KU_KEY_CERT_SIGN = @as(c_int, 0x0004);
 pub const X509v3_KU_CRL_SIGN = @as(c_int, 0x0002);
 pub const X509v3_KU_ENCIPHER_ONLY = @as(c_int, 0x0001);
-pub const X509v3_KU_DECIPHER_ONLY = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x8000, .hex);
-pub const X509v3_KU_UNDEF = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0xffff, .hex);
+pub const X509v3_KU_DECIPHER_ONLY = std.zig.c_translation.promoteIntLiteral(c_int, 0x8000, .hex);
+pub const X509v3_KU_UNDEF = std.zig.c_translation.promoteIntLiteral(c_int, 0xffff, .hex);
 pub const X509_TRUST_DEFAULT = -@as(c_int, 1);
 pub const X509_TRUST_COMPAT = @as(c_int, 1);
 pub const X509_TRUST_SSL_CLIENT = @as(c_int, 2);
@@ -19313,16 +19313,16 @@ pub const X509_LU_CRL = @as(c_int, 2);
 pub const X509_LU_PKEY = @as(c_int, 3);
 pub const X509_L_FILE_LOAD = @as(c_int, 1);
 pub const X509_L_ADD_DIR = @as(c_int, 2);
-pub inline fn X509_LOOKUP_load_file(x: anytype, name: anytype, @"type": anytype): @TypeOf(X509_LOOKUP_ctrl(x, X509_L_FILE_LOAD, name, @import("std").zig.c_translation.cast(c_long, @"type"), NULL)) {
+pub inline fn X509_LOOKUP_load_file(x: anytype, name: anytype, @"type": anytype): @TypeOf(X509_LOOKUP_ctrl(x, X509_L_FILE_LOAD, name, std.zig.c_translation.cast(c_long, @"type"), NULL)) {
     unsafe {
 
-    return X509_LOOKUP_ctrl(x, X509_L_FILE_LOAD, name, @import("std").zig.c_translation.cast(c_long, @"type"), NULL);
+    return X509_LOOKUP_ctrl(x, X509_L_FILE_LOAD, name, std.zig.c_translation.cast(c_long, @"type"), NULL);
     }
 }
-pub inline fn X509_LOOKUP_add_dir(x: anytype, name: anytype, @"type": anytype): @TypeOf(X509_LOOKUP_ctrl(x, X509_L_ADD_DIR, name, @import("std").zig.c_translation.cast(c_long, @"type"), NULL)) {
+pub inline fn X509_LOOKUP_add_dir(x: anytype, name: anytype, @"type": anytype): @TypeOf(X509_LOOKUP_ctrl(x, X509_L_ADD_DIR, name, std.zig.c_translation.cast(c_long, @"type"), NULL)) {
     unsafe {
 
-    return X509_LOOKUP_ctrl(x, X509_L_ADD_DIR, name, @import("std").zig.c_translation.cast(c_long, @"type"), NULL);
+    return X509_LOOKUP_ctrl(x, X509_L_ADD_DIR, name, std.zig.c_translation.cast(c_long, @"type"), NULL);
     }
 }
 pub const X509_V_OK = @as(c_int, 0);
@@ -19409,10 +19409,10 @@ pub const X509_V_FLAG_NOTIFY_POLICY = @as(c_int, 0x800);
 pub const X509_V_FLAG_EXTENDED_CRL_SUPPORT = @as(c_int, 0x1000);
 pub const X509_V_FLAG_USE_DELTAS = @as(c_int, 0x2000);
 pub const X509_V_FLAG_CHECK_SS_SIGNATURE = @as(c_int, 0x4000);
-pub const X509_V_FLAG_TRUSTED_FIRST = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x8000, .hex);
-pub const X509_V_FLAG_PARTIAL_CHAIN = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x80000, .hex);
-pub const X509_V_FLAG_NO_ALT_CHAINS = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x100000, .hex);
-pub const X509_V_FLAG_NO_CHECK_TIME = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x200000, .hex);
+pub const X509_V_FLAG_TRUSTED_FIRST = std.zig.c_translation.promoteIntLiteral(c_int, 0x8000, .hex);
+pub const X509_V_FLAG_PARTIAL_CHAIN = std.zig.c_translation.promoteIntLiteral(c_int, 0x80000, .hex);
+pub const X509_V_FLAG_NO_ALT_CHAINS = std.zig.c_translation.promoteIntLiteral(c_int, 0x100000, .hex);
+pub const X509_V_FLAG_NO_CHECK_TIME = std.zig.c_translation.promoteIntLiteral(c_int, 0x200000, .hex);
 pub const X509_VP_FLAG_DEFAULT = @as(c_int, 0x1);
 pub const X509_VP_FLAG_OVERWRITE = @as(c_int, 0x2);
 pub const X509_VP_FLAG_RESET_FLAGS = @as(c_int, 0x4);
@@ -19549,35 +19549,35 @@ pub const PEM_R_UNSUPPORTED_ENCRYPTION = @as(c_int, 114);
 pub const OPENSSL_HEADER_SSL3_H = "";
 pub const SSL2_MT_CLIENT_HELLO = @as(c_int, 1);
 pub const SSL2_VERSION = @as(c_int, 0x0002);
-pub const SSL3_CK_SCSV = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x030000FF, .hex);
-pub const SSL3_CK_FALLBACK_SCSV = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03005600, .hex);
-pub const SSL3_CK_RSA_NULL_MD5 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000001, .hex);
-pub const SSL3_CK_RSA_NULL_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000002, .hex);
-pub const SSL3_CK_RSA_RC4_40_MD5 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000003, .hex);
-pub const SSL3_CK_RSA_RC4_128_MD5 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000004, .hex);
-pub const SSL3_CK_RSA_RC4_128_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000005, .hex);
-pub const SSL3_CK_RSA_RC2_40_MD5 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000006, .hex);
-pub const SSL3_CK_RSA_IDEA_128_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000007, .hex);
-pub const SSL3_CK_RSA_DES_40_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000008, .hex);
-pub const SSL3_CK_RSA_DES_64_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000009, .hex);
-pub const SSL3_CK_RSA_DES_192_CBC3_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300000A, .hex);
-pub const SSL3_CK_DH_DSS_DES_40_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300000B, .hex);
-pub const SSL3_CK_DH_DSS_DES_64_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300000C, .hex);
-pub const SSL3_CK_DH_DSS_DES_192_CBC3_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300000D, .hex);
-pub const SSL3_CK_DH_RSA_DES_40_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300000E, .hex);
-pub const SSL3_CK_DH_RSA_DES_64_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300000F, .hex);
-pub const SSL3_CK_DH_RSA_DES_192_CBC3_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000010, .hex);
-pub const SSL3_CK_EDH_DSS_DES_40_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000011, .hex);
-pub const SSL3_CK_EDH_DSS_DES_64_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000012, .hex);
-pub const SSL3_CK_EDH_DSS_DES_192_CBC3_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000013, .hex);
-pub const SSL3_CK_EDH_RSA_DES_40_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000014, .hex);
-pub const SSL3_CK_EDH_RSA_DES_64_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000015, .hex);
-pub const SSL3_CK_EDH_RSA_DES_192_CBC3_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000016, .hex);
-pub const SSL3_CK_ADH_RC4_40_MD5 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000017, .hex);
-pub const SSL3_CK_ADH_RC4_128_MD5 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000018, .hex);
-pub const SSL3_CK_ADH_DES_40_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000019, .hex);
-pub const SSL3_CK_ADH_DES_64_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300001A, .hex);
-pub const SSL3_CK_ADH_DES_192_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300001B, .hex);
+pub const SSL3_CK_SCSV = std.zig.c_translation.promoteIntLiteral(c_int, 0x030000FF, .hex);
+pub const SSL3_CK_FALLBACK_SCSV = std.zig.c_translation.promoteIntLiteral(c_int, 0x03005600, .hex);
+pub const SSL3_CK_RSA_NULL_MD5 = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000001, .hex);
+pub const SSL3_CK_RSA_NULL_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000002, .hex);
+pub const SSL3_CK_RSA_RC4_40_MD5 = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000003, .hex);
+pub const SSL3_CK_RSA_RC4_128_MD5 = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000004, .hex);
+pub const SSL3_CK_RSA_RC4_128_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000005, .hex);
+pub const SSL3_CK_RSA_RC2_40_MD5 = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000006, .hex);
+pub const SSL3_CK_RSA_IDEA_128_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000007, .hex);
+pub const SSL3_CK_RSA_DES_40_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000008, .hex);
+pub const SSL3_CK_RSA_DES_64_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000009, .hex);
+pub const SSL3_CK_RSA_DES_192_CBC3_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300000A, .hex);
+pub const SSL3_CK_DH_DSS_DES_40_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300000B, .hex);
+pub const SSL3_CK_DH_DSS_DES_64_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300000C, .hex);
+pub const SSL3_CK_DH_DSS_DES_192_CBC3_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300000D, .hex);
+pub const SSL3_CK_DH_RSA_DES_40_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300000E, .hex);
+pub const SSL3_CK_DH_RSA_DES_64_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300000F, .hex);
+pub const SSL3_CK_DH_RSA_DES_192_CBC3_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000010, .hex);
+pub const SSL3_CK_EDH_DSS_DES_40_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000011, .hex);
+pub const SSL3_CK_EDH_DSS_DES_64_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000012, .hex);
+pub const SSL3_CK_EDH_DSS_DES_192_CBC3_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000013, .hex);
+pub const SSL3_CK_EDH_RSA_DES_40_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000014, .hex);
+pub const SSL3_CK_EDH_RSA_DES_64_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000015, .hex);
+pub const SSL3_CK_EDH_RSA_DES_192_CBC3_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000016, .hex);
+pub const SSL3_CK_ADH_RC4_40_MD5 = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000017, .hex);
+pub const SSL3_CK_ADH_RC4_128_MD5 = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000018, .hex);
+pub const SSL3_CK_ADH_DES_40_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000019, .hex);
+pub const SSL3_CK_ADH_DES_64_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300001A, .hex);
+pub const SSL3_CK_ADH_DES_192_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300001B, .hex);
 pub const SSL3_TXT_RSA_NULL_MD5 = "NULL-MD5";
 pub const SSL3_TXT_RSA_NULL_SHA = "NULL-SHA";
 pub const SSL3_TXT_RSA_RC4_40_MD5 = "EXP-RC4-MD5";
@@ -19702,7 +19702,7 @@ pub const TLSEXT_TYPE_srtp = @as(c_int, 14);
 pub const TLSEXT_TYPE_application_layer_protocol_negotiation = @as(c_int, 16);
 pub const TLSEXT_TYPE_padding = @as(c_int, 21);
 pub const TLSEXT_TYPE_extended_master_secret = @as(c_int, 23);
-pub const TLSEXT_TYPE_quic_transport_parameters_legacy = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0xffa5, .hex);
+pub const TLSEXT_TYPE_quic_transport_parameters_legacy = std.zig.c_translation.promoteIntLiteral(c_int, 0xffa5, .hex);
 pub const TLSEXT_TYPE_quic_transport_parameters = @as(c_int, 57);
 pub const TLSEXT_TYPE_quic_transport_parameters_standard = TLSEXT_TYPE_quic_transport_parameters;
 pub const TLSEXT_TYPE_cert_compression = @as(c_int, 27);
@@ -19716,11 +19716,11 @@ pub const TLSEXT_TYPE_psk_key_exchange_modes = @as(c_int, 45);
 pub const TLSEXT_TYPE_certificate_authorities = @as(c_int, 47);
 pub const TLSEXT_TYPE_signature_algorithms_cert = @as(c_int, 50);
 pub const TLSEXT_TYPE_key_share = @as(c_int, 51);
-pub const TLSEXT_TYPE_renegotiate = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0xff01, .hex);
+pub const TLSEXT_TYPE_renegotiate = std.zig.c_translation.promoteIntLiteral(c_int, 0xff01, .hex);
 pub const TLSEXT_TYPE_delegated_credential = @as(c_int, 0x22);
 pub const TLSEXT_TYPE_application_settings = @as(c_int, 17513);
-pub const TLSEXT_TYPE_encrypted_client_hello = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0xfe0d, .hex);
-pub const TLSEXT_TYPE_ech_outer_extensions = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0xfd00, .hex);
+pub const TLSEXT_TYPE_encrypted_client_hello = std.zig.c_translation.promoteIntLiteral(c_int, 0xfe0d, .hex);
+pub const TLSEXT_TYPE_ech_outer_extensions = std.zig.c_translation.promoteIntLiteral(c_int, 0xfd00, .hex);
 pub const TLSEXT_TYPE_certificate_timestamp = @as(c_int, 18);
 pub const TLSEXT_TYPE_next_proto_neg = @as(c_int, 13172);
 pub const TLSEXT_TYPE_channel_id = @as(c_int, 30032);
@@ -19742,130 +19742,130 @@ pub const TLSEXT_hash_sha512 = @as(c_int, 6);
 pub const TLSEXT_cert_compression_zlib = @as(c_int, 1);
 pub const TLSEXT_cert_compression_brotli = @as(c_int, 2);
 pub const TLSEXT_MAXLEN_host_name = @as(c_int, 255);
-pub const TLS1_CK_PSK_WITH_RC4_128_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300008A, .hex);
-pub const TLS1_CK_PSK_WITH_3DES_EDE_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300008B, .hex);
-pub const TLS1_CK_PSK_WITH_AES_128_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300008C, .hex);
-pub const TLS1_CK_PSK_WITH_AES_256_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300008D, .hex);
-pub const TLS1_CK_ECDHE_PSK_WITH_AES_128_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C035, .hex);
-pub const TLS1_CK_ECDHE_PSK_WITH_AES_256_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C036, .hex);
-pub const TLS1_CK_RSA_EXPORT1024_WITH_RC4_56_MD5 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000060, .hex);
-pub const TLS1_CK_RSA_EXPORT1024_WITH_RC2_CBC_56_MD5 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000061, .hex);
-pub const TLS1_CK_RSA_EXPORT1024_WITH_DES_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000062, .hex);
-pub const TLS1_CK_DHE_DSS_EXPORT1024_WITH_DES_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000063, .hex);
-pub const TLS1_CK_RSA_EXPORT1024_WITH_RC4_56_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000064, .hex);
-pub const TLS1_CK_DHE_DSS_EXPORT1024_WITH_RC4_56_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000065, .hex);
-pub const TLS1_CK_DHE_DSS_WITH_RC4_128_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000066, .hex);
-pub const TLS1_CK_RSA_WITH_AES_128_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300002F, .hex);
-pub const TLS1_CK_DH_DSS_WITH_AES_128_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000030, .hex);
-pub const TLS1_CK_DH_RSA_WITH_AES_128_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000031, .hex);
-pub const TLS1_CK_DHE_DSS_WITH_AES_128_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000032, .hex);
-pub const TLS1_CK_DHE_RSA_WITH_AES_128_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000033, .hex);
-pub const TLS1_CK_ADH_WITH_AES_128_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000034, .hex);
-pub const TLS1_CK_RSA_WITH_AES_256_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000035, .hex);
-pub const TLS1_CK_DH_DSS_WITH_AES_256_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000036, .hex);
-pub const TLS1_CK_DH_RSA_WITH_AES_256_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000037, .hex);
-pub const TLS1_CK_DHE_DSS_WITH_AES_256_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000038, .hex);
-pub const TLS1_CK_DHE_RSA_WITH_AES_256_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000039, .hex);
-pub const TLS1_CK_ADH_WITH_AES_256_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300003A, .hex);
-pub const TLS1_CK_RSA_WITH_NULL_SHA256 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300003B, .hex);
-pub const TLS1_CK_RSA_WITH_AES_128_SHA256 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300003C, .hex);
-pub const TLS1_CK_RSA_WITH_AES_256_SHA256 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300003D, .hex);
-pub const TLS1_CK_DH_DSS_WITH_AES_128_SHA256 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300003E, .hex);
-pub const TLS1_CK_DH_RSA_WITH_AES_128_SHA256 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300003F, .hex);
-pub const TLS1_CK_DHE_DSS_WITH_AES_128_SHA256 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000040, .hex);
-pub const TLS1_CK_RSA_WITH_CAMELLIA_128_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000041, .hex);
-pub const TLS1_CK_DH_DSS_WITH_CAMELLIA_128_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000042, .hex);
-pub const TLS1_CK_DH_RSA_WITH_CAMELLIA_128_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000043, .hex);
-pub const TLS1_CK_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000044, .hex);
-pub const TLS1_CK_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000045, .hex);
-pub const TLS1_CK_ADH_WITH_CAMELLIA_128_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000046, .hex);
-pub const TLS1_CK_DHE_RSA_WITH_AES_128_SHA256 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000067, .hex);
-pub const TLS1_CK_DH_DSS_WITH_AES_256_SHA256 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000068, .hex);
-pub const TLS1_CK_DH_RSA_WITH_AES_256_SHA256 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000069, .hex);
-pub const TLS1_CK_DHE_DSS_WITH_AES_256_SHA256 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300006A, .hex);
-pub const TLS1_CK_DHE_RSA_WITH_AES_256_SHA256 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300006B, .hex);
-pub const TLS1_CK_ADH_WITH_AES_128_SHA256 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300006C, .hex);
-pub const TLS1_CK_ADH_WITH_AES_256_SHA256 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300006D, .hex);
-pub const TLS1_CK_RSA_WITH_CAMELLIA_256_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000084, .hex);
-pub const TLS1_CK_DH_DSS_WITH_CAMELLIA_256_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000085, .hex);
-pub const TLS1_CK_DH_RSA_WITH_CAMELLIA_256_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000086, .hex);
-pub const TLS1_CK_DHE_DSS_WITH_CAMELLIA_256_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000087, .hex);
-pub const TLS1_CK_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000088, .hex);
-pub const TLS1_CK_ADH_WITH_CAMELLIA_256_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000089, .hex);
-pub const TLS1_CK_RSA_WITH_SEED_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000096, .hex);
-pub const TLS1_CK_DH_DSS_WITH_SEED_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000097, .hex);
-pub const TLS1_CK_DH_RSA_WITH_SEED_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000098, .hex);
-pub const TLS1_CK_DHE_DSS_WITH_SEED_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03000099, .hex);
-pub const TLS1_CK_DHE_RSA_WITH_SEED_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300009A, .hex);
-pub const TLS1_CK_ADH_WITH_SEED_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300009B, .hex);
-pub const TLS1_CK_RSA_WITH_AES_128_GCM_SHA256 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300009C, .hex);
-pub const TLS1_CK_RSA_WITH_AES_256_GCM_SHA384 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300009D, .hex);
-pub const TLS1_CK_DHE_RSA_WITH_AES_128_GCM_SHA256 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300009E, .hex);
-pub const TLS1_CK_DHE_RSA_WITH_AES_256_GCM_SHA384 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300009F, .hex);
-pub const TLS1_CK_DH_RSA_WITH_AES_128_GCM_SHA256 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x030000A0, .hex);
-pub const TLS1_CK_DH_RSA_WITH_AES_256_GCM_SHA384 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x030000A1, .hex);
-pub const TLS1_CK_DHE_DSS_WITH_AES_128_GCM_SHA256 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x030000A2, .hex);
-pub const TLS1_CK_DHE_DSS_WITH_AES_256_GCM_SHA384 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x030000A3, .hex);
-pub const TLS1_CK_DH_DSS_WITH_AES_128_GCM_SHA256 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x030000A4, .hex);
-pub const TLS1_CK_DH_DSS_WITH_AES_256_GCM_SHA384 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x030000A5, .hex);
-pub const TLS1_CK_ADH_WITH_AES_128_GCM_SHA256 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x030000A6, .hex);
-pub const TLS1_CK_ADH_WITH_AES_256_GCM_SHA384 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x030000A7, .hex);
-pub const TLS1_CK_ECDH_ECDSA_WITH_NULL_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C001, .hex);
-pub const TLS1_CK_ECDH_ECDSA_WITH_RC4_128_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C002, .hex);
-pub const TLS1_CK_ECDH_ECDSA_WITH_DES_192_CBC3_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C003, .hex);
-pub const TLS1_CK_ECDH_ECDSA_WITH_AES_128_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C004, .hex);
-pub const TLS1_CK_ECDH_ECDSA_WITH_AES_256_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C005, .hex);
-pub const TLS1_CK_ECDHE_ECDSA_WITH_NULL_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C006, .hex);
-pub const TLS1_CK_ECDHE_ECDSA_WITH_RC4_128_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C007, .hex);
-pub const TLS1_CK_ECDHE_ECDSA_WITH_DES_192_CBC3_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C008, .hex);
-pub const TLS1_CK_ECDHE_ECDSA_WITH_AES_128_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C009, .hex);
-pub const TLS1_CK_ECDHE_ECDSA_WITH_AES_256_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C00A, .hex);
-pub const TLS1_CK_ECDH_RSA_WITH_NULL_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C00B, .hex);
-pub const TLS1_CK_ECDH_RSA_WITH_RC4_128_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C00C, .hex);
-pub const TLS1_CK_ECDH_RSA_WITH_DES_192_CBC3_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C00D, .hex);
-pub const TLS1_CK_ECDH_RSA_WITH_AES_128_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C00E, .hex);
-pub const TLS1_CK_ECDH_RSA_WITH_AES_256_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C00F, .hex);
-pub const TLS1_CK_ECDHE_RSA_WITH_NULL_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C010, .hex);
-pub const TLS1_CK_ECDHE_RSA_WITH_RC4_128_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C011, .hex);
-pub const TLS1_CK_ECDHE_RSA_WITH_DES_192_CBC3_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C012, .hex);
-pub const TLS1_CK_ECDHE_RSA_WITH_AES_128_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C013, .hex);
-pub const TLS1_CK_ECDHE_RSA_WITH_AES_256_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C014, .hex);
-pub const TLS1_CK_ECDH_anon_WITH_NULL_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C015, .hex);
-pub const TLS1_CK_ECDH_anon_WITH_RC4_128_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C016, .hex);
-pub const TLS1_CK_ECDH_anon_WITH_DES_192_CBC3_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C017, .hex);
-pub const TLS1_CK_ECDH_anon_WITH_AES_128_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C018, .hex);
-pub const TLS1_CK_ECDH_anon_WITH_AES_256_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C019, .hex);
-pub const TLS1_CK_SRP_SHA_WITH_3DES_EDE_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C01A, .hex);
-pub const TLS1_CK_SRP_SHA_RSA_WITH_3DES_EDE_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C01B, .hex);
-pub const TLS1_CK_SRP_SHA_DSS_WITH_3DES_EDE_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C01C, .hex);
-pub const TLS1_CK_SRP_SHA_WITH_AES_128_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C01D, .hex);
-pub const TLS1_CK_SRP_SHA_RSA_WITH_AES_128_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C01E, .hex);
-pub const TLS1_CK_SRP_SHA_DSS_WITH_AES_128_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C01F, .hex);
-pub const TLS1_CK_SRP_SHA_WITH_AES_256_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C020, .hex);
-pub const TLS1_CK_SRP_SHA_RSA_WITH_AES_256_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C021, .hex);
-pub const TLS1_CK_SRP_SHA_DSS_WITH_AES_256_CBC_SHA = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C022, .hex);
-pub const TLS1_CK_ECDHE_ECDSA_WITH_AES_128_SHA256 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C023, .hex);
-pub const TLS1_CK_ECDHE_ECDSA_WITH_AES_256_SHA384 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C024, .hex);
-pub const TLS1_CK_ECDH_ECDSA_WITH_AES_128_SHA256 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C025, .hex);
-pub const TLS1_CK_ECDH_ECDSA_WITH_AES_256_SHA384 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C026, .hex);
-pub const TLS1_CK_ECDHE_RSA_WITH_AES_128_SHA256 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C027, .hex);
-pub const TLS1_CK_ECDHE_RSA_WITH_AES_256_SHA384 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C028, .hex);
-pub const TLS1_CK_ECDH_RSA_WITH_AES_128_SHA256 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C029, .hex);
-pub const TLS1_CK_ECDH_RSA_WITH_AES_256_SHA384 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C02A, .hex);
-pub const TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C02B, .hex);
-pub const TLS1_CK_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C02C, .hex);
-pub const TLS1_CK_ECDH_ECDSA_WITH_AES_128_GCM_SHA256 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C02D, .hex);
-pub const TLS1_CK_ECDH_ECDSA_WITH_AES_256_GCM_SHA384 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C02E, .hex);
-pub const TLS1_CK_ECDHE_RSA_WITH_AES_128_GCM_SHA256 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C02F, .hex);
-pub const TLS1_CK_ECDHE_RSA_WITH_AES_256_GCM_SHA384 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C030, .hex);
-pub const TLS1_CK_ECDH_RSA_WITH_AES_128_GCM_SHA256 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C031, .hex);
-pub const TLS1_CK_ECDH_RSA_WITH_AES_256_GCM_SHA384 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300C032, .hex);
-pub const TLS1_CK_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300CCA8, .hex);
-pub const TLS1_CK_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300CCA9, .hex);
-pub const TLS1_CK_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x0300CCAC, .hex);
-pub const TLS1_3_CK_AES_128_GCM_SHA256 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03001301, .hex);
-pub const TLS1_3_CK_AES_256_GCM_SHA384 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03001302, .hex);
-pub const TLS1_3_CK_CHACHA20_POLY1305_SHA256 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0x03001303, .hex);
+pub const TLS1_CK_PSK_WITH_RC4_128_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300008A, .hex);
+pub const TLS1_CK_PSK_WITH_3DES_EDE_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300008B, .hex);
+pub const TLS1_CK_PSK_WITH_AES_128_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300008C, .hex);
+pub const TLS1_CK_PSK_WITH_AES_256_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300008D, .hex);
+pub const TLS1_CK_ECDHE_PSK_WITH_AES_128_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C035, .hex);
+pub const TLS1_CK_ECDHE_PSK_WITH_AES_256_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C036, .hex);
+pub const TLS1_CK_RSA_EXPORT1024_WITH_RC4_56_MD5 = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000060, .hex);
+pub const TLS1_CK_RSA_EXPORT1024_WITH_RC2_CBC_56_MD5 = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000061, .hex);
+pub const TLS1_CK_RSA_EXPORT1024_WITH_DES_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000062, .hex);
+pub const TLS1_CK_DHE_DSS_EXPORT1024_WITH_DES_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000063, .hex);
+pub const TLS1_CK_RSA_EXPORT1024_WITH_RC4_56_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000064, .hex);
+pub const TLS1_CK_DHE_DSS_EXPORT1024_WITH_RC4_56_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000065, .hex);
+pub const TLS1_CK_DHE_DSS_WITH_RC4_128_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000066, .hex);
+pub const TLS1_CK_RSA_WITH_AES_128_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300002F, .hex);
+pub const TLS1_CK_DH_DSS_WITH_AES_128_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000030, .hex);
+pub const TLS1_CK_DH_RSA_WITH_AES_128_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000031, .hex);
+pub const TLS1_CK_DHE_DSS_WITH_AES_128_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000032, .hex);
+pub const TLS1_CK_DHE_RSA_WITH_AES_128_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000033, .hex);
+pub const TLS1_CK_ADH_WITH_AES_128_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000034, .hex);
+pub const TLS1_CK_RSA_WITH_AES_256_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000035, .hex);
+pub const TLS1_CK_DH_DSS_WITH_AES_256_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000036, .hex);
+pub const TLS1_CK_DH_RSA_WITH_AES_256_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000037, .hex);
+pub const TLS1_CK_DHE_DSS_WITH_AES_256_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000038, .hex);
+pub const TLS1_CK_DHE_RSA_WITH_AES_256_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000039, .hex);
+pub const TLS1_CK_ADH_WITH_AES_256_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300003A, .hex);
+pub const TLS1_CK_RSA_WITH_NULL_SHA256 = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300003B, .hex);
+pub const TLS1_CK_RSA_WITH_AES_128_SHA256 = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300003C, .hex);
+pub const TLS1_CK_RSA_WITH_AES_256_SHA256 = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300003D, .hex);
+pub const TLS1_CK_DH_DSS_WITH_AES_128_SHA256 = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300003E, .hex);
+pub const TLS1_CK_DH_RSA_WITH_AES_128_SHA256 = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300003F, .hex);
+pub const TLS1_CK_DHE_DSS_WITH_AES_128_SHA256 = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000040, .hex);
+pub const TLS1_CK_RSA_WITH_CAMELLIA_128_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000041, .hex);
+pub const TLS1_CK_DH_DSS_WITH_CAMELLIA_128_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000042, .hex);
+pub const TLS1_CK_DH_RSA_WITH_CAMELLIA_128_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000043, .hex);
+pub const TLS1_CK_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000044, .hex);
+pub const TLS1_CK_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000045, .hex);
+pub const TLS1_CK_ADH_WITH_CAMELLIA_128_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000046, .hex);
+pub const TLS1_CK_DHE_RSA_WITH_AES_128_SHA256 = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000067, .hex);
+pub const TLS1_CK_DH_DSS_WITH_AES_256_SHA256 = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000068, .hex);
+pub const TLS1_CK_DH_RSA_WITH_AES_256_SHA256 = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000069, .hex);
+pub const TLS1_CK_DHE_DSS_WITH_AES_256_SHA256 = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300006A, .hex);
+pub const TLS1_CK_DHE_RSA_WITH_AES_256_SHA256 = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300006B, .hex);
+pub const TLS1_CK_ADH_WITH_AES_128_SHA256 = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300006C, .hex);
+pub const TLS1_CK_ADH_WITH_AES_256_SHA256 = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300006D, .hex);
+pub const TLS1_CK_RSA_WITH_CAMELLIA_256_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000084, .hex);
+pub const TLS1_CK_DH_DSS_WITH_CAMELLIA_256_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000085, .hex);
+pub const TLS1_CK_DH_RSA_WITH_CAMELLIA_256_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000086, .hex);
+pub const TLS1_CK_DHE_DSS_WITH_CAMELLIA_256_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000087, .hex);
+pub const TLS1_CK_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000088, .hex);
+pub const TLS1_CK_ADH_WITH_CAMELLIA_256_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000089, .hex);
+pub const TLS1_CK_RSA_WITH_SEED_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000096, .hex);
+pub const TLS1_CK_DH_DSS_WITH_SEED_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000097, .hex);
+pub const TLS1_CK_DH_RSA_WITH_SEED_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000098, .hex);
+pub const TLS1_CK_DHE_DSS_WITH_SEED_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x03000099, .hex);
+pub const TLS1_CK_DHE_RSA_WITH_SEED_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300009A, .hex);
+pub const TLS1_CK_ADH_WITH_SEED_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300009B, .hex);
+pub const TLS1_CK_RSA_WITH_AES_128_GCM_SHA256 = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300009C, .hex);
+pub const TLS1_CK_RSA_WITH_AES_256_GCM_SHA384 = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300009D, .hex);
+pub const TLS1_CK_DHE_RSA_WITH_AES_128_GCM_SHA256 = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300009E, .hex);
+pub const TLS1_CK_DHE_RSA_WITH_AES_256_GCM_SHA384 = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300009F, .hex);
+pub const TLS1_CK_DH_RSA_WITH_AES_128_GCM_SHA256 = std.zig.c_translation.promoteIntLiteral(c_int, 0x030000A0, .hex);
+pub const TLS1_CK_DH_RSA_WITH_AES_256_GCM_SHA384 = std.zig.c_translation.promoteIntLiteral(c_int, 0x030000A1, .hex);
+pub const TLS1_CK_DHE_DSS_WITH_AES_128_GCM_SHA256 = std.zig.c_translation.promoteIntLiteral(c_int, 0x030000A2, .hex);
+pub const TLS1_CK_DHE_DSS_WITH_AES_256_GCM_SHA384 = std.zig.c_translation.promoteIntLiteral(c_int, 0x030000A3, .hex);
+pub const TLS1_CK_DH_DSS_WITH_AES_128_GCM_SHA256 = std.zig.c_translation.promoteIntLiteral(c_int, 0x030000A4, .hex);
+pub const TLS1_CK_DH_DSS_WITH_AES_256_GCM_SHA384 = std.zig.c_translation.promoteIntLiteral(c_int, 0x030000A5, .hex);
+pub const TLS1_CK_ADH_WITH_AES_128_GCM_SHA256 = std.zig.c_translation.promoteIntLiteral(c_int, 0x030000A6, .hex);
+pub const TLS1_CK_ADH_WITH_AES_256_GCM_SHA384 = std.zig.c_translation.promoteIntLiteral(c_int, 0x030000A7, .hex);
+pub const TLS1_CK_ECDH_ECDSA_WITH_NULL_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C001, .hex);
+pub const TLS1_CK_ECDH_ECDSA_WITH_RC4_128_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C002, .hex);
+pub const TLS1_CK_ECDH_ECDSA_WITH_DES_192_CBC3_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C003, .hex);
+pub const TLS1_CK_ECDH_ECDSA_WITH_AES_128_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C004, .hex);
+pub const TLS1_CK_ECDH_ECDSA_WITH_AES_256_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C005, .hex);
+pub const TLS1_CK_ECDHE_ECDSA_WITH_NULL_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C006, .hex);
+pub const TLS1_CK_ECDHE_ECDSA_WITH_RC4_128_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C007, .hex);
+pub const TLS1_CK_ECDHE_ECDSA_WITH_DES_192_CBC3_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C008, .hex);
+pub const TLS1_CK_ECDHE_ECDSA_WITH_AES_128_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C009, .hex);
+pub const TLS1_CK_ECDHE_ECDSA_WITH_AES_256_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C00A, .hex);
+pub const TLS1_CK_ECDH_RSA_WITH_NULL_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C00B, .hex);
+pub const TLS1_CK_ECDH_RSA_WITH_RC4_128_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C00C, .hex);
+pub const TLS1_CK_ECDH_RSA_WITH_DES_192_CBC3_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C00D, .hex);
+pub const TLS1_CK_ECDH_RSA_WITH_AES_128_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C00E, .hex);
+pub const TLS1_CK_ECDH_RSA_WITH_AES_256_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C00F, .hex);
+pub const TLS1_CK_ECDHE_RSA_WITH_NULL_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C010, .hex);
+pub const TLS1_CK_ECDHE_RSA_WITH_RC4_128_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C011, .hex);
+pub const TLS1_CK_ECDHE_RSA_WITH_DES_192_CBC3_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C012, .hex);
+pub const TLS1_CK_ECDHE_RSA_WITH_AES_128_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C013, .hex);
+pub const TLS1_CK_ECDHE_RSA_WITH_AES_256_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C014, .hex);
+pub const TLS1_CK_ECDH_anon_WITH_NULL_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C015, .hex);
+pub const TLS1_CK_ECDH_anon_WITH_RC4_128_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C016, .hex);
+pub const TLS1_CK_ECDH_anon_WITH_DES_192_CBC3_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C017, .hex);
+pub const TLS1_CK_ECDH_anon_WITH_AES_128_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C018, .hex);
+pub const TLS1_CK_ECDH_anon_WITH_AES_256_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C019, .hex);
+pub const TLS1_CK_SRP_SHA_WITH_3DES_EDE_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C01A, .hex);
+pub const TLS1_CK_SRP_SHA_RSA_WITH_3DES_EDE_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C01B, .hex);
+pub const TLS1_CK_SRP_SHA_DSS_WITH_3DES_EDE_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C01C, .hex);
+pub const TLS1_CK_SRP_SHA_WITH_AES_128_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C01D, .hex);
+pub const TLS1_CK_SRP_SHA_RSA_WITH_AES_128_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C01E, .hex);
+pub const TLS1_CK_SRP_SHA_DSS_WITH_AES_128_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C01F, .hex);
+pub const TLS1_CK_SRP_SHA_WITH_AES_256_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C020, .hex);
+pub const TLS1_CK_SRP_SHA_RSA_WITH_AES_256_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C021, .hex);
+pub const TLS1_CK_SRP_SHA_DSS_WITH_AES_256_CBC_SHA = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C022, .hex);
+pub const TLS1_CK_ECDHE_ECDSA_WITH_AES_128_SHA256 = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C023, .hex);
+pub const TLS1_CK_ECDHE_ECDSA_WITH_AES_256_SHA384 = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C024, .hex);
+pub const TLS1_CK_ECDH_ECDSA_WITH_AES_128_SHA256 = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C025, .hex);
+pub const TLS1_CK_ECDH_ECDSA_WITH_AES_256_SHA384 = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C026, .hex);
+pub const TLS1_CK_ECDHE_RSA_WITH_AES_128_SHA256 = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C027, .hex);
+pub const TLS1_CK_ECDHE_RSA_WITH_AES_256_SHA384 = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C028, .hex);
+pub const TLS1_CK_ECDH_RSA_WITH_AES_128_SHA256 = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C029, .hex);
+pub const TLS1_CK_ECDH_RSA_WITH_AES_256_SHA384 = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C02A, .hex);
+pub const TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C02B, .hex);
+pub const TLS1_CK_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384 = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C02C, .hex);
+pub const TLS1_CK_ECDH_ECDSA_WITH_AES_128_GCM_SHA256 = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C02D, .hex);
+pub const TLS1_CK_ECDH_ECDSA_WITH_AES_256_GCM_SHA384 = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C02E, .hex);
+pub const TLS1_CK_ECDHE_RSA_WITH_AES_128_GCM_SHA256 = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C02F, .hex);
+pub const TLS1_CK_ECDHE_RSA_WITH_AES_256_GCM_SHA384 = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C030, .hex);
+pub const TLS1_CK_ECDH_RSA_WITH_AES_128_GCM_SHA256 = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C031, .hex);
+pub const TLS1_CK_ECDH_RSA_WITH_AES_256_GCM_SHA384 = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300C032, .hex);
+pub const TLS1_CK_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256 = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300CCA8, .hex);
+pub const TLS1_CK_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256 = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300CCA9, .hex);
+pub const TLS1_CK_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256 = std.zig.c_translation.promoteIntLiteral(c_int, 0x0300CCAC, .hex);
+pub const TLS1_3_CK_AES_128_GCM_SHA256 = std.zig.c_translation.promoteIntLiteral(c_int, 0x03001301, .hex);
+pub const TLS1_3_CK_AES_256_GCM_SHA384 = std.zig.c_translation.promoteIntLiteral(c_int, 0x03001302, .hex);
+pub const TLS1_3_CK_CHACHA20_POLY1305_SHA256 = std.zig.c_translation.promoteIntLiteral(c_int, 0x03001303, .hex);
 pub const TLS1_CK_AES_128_GCM_SHA256 = TLS1_3_CK_AES_128_GCM_SHA256;
 pub const TLS1_CK_AES_256_GCM_SHA384 = TLS1_3_CK_AES_256_GCM_SHA384;
 pub const TLS1_CK_CHACHA20_POLY1305_SHA256 = TLS1_3_CK_CHACHA20_POLY1305_SHA256;
@@ -20059,8 +20059,8 @@ pub const TLS1_VERSION = @as(c_int, 0x0301);
 pub const TLS1_1_VERSION = @as(c_int, 0x0302);
 pub const TLS1_2_VERSION = @as(c_int, 0x0303);
 pub const TLS1_3_VERSION = @as(c_int, 0x0304);
-pub const DTLS1_VERSION = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0xfeff, .hex);
-pub const DTLS1_2_VERSION = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0xfefd, .hex);
+pub const DTLS1_VERSION = std.zig.c_translation.promoteIntLiteral(c_int, 0xfeff, .hex);
+pub const DTLS1_2_VERSION = std.zig.c_translation.promoteIntLiteral(c_int, 0xfefd, .hex);
 pub const SSL_OP_NO_QUERY_MTU = @as(c_long, 0x00001000);
 pub const SSL_OP_NO_TICKET = @as(c_long, 0x00004000);
 pub const SSL_OP_CIPHER_SERVER_PREFERENCE = @as(c_long, 0x00400000);
@@ -20089,7 +20089,7 @@ pub const SSL_SIGN_RSA_PSS_RSAE_SHA256 = @as(c_int, 0x0804);
 pub const SSL_SIGN_RSA_PSS_RSAE_SHA384 = @as(c_int, 0x0805);
 pub const SSL_SIGN_RSA_PSS_RSAE_SHA512 = @as(c_int, 0x0806);
 pub const SSL_SIGN_ED25519 = @as(c_int, 0x0807);
-pub const SSL_SIGN_RSA_PKCS1_MD5_SHA1 = @import("std").zig.c_translation.promoteIntLiteral(c_int, 0xff01, .hex);
+pub const SSL_SIGN_RSA_PKCS1_MD5_SHA1 = std.zig.c_translation.promoteIntLiteral(c_int, 0xff01, .hex);
 pub const SSL_FILETYPE_PEM = @as(c_int, 1);
 pub const SSL_FILETYPE_ASN1 = @as(c_int, 2);
 pub const SSL_DEFAULT_CIPHER_LIST = "ALL";
@@ -20200,10 +20200,10 @@ pub const SSL_CB_HANDSHAKE_DONE = @as(c_int, 0x20);
 pub const SSL_SENT_SHUTDOWN = @as(c_int, 1);
 pub const SSL_RECEIVED_SHUTDOWN = @as(c_int, 2);
 pub const SSL_MODE_HANDSHAKE_CUTTHROUGH = SSL_MODE_ENABLE_FALSE_START;
-pub inline fn SSL_set_app_data(s: anytype, arg: anytype): @TypeOf(SSL_set_ex_data(s, @as(c_int, 0), @import("std").zig.c_translation.cast([*c]u8, arg))) {
+pub inline fn SSL_set_app_data(s: anytype, arg: anytype): @TypeOf(SSL_set_ex_data(s, @as(c_int, 0), std.zig.c_translation.cast([*c]u8, arg))) {
     unsafe {
 
-    return SSL_set_ex_data(s, @as(c_int, 0), @import("std").zig.c_translation.cast([*c]u8, arg));
+    return SSL_set_ex_data(s, @as(c_int, 0), std.zig.c_translation.cast([*c]u8, arg));
     }
 }
 pub inline fn SSL_get_app_data(s: anytype): @TypeOf(SSL_get_ex_data(s, @as(c_int, 0))) {
@@ -20212,10 +20212,10 @@ pub inline fn SSL_get_app_data(s: anytype): @TypeOf(SSL_get_ex_data(s, @as(c_int
     return SSL_get_ex_data(s, @as(c_int, 0));
     }
 }
-pub inline fn SSL_SESSION_set_app_data(s: anytype, a: anytype): @TypeOf(SSL_SESSION_set_ex_data(s, @as(c_int, 0), @import("std").zig.c_translation.cast([*c]u8, a))) {
+pub inline fn SSL_SESSION_set_app_data(s: anytype, a: anytype): @TypeOf(SSL_SESSION_set_ex_data(s, @as(c_int, 0), std.zig.c_translation.cast([*c]u8, a))) {
     unsafe {
 
-    return SSL_SESSION_set_ex_data(s, @as(c_int, 0), @import("std").zig.c_translation.cast([*c]u8, a));
+    return SSL_SESSION_set_ex_data(s, @as(c_int, 0), std.zig.c_translation.cast([*c]u8, a));
     }
 }
 pub inline fn SSL_SESSION_get_app_data(s: anytype): @TypeOf(SSL_SESSION_get_ex_data(s, @as(c_int, 0))) {
@@ -20230,10 +20230,10 @@ pub inline fn SSL_CTX_get_app_data(ctx: anytype): @TypeOf(SSL_CTX_get_ex_data(ct
     return SSL_CTX_get_ex_data(ctx, @as(c_int, 0));
     }
 }
-pub inline fn SSL_CTX_set_app_data(ctx: anytype, arg: anytype): @TypeOf(SSL_CTX_set_ex_data(ctx, @as(c_int, 0), @import("std").zig.c_translation.cast([*c]u8, arg))) {
+pub inline fn SSL_CTX_set_app_data(ctx: anytype, arg: anytype): @TypeOf(SSL_CTX_set_ex_data(ctx, @as(c_int, 0), std.zig.c_translation.cast([*c]u8, arg))) {
     unsafe {
 
-    return SSL_CTX_set_ex_data(ctx, @as(c_int, 0), @import("std").zig.c_translation.cast([*c]u8, arg));
+    return SSL_CTX_set_ex_data(ctx, @as(c_int, 0), std.zig.c_translation.cast([*c]u8, arg));
     }
 }
 pub inline fn OpenSSL_add_ssl_algorithms(): @TypeOf(SSL_library_init()) {
@@ -21389,7 +21389,7 @@ pub fn getError(ssl: *SSL, rc: c_int): SSL.Error!u32 {
     }
 }
 
-const C = @import("std").zig.c_builtins;
+const C = std.zig.c_builtins;
 const DECLARE_ASN1_ALLOC_FUNCTIONS_name = C.DECLARE_ASN1_ALLOC_FUNCTIONS_name;
 const DECLARE_ASN1_FUNCTIONS_name = C.DECLARE_ASN1_FUNCTIONS_name;
 const DEFINE_NAMED_STACK_OF = C.DEFINE_NAMED_STACK_OF;

@@ -6,10 +6,14 @@ import ast from "../options_types/import_record.zig";
 import node_module_module from "./NodeModuleModule.zig";
 import options from "../bundler/options.zig";
 import bun from "bun";
+import async_module_mod from "./AsyncModule.zig";
+import runtime_transpiler_store_mod from "./RuntimeTranspilerStore.zig";
+import hardcoded_module_mod from "../resolve_builtins/HardcodedModule.zig";
+import package_json_mod from "../resolver/package_json.zig";
 
-pub const AsyncModule = @import("./AsyncModule.zig").AsyncModule;
-pub const RuntimeTranspilerStore = @import("./RuntimeTranspilerStore.zig").RuntimeTranspilerStore;
-pub const HardcodedModule = @import("../resolve_builtins/HardcodedModule.zig").HardcodedModule;
+pub const AsyncModule = async_module_mod.AsyncModule;
+pub const RuntimeTranspilerStore = runtime_transpiler_store_mod.RuntimeTranspilerStore;
+pub const HardcodedModule = hardcoded_module_mod.HardcodedModule;
 
 struct DeinitGuard<T> {
     ptr: *T!,
@@ -1425,12 +1429,12 @@ const panic = std.debug.panic;
 
 const ModuleType = options.ModuleType;
 
-const MacroRemap = @import("../resolver/package_json.zig").MacroMap;
-const PackageJSON = @import("../resolver/package_json.zig").PackageJSON;
+const MacroRemap = package_json_mod.MacroMap;
+const PackageJSON = package_json_mod.PackageJSON;
 
-const dumpSource = @import("./RuntimeTranspilerStore.zig").dumpSource;
-const dumpSourceString = @import("./RuntimeTranspilerStore.zig").dumpSourceString;
-const setBreakPointOnFirstLine = @import("./RuntimeTranspilerStore.zig").setBreakPointOnFirstLine;
+const dumpSource = runtime_transpiler_store_mod.dumpSource;
+const dumpSourceString = runtime_transpiler_store_mod.dumpSourceString;
+const setBreakPointOnFirstLine = runtime_transpiler_store_mod.setBreakPointOnFirstLine;
 
 const Environment = bun.Environment;
 const FD = bun.FD;

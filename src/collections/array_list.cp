@@ -240,7 +240,7 @@ pub fn ArrayListAlignedIn(
             start: usize,
             len: usize,
             new_items: []const T,
-        ): void {
+        ) {
             bun.memory.deinit(this.items()[start .. start + len]);
             this.replaceRangeAssumeCapacityShallow(start, len, new_items);
         }
@@ -252,7 +252,7 @@ pub fn ArrayListAlignedIn(
             start: usize,
             len: usize,
             new_items: []const T,
-        ): void {
+        ) {
             this.#unmanaged.replaceRangeAssumeCapacity(start, len, new_items);
         }
 

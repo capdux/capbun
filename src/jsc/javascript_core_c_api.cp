@@ -13,7 +13,7 @@ const jsc = bun.jsc;
         }
     }
 }
-pub const Private = anyopaque;
+pub const Private = void;
 pub const struct_OpaqueJSContextGroup = generic;
 pub type JSContextGroupRef = (*const struct_OpaqueJSContextGroup)?;
 pub const struct_OpaqueJSContext = generic;

@@ -1211,9 +1211,7 @@ inline fn float64(num: anytype): f64 {
     return f;
 }
 
-const std = @import("std");
-
-const bun = @import("bun");
+import bun from "bun";
 const CodePoint = bun.CodePoint;
 const js_ast = bun.ast;
 const logger = bun.logger;

@@ -87,6 +87,11 @@ pub const StaticHashMapMod = @import("../collections/StaticHashMap.zig");
 pub const WhichMod = @import("../which/which.zig");
 pub const IdentityContextMod = @import("../collections/identity_context.zig");
 pub const RunCommandMod = @import("../cli/run_command.zig");
+pub const TreePrinter = @import("./lockfile/printer/tree_printer.zig");
+pub const YarnPrinter = @import("./lockfile/printer/Yarn.zig");
+pub const LockfileJsonStringify = @import("./lockfile/lockfile_json_stringify_for_debugging.zig");
+pub const PaddingChecker = @import("./padding_checker.zig");
+pub const PackageMod = @import("./lockfile/Package.zig");
 pub const LockfileFormatVersion = enum(u32) {
     v0 = 0,
     v1 = 1,
@@ -609,8 +614,8 @@ _ = try Yarn.print((&printer), Writer, writer);
 }
     }
     pub const Format = _PrinterFormat;
-    pub const Tree = @import("./lockfile/printer/tree_printer.zig");
-    pub const Yarn = @import("./lockfile/printer/Yarn.zig");
+    pub const Tree = TreePrinter;
+    pub const Yarn = YarnPrinter;
 };
 
 pub const StringBuilder = struct {
@@ -2018,9 +2023,9 @@ pub const DependencyList = std.ArrayListUnmanaged(Dependency);
 pub const DependencyIDList = std.ArrayListUnmanaged(DependencyID);
 pub const StringBuffer = std.ArrayListUnmanaged(u8);
 pub const ExternalStringBuffer = std.ArrayListUnmanaged(ExternalString);
-pub const jsonStringify = @import("./lockfile/lockfile_json_stringify_for_debugging.zig").jsonStringify;
-pub const assertNoUninitializedPadding = @import("./padding_checker.zig").assertNoUninitializedPadding;
-pub const Package = @import("./lockfile/Package.zig").Package(u64);
+pub const jsonStringify = LockfileJsonStringify.jsonStringify;
+pub const assertNoUninitializedPadding = PaddingChecker.assertNoUninitializedPadding;
+pub const Package = PackageMod.Package(u64);
 const max_default_trusted_dependencies = 512;
 pub const default_trusted_dependencies_list: []const []const u8 = brk: {
     const data = @embedFile("./default-trusted-dependencies.txt");

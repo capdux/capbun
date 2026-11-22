@@ -1,8 +1,8 @@
 // JSC bridges for src/uws/ types in CP language
 // Converted from src/runtime/socket/uws_jsc.zig
 
-const std = @import("std");
-const bun = @import("bun");
+import std from "std";
+import bun from "bun";
 const jsc = bun.jsc;
 const uws = bun.uws;
 const us_socket_stream_buffer_t = uws.us_socket_stream_buffer_t;

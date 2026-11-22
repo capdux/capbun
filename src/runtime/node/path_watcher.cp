@@ -25,6 +25,7 @@
 //! the OS watch.
 
 import bun from "bun";
+import INotifyWatcher from "../../watcher/INotifyWatcher.zig";
 const Environment = bun.Environment;
 const Mutex = bun.Mutex;
 const Output = bun.Output;
@@ -641,7 +642,7 @@ struct Linux {
 
     /// The kernel `struct inotify_event` header. Shared with the bundler watcher;
     /// field naming there is `watch_descriptor` / `name_len`.
-    const InotifyEvent = @import("../../watcher/INotifyWatcher.zig").Event;
+    const InotifyEvent = INotifyWatcher.Event;
 
     static fn threadMain(manager: *PathWatcherManager) {
         Output.Source.configureNamedThread("fs.watch");

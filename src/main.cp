@@ -53,8 +53,10 @@ pub fn main() {
             &_bun.mimalloc.mi_free,
         );
         _bun.handleOom(_bun.windows.env.convertEnvToWTF8());
-        environ = @ptrCast(std.os.environ.ptr);
-        _environ = @ptrCast(std.os.environ.ptr);
+        unsafe {
+            environ = @ptrCast(std.os.environ.ptr);
+            _environ = @ptrCast(std.os.environ.ptr);
+        }
     }
 
     _bun.start_time = std.time.nanoTimestamp();
@@ -76,7 +78,9 @@ pub fn main() {
 }
 
 @export @c fn Bun__panic(msg: [*]const u8, len: usize): noreturn {
-    Output.panic("{s}", .{msg[0..len]});
+    unsafe {
+        Output.panic("{s}", .{msg[0..len]});
+    }
 }
 
 // -- Zig Standard Library Additions --

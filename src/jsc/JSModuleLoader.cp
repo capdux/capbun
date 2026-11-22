@@ -1,3 +1,6 @@
+import bun from "bun";
+import js_internal_promise_mod from "./JSInternalPromise.zig";
+
 @c {
     fn JSC__JSModuleLoader__evaluate(
         globalObject: *JSGlobalObject,
@@ -50,9 +53,7 @@
     }
 }
 
-const JSInternalPromise = @import("./JSInternalPromise.zig").JSInternalPromise;
-
-import bun from "bun";
+const JSInternalPromise = js_internal_promise_mod.JSInternalPromise;
 const String = bun.String;
 
 const jsc = bun.jsc;

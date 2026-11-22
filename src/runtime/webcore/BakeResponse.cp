@@ -1,6 +1,6 @@
 // SSR BakeResponse bridge in CP
-const std = @import("std");
-const bun = @import("bun");
+import std from "std";
+import bun from "bun";
 const Response = bun.webcore.Response;
 
 const jsc = bun.jsc;

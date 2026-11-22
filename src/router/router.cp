@@ -16,8 +16,9 @@ import DirInfo from "../resolver/dir_info.zig";
 import Options from "../bundler/options.zig";
 import URLPath from "../http_types/URLPath.zig";
 import Fs from "../resolver/fs.zig";
+import url_mod from "../url/url.zig";
 const FileSystem = Fs.FileSystem;
-const PathnameScanner = @import("../url/url.zig").PathnameScanner;
+const PathnameScanner = url_mod.PathnameScanner;
 
 pub type RoutePtr = *Route;
 pub type RoutePathInt = u16;

@@ -2,8 +2,11 @@
 import { Environment, Output, jsc, strings, schema } from "bun";
 import bun from "bun";
 
-const resolve_path = @import("../paths/resolve_path.zig");
-const ParamsList = @import("../router/router.zig").Param.List;
+import resolve_path from "../paths/resolve_path.zig";
+import router from "../router/router.zig";
+import url_jsc from "../url_jsc/url_jsc.zig";
+import form_data_mod from "../runtime/webcore/FormData.zig";
+const ParamsList = router.Param.List;
 const api = bun.schema.api;
 
 const blob_specifier_len = "blob:".len + 36;
@@ -80,7 +83,7 @@ export struct URL {
         return _.href.len == blob_specifier_len && strings.hasPrefixComptime(_.href, "blob:");
     }
 
-    pub const fromJS = @import("../url_jsc/url_jsc.zig").urlFromJS;
+    pub const fromJS = url_jsc.urlFromJS;
 
     pub static fn fromString(allocator: std.mem.Allocator, input: bun.String): !URL {
         let parsed_href = jsc.URL.hrefFromString(input);
@@ -159,7 +162,7 @@ export struct URL {
         return strings.eqlComptime(_.protocol, "http") || strings.eqlComptime(_.protocol, "https");
     }
 
-    pub fn getPort(_: *const URL): ?u16 {
+    pub fn getPort(_: *const URL): u16? {
         return std.fmt.parseInt(u16, _.port, 10) catch null;
     }
 
@@ -916,7 +919,7 @@ export struct PercentEncoding {
     }
 }
 
-pub const FormData = @import("../runtime/webcore/FormData.zig").FormData;
+pub const FormData = form_data_mod.FormData;
 
 export struct CombinedScanner {
     query: Scanner,

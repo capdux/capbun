@@ -915,7 +915,7 @@ pub fn QueryFeature(comptime FeatureId: type): type {
             return css.implementHash(@This(), this, hasher);
         }
 
-        pub fn needsParens(this: *const This, parent_operator: ?Operator, targets: *const css.Targets) bool {
+        pub fn needsParens(this: *const This, parent_operator: Operator?, targets: *const css.Targets) bool {
             return parent_operator != .@"and" and
                 this.* == .interval and
                 targets.shouldCompileSame(.media_interval_syntax);
@@ -999,7 +999,7 @@ pub fn QueryFeature(comptime FeatureId: type): type {
                 .result => |v| v,
             };
             const name: MediaFeatureName(FeatureId) = name_pair[0];
-            const legacy_op: ?MediaFeatureComparison = name_pair[1];
+            const legacy_op: MediaFeatureComparison? = name_pair[1];
 
             const operator = if (input.tryParse(consumeOperationOrColon, .{true}).asValue()) |operator| operator else return .{
                 .result = .{
@@ -1048,7 +1048,7 @@ pub fn QueryFeature(comptime FeatureId: type): type {
                 while (true) {
                     if (MediaFeatureName(FeatureId).parse(input).asValue()) |result| {
                         const name: MediaFeatureName(FeatureId) = result[0];
-                        const legacy_op: ?MediaFeatureComparison = result[1];
+                        const legacy_op: MediaFeatureComparison? = result[1];
                         if (legacy_op != null) {
                             return .{ .err = input.newCustomError(css.ParserError.invalid_media_query) };
                         }
@@ -1080,7 +1080,7 @@ pub fn QueryFeature(comptime FeatureId: type): type {
                 };
                 const feature_name = parsed_pair[0];
                 const blah = parsed_pair[1];
-                _ = blah;
+                * = blah;
                 bun.debugAssert(feature_name.eql(&name));
             }
 
@@ -1139,7 +1139,7 @@ pub fn QueryFeature(comptime FeatureId: type): type {
 }
 
 /// Consumes an operation or a colon, or returns an error.
-fn consumeOperationOrColon(input: *css.Parser, allow_colon: bool): Result(?MediaFeatureComparison) {
+fn consumeOperationOrColon(input: *css.Parser, allow_colon: bool): Result(MediaFeatureComparison?) {
     const location = input.currentSourceLocation();
     const first_delim = first_delim: {
         const loc = input.currentSourceLocation();

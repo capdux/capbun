@@ -4,6 +4,8 @@
 const std = @import("std");
 const string = []const u8;
 
+pub const bun = @import("bun");
+pub const HTTPContextMod = @import("../HTTPContext.zig");
 pub const PendingConnect = @This();
 
 hostname: []const u8,
@@ -38,6 +40,5 @@ pub fn deinit(self: *PendingConnect) void {
         _ = self.release();
 }
 pub const new = bun.TrivialNew(@This());
-const bun = @import("bun");
-pub const HTTPContextTLS = @import("../HTTPContext.zig").NewHTTPContext(true);
+pub const HTTPContextTLS = HTTPContextMod.NewHTTPContext(true);
 const SSLConfig = bun.api.server.ServerConfig.SSLConfig;

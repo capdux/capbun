@@ -1264,7 +1264,6 @@ pub struct PackageInstall {
     }
 
     static fn isDanglingWindowsBinLink(node_mod_fd: bun.FD, path: []const u16, temp_buffer: []u8): bool {
-        const WinBinLinkingShim = @import("./windows-shim/BinLinkingShim.zig");
         const bin_path = bin_path: {
             const fd = bun.sys.openatWindows(node_mod_fd, path, bun.O.RDONLY).unwrap() catch return true;
             const _guard_fd = CloseValGuard<@TypeOf(fd)>{ val: fd };
@@ -1511,6 +1510,7 @@ type string = []const u8;
 type stringZ = [:0]const u8;
 
 import Walker from "../sys/walker_skippable.zig";
+import WinBinLinkingShim from "./windows-shim/BinLinkingShim.zig";
 
 
 import bun from "bun";

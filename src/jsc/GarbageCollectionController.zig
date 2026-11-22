@@ -64,6 +64,7 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 const Environment = @import("bun").Environment;
 const uws = @import("bun").uws;
 const jsc = @import("bun").jsc;
+pub const bun = @import("bun");
 pub const GCTimerState = enum {
     pending,
     scheduled,
@@ -231,4 +232,3 @@ pub fn performGC(self: *GarbageCollectionController) void {
         self.gc_last_heap_size = vm.blockBytesAllocated();
 }
 const VirtualMachine = jsc.VirtualMachine;
-const bun = @import("bun");

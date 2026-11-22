@@ -67,7 +67,7 @@ pub fn MaybeOwned(comptime Allocator: type): type {
             return null;
         }
 
-        pub fn intoParent(self: *Self): ?Allocator {
+        pub fn intoParent(self: *Self): Allocator? {
             defer self.* = undefined;
             return self.rawParent();
         }
@@ -78,11 +78,11 @@ pub fn MaybeOwned(comptime Allocator: type): type {
             return .{ ._parent = bun.allocators.initNullable(BorrowedParent, self.parent()) };
         }
 
-        fn initRaw(parent_alloc: ?Allocator): Self {
+        fn initRaw(parent_alloc: Allocator?): Self {
             return .{ ._parent = bun.allocators.initNullable(Allocator, parent_alloc) };
         }
 
-        fn rawParent(self: Self): ?Allocator {
+        fn rawParent(self: Self): Allocator? {
             return bun.allocators.unpackNullable(Allocator, self._parent);
         }
     };

@@ -1,8 +1,7 @@
 // src/http/HTTPContext.cp
 // HTTP Context and Keep-Alive Socket Pooling in CP language
 
-const bun = @import("bun");
-const std = @import("std");
+import bun from "bun";
 
 import { SocketHandler } from "../uws_sys/socket.cp";
 import { SocketGroup } from "../uws_sys/SocketGroup.cp";

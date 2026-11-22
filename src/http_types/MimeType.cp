@@ -5,7 +5,9 @@ const strings = bun.strings;
 import { Loader } from "../bundler/options.zig";
 const ComptimeStringMap = bun.ComptimeStringMap;
 
-pub const Table = @import("./mime_type_list_enum.zig").MimeTypeList;
+import mime_type_list_enum from "./mime_type_list_enum.zig";
+
+pub const Table = mime_type_list_enum.MimeTypeList;
 pub const Map = bun.StringHashMap(Table);
 pub const all = Table.all;
 

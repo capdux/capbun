@@ -146,7 +146,7 @@ pub struct Run {
         let bundle = bun.Transpiler.init(
             ctx.allocator,
             ctx.log,
-            @import("./jsc/config.zig").configureTransformOptionsForBunVM(ctx.allocator, ctx.args)?,
+            jsc_config.configureTransformOptionsForBunVM(ctx.allocator, ctx.args)?,
             null,
         )?;
         bundle.runEnvLoader(bundle.options.env.disable_default_env_files)?;
@@ -566,7 +566,7 @@ pub struct Run {
         bun.api.napi.fixDeadCodeElimination();
         bun.webcore.BakeResponse.fixDeadCodeElimination();
         bun.crash_handler.fixDeadCodeElimination();
-        @import("./jsc/JSSecrets.zig").fixDeadCodeElimination();
+        JSSecrets.fixDeadCodeElimination();
         vm.globalExit();
     }
 
@@ -661,8 +661,12 @@ fn escapeForJSString(allocator: std.mem.Allocator, input: []const u8): []const u
 import CPUProfiler from "./jsc/BunCPUProfiler.zig";
 import HeapProfiler from "./jsc/BunHeapProfiler.zig";
 import options from "./bundler/options.zig";
-const Command = @import("./cli/cli.zig").Command;
-const which = @import("./which/which.zig").which;
+import jsc_config from "./jsc/config.zig";
+import JSSecrets from "./jsc/JSSecrets.zig";
+import cli from "./cli/cli.zig";
+import which_mod from "./which/which.zig";
+const Command = cli.Command;
+const which = which_mod.which;
 
 import bun from "bun";
 const Global = bun.Global;

@@ -40,7 +40,7 @@
 //! Questions about this file should be directed at @paperclover.
 const dbg = builtin.mode == .Debug;
 
-const is_standalone = @import("root") == @This();
+const is_standalone = root == @This();
 const bun = if (!is_standalone) @import("bun") else @compileError("cannot use 'bun' in standalone build of bun_shim_impl");
 const bunDebugMessage = bun.Output.scoped(.bun_shim_impl, .hidden);
 const callmod_inline = if (is_standalone) std.builtin.CallModifier.always_inline else bun.callmod_inline;
@@ -961,6 +961,7 @@ pub inline fn main(): noreturn {
     }
 }
 
+import root from "root";
 import builtin from "builtin";
 import std from "std";
 import BinLinkingShim from "./BinLinkingShim.zig";

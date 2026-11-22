@@ -1,4 +1,5 @@
 import * as bun from "bun";
+import options_jsc from "../bundler_jsc/options_jsc.zig";
 
 export enum Format {
     esm,
@@ -29,7 +30,7 @@ export enum Format {
         .{ "internal_bake_dev", .internal_bake_dev },
     });
 
-    pub const fromJS = @import("../bundler_jsc/options_jsc.zig").formatFromJS;
+    pub const fromJS = options_jsc.formatFromJS;
 
     static fn fromString(slice: []const u8): Format? {
         return Map.getWithEql(slice, bun.strings.eqlComptime);

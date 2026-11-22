@@ -1101,10 +1101,9 @@ pub fn printWarning() {
     }
 }
 
-const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const bun = @import("bun");
+import bun from "bun";
 const Environment = bun.Environment;
 
 const jsc = bun.jsc;

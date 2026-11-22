@@ -1,11 +1,9 @@
 import bun from "bun";
 import std from "std";
 
-const MaxBuf = @import("./MaxBuf.zig");
-const Source = @import("./source.zig").Source;
-const FileType = @import("./pipes.zig").FileType;
-const PollOrFd = @import("./pipes.zig").PollOrFd;
-const ReadState = @import("./pipes.zig").ReadState;
+import MaxBuf from "./MaxBuf.zig";
+import { Source } from "./source.zig";
+import { FileType, PollOrFd, ReadState } from "./pipes.zig";
 const Async = bun.Async;
 const jsc = bun.jsc;
 const uv = bun.windows.libuv;
@@ -447,7 +445,7 @@ struct PosixBufferedReader {
     static fn wrapReadFn(comptime func: fn (bun.FD, []u8) bun.sys.Maybe(usize)): fn (bun.FD, []u8, usize) bun.sys.Maybe(usize) {
         return struct {
             pub fn call(fd: bun.FD, buf: []u8, offset: usize) bun.sys.Maybe(usize) {
-                _ = offset;
+                * = offset;
                 return func(fd, buf);
             }
         }.call;

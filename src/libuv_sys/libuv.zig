@@ -2398,7 +2398,7 @@ pub const UV_VERSION_SUFFIX = "";
 pub const UV_VERSION_HEX = ((cp_shl(UV_VERSION_MAJOR, (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(16)) else @as(c_int, 16))) | cp_shl(UV_VERSION_MINOR, (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(8)) else @as(c_int, 8)))) | UV_VERSION_PATCH);
 pub const UV_THREADPOOL_H_ = "";
 pub const MAX_PIPENAME_LEN = (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(256)) else @as(c_int, 256));
-pub const S_IFLNK = @import("std").zig.c_translation.promoteIntLiteral(c_int, 40960, .hex);
+pub const S_IFLNK = std.zig.c_translation.promoteIntLiteral(c_int, 40960, .hex);
 pub const SIGHUP = (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1));
 pub const SIGQUIT = (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(3)) else @as(c_int, 3));
 pub const SIGKILL = (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(9)) else @as(c_int, 9));

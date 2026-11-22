@@ -493,7 +493,7 @@ pub fn GlobWalkerIterator_(comptime GlobWalker: type, comptime Accessor: type, c
                             },
                             .result => |fd| fd,
                         };
-                        _ = Accessor.close(fd);
+                        * = Accessor.close(fd);
                         _.iter_state = .{ .matched = path };
                         return .success;
                     }
@@ -564,13 +564,13 @@ pub fn GlobWalkerIterator_(comptime GlobWalker: type, comptime Accessor: type, c
 
         fn closeCwdFd(*_) {
             if (_.cwd_fd.isEmpty()) return;
-            _ = Accessor.close(_.cwd_fd);
+            * = Accessor.close(_.cwd_fd);
             if (comptime count_fds) _.fds_open -= 1;
         }
 
         fn closeDisallowingCwd(*_, fd: Accessor.Handle) {
             if (fd.isEmpty() || fd.eql(_.cwd_fd)) return;
-            _ = Accessor.close(fd);
+            * = Accessor.close(fd);
             if (comptime count_fds) _.fds_open -= 1;
         }
 
@@ -780,7 +780,7 @@ pub fn GlobWalkerIterator_(comptime GlobWalker: type, comptime Accessor: type, c
                                 } else work_item.active;
 
                                 _.iter_state = .get_next;
-                                const maybe_dir_fd: ?Accessor.Handle = switch (try Accessor.openat(_.cwd_fd, symlink_full_path_z)) {
+                                const maybe_dir_fd: Accessor.Handle? = switch (try Accessor.openat(_.cwd_fd, symlink_full_path_z)) {
                                     .err => |err| brk: {
                                         if (@as(usize, @intCast(err.errno)) == @as(usize, @intFromEnum(bun.sys.E.NOTDIR))) {
                                             break :brk null;
@@ -1203,7 +1203,7 @@ pub fn GlobWalker_(
         fn collapseSuccessiveDoubleWildcards(idx: u32): u32 {
             let component_idx = idx;
             const pattern = _.patternComponents.items[idx];
-            _ = pattern;
+            * = pattern;
             while (component_idx + 1 < _.patternComponents.items.len &&
                 _.patternComponents.items[component_idx + 1].syntax_hint == .Double) : (component_idx += 1)
             {}
@@ -1245,12 +1245,12 @@ pub fn GlobWalker_(
 
         fn matchPatternDir(
             *_, pattern: *Component,
-            next_pattern: ?*Component,
+            next_pattern: (*Component)?,
             entry_name: []const u8,
             component_idx: u32,
             is_last: bool,
             add: *bool,
-        ) ?u32 {
+        ): u32? {
             if (!_.dot && @This().startsWithDot(entry_name)) return null;
             if (is_ignored(entry_name)) return null;
 
@@ -1288,7 +1288,7 @@ pub fn GlobWalker_(
             component_idx: u32,
             is_last: bool,
             pattern: *Component,
-            next_pattern: ?*Component,
+            next_pattern: (*Component)?,
         ): bool {
             if (pattern.trailing_sep) return false;
 
@@ -1560,8 +1560,8 @@ const subdir_parts: []const []const u8 = &_subdir_parts_arr;
             patternComponents: *ArrayList(Component),
             pattern: []const u8,
             has_relative_patterns: *bool,
-            end_byte_of_basename_excluding_special_syntax: ?*u32,
-            basename_excluding_special_syntax_component_idx: ?*u32,
+            end_byte_of_basename_excluding_special_syntax: (*u32)?,
+            basename_excluding_special_syntax_component_idx: (*u32)?,
         ) !void {
             const scratchpad: [3]u32 = .{0} ** 3;
             return buildPatternComponents(

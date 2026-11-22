@@ -75,7 +75,7 @@ import * as FetchRequestModeMod from "../http_types/FetchRequestMode.cp";
 pub const FetchRequestMode = FetchRequestModeMod.FetchRequestMode;
 
 
-const bun = @import("bun");
+import bun from "bun";
 const Output = bun.Output;
 const picohttp = bun.picohttp;
 const FeatureFlags = bun.FeatureFlags;
@@ -89,7 +89,7 @@ const Global = bun.Global;
 const URL = bun.URL;
 const print_every = 0;
 let print_every_i: usize = 0;
-pub const HTTPContextTLS = @import("./HTTPContext.zig").NewHTTPContext(true);
+pub const HTTPContextTLS = HTTPContextMod.NewHTTPContext(true);
 
 pub let default_allocator: std.mem.Allocator = undefined;
 pub let default_arena: bun.allocators.MimallocArena = undefined;

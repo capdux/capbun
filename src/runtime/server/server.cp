@@ -1,3 +1,22 @@
+import std from "std";
+import bun from "bun";
+import _WebSocketServerContext from "./WebSocketServerContext.zig";
+import _HTTPStatusText from "./HTTPStatusText.zig";
+import _HTMLBundle from "./HTMLBundle.zig";
+import _StaticRoute from "./StaticRoute.zig";
+import _FileRouteMod from "./FileRoute.zig";
+import _FileResponseStream from "./FileResponseStream.zig";
+import _RangeRequest from "./RangeRequest.zig";
+import _ServerConfig from "./ServerConfig.zig";
+import _ServerWebSocket from "./ServerWebSocket.zig";
+import _NodeHTTPResponseMod from "./NodeHTTPResponse.zig";
+import _AnyRequestContext from "./AnyRequestContext.zig";
+import _RequestContextMod from "./RequestContext.zig";
+import Sys from "../../sys/sys.zig";
+import options from "../../bundler/options.zig";
+import _URLMod from "../../url/url.zig";
+import Runtime from "../../js_parser/runtime.zig";
+
 pub enum ProtocolEnum { http, https }
 pub enum DevelopmentKind { debug, production }
 enum CreateJsRequest { yes, no, bake }
@@ -81,9 +100,9 @@ pub struct UserRoutesDeinitGuard<T> {
     }
 }
 
-pub const WebSocketServerContext = @import("./WebSocketServerContext.zig");
-pub const HTTPStatusText = @import("./HTTPStatusText.zig");
-pub const HTMLBundle = @import("./HTMLBundle.zig");
+pub const WebSocketServerContext = _WebSocketServerContext;
+pub const HTTPStatusText = _HTTPStatusText;
+pub const HTMLBundle = _HTMLBundle;
 
 pub fn writeStatus(comptime ssl: bool, resp_ptr: (*uws.NewApp(ssl).Response)?, status: u16)  {
     if (resp := resp_ptr) {
@@ -97,10 +116,10 @@ pub fn writeStatus(comptime ssl: bool, resp_ptr: (*uws.NewApp(ssl).Response)?, s
 }
 
 // TODO: rename to StaticBlobRoute? the html bundle is sometimes a static route
-pub const StaticRoute = @import("./StaticRoute.zig");
-pub const FileRoute = @import("./FileRoute.zig").FileRoute;
-pub const FileResponseStream = @import("./FileResponseStream.zig");
-pub const RangeRequest = @import("./RangeRequest.zig");
+pub const StaticRoute = _StaticRoute;
+pub const FileRoute = _FileRouteMod.FileRoute;
+pub const FileResponseStream = _FileResponseStream;
+pub const RangeRequest = _RangeRequest;
 
 pub struct ServerUserRoute<S> {
     id: u32,
@@ -388,9 +407,9 @@ pub union(enum) AnyRoute {
     }
 }
 
-pub const ServerConfig = @import("./ServerConfig.zig");
-pub const ServerWebSocket = @import("./ServerWebSocket.zig");
-pub const NodeHTTPResponse = @import("./NodeHTTPResponse.zig").NodeHTTPResponse;
+pub const ServerConfig = _ServerConfig;
+pub const ServerWebSocket = _ServerWebSocket;
+pub const NodeHTTPResponse = _NodeHTTPResponseMod.NodeHTTPResponse;
 
 pub struct _ServePluginsPending {
     /// Promise may be empty if the plugin load finishes synchronously.
@@ -3366,8 +3385,8 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
     };
 }
 
-pub const AnyRequestContext = @import("./AnyRequestContext.zig");
-pub const NewRequestContext = @import("./RequestContext.zig").NewRequestContext;
+pub const AnyRequestContext = _AnyRequestContext;
+pub const NewRequestContext = _RequestContextMod.NewRequestContext;
 
 pub union(enum) _SavedRequestUnion {
     /// Direct pointer to a µWebSockets request that is still on the stack.
@@ -3799,16 +3818,10 @@ extern fn NodeHTTP_assignOnNodeJSCompat(_: bool, _: *!);
 extern fn NodeHTTP_setUsingCustomExpectHandler(_: bool, _: *!, _: bool);
 
 
-const Sys = @import("../../sys/sys.zig");
-const options = @import("../../bundler/options.zig");
-const std = @import("std");
-const URL = @import("../../url/url.zig").URL;
+const URL = _URLMod.URL;
 const Allocator = std.mem.Allocator;
 
-const Runtime = @import("../../js_parser/runtime.zig");
 const Fallback = Runtime.Fallback;
-
-const bun = @import("bun");
 const Async = bun.Async;
 const Environment = bun.Environment;
 const Global = bun.Global;

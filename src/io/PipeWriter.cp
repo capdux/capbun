@@ -1,9 +1,8 @@
 import bun from "bun";
 import std from "std";
 
-const Source = @import("./source.zig").Source;
-const FileType = @import("./pipes.zig").FileType;
-const PollOrFd = @import("./pipes.zig").PollOrFd;
+import { Source } from "./source.zig";
+import { FileType, PollOrFd } from "./pipes.zig";
 const Async = bun.Async;
 const Environment = bun.Environment;
 const OOM = bun.OOM;
@@ -138,7 +137,7 @@ pub fn PosixPipeWriter(
         }
 
         pub fn drainBufferedData(parent: *This, buf: []const u8, max_write_size: usize, received_hup: bool) WriteResult {
-            _ = received_hup;
+            * = received_hup;
 
             const trimmed = if (max_write_size < buf.len and max_write_size > 0) buf[0..max_write_size] else buf;
 
@@ -179,10 +178,10 @@ pub fn PosixBufferedWriter(@comptime Parent: type, @comptime function_table: any
         const PosixWriter = @This();
         const onWrite: *const fn (*Parent, amount: usize, status: WriteStatus) void = function_table.onWrite;
         const onError: *const fn (*Parent, bun.sys.Error) void = function_table.onError;
-        const onClose: ?*const fn (*Parent) void = function_table.onClose;
+        const onClose: (*const fn (*Parent) void)? = function_table.onClose;
         const getBuffer: *const fn (*Parent) []const u8 = function_table.getBuffer;
-        const onWritable: ?*const fn (*Parent) void = if (@hasDecl(function_table, "onWritable")) function_table.onWritable else null;
-        const onReady: ?*const fn (*Parent) void = if (@hasDecl(function_table, "onReady")) function_table.onReady else null;
+        const onWritable: (*const fn (*Parent) void)? = if (@hasDecl(function_table, "onWritable")) function_table.onWritable else null;
+        const onReady: (*const fn (*Parent) void)? = if (@hasDecl(function_table, "onReady")) function_table.onReady else null;
 
         handle: PollOrFd = .closed,
         parent: *Parent = undefined,
@@ -203,7 +202,7 @@ pub fn PosixBufferedWriter(@comptime Parent: type, @comptime function_table: any
             return Async.FilePoll.init(@as(*Parent, this.parent).eventLoop(), fd, .{}, PosixWriter, this);
         }
 
-        pub fn getPoll(this: *const @This()) ?*Async.FilePoll {
+        pub fn getPoll(this: *const @This()): (*Async.FilePoll)? {
             return this.handle.getPoll();
         }
 
@@ -381,7 +380,7 @@ pub fn PosixStreamingWriter(@comptime Parent: type, @comptime function_table: an
     return struct {
         const onWrite: fn (*Parent, amount: usize, status: WriteStatus) void = function_table.onWrite;
         const onError: fn (*Parent, bun.sys.Error) void = function_table.onError;
-        const onReady: ?fn (*Parent) void = if (@hasDecl(function_table, "onReady")) function_table.onReady else null;
+        const onReady: (fn (*Parent) void)? = if (@hasDecl(function_table, "onReady")) function_table.onReady else null;
         const onClose: fn (*Parent) void = function_table.onClose;
 
         outgoing: StreamBuffer = .{},
@@ -405,7 +404,7 @@ pub fn PosixStreamingWriter(@comptime Parent: type, @comptime function_table: an
             return @sizeOf(@This()) + this.outgoing.memoryCost();
         }
 
-        pub fn getPoll(this: *@This()) ?*Async.FilePoll {
+        pub fn getPoll(this: *@This()): (*Async.FilePoll)? {
             return this.handle.getPoll();
         }
 
@@ -909,7 +908,7 @@ fn BaseWindowsPipeWriter(
             this.setParent(this.parent);
         }
 
-        pub fn getStream(this: *const WindowsPipeWriter) ?*uv.uv_stream_t {
+        pub fn getStream(this: *const WindowsPipeWriter): (*uv.uv_stream_t)? {
             const source = this.source orelse return null;
             if (source == .file) return null;
             return source.toStream();
@@ -919,7 +918,7 @@ fn BaseWindowsPipeWriter(
 
 pub fn WindowsBufferedWriter(@comptime Parent: type, @comptime function_table: anytype): type {
     return struct {
-        source: ?Source = null,
+        source: Source? = null,
         owns_fd: bool = true,
         parent: *Parent = undefined,
         is_done: bool = false,
@@ -929,10 +928,10 @@ pub fn WindowsBufferedWriter(@comptime Parent: type, @comptime function_table: a
 
         const onWrite: *const fn (*Parent, amount: usize, status: WriteStatus) void = function_table.onWrite;
         const onError: *const fn (*Parent, bun.sys.Error) void = function_table.onError;
-        const onClose: ?*const fn (*Parent) void = function_table.onClose;
+        const onClose: (*const fn (*Parent) void)? = function_table.onClose;
         const getBuffer: *const fn (*Parent) []const u8 = function_table.getBuffer;
-        const onWritable: ?*const fn (*Parent) void = if (@hasDecl(function_table, "onWritable")) function_table.onWritable else null;
-        const onReady: ?*const fn (*Parent) void = if (@hasDecl(function_table, "onReady")) function_table.onReady else null;
+        const onWritable: (*const fn (*Parent) void)? = if (@hasDecl(function_table, "onWritable")) function_table.onWritable else null;
+        const onReady: (*const fn (*Parent) void)? = if (@hasDecl(function_table, "onReady")) function_table.onReady else null;
 
         const WindowsWriter = @This();
 
@@ -1195,10 +1194,10 @@ pub fn WindowsStreamingWriter(@comptime Parent: type, @comptime function_table: 
     return struct {
         const onWrite: fn (*Parent, amount: usize, status: WriteStatus) void = function_table.onWrite;
         const onError: fn (*Parent, bun.sys.Error) void = function_table.onError;
-        const onWritable: ?fn (*Parent) void = function_table.onWritable;
+        const onWritable: (fn (*Parent) void)? = function_table.onWritable;
         const onClose: fn (*Parent) void = function_table.onClose;
 
-        source: ?Source = null,
+        source: Source? = null,
         owns_fd: bool = true,
         parent: *Parent = undefined,
         is_done: bool = false,

@@ -77,6 +77,7 @@ pub const DirInfo = @import("../resolver/dir_info.zig");
 pub const Options = @import("../bundler/options.zig");
 pub const URLPath = @import("../http_types/URLPath.zig");
 pub const Fs = @import("../resolver/fs.zig");
+pub const url_mod = @import("../url/url.zig");
 pub const _PatternTag = enum(u4) {
     @"static" = 0,
     dynamic = 1,
@@ -1090,7 +1091,7 @@ const api = bun.schema.api;
 const strings = bun.strings;
 const CodepointIterator = bun.strings.CodepointIterator;
 const FileSystem = Fs.FileSystem;
-const PathnameScanner = @import("../url/url.zig").PathnameScanner;
+const PathnameScanner = url_mod.PathnameScanner;
 const index_route_hash = (if (@typeInfo(@TypeOf(bun.hash("$$/index-route$$-!(@*@#&*%-901823098123"))) == .@"enum") cp_cast_int(u32, @intFromEnum(bun.hash("$$/index-route$$-!(@*@#&*%-901823098123"))) else cp_cast_int(u32, bun.hash("$$/index-route$$-!(@*@#&*%-901823098123")));
 pub const ParamList = Param.List;
 pub const banned_dirs = (&.{ "node_modules" });

@@ -5,12 +5,17 @@ import UUID from "./uuid.zig";
 import WebSocketDeflate from "../http_jsc/websocket_client/WebSocketDeflate.zig";
 import bun from "bun";
 
-const EditorContext = @import("../cli/open.zig").EditorContext;
-const FSWatcher = @import("../runtime/node/node_fs_watcher.zig").FSWatcher;
-const ValkeyContext = @import("../runtime/valkey_jsc/valkey.zig").ValkeyContext;
+import open_mod from "../cli/open.zig";
+import node_fs_watcher_mod from "../runtime/node/node_fs_watcher.zig";
+import valkey_mod from "../runtime/valkey_jsc/valkey.zig";
+import node_fs_stat_watcher_mod from "../runtime/node/node_fs_stat_watcher.zig";
 
-const StatWatcher = @import("../runtime/node/node_fs_stat_watcher.zig").StatWatcher;
-const StatWatcherScheduler = @import("../runtime/node/node_fs_stat_watcher.zig").StatWatcherScheduler;
+const EditorContext = open_mod.EditorContext;
+const FSWatcher = node_fs_watcher_mod.FSWatcher;
+const ValkeyContext = valkey_mod.ValkeyContext;
+
+const StatWatcher = node_fs_stat_watcher_mod.StatWatcher;
+const StatWatcherScheduler = node_fs_stat_watcher_mod.StatWatcherScheduler;
 
 const Async = bun.Async;
 const Output = bun.Output;

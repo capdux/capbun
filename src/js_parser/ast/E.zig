@@ -68,6 +68,7 @@ fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .poi
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
+pub const expr_jsc = @import("../../js_parser_jsc/expr_jsc.zig");
 pub const bun = @import("bun");
 pub const CallUnwrap = enum(u2) {
     never,
@@ -228,7 +229,7 @@ pub fn alphabetizeStrings(self: *Array) void {
             const empty_ctx: void = undefined;
             _ = std.sort.pdq(Expr, self.items.slice(), empty_ctx, Sorter.isLessThan);
     }
-    pub const toJS = @import("../../js_parser_jsc/expr_jsc.zig").arrayToJS;
+    pub const toJS = expr_jsc.arrayToJS;
     const Sorter = ArraySorter;
 };
 
@@ -253,7 +254,7 @@ pub const Binary = struct {
 
 pub const Boolean = struct {
     value: bool,
-    pub const toJS = @import("../../js_parser_jsc/expr_jsc.zig").boolToJS;
+    pub const toJS = expr_jsc.boolToJS;
 };
 
 pub const Super = struct {
@@ -449,7 +450,7 @@ pub fn jsonStringify(self: Number, writer: anytype) !void {
     }
     const double_digit = [_]string{ "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "43", "44", "45", "46", "47", "48", "49", "50", "51", "52", "53", "54", "55", "56", "57", "58", "59", "60", "61", "62", "63", "64", "65", "66", "67", "68", "69", "70", "71", "72", "73", "74", "75", "76", "77", "78", "79", "80", "81", "82", "83", "84", "85", "86", "87", "88", "89", "90", "91", "92", "93", "94", "95", "96", "97", "98", "99", "100" };
     const neg_double_digit = [_]string{ "-0", "-1", "-2", "-3", "-4", "-5", "-6", "-7", "-8", "-9", "-10", "-11", "-12", "-13", "-14", "-15", "-16", "-17", "-18", "-19", "-20", "-21", "-22", "-23", "-24", "-25", "-26", "-27", "-28", "-29", "-30", "-31", "-32", "-33", "-34", "-35", "-36", "-37", "-38", "-39", "-40", "-41", "-42", "-43", "-44", "-45", "-46", "-47", "-48", "-49", "-50", "-51", "-52", "-53", "-54", "-55", "-56", "-57", "-58", "-59", "-60", "-61", "-62", "-63", "-64", "-65", "-66", "-67", "-68", "-69", "-70", "-71", "-72", "-73", "-74", "-75", "-76", "-77", "-78", "-79", "-80", "-81", "-82", "-83", "-84", "-85", "-86", "-87", "-88", "-89", "-90", "-91", "-92", "-93", "-94", "-95", "-96", "-97", "-98", "-99", "-100" };
-    pub const toJS = @import("../../js_parser_jsc/expr_jsc.zig").numberToJS;
+    pub const toJS = expr_jsc.numberToJS;
 };
 
 pub const BigInt = struct {
@@ -459,7 +460,7 @@ pub fn jsonStringify(self: BigInt, writer: anytype) !void {
             return try writer.write(self.value);
     }
     pub const empty: BigInt = BigInt{ .value = "" };
-    pub const toJS = @import("../../js_parser_jsc/expr_jsc.zig").bigIntToJS;
+    pub const toJS = expr_jsc.bigIntToJS;
 };
 
 pub const ObjectRope = struct {
@@ -708,7 +709,7 @@ pub fn packageJSONSort(self: *Object) void {
     pub const RopeQuery = ObjectRopeQuery;
     const PackageJSONSort = ObjectPackageJSONSort;
     const Sorter = ObjectSorter;
-    pub const toJS = @import("../../js_parser_jsc/expr_jsc.zig").objectToJS;
+    pub const toJS = expr_jsc.objectToJS;
     pub const SetError = ObjectSetError;
 };
 
@@ -1066,7 +1067,7 @@ pub fn jsonStringify(self: String, writer: anytype) !void {
     pub const @"false": String = String{ .data = "false" };
     pub const @"null": String = String{ .data = "null" };
     pub const @"undefined": String = String{ .data = "undefined" };
-    pub const toJS = @import("../../js_parser_jsc/expr_jsc.zig").stringToJS;
+    pub const toJS = expr_jsc.stringToJS;
 };
 
 pub const TemplatePart = struct {

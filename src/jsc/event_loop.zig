@@ -77,6 +77,21 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 
 pub const bun = @import("bun");
 pub const TaskMod = @import("./Task.zig");
+pub const _AnyEventLoopMod = @import("../event_loop/AnyEventLoop.zig");
+pub const _ConcurrentPromiseTaskMod = @import("./ConcurrentPromiseTask.zig");
+pub const _WorkTaskMod = @import("./WorkTask.zig");
+pub const _AnyTaskMod = @import("../event_loop/AnyTask.zig");
+pub const _ManagedTaskMod = @import("../event_loop/ManagedTask.zig");
+pub const _AnyTaskWithExtraContextMod = @import("../event_loop/AnyTaskWithExtraContext.zig");
+pub const _CppTaskMod = @import("./CppTask.zig");
+pub const _JSCSchedulerMod = @import("./JSCScheduler.zig");
+pub const _ConcurrentTaskMod = @import("../event_loop/ConcurrentTask.zig");
+pub const _GarbageCollectionControllerMod = @import("./GarbageCollectionController.zig");
+pub const _DeferredTaskQueueMod = @import("../event_loop/DeferredTaskQueue.zig");
+pub const _PosixSignalHandleMod = @import("./PosixSignalHandle.zig");
+pub const _MiniEventLoopMod = @import("../event_loop/MiniEventLoop.zig");
+pub const _EventLoopHandleMod = @import("./EventLoopHandle.zig");
+pub const _WorkPoolMod = @import("../threading/work_pool.zig");
 pub const DrainMicrotasksResult = enum(u8) {
     success = 0,
     JSTerminated = 1,
@@ -690,32 +705,32 @@ pub inline fn enter(_: Debug) void {
 pub inline fn exit(_: Debug) void {
     }
 });
-pub const AnyEventLoop = @import("../event_loop/AnyEventLoop.zig").AnyEventLoop;
-pub const ConcurrentPromiseTask = @import("./ConcurrentPromiseTask.zig").ConcurrentPromiseTask;
-pub const WorkTask = @import("./WorkTask.zig").WorkTask;
-pub const AnyTask = @import("../event_loop/AnyTask.zig");
-pub const ManagedTask = @import("../event_loop/ManagedTask.zig");
-pub const AnyTaskWithExtraContext = @import("../event_loop/AnyTaskWithExtraContext.zig");
-pub const CppTask = @import("./CppTask.zig").CppTask;
-pub const ConcurrentCppTask = @import("./CppTask.zig").ConcurrentCppTask;
-pub const JSCScheduler = @import("./JSCScheduler.zig");
-pub const Task = @import("./Task.zig").Task;
-pub const ConcurrentTask = @import("../event_loop/ConcurrentTask.zig").ConcurrentTask;
-pub const GarbageCollectionController = @import("./GarbageCollectionController.zig");
-pub const DeferredTaskQueue = @import("../event_loop/DeferredTaskQueue.zig");
+pub const AnyEventLoop = _AnyEventLoopMod.AnyEventLoop;
+pub const ConcurrentPromiseTask = _ConcurrentPromiseTaskMod.ConcurrentPromiseTask;
+pub const WorkTask = _WorkTaskMod.WorkTask;
+pub const AnyTask = _AnyTaskMod;
+pub const ManagedTask = _ManagedTaskMod;
+pub const AnyTaskWithExtraContext = _AnyTaskWithExtraContextMod;
+pub const CppTask = _CppTaskMod.CppTask;
+pub const ConcurrentCppTask = _CppTaskMod.ConcurrentCppTask;
+pub const JSCScheduler = _JSCSchedulerMod;
+pub const Task = TaskMod.Task;
+pub const ConcurrentTask = _ConcurrentTaskMod.ConcurrentTask;
+pub const GarbageCollectionController = _GarbageCollectionControllerMod;
+pub const DeferredTaskQueue = _DeferredTaskQueueMod;
 pub const DeferredRepeatingTask = DeferredTaskQueue.DeferredRepeatingTask;
-pub const PosixSignalHandle = @import("./PosixSignalHandle.zig");
+pub const PosixSignalHandle = _PosixSignalHandleMod;
 pub const PosixSignalTask = PosixSignalHandle.PosixSignalTask;
-pub const MiniEventLoop = @import("../event_loop/MiniEventLoop.zig");
+pub const MiniEventLoop = _MiniEventLoopMod;
 pub const MiniVM = MiniEventLoop.MiniVM;
 pub const JsVM = MiniEventLoop.JsVM;
 pub const EventLoopKind = MiniEventLoop.EventLoopKind;
 pub const AbstractVM = MiniEventLoop.AbstractVM;
-pub const EventLoopHandle = @import("./EventLoopHandle.zig").EventLoopHandle;
-pub const EventLoopTask = @import("./EventLoopHandle.zig").EventLoopTask;
-pub const EventLoopTaskPtr = @import("./EventLoopHandle.zig").EventLoopTaskPtr;
-pub const WorkPool = @import("../threading/work_pool.zig").WorkPool;
-pub const WorkPoolTask = @import("../threading/work_pool.zig").Task;
+pub const EventLoopHandle = _EventLoopHandleMod.EventLoopHandle;
+pub const EventLoopTask = _EventLoopHandleMod.EventLoopTask;
+pub const EventLoopTaskPtr = _EventLoopHandleMod.EventLoopTaskPtr;
+pub const WorkPool = _WorkPoolMod.WorkPool;
+pub const WorkPoolTask = _WorkPoolMod.Task;
 
 extern "c" fn JSC__JSGlobalObject__drainMicrotasks(global: *jsc.JSGlobalObject) callconv(.c) DrainMicrotasksResult;
 

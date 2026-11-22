@@ -472,7 +472,7 @@ pub fn DMP(comptime Unit: type): type {
                 alloc: allocator,
             };
 
-            let half_match: ?HalfMatchResult = null;
+            let half_match: HalfMatchResult? = null;
             if (half_match_1 == null and half_match_2 == null) {
                 return null;
             } else if (half_match_2 == null) {
@@ -1157,7 +1157,7 @@ pub fn DMP(comptime Unit: type): type {
             let equalities: std.ArrayListUnmanaged(isize) = .empty;
             const _guard_equalities = DeinitWithAllocGuard<@TypeOf(equalities)>{ ptr: unsafe { &equalities }, alloc: allocator };
             // Always equal to equalities[equalitiesLength-1][1]
-            let last_equality: ?[]const Unit = null;
+            let last_equality: ([]const Unit)? = null;
             let pointer: isize = 0; // Index of current position.
             // Number of characters that changed prior to the equality.
             let length_insertions1: usize = 0;
@@ -1197,9 +1197,9 @@ pub fn DMP(comptime Unit: type): type {
                         // Change second copy to insert.
                         diffs.items[equalities.items[equalities.items.len - 1] + 1].operation = .insert;
                         // Throw away the equality we just deleted.
-                        _ = equalities.pop();
+                        * = equalities.pop();
                         if (equalities.items.len > 0) {
-                            _ = equalities.pop();
+                            * = equalities.pop();
                         }
                         pointer = if (equalities.items.len > 0) equalities.items[equalities.items.len - 1] else -1;
                         length_insertions1 = 0; // Reset the counters.
@@ -1349,10 +1349,10 @@ pub fn DMP(comptime Unit: type): type {
                     while (edit.items.len != 0 and equality_2.items.len != 0 and edit.items[0] == equality_2.items[0]) {
                         try equality_1.append(allocator, edit.items[0]);
 
-                        _ = edit.orderedRemove(0);
+                        * = edit.orderedRemove(0);
                         try edit.append(allocator, equality_2.items[0]);
 
-                        _ = equality_2.orderedRemove(0);
+                        * = equality_2.orderedRemove(0);
 
                         const score = diffCleanupSemanticScore(equality_1.items, edit.items) +
                             diffCleanupSemanticScore(edit.items, equality_2.items);
@@ -1523,7 +1523,7 @@ pub fn DMP(comptime Unit: type): type {
                         );
                         // Change second copy to insert.
                         diffs.items[equalities.items[equalities.items.len - 1] + 1].operation = .insert;
-                        _ = equalities.pop(); // Throw away the equality we just deleted.
+                        * = equalities.pop(); // Throw away the equality we just deleted.
                         last_equality = "";
                         if (pre_ins and pre_del) {
                             // No changes made which could affect previous entry, keep going.
@@ -1532,7 +1532,7 @@ pub fn DMP(comptime Unit: type): type {
                             equalities.clearRetainingCapacity();
                         } else {
                             if (equalities.items.len > 0) {
-                                _ = equalities.pop();
+                                * = equalities.pop();
                             }
 
                             ipointer = if (equalities.items.len > 0) @intCast(equalities.items[equalities.items.len - 1]) else -1;
@@ -1626,14 +1626,16 @@ pub fn DMP(comptime Unit: type): type {
             try testing.expectEqual(@as(usize, 0), diffCommonOverlap("fi", "\u{fb01}")); // Unicode
         }
 
+        const TestDiffHalfMatchParams = struct {
+            dmp: DiffMatchPatch,
+            before: []const Unit,
+            after: []const Unit,
+            expected: HalfMatchResult?,
+        };
+
         fn testDiffHalfMatch(
             allocator: std.mem.Allocator,
-            params: struct {
-                dmp: DiffMatchPatch,
-                before: []const Unit,
-                after: []const Unit,
-                expected: ?HalfMatchResult,
-            },
+            params: TestDiffHalfMatchParams,
         ) !void {
             let maybe_result = try params.dmp.diffHalfMatch(allocator, params.before, params.after);
             const _guard_res = DeinitWithAllocGuard<HalfMatchResult>{

@@ -1,8 +1,9 @@
 // src/http/h2_client/ClientSession.cp
 // One TCP+TLS connection running the HTTP/2 protocol for `fetch()`.
 
-const bun = @import("bun");
-pub const HTTPContextTLS = @import("../HTTPContext.zig").NewHTTPContext(true);
+import bun from "bun";
+import { HTTPContext, NewHTTPContext } from "../HTTPContext.cp";
+pub const HTTPContextTLS = NewHTTPContext(true);
 pub const Socket = HTTPContextTLS.HTTPSocket;
 pub const HTTPClient = bun.http.HTTPClient;
 pub const SSLConfig = bun.api.server.ServerConfig.SSLConfig;
@@ -12,7 +13,6 @@ import * as dispatch from "./dispatch.cp";
 import * as encode from "./encode.cp";
 import { HPACK } from "../lshpack.cp";
 import * as H2FrameParser from "../H2FrameParser.cp";
-import { HTTPContext, NewHTTPContext } from "../HTTPContext.cp";
 
 enum HeaderResult {
     has_body,

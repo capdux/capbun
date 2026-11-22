@@ -38,7 +38,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -59,11 +59,13 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const resolve_path = @import("../paths/resolve_path.zig");
 pub const resolver = @import("../resolver/resolver.zig");
 pub const bun = @import("bun");
+pub const options_mod = @import("./options.zig");
+pub const output_file_jsc = @import("../bundler_jsc/output_file_jsc.zig");
 pub const Kind = enum {
     @"move",
     @"copy",
@@ -152,8 +154,8 @@ _ = buf.allocator.free(buf.bytes);
 }
     }
 
-pub fn asSlice(self: Value) []const u8 {
-            return (switch (self) {
+pub fn asSlice(self: *const Value) []const u8 {
+            return (switch (self.*) {
 .buffer => |buf| buf.bytes,
 else => "",
 });
@@ -306,7 +308,10 @@ var rel_path = self.dest_path;
         }
         var path_buf: bun.PathBuffer = undefined;
         _ = &path_buf;
-        _ = try jsc.Node.fs.NodeFS.writeFileWithPathBuffer((&path_buf), .{ .data = .{ .buffer = .{ .buffer = .{ .ptr = @constCast(value.bytes.ptr), .len = value.bytes.len, .byte_len = value.bytes.len } } }, .encoding = .buffer, .mode = (if (self.is_executable) 493 else 420), .dirfd = .fromStdDir(root_dir), .file = .{ .path = .{ .string = bun.PathString.init(rel_path) } } }).unwrap();
+        _ = try jsc.Node.fs.NodeFS.writeFileWithPathBuffer((&path_buf), .{ .data = .{ .buffer = .{ .buffer = .{ .ptr = (blk: {
+        break :blk @constCast(value.bytes.ptr);
+
+}), .len = value.bytes.len, .byte_len = value.bytes.len } } }, .encoding = .buffer, .mode = (if (self.is_executable) 493 else 420), .dirfd = .fromStdDir(root_dir), .file = .{ .path = .{ .string = bun.PathString.init(rel_path) } } }).unwrap();
 },
 .@"move" => |value| {
 _ = try self.moveTo(root_dir_path, value.pathname, .fromStdDir(root_dir));
@@ -346,12 +351,12 @@ pub fn copyTo(self: *OutputFile, _: []const u8, rel_path: []const u8, dir: FileD
 }
 pub const zero_value = OutputFile{ .loader = .file, .src_path = Fs.Path.init(""), .value = .noop, .output_kind = .chunk, .side = null, .entry_point_index = null };
 const string = []const u8;
-const Loader = @import("./options.zig").Loader;
+const Loader = options_mod.Loader;
 const Environment = bun.Environment;
 const FileDescriptorType = bun.FD;
 const Fs = bun.fs;
 const jsc = bun.jsc;
-pub const SavedFile = @import("../bundler_jsc/output_file_jsc.zig").SavedFile;
-pub const toJS = @import("../bundler_jsc/output_file_jsc.zig").toJS;
-pub const toBlob = @import("../bundler_jsc/output_file_jsc.zig").toBlob;
+pub const SavedFile = output_file_jsc.SavedFile;
+pub const toJS = output_file_jsc.toJS;
+pub const toBlob = output_file_jsc.toBlob;
 pub const Index = bun.GenericIndex(u32, OutputFile);

@@ -1,4 +1,5 @@
 import bun from "bun";
+import error_jsc from "../sys_jsc/error_jsc.zig";
 
 const Environment = bun.Environment;
 const SystemError = bun.jsc.SystemError;
@@ -321,7 +322,7 @@ pub type _TagNameTuple = [[:0]const u8, SystemErrno];
         return Error{ errno: todo_errno, syscall: .TODO };
     }
 
-    pub const toJS = @import("../sys_jsc/error_jsc.zig").toJS;
-    pub const toJSWithAsyncStack = @import("../sys_jsc/error_jsc.zig").toJSWithAsyncStack;
-    pub const TestingAPIs = @import("../sys_jsc/error_jsc.zig").TestingAPIs;
+    pub const toJS = error_jsc.toJS;
+    pub const toJSWithAsyncStack = error_jsc.toJSWithAsyncStack;
+    pub const TestingAPIs = error_jsc.TestingAPIs;
 }

@@ -20,9 +20,9 @@ pub const JSHostFnZig = @TypeOf(_JSHostFnZig);
 fn _ZigWithContext(comptime ContextType: type): type {
     return struct {
         pub fn f(ctx: *ContextType, globalThis: *JSGlobalObject, callframe: *CallFrame) bun.JSError!JSValue {
-            _ = ctx;
-            _ = globalThis;
-            _ = callframe;
+            * = ctx;
+            * = globalThis;
+            * = callframe;
             return .zero;
         }
     };
@@ -31,9 +31,9 @@ fn _ZigWithContext(comptime ContextType: type): type {
 fn _FnTypeWithContext(comptime ContextType: type): type {
     return struct {
         pub fn f(ctx: *ContextType, globalThis: *JSGlobalObject, callframe: *CallFrame) callconv(jsc.conv) JSValue {
-            _ = ctx;
-            _ = globalThis;
-            _ = callframe;
+            * = ctx;
+            * = globalThis;
+            * = callframe;
             return .zero;
         }
     };
@@ -503,7 +503,7 @@ pub fn DOMCall(
         const PutFnType = fn (globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) callconv(.c) void;
         const put_fn = @extern(PutFnType, .{ .name = className ++ "__" ++ functionName ++ "__put" });
 
-        pub fn put(globalObject: *jsc.JSGlobalObject, value: jsc.JSValue): void {
+        pub fn put(globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) void {
             put_fn(globalObject, value);
         }
 

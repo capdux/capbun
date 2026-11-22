@@ -1,6 +1,5 @@
 // Next.js-compatible file-system router in CP
-const std = @import("std");
-const bun = @import("bun");
+import bun from "bun";
 
 const Environment = bun.Environment;
 const FD = bun.FD;
@@ -17,10 +16,14 @@ import DirInfo from "../resolver/dir_info.zig";
 import Options from "../bundler/options.zig";
 import URLPath from "../http_types/URLPath.zig";
 import Fs from "../resolver/fs.zig";
-const FileSystem = Fs.FileSystem;
-const PathnameScanner = @import("../url/url.zig").PathnameScanner;
+import url_mod from "../url/url.zig";
+import route_types from "./route_types.zig";
+import ParamMapModule from "./ParamMap.zig";
+import RouteModule from "./Route.zig";
 
-const route_types = @import("./route_types.zig");
+const FileSystem = Fs.FileSystem;
+const PathnameScanner = url_mod.PathnameScanner;
+
 pub type RoutePathInt = route_types.RoutePathInt;
 pub const index_route_hash = route_types.index_route_hash;
 pub const banned_dirs = route_types.banned_dirs;
@@ -30,12 +33,10 @@ pub type AbsPathType = route_types.AbsPathType;
 pub type Pattern = route_types.Pattern;
 pub const PatternValidationResult = route_types.PatternValidationResult;
 
-const ParamMapModule = @import("./ParamMap.zig");
 pub type Param = ParamMapModule.Param;
 pub const ParamList = ParamMapModule.ParamList;
 pub type ParamListPtr = ParamMapModule.ParamListPtr;
 
-const RouteModule = @import("./Route.zig");
 pub type Route = RouteModule.Route;
 pub const RouteSorter = RouteModule.RouteSorter;
 pub type Match = RouteModule.Match;

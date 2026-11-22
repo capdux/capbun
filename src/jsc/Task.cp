@@ -1,13 +1,12 @@
 // JavaScriptCore Main Thread Task Union and Queue Dispatcher in CP
 import { Environment, Output, TaggedPointerUnion, Async, shell, jsc } from "bun";
 pub const VirtualMachine = jsc.VirtualMachine;
-const std = @import("std");
-const bun = @import("bun");
+import bun from "bun";
 
-const JSCScheduler = @import("../jsc/JSCScheduler.zig");
+import JSCScheduler from "../jsc/JSCScheduler.zig";
 const JSCDeferredWorkTask = JSCScheduler.JSCDeferredWorkTask;
 
-const Fetch = @import("../runtime/webcore/fetch.zig");
+import Fetch from "../runtime/webcore/fetch.zig";
 const FetchTasklet = Fetch.FetchTasklet;
 
 const FlushPendingFileSinkTask = bun.webcore.FileSink.FlushPendingTask;

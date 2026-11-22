@@ -83,6 +83,8 @@ fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
 }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
+pub const bun = @import("bun");
+pub const cares_jsc = @import("../runtime/dns_jsc/cares_jsc.zig");
 pub const NSClass = enum(c_int) {
     ns_c_invalid = 0,
     ns_c_in = 1,
@@ -277,13 +279,13 @@ else => unreachable,
 });
     }
     
-    pub const Deferred = @import("../runtime/dns_jsc/cares_jsc.zig").ErrorDeferred;
+    pub const Deferred = cares_jsc.ErrorDeferred;
     
-    pub const toDeferred = @import("../runtime/dns_jsc/cares_jsc.zig").errorToDeferred;
+    pub const toDeferred = cares_jsc.errorToDeferred;
     
-    pub const toJSWithSyscall = @import("../runtime/dns_jsc/cares_jsc.zig").errorToJSWithSyscall;
+    pub const toJSWithSyscall = cares_jsc.errorToJSWithSyscall;
     
-    pub const toJSWithSyscallAndHostname = @import("../runtime/dns_jsc/cares_jsc.zig").errorToJSWithSyscallAndHostname;
+    pub const toJSWithSyscallAndHostname = cares_jsc.errorToJSWithSyscallAndHostname;
     
     pub const code = bun.enumMap(Error, .{ .{ .ENODATA, "DNS_ENODATA" }, .{ .EFORMERR, "DNS_EFORMERR" }, .{ .ESERVFAIL, "DNS_ESERVFAIL" }, .{ .ENOTFOUND, "DNS_ENOTFOUND" }, .{ .ENOTIMP, "DNS_ENOTIMP" }, .{ .EREFUSED, "DNS_EREFUSED" }, .{ .EBADQUERY, "DNS_EBADQUERY" }, .{ .EBADNAME, "DNS_ENOTFOUND" }, .{ .EBADFAMILY, "DNS_EBADFAMILY" }, .{ .EBADRESP, "DNS_EBADRESP" }, .{ .ECONNREFUSED, "DNS_ECONNREFUSED" }, .{ .ETIMEOUT, "DNS_ETIMEOUT" }, .{ .EOF, "DNS_EOF" }, .{ .EFILE, "DNS_EFILE" }, .{ .ENOMEM, "DNS_ENOMEM" }, .{ .EDESTRUCTION, "DNS_EDESTRUCTION" }, .{ .EBADSTR, "DNS_EBADSTR" }, .{ .EBADFLAGS, "DNS_EBADFLAGS" }, .{ .ENONAME, "DNS_ENOTFOUND" }, .{ .EBADHINTS, "DNS_EBADHINTS" }, .{ .ENOTINITIALIZED, "DNS_ENOTINITIALIZED" }, .{ .ELOADIPHLPAPI, "DNS_ELOADIPHLPAPI" }, .{ .EADDRGETNETWORKPARAMS, "DNS_EADDRGETNETWORKPARAMS" }, .{ .ECANCELLED, "DNS_ECANCELLED" }, .{ .ESERVICE, "DNS_ESERVICE" }, .{ .ENOSERVER, "DNS_ENOSERVER" } });
     
@@ -329,7 +331,7 @@ pub const Options = extern struct {
     maxtimeout: c_int = 0,
     qcache_max_ttl: c_uint = 0,
     evsys: ares_evsys_t = 0,
-    server_failover_opts: struct_ares_server_failover_options = @import("std").mem.zeroes(struct_ares_server_failover_options),
+    server_failover_opts: struct_ares_server_failover_options = std.mem.zeroes(struct_ares_server_failover_options),
 };
 
 pub const struct_hostent = extern struct {
@@ -342,7 +344,7 @@ pub const struct_hostent = extern struct {
 pub fn deinit(self: *struct_hostent) void {
             _ = ares_free_hostent(self);
     }
-    pub const toJSResponse = @import("../runtime/dns_jsc/cares_jsc.zig").hostentToJSResponse;
+    pub const toJSResponse = cares_jsc.hostentToJSResponse;
     pub const Callback = hostentCallback;
     pub const hostCallbackWrapper = hostentHostCallbackWrapper;
     pub const callbackWrapper = hostentCallbackWrapper;
@@ -443,7 +445,7 @@ pub fn deinit(self: *hostent_with_ttls) void {
             _ = self.hostent.deinit();
             _ = bun.default_allocator.destroy(self);
     }
-    pub const toJSResponse = @import("../runtime/dns_jsc/cares_jsc.zig").hostentWithTtlsToJSResponse;
+    pub const toJSResponse = cares_jsc.hostentWithTtlsToJSResponse;
 };
 
 pub const struct_nameinfo = extern struct {
@@ -468,7 +470,7 @@ pub fn handle(ctx: ?*anyopaque, status: c_int, timeouts: c_int, node: [*c]u8, se
     }
 }).handle);
     }
-    pub const toJSResponse = @import("../runtime/dns_jsc/cares_jsc.zig").nameinfoToJSResponse;
+    pub const toJSResponse = cares_jsc.nameinfoToJSResponse;
 };
 
 pub const struct_Channeldata = opaque {
@@ -535,7 +537,7 @@ pub fn handleAddrInfo(ctx: ?*anyopaque, status: c_int, timeouts: c_int, addr_inf
 pub fn deinit(self: *AddrInfo) void {
             _ = ares_freeaddrinfo(self);
     }
-    pub const toJSArray = @import("../runtime/dns_jsc/cares_jsc.zig").addrInfoToJSArray;
+    pub const toJSArray = cares_jsc.addrInfoToJSArray;
 };
 
 pub const AddrInfo_hints = extern struct {
@@ -769,8 +771,8 @@ pub fn handle(ctx: ?*anyopaque, status: c_int, timeouts: c_int, buffer: [*c]u8, 
 pub fn deinit(self: *struct_ares_caa_reply) void {
             _ = ares_free_data(self);
     }
-    pub const toJSResponse = @import("../runtime/dns_jsc/cares_jsc.zig").caaReplyToJSResponse;
-    pub const toJS = @import("../runtime/dns_jsc/cares_jsc.zig").caaReplyToJS;
+    pub const toJSResponse = cares_jsc.caaReplyToJSResponse;
+    pub const toJS = cares_jsc.caaReplyToJS;
 };
 
 pub const struct_ares_srv_reply = extern struct {
@@ -808,8 +810,8 @@ pub fn handleSrv(ctx: ?*anyopaque, status: c_int, timeouts: c_int, buffer: [*c]u
 pub fn deinit(self: *struct_ares_srv_reply) void {
             _ = ares_free_data(self);
     }
-    pub const toJSResponse = @import("../runtime/dns_jsc/cares_jsc.zig").srvReplyToJSResponse;
-    pub const toJS = @import("../runtime/dns_jsc/cares_jsc.zig").srvReplyToJS;
+    pub const toJSResponse = cares_jsc.srvReplyToJSResponse;
+    pub const toJS = cares_jsc.srvReplyToJS;
 };
 
 pub const struct_ares_mx_reply = extern struct {
@@ -845,8 +847,8 @@ pub fn handle(ctx: ?*anyopaque, status: c_int, timeouts: c_int, buffer: [*c]u8, 
 pub fn deinit(self: *struct_ares_mx_reply) void {
             _ = ares_free_data(self);
     }
-    pub const toJSResponse = @import("../runtime/dns_jsc/cares_jsc.zig").mxReplyToJSResponse;
-    pub const toJS = @import("../runtime/dns_jsc/cares_jsc.zig").mxReplyToJS;
+    pub const toJSResponse = cares_jsc.mxReplyToJSResponse;
+    pub const toJS = cares_jsc.mxReplyToJS;
 };
 
 pub const struct_ares_txt_reply = extern struct {
@@ -882,9 +884,9 @@ pub fn handleTxt(ctx: ?*anyopaque, status: c_int, timeouts: c_int, buffer: [*c]u
 pub fn deinit(self: *struct_ares_txt_reply) void {
             _ = ares_free_data(self);
     }
-    pub const toJSResponse = @import("../runtime/dns_jsc/cares_jsc.zig").txtReplyToJSResponse;
-    pub const toJS = @import("../runtime/dns_jsc/cares_jsc.zig").txtReplyToJS;
-    pub const toJSForAny = @import("../runtime/dns_jsc/cares_jsc.zig").txtReplyToJSForAny;
+    pub const toJSResponse = cares_jsc.txtReplyToJSResponse;
+    pub const toJS = cares_jsc.txtReplyToJS;
+    pub const toJSForAny = cares_jsc.txtReplyToJSForAny;
 };
 
 pub const struct_ares_txt_ext = extern struct {
@@ -931,8 +933,8 @@ pub fn handleNaptr(ctx: ?*anyopaque, status: c_int, timeouts: c_int, buffer: [*c
 pub fn deinit(self: *struct_ares_naptr_reply) void {
             _ = ares_free_data(self);
     }
-    pub const toJSResponse = @import("../runtime/dns_jsc/cares_jsc.zig").naptrReplyToJSResponse;
-    pub const toJS = @import("../runtime/dns_jsc/cares_jsc.zig").naptrReplyToJS;
+    pub const toJSResponse = cares_jsc.naptrReplyToJSResponse;
+    pub const toJS = cares_jsc.naptrReplyToJS;
 };
 
 pub const struct_ares_soa_reply = extern struct {
@@ -972,8 +974,8 @@ pub fn handleSoa(ctx: ?*anyopaque, status: c_int, timeouts: c_int, buffer: [*c]u
 pub fn deinit(self: *struct_ares_soa_reply) void {
             _ = ares_free_data(self);
     }
-    pub const toJSResponse = @import("../runtime/dns_jsc/cares_jsc.zig").soaReplyToJSResponse;
-    pub const toJS = @import("../runtime/dns_jsc/cares_jsc.zig").soaReplyToJS;
+    pub const toJSResponse = cares_jsc.soaReplyToJSResponse;
+    pub const toJS = cares_jsc.soaReplyToJS;
 };
 
 pub const struct_ares_uri_reply = extern struct {
@@ -1104,8 +1106,8 @@ pub fn deinit(self: *struct_any_reply) void {
             }
             _ = bun.default_allocator.destroy(self);
     }
-    pub const toJSResponse = @import("../runtime/dns_jsc/cares_jsc.zig").anyReplyToJSResponse;
-    pub const toJS = @import("../runtime/dns_jsc/cares_jsc.zig").anyReplyToJS;
+    pub const toJSResponse = cares_jsc.anyReplyToJSResponse;
+    pub const toJS = cares_jsc.anyReplyToJS;
 };
 
 const union_unnamed_3 = extern union {
@@ -1278,12 +1280,11 @@ pub const ares_soa_reply = struct_ares_soa_reply;
 pub const ares_uri_reply = struct_ares_uri_reply;
 pub const ares_addr_node = struct_ares_addr_node;
 pub const ares_addr_port_node = struct_ares_addr_port_node;
-const iovec = @import("std").os.iovec;
-const bun = @import("bun");
+const iovec = std.os.iovec;
 const jsc = bun.jsc;
 const strings = bun.strings;
 const libuv = bun.windows.libuv;
-const c = @import("std").c;
+const c = std.c;
 const ares_socklen_t = c.socklen_t;
 const fd_set = c.fd_set;
 const struct_sockaddr = std.posix.sockaddr;

@@ -5,6 +5,7 @@ const std = @import("std");
 const string = []const u8;
 
 pub const bun = @import("bun");
+pub const _ResolvedSourceTag = @import("ResolvedSourceTag");
 pub const ResolvedSource = extern struct {
     specifier: bun.String = bun.String.empty,
     source_code: bun.String = bun.String.empty,
@@ -20,7 +21,7 @@ pub const ResolvedSource = extern struct {
     bytecode_cache_size: usize = 0,
     module_info: ?*anyopaque = null,
     bytecode_origin_path: bun.String = bun.String.empty,
-    pub const Tag = @import("ResolvedSourceTag").ResolvedSourceTag;
+    pub const Tag = _ResolvedSourceTag.ResolvedSourceTag;
 };
 
 const jsc = bun.jsc;

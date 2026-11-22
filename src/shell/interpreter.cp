@@ -291,7 +291,8 @@ pub enum CoroutineResult {
 }
 
 import RefCountedStr from "./RefCountedStr.zig";
-pub const EnvStr = @import("./EnvStr.zig").EnvStr;
+import _EnvStrMod from "./EnvStr.zig";
+pub const EnvStr = _EnvStrMod.EnvStr;
 import EnvMap from "./EnvMap.zig";
 import ParsedShellScript from "./ParsedShellScript.zig";
 pub struct ShellArgs {
@@ -781,18 +782,18 @@ pub struct Interpreter {
     pub const Catch = ShellCatch;
 
     // Here are all the state nodes:
-    pub const State = @import("./states/Base.zig");
-    pub const Script = @import("./states/Script.zig");
-    pub const Stmt = @import("./states/Stmt.zig");
-    pub const Pipeline = @import("./states/Pipeline.zig");
-    pub const Binary = @import("./states/Binary.zig");
-    pub const Subshell = @import("./states/Subshell.zig");
-    pub const Expansion = @import("./states/Expansion.zig");
-    pub const Assigns = @import("./states/Assigns.zig");
-    pub const Async = @import("./states/Async.zig");
-    pub const CondExpr = @import("./states/CondExpr.zig");
-    pub const If = @import("./states/If.zig");
-    pub const Cmd = @import("./states/Cmd.zig");
+    pub const State = _StateMod;
+    pub const Script = _ScriptMod;
+    pub const Stmt = _StmtMod;
+    pub const Pipeline = _PipelineMod;
+    pub const Binary = _BinaryMod;
+    pub const Subshell = _SubshellMod;
+    pub const Expansion = _ExpansionMod;
+    pub const Assigns = _AssignsMod;
+    pub const Async = _AsyncMod;
+    pub const CondExpr = _CondExprMod;
+    pub const If = _IfMod;
+    pub const Cmd = _CmdMod;
 
     pub const InterpreterChildPtr = StatePtrUnion(.{
         Script,
@@ -1563,16 +1564,16 @@ pub struct Interpreter {
 
     const ExpansionOpts = _ExpansionOpts;
 
-    pub const Builtin = @import("./Builtin.zig");
+    pub const Builtin = _BuiltinMod;
 
     /// TODO: Investigate whether or not this can be removed now that we have
     /// removed recursion
     pub const AsyncDeinitReader = IOReader.AsyncDeinitReader;
 
-    pub const IO = @import("./IO.zig");
-    pub const IOReader = @import("./IOReader.zig");
+    pub const IO = _IOMod;
+    pub const IOReader = _IOReaderMod;
     pub const IOReaderChildPtr = IOReader.ChildPtr;
-    pub const IOWriter = @import("./IOWriter.zig");
+    pub const IOWriter = _IOWriterMod;
 
     pub const AsyncDeinitWriter = IOWriter.AsyncDeinitWriter;
 }
@@ -2132,7 +2133,7 @@ pub type FlagArgs = ([]const CStr)?;
 pub union(enum) ParseFlagResult { continue_parsing: void, done: void, illegal_option: []const u8, unsupported: []const u8, show_usage: void }
 pub fn FlagParser(comptime Opts: type): type {
     return struct {
-        pub const Result = @import("../bun_core/result.zig").Result;
+        pub const Result = _ResultMod.Result;
 
         pub fn parseFlags(opts: Opts, args: []const CStr): Result(FlagArgs, ParseError) {
             let idx: usize = 0;
@@ -2205,7 +2206,25 @@ pub fn unreachableState(context: []const u8, state: []const u8): noreturn {
 }
 
 import builtin from "builtin";
-const WTFStringImplStruct = @import("../string/string.zig").WTFStringImplStruct;
+import _StateMod from "./states/Base.zig";
+import _ScriptMod from "./states/Script.zig";
+import _StmtMod from "./states/Stmt.zig";
+import _PipelineMod from "./states/Pipeline.zig";
+import _BinaryMod from "./states/Binary.zig";
+import _SubshellMod from "./states/Subshell.zig";
+import _ExpansionMod from "./states/Expansion.zig";
+import _AssignsMod from "./states/Assigns.zig";
+import _AsyncMod from "./states/Async.zig";
+import _CondExprMod from "./states/CondExpr.zig";
+import _IfMod from "./states/If.zig";
+import _CmdMod from "./states/Cmd.zig";
+import _BuiltinMod from "./Builtin.zig";
+import _IOMod from "./IO.zig";
+import _IOReaderMod from "./IOReader.zig";
+import _IOWriterMod from "./IOWriter.zig";
+import _ResultMod from "../bun_core/result.zig";
+import _StringMod from "../string/string.zig";
+const WTFStringImplStruct = _StringMod.WTFStringImplStruct;
 
 import bun from "bun";
 const ResolvePath = bun.path;

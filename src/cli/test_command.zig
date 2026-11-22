@@ -73,6 +73,7 @@ pub const resolve_path = @import("../paths/resolve_path.zig");
 pub const cli_mod = @import("./cli.zig");
 pub const fs_mod = @import("../resolver/fs.zig");
 pub const which_mod = @import("../which/which.zig");
+pub const CodeCoverageOptionsMod = @import("../options_types/CodeCoverageOptions.zig");
 pub const bun = @import("bun");
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
@@ -2128,9 +2129,9 @@ else => {
             }
     }
     pub const name = "test";
-    pub const CodeCoverageOptions = @import("../options_types/CodeCoverageOptions.zig").CodeCoverageOptions;
-    pub const Reporter = @import("../options_types/CodeCoverageOptions.zig").Reporter;
-    const Reporters = @import("../options_types/CodeCoverageOptions.zig").Reporters;
+    pub const CodeCoverageOptions = CodeCoverageOptionsMod.CodeCoverageOptions;
+    pub const Reporter = CodeCoverageOptionsMod.Reporter;
+    const Reporters = CodeCoverageOptionsMod.Reporters;
 };
 
 const string = []const u8;

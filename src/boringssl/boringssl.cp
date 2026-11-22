@@ -4,7 +4,8 @@
 pub import boring from "../boringssl_sys/boringssl.zig";
 pub const c = boring;
 pub import builtin from "builtin";
-pub const ERR_toJS = @import("../runtime/crypto/boringssl_jsc.zig").ERR_toJS;
+import boringssl_jsc from "../runtime/crypto/boringssl_jsc.zig";
+pub const ERR_toJS = boringssl_jsc.ERR_toJS;
 import std from "std";
 import bun from "bun";
 const strings = bun.strings;

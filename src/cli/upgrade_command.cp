@@ -69,8 +69,6 @@ pub struct Version {
     fn name(): string? {
         if (_.tag.len <= "bun-v".len || !strings.hasPrefixComptime(_.tag, "bun-v")) {
             if (strings.eqlComptime(_.tag, "canary")) {
-                const Cli = @import("./cli.zig");
-
                 return std.fmt.allocPrint(
                     bun.default_allocator,
                     "bun-canary-timestamp-{f}",
@@ -983,10 +981,14 @@ type stringZ = [:0]const u8;
 import DotEnv from "../dotenv/env_loader.zig";
 import fs from "../resolver/fs.zig";
 import linker from "../bundler/linker.zig";
-const Archive = @import("../libarchive/libarchive.zig").Archive;
-const Command = @import("./cli.zig").Command;
-const URL = @import("../url/url.zig").URL;
-const which = @import("../which/which.zig").which;
+import libarchive_mod from "../libarchive/libarchive.zig";
+const Archive = libarchive_mod.Archive;
+import Cli from "./cli.zig";
+const Command = Cli.Command;
+import url_mod from "../url/url.zig";
+const URL = url_mod.URL;
+import which_mod from "../which/which.zig";
+const which = which_mod.which;
 
 import bun from "bun";
 const Environment = bun.Environment;

@@ -1,8 +1,9 @@
 // src/http/h2_client/PendingConnect.cp
 // Placeholder for TLS connect in flight in CP language
 
-const bun = @import("bun");
-pub const HTTPContextTLS = @import("../HTTPContext.zig").NewHTTPContext(true);
+import bun from "bun";
+import HTTPContextMod from "../HTTPContext.zig";
+pub const HTTPContextTLS = HTTPContextMod.NewHTTPContext(true);
 const SSLConfig = bun.api.server.ServerConfig.SSLConfig;
 
 export @root struct PendingConnect {

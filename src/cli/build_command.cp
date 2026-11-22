@@ -840,9 +840,12 @@ import MetafileBuilder from "../bundler/linker_context/MetafileBuilder.zig";
 import fs from "../resolver/fs.zig";
 import options from "../bundler/options.zig";
 import resolve_path from "../paths/resolve_path.zig";
-const BundleV2 = @import("../bundler/bundle_v2.zig").BundleV2;
-const Command = @import("./cli.zig").Command;
-const Runtime = @import("../js_parser/runtime.zig").Runtime;
+import bundle_v2 from "../bundler/bundle_v2.zig";
+const BundleV2 = bundle_v2.BundleV2;
+import cli from "./cli.zig";
+const Command = cli.Command;
+import runtime from "../js_parser/runtime.zig";
+const Runtime = runtime.Runtime;
 
 import bun from "bun";
 const Global = bun.Global;

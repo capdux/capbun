@@ -1,3 +1,6 @@
+import visit_expr_mod from "./visitExpr.zig";
+import visit_stmt_mod from "./visitStmt.zig";
+
 pub fn Visit(
     comptime parser_feature__typescript: bool,
     comptime parser_feature__jsx: JSXTransformType,
@@ -11,9 +14,9 @@ pub fn Visit(
         const LowerUsingDeclarationsContext = P.LowerUsingDeclarationsContext;
         const only_scan_imports_and_do_not_visit = P.only_scan_imports_and_do_not_visit;
 
-        pub const visitExpr = @import("./visitExpr.zig").VisitExpr(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only).visitExpr;
-        pub const visitExprInOut = @import("./visitExpr.zig").VisitExpr(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only).visitExprInOut;
-        pub const visitAndAppendStmt = @import("./visitStmt.zig").VisitStmt(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only).visitAndAppendStmt;
+        pub const visitExpr = visit_expr_mod.VisitExpr(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only).visitExpr;
+        pub const visitExprInOut = visit_expr_mod.VisitExpr(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only).visitExprInOut;
+        pub const visitAndAppendStmt = visit_stmt_mod.VisitStmt(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only).visitAndAppendStmt;
 
         static fn visitStmtsAndPrependTempRefs(p: *P, stmts: *ListManaged(Stmt), opts: *PrependTempRefsOpts): anyerror!void {
             if (only_scan_imports_and_do_not_visit) {

@@ -61,6 +61,9 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
+pub const bun = @import("bun");
+pub const hmac = @import("../sha_hmac/hmac.zig");
+pub const csrf_jsc = @import("../runtime/api/csrf_jsc.zig");
 pub const Error = error{
     InvalidToken,
     ExpiredToken,
@@ -101,15 +104,13 @@ pub const VerifyOptions = struct {
     algorithm: jsc.API.Bun.Crypto.EVP.Algorithm = DEFAULT_ALGORITHM,
 };
 
-const bun = @import("bun");
 const jsc = bun.jsc;
 const boring = bun.BoringSSL.c;
-const hmac = @import("../sha_hmac/hmac.zig");
 pub const CSRF = @This();
 pub const DEFAULT_EXPIRATION_MS: u64 = (((24 * 60) * 60) * 1000);
 pub const DEFAULT_ALGORITHM: jsc.API.Bun.Crypto.EVP.Algorithm = .sha256;
-pub const csrf__generate = @import("../runtime/api/csrf_jsc.zig").csrf__generate;
-pub const csrf__verify = @import("../runtime/api/csrf_jsc.zig").csrf__verify;
+pub const csrf__generate = csrf_jsc.csrf__generate;
+pub const csrf__verify = csrf_jsc.csrf__verify;
 
 pub fn generate(options: GenerateOptions, out_buffer: *[512]u8) ![]u8 {
         var nonce: [16]u8 = @as([16]u8, @splat(@as(u8, 0)));

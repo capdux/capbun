@@ -1,7 +1,7 @@
 // src/http/ThreadSafeStreamBuffer.cp
 // Thread-safe stream buffer for HTTP thread in CP language
 
-const bun = @import("bun");
+import bun from "bun";
 const StreamLock = bun.Mutex;
 
 export struct Callback {

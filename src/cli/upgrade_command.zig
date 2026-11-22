@@ -66,6 +66,10 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 pub const DotEnv = @import("../dotenv/env_loader.zig");
 pub const fs = @import("../resolver/fs.zig");
 pub const linker = @import("../bundler/linker.zig");
+pub const libarchive_mod = @import("../libarchive/libarchive.zig");
+pub const Cli = @import("./cli.zig");
+pub const url_mod = @import("../url/url.zig");
+pub const which_mod = @import("../which/which.zig");
 pub const bun = @import("bun");
 pub fn FreeGuard(comptime A: type) type {
     return struct {
@@ -165,7 +169,6 @@ pub const Version = struct {
 pub fn name(self: *const Version) ?[]const u8 {
             if (((self.tag.len <= "bun-v".len) or (!strings.hasPrefixComptime(self.tag, "bun-v")))) {
                 if (strings.eqlComptime(self.tag, "canary")) {
-                    const Cli = @import("./cli.zig");
                     return (blk_catch_2: { break :blk_catch_2 ((std.fmt.allocPrint(bun.default_allocator, "bun-canary-timestamp-{f}", .{ bun.fmt.hexIntLower(bun.hash(std.mem.asBytes((&Cli.start_time)))) })) catch |e| { _ = &e; break :blk_catch_2 bun.handleOom(e); }); });
                 }
                 return self.tag;
@@ -822,10 +825,10 @@ var github_repository_url_buf: bun.PathBuffer = undefined;
 var current_executable_buf: bun.PathBuffer = undefined;
 var unzip_path_buf: bun.PathBuffer = undefined;
 var tmpdir_path_buf: bun.PathBuffer = undefined;
-const Archive = @import("../libarchive/libarchive.zig").Archive;
-const Command = @import("./cli.zig").Command;
-const URL = @import("../url/url.zig").URL;
-const which = @import("../which/which.zig").which;
+const Archive = libarchive_mod.Archive;
+const Command = Cli.Command;
+const URL = url_mod.URL;
+const which = which_mod.which;
 const Environment = bun.Environment;
 const Global = bun.Global;
 const JSON = bun.json;

@@ -1,4 +1,6 @@
 import css from "../css_parser.zig";
+import color_js from "../../css_jsc/color_js.zig";
+import color_generated from "./color_generated.zig";
 pub const Result = css.Result;
 
 const Percentage = css.css_values.percentage.Percentage;
@@ -147,7 +149,7 @@ pub union(enum) CssColor {
 
     const This = @This();
 
-    pub const jsFunctionColor = @import("../../css_jsc/color_js.zig").jsFunctionColor;
+    pub const jsFunctionColor = color_js.jsFunctionColor;
 
     fn isCompatible(browsers: css.targets.Browsers): bool {
         return switch (_) {
@@ -4674,7 +4676,7 @@ pub fn ImplementIntoCssColor(comptime T: type, comptime space: ConvertTo): fn (*
     return @field(color_conversions, ns).intoCssColor;
 }
 
-const generated_color_conversions = @import("./color_generated.zig").generated_color_conversions;
+const generated_color_conversions = color_generated.generated_color_conversions;
 const Allocator = std.mem.Allocator;
 
 import bun from "bun";

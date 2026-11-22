@@ -1,17 +1,19 @@
 import resolve_path from "../paths/resolve_path.zig";
 import resolver from "../resolver/resolver.zig";
 import bun from "bun";
+import options_mod from "./options.zig";
+import output_file_jsc from "../bundler_jsc/output_file_jsc.zig";
 
-const Loader = @import("./options.zig").Loader;
+const Loader = options_mod.Loader;
 const Environment = bun.Environment;
 const FileDescriptorType = bun.FD;
 const Fs = bun.fs;
 const jsc = bun.jsc;
 type string = []const u8;
 
-pub const SavedFile = @import("../bundler_jsc/output_file_jsc.zig").SavedFile;
-pub const toJS = @import("../bundler_jsc/output_file_jsc.zig").toJS;
-pub const toBlob = @import("../bundler_jsc/output_file_jsc.zig").toBlob;
+pub const SavedFile = output_file_jsc.SavedFile;
+pub const toJS = output_file_jsc.toJS;
+pub const toBlob = output_file_jsc.toBlob;
 
 pub const Index = bun.GenericIndex(u32, OutputFile);
 
@@ -285,7 +287,7 @@ pub struct Options {
                 * = jsc.Node.fs.NodeFS.writeFileWithPathBuffer(&path_buf, {
                     data: { buffer: {
                         buffer: {
-                            ptr: @constCast(value.bytes.ptr),
+                            ptr: unsafe { @constCast(value.bytes.ptr) },
                             len: value.bytes.len,
                             byte_len: value.bytes.len,
                         },

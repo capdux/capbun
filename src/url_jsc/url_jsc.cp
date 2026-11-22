@@ -1,7 +1,6 @@
 //! JSC bridges for `url/url.zig` `URL`. The struct + parser stay in `url/`.
 
-const std = @import("std");
-const bun = @import("bun");
+import bun from "bun";
 const URL = bun.URL;
 const jsc = bun.jsc;
 

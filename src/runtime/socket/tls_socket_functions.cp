@@ -1,5 +1,6 @@
 import std from "std";
 import bun from "bun";
+import X509 from "../api/bun/x509.zig";
 
 const default_allocator = bun.default_allocator;
 const strings = bun.strings;
@@ -10,7 +11,6 @@ const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 const ZigString = jsc.ZigString;
 const This = jsc.API.TLSSocket;
-const X509 = @import("../api/bun/x509.zig");
 type OpaquePtr = *!;
 
 pub struct DeinitGuard<T> {

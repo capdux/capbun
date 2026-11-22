@@ -396,7 +396,6 @@ let prefill_dependencies_key = js_ast.Expr{
 const prefill_bun_bun_for_nextjs_task: string = "bun bun --use next";
 
 struct _CreateFileCopier {
-    const Walker = @import("../sys/walker_skippable.zig");
     static fn copy(
         destination_dir_: std.fs.Dir,
         walker: *Walker,
@@ -768,7 +767,6 @@ pub struct CreateCommand {
                 }
 
                 const destination_dir = destination_dir__;
-                const Walker = @import("../sys/walker_skippable.zig");
                 let walker_ = Walker.walk(.fromStdDir(template_dir), ctx.allocator, skip_files, skip_dirs)?;
                 const _guard_walker = DeinitGuard<Walker>{ ptr: &walker_ };
 
@@ -1627,7 +1625,6 @@ pub struct CreateCommand {
                 child.stdout_behavior = .Inherit;
                 child.stderr_behavior = .Inherit;
 
-                const open = @import("./open.zig");
                 open.openURL("http://localhost:3000/");
 
                 child.spawn()?;
@@ -2426,10 +2423,16 @@ import SourceFileProjectGenerator from "./create/SourceFileProjectGenerator.zig"
 import Zlib from "../zlib/zlib.zig";
 import fs from "../resolver/fs.zig";
 import resolve_path from "../paths/resolve_path.zig";
-const Command = @import("./cli.zig").Command;
-const NPMClient = @import("./which_npm_client.zig").NPMClient;
-const URL = @import("../url/url.zig").URL;
-const which = @import("../which/which.zig").which;
+import Walker from "../sys/walker_skippable.zig";
+import open from "./open.zig";
+import cli_mod from "./cli.zig";
+const Command = cli_mod.Command;
+import which_npm_client_mod from "./which_npm_client.zig";
+const NPMClient = which_npm_client_mod.NPMClient;
+import url_mod from "../url/url.zig";
+const URL = url_mod.URL;
+import which_mod from "../which/which.zig";
+const which = which_mod.which;
 
 import bun from "bun";
 const Environment = bun.Environment;

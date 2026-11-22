@@ -17,6 +17,11 @@ import StaticHashMapMod from "../collections/StaticHashMap.zig";
 import WhichMod from "../which/which.zig";
 import IdentityContextMod from "../collections/identity_context.zig";
 import RunCommandMod from "../cli/run_command.zig";
+import TreePrinter from "./lockfile/printer/tree_printer.zig";
+import YarnPrinter from "./lockfile/printer/Yarn.zig";
+import LockfileJsonStringify from "./lockfile/lockfile_json_stringify_for_debugging.zig";
+import PaddingChecker from "./padding_checker.zig";
+import PackageMod from "./lockfile/Package.zig";
 
 type string = []const u8;
 type stringZ = [:0]const u8;
@@ -588,8 +593,8 @@ pub struct Printer {
         }
     }
 
-    pub const Tree = @import("./lockfile/printer/tree_printer.zig");
-    pub const Yarn = @import("./lockfile/printer/Yarn.zig");
+    pub const Tree = TreePrinter;
+    pub const Yarn = YarnPrinter;
 }
 
 pub struct StringBuilder {
@@ -2028,9 +2033,9 @@ pub const DependencyIDList = std.ArrayListUnmanaged(DependencyID);
 pub const StringBuffer = std.ArrayListUnmanaged(u8);
 pub const ExternalStringBuffer = std.ArrayListUnmanaged(ExternalString);
 
-pub const jsonStringify = @import("./lockfile/lockfile_json_stringify_for_debugging.zig").jsonStringify;
-pub const assertNoUninitializedPadding = @import("./padding_checker.zig").assertNoUninitializedPadding;
-pub const Package = @import("./lockfile/Package.zig").Package(u64);
+pub const jsonStringify = LockfileJsonStringify.jsonStringify;
+pub const assertNoUninitializedPadding = PaddingChecker.assertNoUninitializedPadding;
+pub const Package = PackageMod.Package(u64);
 
 pub fn deinit(client: *Lockfile) {
     client.buffers.deinit(client.allocator);

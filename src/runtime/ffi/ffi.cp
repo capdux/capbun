@@ -1,3 +1,4 @@
+import Sizes from "../../jsc/sizes.zig";
 const debug = Output.scoped(.TCC, .visible);
 
 type OpaquePtr = *!;
@@ -1600,7 +1601,6 @@ pub struct CompilerRT {
             };
         }
 
-        const Sizes = @import("../../jsc/sizes.zig");
         const offsets = Offsets.get();
         state.defineSymbolsComptime(.{
             .Bun_FFI_PointerOffsetToArgumentsList = Sizes.Bun_FFI_PointerOffsetToArgumentsList,

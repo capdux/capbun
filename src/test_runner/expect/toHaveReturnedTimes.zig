@@ -4,4 +4,5 @@
 const std = @import("std");
 const string = []const u8;
 
-pub const toHaveReturnedTimes = @import("./toHaveReturned.zig").toHaveReturnedTimes;
+pub const toHaveReturned = @import("./toHaveReturned.zig");
+pub const toHaveReturnedTimes = toHaveReturned.toHaveReturnedTimes;

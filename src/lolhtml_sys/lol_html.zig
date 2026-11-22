@@ -900,11 +900,11 @@ pub fn DirectiveFunctionType(comptime Container: type) type {
 }
 
 pub fn DirectiveFunctionTypeForHandler(comptime Container: type, comptime UserDataType: type) type {
-        return *const fn(_: *UserDataType, _: *Container) bool;
+        return *const fn (*UserDataType, *Container) bool;
 }
 
 pub fn DocTypeHandlerCallback(comptime UserDataType: type) type {
-        return *const fn(_: *DocType, _: *UserDataType) bool;
+        return *const fn (*DocType, *UserDataType) bool;
 }
 
 pub fn DirectiveHandler(comptime Container: type, comptime UserDataType: type, comptime Callback: *const fn (*UserDataType, *Container) bool) DirectiveFunctionType(Container) {

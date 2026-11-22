@@ -4,6 +4,7 @@
 const std = @import("std");
 const string = []const u8;
 
+pub const bun = @import("bun");
 pub const lshpack_header = extern struct {
     name: ?[*]u8 = null,
     name_len: usize = 0,
@@ -66,7 +67,6 @@ pub fn deinit(self: *HPACK) void {
 
 pub const MallocFn = *const fn (usize) callconv(.c) ?*anyopaque;
 pub const FreeFn = *const fn (?*anyopaque) callconv(.c) void;
-const bun = @import("bun");
 pub export const LSHPACK_MAX_HEADER_SIZE: usize = 65536;
 
 pub extern "c" fn lshpack_wrapper_init(alloc: ?MallocFn, free: ?FreeFn, capacity: usize) callconv(.c) ?*HPACK;

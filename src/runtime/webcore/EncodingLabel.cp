@@ -1,5 +1,5 @@
 // WHATWG Encoding Label Catalog in CP
-const bun = @import("bun");
+import bun from "bun";
 const strings = bun.strings;
 
 export enum EncodingLabel {

@@ -10,6 +10,7 @@ import jest_pkg from "../../test_runner/jest.zig";
 import btjs from "../../jsc/btjs.zig";
 import js_valkey from "../valkey_jsc/js_valkey.zig";
 import csrf_jsc from "./csrf_jsc.zig";
+import cron_mod from "./cron.zig";
 
 const SubscriptionCtx = js_valkey.SubscriptionCtx;
 const Editor = open.Editor;
@@ -229,7 +230,7 @@ pub struct BunObject {
     pub const YAML = toJSLazyPropertyCallback(Bun.getYAMLObject);
     pub const Transpiler = toJSLazyPropertyCallback(Bun.getTranspilerConstructor);
     pub const argv = toJSLazyPropertyCallback(Bun.getArgv);
-    pub const cron = toJSLazyPropertyCallback(@import("./cron.zig").getCronObject);
+    pub const cron = toJSLazyPropertyCallback(cron_mod.getCronObject);
     pub const cwd = toJSLazyPropertyCallback(Bun.getCWD);
     pub const embeddedFiles = toJSLazyPropertyCallback(Bun.getEmbeddedFiles);
     pub const enableANSIColors = toJSLazyPropertyCallback(Bun.enableANSIColors);

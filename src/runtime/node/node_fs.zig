@@ -82,6 +82,9 @@ pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const constants = @import("./node_fs_constant.zig");
+pub const node_fs_binding = @import("./node_fs_binding.zig");
+pub const node_fs_watcher = @import("./node_fs_watcher.zig");
+pub const node_fs_stat_watcher = @import("./node_fs_stat_watcher.zig");
 pub const fs = @import("../../resolver/fs.zig");
 pub const bun = @import("bun");
 pub const DirIterator = @import("./dir_iterator.zig");
@@ -6374,9 +6377,9 @@ const ReaddirZStr = [:0]const u8;
 const ReaddirSyncStack = bun.LinearFifo(ReaddirZStr, .Dynamic);
 const UnalignedStatFS = *align(1) bun.StatFS;
 const ShellCpTaskPtr = *bun.shell.Interpreter.Builtin.Cp.ShellCpTask;
-pub const Binding = @import("./node_fs_binding.zig").Binding;
-pub const Watcher = @import("./node_fs_watcher.zig").FSWatcher;
-pub const StatWatcher = @import("./node_fs_stat_watcher.zig").StatWatcher;
+pub const Binding = node_fs_binding.Binding;
+pub const Watcher = node_fs_watcher.FSWatcher;
+pub const StatWatcher = node_fs_stat_watcher.StatWatcher;
 pub const default_permission = (if (Environment.isPosix) (((((Syscall.S.IRUSR | Syscall.S.IWUSR) | Syscall.S.IRGRP) | Syscall.S.IWGRP) | Syscall.S.IROTH) | Syscall.S.IWOTH) else 0);
 pub const AsyncCpTask = NewAsyncCpTask(false);
 pub const ShellAsyncCpTask = NewAsyncCpTask(true);

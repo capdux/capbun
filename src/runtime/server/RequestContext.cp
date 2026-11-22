@@ -1,4 +1,5 @@
 import bun from "bun";
+import runtime_mod from "../../js_parser/runtime.zig";
 
 /// Q: Why is this needed?
 /// A: The dev server needs to attach its own callback when the request is
@@ -2784,7 +2785,7 @@ const welcome_page_html_gz = @embedFile("../api/welcome-page.html.gz");
 
 const ctxLog = Output.scoped(.RequestContext, .visible);
 
-const Fallback = @import("../../js_parser/runtime.zig").Fallback;
+const Fallback = runtime_mod.Fallback;
 
 const Environment = bun.Environment;
 const JSError = bun.JSError;

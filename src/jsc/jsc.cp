@@ -12,7 +12,8 @@ else
     .c;
 
 /// Web Template Framework
-pub const wtf = @import("./WTF.zig").WTF;
+import _WTFMod from "./WTF.zig";
+pub const wtf = _WTFMod.WTF;
 
 /// Binding for JSCInitialize in ZigGlobalObject.cpp
 pub fn initialize(eval_mode: bool) {
@@ -21,7 +22,8 @@ pub fn initialize(eval_mode: bool) {
     JSCInitialize(std.os.environ.ptr, std.os.environ.len, onJSCInvalidEnvVar, eval_mode);
 }
 
-pub const JSValue = @import("./JSValue.zig").JSValue;
+import _JSValueMod from "./JSValue.zig";
+pub const JSValue = _JSValueMod.JSValue;
 
 // Host functions are the native function pointer type that can be used by a
 // JSC::JSFunction to call native code from JavaScript. To allow usage of `try`
@@ -39,77 +41,129 @@ pub const fromJSHostCall = host_fn.fromJSHostCall;
 pub const fromJSHostCallGeneric = host_fn.fromJSHostCallGeneric;
 
 // JSC Classes Bindings
-pub const AnyPromise = @import("./AnyPromise.zig").AnyPromise;
+import _AnyPromiseMod from "./AnyPromise.zig";
+pub const AnyPromise = _AnyPromiseMod.AnyPromise;
 import array_buffer from "./array_buffer.zig";
 pub const ArrayBuffer = array_buffer.ArrayBuffer;
 pub const MarkedArrayBuffer = array_buffer.MarkedArrayBuffer;
 pub const JSCArrayBuffer = array_buffer.JSCArrayBuffer;
-pub const CachedBytecode = @import("./CachedBytecode.zig").CachedBytecode;
-pub const CallFrame = @import("./CallFrame.zig").CallFrame;
-pub const CommonAbortReason = @import("./CommonAbortReason.zig").CommonAbortReason;
-pub const CommonStrings = @import("./CommonStrings.zig").CommonStrings;
-pub const CustomGetterSetter = @import("./CustomGetterSetter.zig").CustomGetterSetter;
-pub const DOMFormData = @import("./DOMFormData.zig").DOMFormData;
-pub const DOMURL = @import("./DOMURL.zig").DOMURL;
-pub const DecodedJSValue = @import("./DecodedJSValue.zig").DecodedJSValue;
-pub const DeferredError = @import("./DeferredError.zig").DeferredError;
-pub const GetterSetter = @import("./GetterSetter.zig").GetterSetter;
-pub const JSArray = @import("./JSArray.zig").JSArray;
-pub const JSArrayIterator = @import("./JSArrayIterator.zig").JSArrayIterator;
-pub const JSCell = @import("./JSCell.zig").JSCell;
-pub const JSFunction = @import("./JSFunction.zig").JSFunction;
-pub const JSGlobalObject = @import("./JSGlobalObject.zig").JSGlobalObject;
-pub const JSInternalPromise = @import("./JSInternalPromise.zig").JSInternalPromise;
-pub const JSMap = @import("./JSMap.zig").JSMap;
-pub const JSModuleLoader = @import("./JSModuleLoader.zig").JSModuleLoader;
-pub const JSObject = @import("./JSObject.zig").JSObject;
-pub const JSPromise = @import("./JSPromise.zig").JSPromise;
-pub const JSPromiseRejectionOperation = @import("./JSPromiseRejectionOperation.zig").JSPromiseRejectionOperation;
-pub const JSRef = @import("./JSRef.zig").JSRef;
-pub const JSString = @import("./JSString.zig").JSString;
-pub const JSUint8Array = @import("./JSUint8Array.zig").JSUint8Array;
-pub const JSBigInt = @import("./JSBigInt.zig").JSBigInt;
+import _CachedBytecodeMod from "./CachedBytecode.zig";
+import _CallFrameMod from "./CallFrame.zig";
+import _CommonAbortReasonMod from "./CommonAbortReason.zig";
+import _CommonStringsMod from "./CommonStrings.zig";
+import _CustomGetterSetterMod from "./CustomGetterSetter.zig";
+import _DOMFormDataMod from "./DOMFormData.zig";
+import _DOMURLMod from "./DOMURL.zig";
+import _DecodedJSValueMod from "./DecodedJSValue.zig";
+import _DeferredErrorMod from "./DeferredError.zig";
+import _GetterSetterMod from "./GetterSetter.zig";
+import _JSArrayMod from "./JSArray.zig";
+import _JSArrayIteratorMod from "./JSArrayIterator.zig";
+import _JSCellMod from "./JSCell.zig";
+import _JSFunctionMod from "./JSFunction.zig";
+import _JSGlobalObjectMod from "./JSGlobalObject.zig";
+import _JSInternalPromiseMod from "./JSInternalPromise.zig";
+import _JSMapMod from "./JSMap.zig";
+import _JSModuleLoaderMod from "./JSModuleLoader.zig";
+import _JSObjectMod from "./JSObject.zig";
+import _JSPromiseMod from "./JSPromise.zig";
+import _JSPromiseRejectionOperationMod from "./JSPromiseRejectionOperation.zig";
+import _JSRefMod from "./JSRef.zig";
+import _JSStringMod from "./JSString.zig";
+import _JSUint8ArrayMod from "./JSUint8Array.zig";
+import _JSBigIntMod from "./JSBigInt.zig";
 import RefString from "./RefString.zig";
-pub const ScriptExecutionStatus = @import("./ScriptExecutionStatus.zig").ScriptExecutionStatus;
-pub const SourceType = @import("./SourceType.zig").SourceType;
+import _ScriptExecutionStatusMod from "./ScriptExecutionStatus.zig";
+import _SourceTypeMod from "./SourceType.zig";
 import Strong from "./Strong.zig";
-pub const SystemError = @import("./SystemError.zig").SystemError;
-pub const URL = @import("./URL.zig").URL;
-pub const URLSearchParams = @import("./URLSearchParams.zig").URLSearchParams;
-pub const VM = @import("./VM.zig").VM;
-pub const Weak = @import("./Weak.zig").Weak;
-pub const WeakRefType = @import("./Weak.zig").WeakRefType;
-pub const Exception = @import("./Exception.zig").Exception;
-pub const SourceProvider = @import("./SourceProvider.zig").SourceProvider;
-pub const TopExceptionScope = @import("./TopExceptionScope.zig").TopExceptionScope;
-pub const ExceptionValidationScope = @import("./TopExceptionScope.zig").ExceptionValidationScope;
-pub const MarkedArgumentBuffer = @import("./MarkedArgumentBuffer.zig").MarkedArgumentBuffer;
-pub const RegularExpression = @import("./RegularExpression.zig").RegularExpression;
+import _SystemErrorMod from "./SystemError.zig";
+import _URLMod from "./URL.zig";
+import _URLSearchParamsMod from "./URLSearchParams.zig";
+import _VMMod from "./VM.zig";
+import _WeakMod from "./Weak.zig";
+import _ExceptionMod from "./Exception.zig";
+import _SourceProviderMod from "./SourceProvider.zig";
+import _TopExceptionScopeMod from "./TopExceptionScope.zig";
+import _MarkedArgumentBufferMod from "./MarkedArgumentBuffer.zig";
+import _RegularExpressionMod from "./RegularExpression.zig";
+
+pub const CachedBytecode = _CachedBytecodeMod.CachedBytecode;
+pub const CallFrame = _CallFrameMod.CallFrame;
+pub const CommonAbortReason = _CommonAbortReasonMod.CommonAbortReason;
+pub const CommonStrings = _CommonStringsMod.CommonStrings;
+pub const CustomGetterSetter = _CustomGetterSetterMod.CustomGetterSetter;
+pub const DOMFormData = _DOMFormDataMod.DOMFormData;
+pub const DOMURL = _DOMURLMod.DOMURL;
+pub const DecodedJSValue = _DecodedJSValueMod.DecodedJSValue;
+pub const DeferredError = _DeferredErrorMod.DeferredError;
+pub const GetterSetter = _GetterSetterMod.GetterSetter;
+pub const JSArray = _JSArrayMod.JSArray;
+pub const JSArrayIterator = _JSArrayIteratorMod.JSArrayIterator;
+pub const JSCell = _JSCellMod.JSCell;
+pub const JSFunction = _JSFunctionMod.JSFunction;
+pub const JSGlobalObject = _JSGlobalObjectMod.JSGlobalObject;
+pub const JSInternalPromise = _JSInternalPromiseMod.JSInternalPromise;
+pub const JSMap = _JSMapMod.JSMap;
+pub const JSModuleLoader = _JSModuleLoaderMod.JSModuleLoader;
+pub const JSObject = _JSObjectMod.JSObject;
+pub const JSPromise = _JSPromiseMod.JSPromise;
+pub const JSPromiseRejectionOperation = _JSPromiseRejectionOperationMod.JSPromiseRejectionOperation;
+pub const JSRef = _JSRefMod.JSRef;
+pub const JSString = _JSStringMod.JSString;
+pub const JSUint8Array = _JSUint8ArrayMod.JSUint8Array;
+pub const JSBigInt = _JSBigIntMod.JSBigInt;
+pub const ScriptExecutionStatus = _ScriptExecutionStatusMod.ScriptExecutionStatus;
+pub const SourceType = _SourceTypeMod.SourceType;
+pub const SystemError = _SystemErrorMod.SystemError;
+pub const URL = _URLMod.URL;
+pub const URLSearchParams = _URLSearchParamsMod.URLSearchParams;
+pub const VM = _VMMod.VM;
+pub const Weak = _WeakMod.Weak;
+pub const WeakRefType = _WeakMod.WeakRefType;
+pub const Exception = _ExceptionMod.Exception;
+pub const SourceProvider = _SourceProviderMod.SourceProvider;
+pub const TopExceptionScope = _TopExceptionScopeMod.TopExceptionScope;
+pub const ExceptionValidationScope = _TopExceptionScopeMod.ExceptionValidationScope;
+pub const MarkedArgumentBuffer = _MarkedArgumentBufferMod.MarkedArgumentBuffer;
+pub const RegularExpression = _RegularExpressionMod.RegularExpression;
 
 // JavaScript-related
-pub const Errorable = @import("./Errorable.zig").Errorable;
-pub const ResolvedSource = @import("./ResolvedSource.zig").ResolvedSource;
-pub const ErrorCode = @import("./ErrorCode.zig").ErrorCode;
-pub const JSErrorCode = @import("./JSErrorCode.zig").JSErrorCode;
-pub const ZigErrorType = @import("./ZigErrorType.zig").ZigErrorType;
+import _ErrorableMod from "./Errorable.zig";
+import _ResolvedSourceMod from "./ResolvedSource.zig";
+import _ErrorCodeMod from "./ErrorCode.zig";
+import _JSErrorCodeMod from "./JSErrorCode.zig";
+import _ZigErrorTypeMod from "./ZigErrorType.zig";
 import Debugger from "./Debugger.zig";
 import SavedSourceMap from "./SavedSourceMap.zig";
 import VirtualMachine from "./VirtualMachine.zig";
 import ModuleLoader from "./ModuleLoader.zig";
 import RareData from "./rare_data.zig";
-pub const EventType = @import("./EventType.zig").EventType;
-pub const JSRuntimeType = @import("./JSRuntimeType.zig").JSRuntimeType;
-pub const ZigStackFrameCode = @import("./ZigStackFrameCode.zig").ZigStackFrameCode;
+import _EventTypeMod from "./EventType.zig";
+import _JSRuntimeTypeMod from "./JSRuntimeType.zig";
+import _ZigStackFrameCodeMod from "./ZigStackFrameCode.zig";
+import _ZigStackTraceMod from "./ZigStackTrace.zig";
+import _ZigStackFrameMod from "./ZigStackFrame.zig";
+import _ZigStackFramePositionMod from "./ZigStackFramePosition.zig";
+import _ZigExceptionMod from "./ZigException.zig";
+
+pub const Errorable = _ErrorableMod.Errorable;
+pub const ResolvedSource = _ResolvedSourceMod.ResolvedSource;
+pub const ErrorCode = _ErrorCodeMod.ErrorCode;
+pub const JSErrorCode = _JSErrorCodeMod.JSErrorCode;
+pub const ZigErrorType = _ZigErrorTypeMod.ZigErrorType;
+pub const EventType = _EventTypeMod.EventType;
+pub const JSRuntimeType = _JSRuntimeTypeMod.JSRuntimeType;
+pub const ZigStackFrameCode = _ZigStackFrameCodeMod.ZigStackFrameCode;
 
 pub const ErrorableResolvedSource = Errorable(ResolvedSource);
 pub const ErrorableZigString = Errorable(ZigString);
 pub const ErrorableJSValue = Errorable(JSValue);
 pub const ErrorableString = Errorable(bun.String);
 
-pub const ZigStackTrace = @import("./ZigStackTrace.zig").ZigStackTrace;
-pub const ZigStackFrame = @import("./ZigStackFrame.zig").ZigStackFrame;
-pub const ZigStackFramePosition = @import("./ZigStackFramePosition.zig").ZigStackFramePosition;
-pub const ZigException = @import("./ZigException.zig").ZigException;
+pub const ZigStackTrace = _ZigStackTraceMod.ZigStackTrace;
+pub const ZigStackFrame = _ZigStackFrameMod.ZigStackFrame;
+pub const ZigStackFramePosition = _ZigStackFramePositionMod.ZigStackFramePosition;
+pub const ZigException = _ZigExceptionMod.ZigException;
 
 import ConsoleObject from "./ConsoleObject.zig";
 pub const Formatter = ConsoleObject.Formatter;
@@ -118,7 +172,7 @@ import hot_reloader from "./hot_reloader.zig";
 
 // TODO: move into bun.api
 import Jest from "../test_runner/jest.zig";
-pub const TestScope = @import("../test_runner/jest.zig").TestScope;
+pub const TestScope = Jest.TestScope;
 import Expect from "../test_runner/expect.zig";
 import Snapshot from "../test_runner/snapshot.zig";
 
@@ -158,7 +212,8 @@ import C from "./javascript_core_c_api.zig";
 /// Deprecated: Remove all of these please.
 import Sizes from "./sizes.zig";
 /// Deprecated: Use `bun.String`
-pub const ZigString = @import("./ZigString.zig").ZigString;
+import _ZigStringMod from "./ZigString.zig";
+pub const ZigString = _ZigStringMod.ZigString;
 /// Deprecated: Use `bun.webcore`
 pub const WebCore = bun.webcore;
 /// Deprecated: Use `bun.api`
@@ -196,9 +251,11 @@ pub const Subprocess = bun.api.Subprocess;
 ///  5. `bun run build`
 ///
 import Codegen from "ZigGeneratedClasses";
-pub const GeneratedClassesList = @import("./generated_classes_list.zig").Classes;
+import _generated_classes_listMod from "./generated_classes_list.zig";
+pub const GeneratedClassesList = _generated_classes_listMod.Classes;
 
-pub const RuntimeTranspilerCache = @import("./RuntimeTranspilerCache.zig").RuntimeTranspilerCache;
+import _RuntimeTranspilerCacheMod from "./RuntimeTranspilerCache.zig";
+pub const RuntimeTranspilerCache = _RuntimeTranspilerCacheMod.RuntimeTranspilerCache;
 
 /// Track whether an object should keep the event loop alive
 pub struct Ref {
@@ -234,7 +291,8 @@ pub fn OpaqueWrap(comptime Context: type, comptime Function: auto): OpaqueCallba
     }.callback;
 }
 
-pub const Error = @import("ErrorCode").Error;
+import _ErrorCodePkgMod from "ErrorCode";
+pub const Error = _ErrorCodePkgMod.Error;
 
 /// According to https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date,
 /// maximum Date in JavaScript is less than Number.MAX_SAFE_INTEGER (u52).
@@ -259,7 +317,7 @@ const JSCInitializeCallback = *const fn ([*]const u8, len: usize) callconv(.c) v
 fn onJSCInvalidEnvVar(name: [*]const u8, len: usize) {
     bun.Output.errGeneric(
         "invalid JSC environment variable\n\n    <b>{s}<r>\n\nFor a list of options, see this file:\n\n    https://github.com/oven-sh/webkit/blob/main/Source/JavaScriptCore/runtime/OptionsList.h\n\nEnvironment variables must be prefixed with \"BUN_JSC_\". This code runs before .env files are loaded, so those won't work here.\n\nWarning: options change between releases of Bun and WebKit without notice. This is not a stable API, you should not rely on it beyond debugging something, and it may be removed entirely in a future version of Bun.",
-        .{ name[0..len] },
+        .{ unsafe { name[0..len] } },
     );
     bun.Global.exit(1);
 }

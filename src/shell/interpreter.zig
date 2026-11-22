@@ -74,9 +74,28 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 
 pub const Braces = @import("../shell_parser/braces.zig");
 pub const RefCountedStr = @import("./RefCountedStr.zig");
+pub const _EnvStrMod = @import("./EnvStr.zig");
 pub const EnvMap = @import("./EnvMap.zig");
 pub const ParsedShellScript = @import("./ParsedShellScript.zig");
 pub const builtin = @import("builtin");
+pub const _StateMod = @import("./states/Base.zig");
+pub const _ScriptMod = @import("./states/Script.zig");
+pub const _StmtMod = @import("./states/Stmt.zig");
+pub const _PipelineMod = @import("./states/Pipeline.zig");
+pub const _BinaryMod = @import("./states/Binary.zig");
+pub const _SubshellMod = @import("./states/Subshell.zig");
+pub const _ExpansionMod = @import("./states/Expansion.zig");
+pub const _AssignsMod = @import("./states/Assigns.zig");
+pub const _AsyncMod = @import("./states/Async.zig");
+pub const _CondExprMod = @import("./states/CondExpr.zig");
+pub const _IfMod = @import("./states/If.zig");
+pub const _CmdMod = @import("./states/Cmd.zig");
+pub const _BuiltinMod = @import("./Builtin.zig");
+pub const _IOMod = @import("./IO.zig");
+pub const _IOReaderMod = @import("./IOReader.zig");
+pub const _IOWriterMod = @import("./IOWriter.zig");
+pub const _ResultMod = @import("../bun_core/result.zig");
+pub const _StringMod = @import("../string/string.zig");
 pub const bun = @import("bun");
 pub const OutputNeedsIOSafeGuard = enum(u0) {
     output_needs_io,
@@ -1441,18 +1460,18 @@ pub fn getVmArgsUtf8(self: *Interpreter, argv: []const *WTFStringImplStruct, idx
     pub const fromJS = js.fromJS;
     pub const fromJSDirect = js.fromJSDirect;
     pub const Catch = ShellCatch;
-    pub const State = @import("./states/Base.zig");
-    pub const Script = @import("./states/Script.zig");
-    pub const Stmt = @import("./states/Stmt.zig");
-    pub const Pipeline = @import("./states/Pipeline.zig");
-    pub const Binary = @import("./states/Binary.zig");
-    pub const Subshell = @import("./states/Subshell.zig");
-    pub const Expansion = @import("./states/Expansion.zig");
-    pub const Assigns = @import("./states/Assigns.zig");
-    pub const Async = @import("./states/Async.zig");
-    pub const CondExpr = @import("./states/CondExpr.zig");
-    pub const If = @import("./states/If.zig");
-    pub const Cmd = @import("./states/Cmd.zig");
+    pub const State = _StateMod;
+    pub const Script = _ScriptMod;
+    pub const Stmt = _StmtMod;
+    pub const Pipeline = _PipelineMod;
+    pub const Binary = _BinaryMod;
+    pub const Subshell = _SubshellMod;
+    pub const Expansion = _ExpansionMod;
+    pub const Assigns = _AssignsMod;
+    pub const Async = _AsyncMod;
+    pub const CondExpr = _CondExprMod;
+    pub const If = _IfMod;
+    pub const Cmd = _CmdMod;
     pub const InterpreterChildPtr = StatePtrUnion(.{ Script });
     pub const ShellExecEnv = _ShellExecEnv;
     const ThisInterpreter = @This();
@@ -1462,12 +1481,12 @@ pub fn getVmArgsUtf8(self: *Interpreter, argv: []const *WTFStringImplStruct, idx
         };
     const ShellErrorCtx = _ShellErrorCtx;
     const ExpansionOpts = _ExpansionOpts;
-    pub const Builtin = @import("./Builtin.zig");
+    pub const Builtin = _BuiltinMod;
     pub const AsyncDeinitReader = IOReader.AsyncDeinitReader;
-    pub const IO = @import("./IO.zig");
-    pub const IOReader = @import("./IOReader.zig");
+    pub const IO = _IOMod;
+    pub const IOReader = _IOReaderMod;
     pub const IOReaderChildPtr = IOReader.ChildPtr;
-    pub const IOWriter = @import("./IOWriter.zig");
+    pub const IOWriter = _IOWriterMod;
     pub const AsyncDeinitWriter = IOWriter.AsyncDeinitWriter;
 };
 
@@ -1725,11 +1744,11 @@ pub const stdout_no = 1;
 pub const stderr_no = 2;
 pub const log = bun.Output.scoped(.SHELL, .visible);
 pub const ExitCode = u16;
-pub const EnvStr = @import("./EnvStr.zig").EnvStr;
+pub const EnvStr = _EnvStrMod.EnvStr;
 const empty_bun_strings: [0]bun.String = undefined;
 pub const AssignCtx = Interpreter.Assigns.AssignCtx;
 pub const IOWriterChildPtr = Interpreter.IOWriter.ChildPtr;
-const WTFStringImplStruct = @import("../string/string.zig").WTFStringImplStruct;
+const WTFStringImplStruct = _StringMod.WTFStringImplStruct;
 const ResolvePath = bun.path;
 const TaggedPointerUnion = bun.TaggedPointerUnion;
 const assert = bun.assert;
@@ -2139,7 +2158,7 @@ pub fn parseFlag(opts: Opts, flag: []const u8) ParseFlagResult {
             }
             return .continue_parsing;
     }
-    pub const Result = @import("../bun_core/result.zig").Result;
+    pub const Result = _ResultMod.Result;
 };
 }
 

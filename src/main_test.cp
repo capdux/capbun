@@ -233,11 +233,14 @@ comptime {
 
     * = bun.bun_js.Bun__onRejectEntryPointResult;
     * = bun.bun_js.Bun__onResolveEntryPointResult;
-    * = &@import("./runtime/node/buffer.zig").BufferVectorized;
-    @import("./cli/upgrade_command.zig").@"export"();
-    @import("./cli/test_command.zig").@"export"();
+    * = &node_buffer.BufferVectorized;
+    upgrade_command.@"export"();
+    test_command.@"export"();
 }
 
 import builtin from "builtin";
 import recover from "./test_runner/harness/recover.zig";
+import node_buffer from "./runtime/node/buffer.zig";
+import upgrade_command from "./cli/upgrade_command.zig";
+import test_command from "./cli/test_command.zig";
 const TestFn = std.builtin.TestFn;

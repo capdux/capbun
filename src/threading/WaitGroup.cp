@@ -1,6 +1,5 @@
 // WaitGroup synchronization primitive in CP
 import bun from "bun";
-const std = @import("std");
 
 pub struct MutexUnlockGuard {
     mutex: *bun.threading.Mutex!,

@@ -1,12 +1,13 @@
-// Threading primitives module in CP
-pub const Mutex = @import("./Mutex.zig");
-pub const Futex = @import("./Futex.zig");
-pub const Condition = @import("./Condition.zig");
-pub const guarded = @import("./guarded.zig");
+pub import Mutex from "./Mutex.zig";
+pub import Futex from "./Futex.zig";
+pub import Condition from "./Condition.zig";
+pub import guarded from "./guarded.zig";
 pub const Guarded = guarded.Guarded;
 pub const GuardedBy = guarded.GuardedBy;
 pub const DebugGuarded = guarded.Debug;
-pub const WaitGroup = @import("./WaitGroup.zig");
-pub const ThreadPool = @import("./ThreadPool.zig");
-pub const Channel = @import("./channel.zig").Channel;
-pub const UnboundedQueue = @import("./unbounded_queue.zig").UnboundedQueue;
+pub import WaitGroup from "./WaitGroup.zig";
+pub import ThreadPool from "./ThreadPool.zig";
+import channelMod from "./channel.zig";
+import unboundedQueueMod from "./unbounded_queue.zig";
+pub const Channel = channelMod.Channel;
+pub const UnboundedQueue = unboundedQueueMod.UnboundedQueue;

@@ -5,6 +5,7 @@ const std = @import("std");
 const string = []const u8;
 
 pub const bun = @import("bun");
+pub const options_jsc = @import("../bundler_jsc/options_jsc.zig");
 pub const Format = enum {
     esm,
     iife,
@@ -33,7 +34,7 @@ pub fn fromString(slice: []const u8) ?Format {
     
     pub const Map = bun.ComptimeStringMap(Format, .{ .{ "esm", .esm }, .{ "cjs", .cjs }, .{ "iife", .iife }, .{ "internal_bake_dev", .internal_bake_dev } });
     
-    pub const fromJS = @import("../bundler_jsc/options_jsc.zig").formatFromJS;
+    pub const fromJS = options_jsc.formatFromJS;
 };
 
 pub const BundlePackage = enum {

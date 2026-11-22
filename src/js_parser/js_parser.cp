@@ -722,9 +722,14 @@ import ServerComponentBoundary from "./ast/ServerComponentBoundary.zig";
 import Stmt from "./ast/Stmt.zig";
 pub const StmtNodeIndex = Stmt;
 import Symbol from "./ast/Symbol.zig";
-pub const B = @import("./ast/B.zig").B;
-pub const NewStore = @import("./ast/NewStore.zig").NewStore;
-pub const UseDirective = @import("./ast/UseDirective.zig").UseDirective;
+import B_mod from "./ast/B.zig";
+import NewStore_mod from "./ast/NewStore.zig";
+import UseDirective_mod from "./ast/UseDirective.zig";
+import ast_base_mod from "./ast/base.zig";
+import parser_mod from "./parser.zig";
+pub const B = B_mod.B;
+pub const NewStore = NewStore_mod.NewStore;
+pub const UseDirective = UseDirective_mod.UseDirective;
 
 import CharFreq from "./ast/CharFreq.zig";
 const char_freq_count = CharFreq.char_freq_count;
@@ -734,16 +739,16 @@ pub const TSNamespaceMember = TS.TSNamespaceMember;
 pub const TSNamespaceMemberMap = TS.TSNamespaceMemberMap;
 pub const TSNamespaceScope = TS.TSNamespaceScope;
 
-pub const Index = @import("./ast/base.zig").Index;
-pub const Ref = @import("./ast/base.zig").Ref;
-pub const RefCtx = @import("./ast/base.zig").RefCtx;
-pub const RefHashCtx = @import("./ast/base.zig").RefHashCtx;
+pub const Index = ast_base_mod.Index;
+pub const Ref = ast_base_mod.Ref;
+pub const RefCtx = ast_base_mod.RefCtx;
+pub const RefHashCtx = ast_base_mod.RefHashCtx;
 
 pub const BabyList = bun.BabyList;
 
 type string = []const u8;
 
-const TypeScript = @import("./parser.zig").TypeScript;
+const TypeScript = parser_mod.TypeScript;
 
 import bun from "bun";
 const Environment = bun.Environment;

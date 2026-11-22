@@ -1,4 +1,5 @@
 import bun from "bun";
+import bun_string_jsc from "../../jsc/bun_string_jsc.zig";
 
 type string = []const u8;
 const CodePoint = bun.CodePoint;
@@ -1254,7 +1255,7 @@ pub fn toUTF16Alloc(allocator: std.mem.Allocator, bytes: []const u8, comptime fa
     return null;
 }
 
-pub const TestingAPIs = @import("../../jsc/bun_string_jsc.zig").UnicodeTestingAPIs;
+pub const TestingAPIs = bun_string_jsc.UnicodeTestingAPIs;
 
 // this one does the thing it's named after
 pub fn toUTF16AllocForReal(allocator: std.mem.Allocator, bytes: []const u8, comptime fail_if_invalid: bool, comptime sentinel: bool): UTF16AllocReturn(sentinel)! {

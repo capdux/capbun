@@ -64,6 +64,7 @@ fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .poi
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
+pub const root = @import("root");
 pub const builtin = @import("builtin");
 pub const BinLinkingShim = @import("./BinLinkingShim.zig");
 pub const FailReason = enum {
@@ -186,10 +187,7 @@ pub const k32 = struct {
     const GetExitCodeProcess = w.kernel32.GetExitCodeProcess;
     const GetConsoleMode = w.kernel32.GetConsoleMode;
     const SetHandleInformation = w.kernel32.SetHandleInformation;
-    const SetConsoleMode = @extern(*const fn(
-            hConsoleHandle: w.HANDLE, // [in]
-            dwMode: w.DWORD, // [in]
-        ) callconv(.winapi) w.BOOL, .{ .name = "SetConsoleMode", .library_name = "kernel32" });
+    const SetConsoleMode = @extern(*const fn (w.HANDLE, w.DWORD) w.BOOL, .{ .name = "SetConsoleMode", .library_name = "kernel32" });
 };
 
 pub const FromBunRunContext = struct {
@@ -219,7 +217,7 @@ pub const ReadWithoutLaunchResult = union {
 
 const Noreturn = noreturn;
 const dbg = (builtin.mode == .Debug);
-const is_standalone = (@import("root") == @This());
+const is_standalone = (root == @This());
 const bun = (if ((!is_standalone)) @import("bun") else @compileError("cannot use 'bun' in standalone build of bun_shim_impl"));
 const bunDebugMessage = bun.Output.scoped(.bun_shim_impl, .hidden);
 const callmod_inline = (if (is_standalone) std.builtin.CallModifier.always_inline else bun.callmod_inline);

@@ -1,4 +1,5 @@
-pub const DataURL = @import("./data_url.zig").DataURL;
+import data_url_mod from "./data_url.zig";
+pub const DataURL = data_url_mod.DataURL;
 import DirInfo from "./dir_info.zig";
 
 const debuglog = Output.scoped(.Resolver, .hidden);
@@ -4478,7 +4479,8 @@ pub struct RootPathPair {
     package_json: *const PackageJSON,
 }
 
-pub const GlobalCache = @import("../options_types/GlobalCache.zig").GlobalCache;
+import global_cache_mod from "../options_types/GlobalCache.zig";
+pub const GlobalCache = global_cache_mod.GlobalCache;
 
 
 import Dependency from "../install/dependency.zig";
@@ -4487,23 +4489,28 @@ import NodeFallbackModules from "./node_fallbacks.zig";
 import ResolvePath from "../paths/resolve_path.zig";
 import ast from "../options_types/import_record.zig";
 import options from "../bundler/options.zig";
-const Package = @import("../install/lockfile.zig").Package;
-const Resolution = @import("../install/resolution.zig").Resolution;
-const TSConfigJSON = @import("./tsconfig_json.zig").TSConfigJSON;
-const Timer = @import("../perf/system_timer.zig").Timer;
+import lockfile_mod from "../install/lockfile.zig";
+const Package = lockfile_mod.Package;
+import resolution_mod from "../install/resolution.zig";
+const Resolution = resolution_mod.Resolution;
+import tsconfig_json_mod from "./tsconfig_json.zig";
+const TSConfigJSON = tsconfig_json_mod.TSConfigJSON;
+import system_timer_mod from "../perf/system_timer.zig";
+const Timer = system_timer_mod.Timer;
 
 import cache from "../bundler/cache.zig";
 const CacheSet = cache.Set;
 
 import Install from "../install/install.zig";
-const PackageManager = @import("../install/install.zig").PackageManager;
+const PackageManager = Install.PackageManager;
 
 import Fs from "./fs.zig";
 const Path = Fs.Path;
 
-const BrowserMap = @import("./package_json.zig").BrowserMap;
-const ESModule = @import("./package_json.zig").ESModule;
-const PackageJSON = @import("./package_json.zig").PackageJSON;
+import package_json_mod from "./package_json.zig";
+const BrowserMap = package_json_mod.BrowserMap;
+const ESModule = package_json_mod.ESModule;
+const PackageJSON = package_json_mod.PackageJSON;
 
 import bun from "bun";
 const Environment = bun.Environment;

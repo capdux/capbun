@@ -1,4 +1,4 @@
-const bun = @import("bun");
+import bun from "bun";
 export const LSHPACK_MAX_HEADER_SIZE: usize = 65536;
 pub type MallocFn = @c fn (usize): *!?;
 pub type FreeFn = @c fn (*!?);

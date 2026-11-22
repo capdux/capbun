@@ -71,6 +71,7 @@ pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub const fd_jsc = @import("../sys_jsc/fd_jsc.zig");
 pub const FDStdio = enum(u8) {
     std_in = 0,
     std_out = 1,
@@ -531,10 +532,10 @@ pub fn quietWriter(self: FD) bun.sys.File.QuietWriter {
     const invalid_value = std.math.minInt(@FieldType(Value, "as_system"));
     pub const fromSystem = fromNative;
     pub const cast = native;
-    pub const fromJS = @import("../sys_jsc/fd_jsc.zig").fromJS;
-    pub const fromJSValidated = @import("../sys_jsc/fd_jsc.zig").fromJSValidated;
-    pub const toJS = @import("../sys_jsc/fd_jsc.zig").toJS;
-    pub const toJSWithoutMakingLibUVOwned = @import("../sys_jsc/fd_jsc.zig").toJSWithoutMakingLibUVOwned;
+    pub const fromJS = fd_jsc.fromJS;
+    pub const fromJSValidated = fd_jsc.fromJSValidated;
+    pub const toJS = fd_jsc.toJS;
+    pub const toJSWithoutMakingLibUVOwned = fd_jsc.toJSWithoutMakingLibUVOwned;
     pub const Stdio = FDStdio;
     pub const HashMapContext = FDHashMapContext;
     pub const DecodeWindows = FDDecodeWindows;

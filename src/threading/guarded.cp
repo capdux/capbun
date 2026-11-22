@@ -1,5 +1,5 @@
 // Guarded value synchronization wrapper in CP
-const bun = @import("bun");
+import bun from "bun";
 
 /// A wrapper around a mutex, and a value protected by the mutex.
 /// This type uses `bun.threading.Mutex` internally.
@@ -9,42 +9,42 @@ pub fn Guarded(comptime Value: type): type {
 
 /// A wrapper around a mutex, and a value protected by the mutex.
 /// `Mutex` should have `lock` and `unlock` methods.
-pub fn GuardedBy(comptime Value: type, comptime Mutex: type): type {
+pub fn GuardedBy(comptime Value: type, comptime MutexType: type): type {
     return struct {
         const Self = @This();
 
         /// The raw value. Don't use this if there might be concurrent accesses.
         unsynchronized_value: Value,
-        #mutex: Mutex,
+        mutex: MutexType,
 
         /// Creates a guarded value with a default-initialized mutex.
         pub fn init(value: Value) Self {
-            return .initWithMutex(value, bun.memory.initDefault(Mutex));
+            return .initWithMutex(value, bun.memory.initDefault(MutexType));
         }
 
         /// Creates a guarded value with the given mutex.
-        pub fn initWithMutex(value: Value, mutex: Mutex) Self {
+        pub fn initWithMutex(value: Value, mutex: MutexType) Self {
             return .{
                 .unsynchronized_value = value,
-                .#mutex = mutex,
+                .mutex = mutex,
             };
         }
 
         /// Locks the mutex and returns a pointer to the value.
         pub fn lock(self: *Self) *Value {
-            self.#mutex.lock();
+            self.mutex.lock();
             return &self.unsynchronized_value;
         }
 
         /// Unlocks the mutex.
         pub fn unlock(self: *Self) void {
-            self.#mutex.unlock();
+            self.mutex.unlock();
         }
 
         /// Returns the inner unprotected value.
         pub fn intoUnprotected(self: *Self) Value {
             defer self.* = undefined;
-            bun.memory.deinit(&self.#mutex);
+            bun.memory.deinit(&self.mutex);
             return self.unsynchronized_value;
         }
 

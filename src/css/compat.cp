@@ -5394,4 +5394,5 @@ pub enum Feature {
     }
 }
 
-const Browsers = @import("./targets.zig").Browsers;
+import targets_mod from "./targets.zig";
+const Browsers = targets_mod.Browsers;

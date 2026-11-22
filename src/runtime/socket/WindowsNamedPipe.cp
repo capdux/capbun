@@ -1,5 +1,6 @@
 import std from "std";
 import bun from "bun";
+import ssl_wrapper from "./ssl_wrapper.zig";
 
 const Environment = bun.Environment;
 const jsc = bun.jsc;
@@ -10,7 +11,7 @@ const EventLoopTimer = bun.api.Timer.EventLoopTimer;
 const uws = bun.uws;
 const UpgradedDuplex = uws.UpgradedDuplex;
 const us_bun_verify_error_t = uws.us_bun_verify_error_t;
-const SSLWrapper = @import("./ssl_wrapper.zig").SSLWrapper;
+const SSLWrapper = ssl_wrapper.SSLWrapper;
 
 const log = bun.Output.scoped(.WindowsNamedPipe, .visible);
 

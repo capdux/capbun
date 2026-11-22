@@ -1,5 +1,8 @@
 import std from "std";
 import bun from "bun";
+import WebSocketServerContext from "./WebSocketServerContext.zig";
+import HTMLBundle from "./HTMLBundle.zig";
+import _SSLConfig from "../socket/SSLConfig.zig";
 const HTTP = bun.http;
 const JSError = bun.JSError;
 const URL = bun.URL;
@@ -9,9 +12,7 @@ const strings = bun.strings;
 const uws = bun.uws;
 const AnyRoute = bun.api.server.AnyRoute;
 const AnyServer = jsc.API.AnyServer;
-const WebSocketServerContext = @import("./WebSocketServerContext.zig");
-const HTMLBundle = @import("./HTMLBundle.zig");
-pub const SSLConfig = @import("../socket/SSLConfig.zig");
+pub const SSLConfig = _SSLConfig;
 pub type StringZ = [:0]const u8;
 
 pub struct DeinitGuard<T> {

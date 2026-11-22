@@ -35,10 +35,11 @@
     /// This is converted to a file:// URL on the C++ side.
     bytecode_origin_path: bun.String = bun.String.empty,
 
-    pub const Tag = @import("ResolvedSourceTag").ResolvedSourceTag;
+    pub const Tag = _ResolvedSourceTag.ResolvedSourceTag;
 }
 
 import bun from "bun";
+import _ResolvedSourceTag from "ResolvedSourceTag";
 
 const jsc = bun.jsc;
 const JSValue = jsc.JSValue;

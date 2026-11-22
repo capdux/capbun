@@ -71,6 +71,8 @@ pub const fs = @import("./fs.zig");
 pub const options = @import("../bundler/options.zig");
 pub const resolve_path = @import("../paths/resolve_path.zig");
 pub const resolver = @import("./resolver.zig");
+pub const npm = @import("../install/npm.zig");
+pub const url_mod = @import("../url/url.zig");
 pub const bun = @import("bun");
 pub const IncludeScripts = enum {
     ignore_scripts,
@@ -1358,14 +1360,13 @@ pub fn finalize(result_: Resolution) Resolution {
             if ((((result.status != .Exact) and (result.status != .ExactEndsWithStar)) and (result.status != .Inexact))) {
                 return result;
             }
-            const PercentEncoding = @import("../url/url.zig").PercentEncoding;
             const bufs_ptr = module_bufs.get();
             const resolved_path_buf_percent = (&bufs_ptr.resolved_path_buf_percent);
             var fbs = std.io.fixedBufferStream(resolved_path_buf_percent);
             _ = &fbs;
             var writer = fbs.writer();
             _ = &writer;
-            const len = (blk_catch_50: { break :blk_catch_50 ((PercentEncoding.decode(@TypeOf((&writer)), (&writer), result.path)) catch |__ce_50| { _ = &__ce_50; return Resolution{ .status = .InvalidModuleSpecifier, .path = result.path, .debug = result.debug }; }); });
+            const len = (blk_catch_50: { break :blk_catch_50 ((url_mod.PercentEncoding.decode(@TypeOf((&writer)), (&writer), result.path)) catch |__ce_50| { _ = &__ce_50; return Resolution{ .status = .InvalidModuleSpecifier, .path = result.path, .debug = result.debug }; }); });
             const resolved_path = resolved_path_buf_percent[0..len];
             var found: []const u8 = "";
             _ = &found;
@@ -1841,8 +1842,8 @@ pub const MacroMap = bun.StringArrayHashMapUnmanaged(MacroImportReplacementMap);
 const ScriptsMap = bun.StringArrayHashMap(string);
 pub const PackageJSON_SideEffectsMap = std.HashMapUnmanaged(bun.StringHashMapUnowned.Key, void, bun.StringHashMapUnowned.Adapter, 80);
 pub const PackageJSON_SideEffectsGlobList = std.ArrayListUnmanaged(string);
-const Architecture = @import("../install/npm.zig").Architecture;
-const OperatingSystem = @import("../install/npm.zig").OperatingSystem;
+const Architecture = npm.Architecture;
+const OperatingSystem = npm.OperatingSystem;
 const Environment = bun.Environment;
 const FD = bun.FD;
 const MainFieldMap = bun.StringMap;

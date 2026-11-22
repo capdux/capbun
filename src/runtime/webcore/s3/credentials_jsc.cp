@@ -1,8 +1,8 @@
 // S3 credentials options parser in CP
-const std = @import("std");
-const MultiPartUploadOptions = @import("./multipart_options.zig").MultiPartUploadOptions;
+import * as MultiPartOptionsMod from "./multipart_options.zig";
+const MultiPartUploadOptions = MultiPartOptionsMod.MultiPartUploadOptions;
 
-const bun = @import("bun");
+import bun from "bun";
 const jsc = bun.jsc;
 const strings = bun.strings;
 

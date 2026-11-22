@@ -1,3 +1,7 @@
+import bun from "bun";
+import error_code_mod from "./ErrorCode.zig";
+import zig_error_type_mod from "./ZigErrorType.zig";
+
 fn ErrorableResult(comptime Type: type): type {
     return extern union {
         value: Type,
@@ -42,6 +46,5 @@ pub fn Errorable(comptime Type: type): type {
     };
 }
 
-import bun from "bun";
-const ErrorCode = @import("./ErrorCode.zig").ErrorCode;
-const ZigErrorType = @import("./ZigErrorType.zig").ZigErrorType;
+const ErrorCode = error_code_mod.ErrorCode;
+const ZigErrorType = zig_error_type_mod.ZigErrorType;

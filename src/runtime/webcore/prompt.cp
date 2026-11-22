@@ -11,7 +11,6 @@ import {
 } from "bun";
 import { fs, heap } from "std";
 
-const std = @import("std");
 const ManagedList = std.array_list.Managed;
 
 const JSGlobalObject = jsc.JSGlobalObject;

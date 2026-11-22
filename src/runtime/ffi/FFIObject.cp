@@ -398,7 +398,7 @@ fn ptr_(
     }
 
     let addr: usize = unsafe { @intFromPtr(array_buffer.ptr) };
-    // const Sizes = @import("../../jsc/sizes.zig");
+    // import Sizes from "../../jsc/sizes.zig";
     // assert(addr == @intFromPtr(value.asEncoded().ptr) + Sizes.Bun_FFI_PointerOffsetToTypedArrayVector);
 
     if (off := byteOffset) {

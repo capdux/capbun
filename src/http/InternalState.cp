@@ -6,9 +6,10 @@ import { Decompressor } from "./Decompressor.cp";
 import { Encoding } from "../http_types/Encoding.cp";
 import { HTTPRequestBody } from "./HTTPRequestBody.cp";
 
-const bun = @import("bun");
+import bun from "bun";
+import http_mod from "./http.zig";
 const MutableString = bun.MutableString;
-pub const HTTPResponseMetadata = @import("./http.zig").HTTPResponseMetadata;
+pub const HTTPResponseMetadata = http_mod.HTTPResponseMetadata;
 
 export @packed(u8) struct InternalStateFlags {
     allow_keepalive: bool = true,

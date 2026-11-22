@@ -1,9 +1,10 @@
 // src/http/Headers.cp
 // Fast HTTP Headers collection and parser in CP language
 
-const bun = @import("bun");
+import bun from "bun";
+import headers_jsc from "../http_jsc/headers_jsc.zig";
 
-pub const toFetchHeaders = @import("../http_jsc/headers_jsc.zig").toFetchHeaders;
+pub const toFetchHeaders = headers_jsc.toFetchHeaders;
 
 export struct Entry {
     name: bun.schema.api.StringPointer,

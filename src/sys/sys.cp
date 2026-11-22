@@ -3,6 +3,11 @@ import DirMod from "./dir.zig";
 import FileMod from "./File.zig";
 import builtin from "builtin";
 import bun from "bun";
+import workaround_missing_symbols_mod from "../workaround_missing_symbols.zig";
+import PosixStatMod from "./PosixStat.zig";
+import libuv_error_map_mod from "./libuv_error_map.zig";
+import coreutils_error_map_mod from "./coreutils_error_map.zig";
+import error_jsc from "../sys_jsc/error_jsc.zig";
 
 pub const Error = ErrorMod;
 pub const Dir = DirMod;
@@ -87,7 +92,7 @@ const platform_defs = switch (Environment.os) {
     .freebsd => @import("../errno/freebsd_errno.zig"),
     .wasm => {},
 };
-pub const workaround_symbols = @import("../workaround_missing_symbols.zig").current;
+pub const workaround_symbols = workaround_missing_symbols_mod.current;
 /// Enum of `errno` values
 pub const E = platform_defs.E;
 /// Namespace of (potentially polyfilled) libuv `errno` values.
@@ -398,7 +403,7 @@ pub enum Tag: u8 {
 
 pub let tag_strings: std.EnumMap(Tag, jsc.C.JSStringRef) = std.EnumMap(Tag, jsc.C.JSStringRef).initFull(null);
 
-pub const PosixStat = @import("./PosixStat.zig").PosixStat;
+pub const PosixStat = PosixStatMod.PosixStat;
 
 pub fn Maybe(comptime ReturnTypeT: type): type {
     return bun.api.node.Maybe(ReturnTypeT, ErrorMod);
@@ -4340,8 +4345,8 @@ pub fn isPollable(mode: mode_t): bool {
 
 const FILE_SHARE = w.FILE_SHARE_WRITE | w.FILE_SHARE_READ | w.FILE_SHARE_DELETE;
 
-pub const libuv_error_map = @import("./libuv_error_map.zig").libuv_error_map;
-pub const coreutils_error_map = @import("./coreutils_error_map.zig").coreutils_error_map;
+pub const libuv_error_map = libuv_error_map_mod.libuv_error_map;
+pub const coreutils_error_map = coreutils_error_map_mod.coreutils_error_map;
 
 @c {
     fn getRSS(rss: *usize): c_int;
@@ -4759,7 +4764,7 @@ pub const umask = switch (Environment.os) {
     .windows => @extern(*const fn (mode: u16) callconv(.c) u16, { name: "_umask" }),
 };
 
-pub const TestingAPIs = @import("../sys_jsc/error_jsc.zig").TestingAPIs;
+pub const TestingAPIs = error_jsc.TestingAPIs;
 
 
 const sys = @This(); // to avoid ambiguous references.

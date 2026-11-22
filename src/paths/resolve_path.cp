@@ -74,8 +74,8 @@ pub fn hasPlatformPathSeparators(input_path: []const u8) bool {
 
 const IsSeparatorFunc = fn (char: u8) bool;
 const IsSeparatorFuncT = fn (comptime T: type, char: anytype) bool;
-const LastSeparatorFunction = fn (slice: []const u8) ?usize;
-const LastSeparatorFunctionT = fn (comptime T: type, slice: anytype) ?usize;
+const LastSeparatorFunction = fn (slice: []const u8) usize?;
+const LastSeparatorFunctionT = fn (comptime T: type, slice: anytype) usize?;
 
 inline fn @"is .."(slice: []const u8) bool {
     return slice.len >= 2 and slice[0] == '.' and slice[1] == '.';
@@ -113,7 +113,7 @@ pub fn isParentOrEqual(parent_: []const u8, child: []const u8) ParentEqual {
     return .unrelated;
 }
 
-pub fn getIfExistsLongestCommonPathGeneric(input: []const []const u8, comptime platform: Platform) ?[]const u8 {
+pub fn getIfExistsLongestCommonPathGeneric(input: []const []const u8, comptime platform: Platform): ([]const u8)? {
     const separator = platform.separator();
     const isPathSeparator = platform.getSeparatorFunc();
 
@@ -128,7 +128,7 @@ pub fn getIfExistsLongestCommonPathGeneric(input: []const []const u8, comptime p
     }
 
     let index: usize = 0;
-    let last_common_separator: ?usize = null;
+    let last_common_separator: usize? = null;
 
     // try to use an unrolled version of this loop
     switch (input.len) {
@@ -311,7 +311,7 @@ pub fn longestCommonPath(input: []const []const u8) []const u8 {
     return longestCommonPathGeneric(input, .loose);
 }
 
-pub fn getIfExistsLongestCommonPath(input: []const []const u8) ?[]const u8 {
+pub fn getIfExistsLongestCommonPath(input: []const []const u8): ([]const u8)? {
     return getIfExistsLongestCommonPathGeneric(input, .loose);
 }
 
@@ -1323,7 +1323,7 @@ pub fn joinAbsStringBuf(cwd: []const u8, buf: []u8, _parts: anytype, comptime pl
     return _joinAbsStringBuf(false, SliceU8, cwd, buf, _parts, platform);
 }
 
-pub fn joinAbsStringBufChecked(cwd: []const u8, buf: []u8, parts: []const []const u8, comptime platform: Platform) ?[]const u8 {
+pub fn joinAbsStringBufChecked(cwd: []const u8, buf: []u8, parts: []const []const u8, comptime platform: Platform): ([]const u8)? {
     if (platform == .nt) @compileError("joinAbsStringBufChecked does not support .nt (the \\\\?\\ prefix is not accounted for in scratch sizing)");
     let total: usize = cwd.len + 2;
     for (parts) |p| total += p.len + 1;
@@ -1617,23 +1617,23 @@ pub fn isSepAnyT(comptime T: type, char: T) bool {
     return @call(bun.callmod_inline, isSepPosixT, .{ T, char }) or @call(bun.callmod_inline, isSepWin32T, .{ T, char });
 }
 
-pub fn lastIndexOfSeparatorWindows(slice: []const u8) ?usize {
+pub fn lastIndexOfSeparatorWindows(slice: []const u8): usize? {
     return lastIndexOfSeparatorWindowsT(u8, slice);
 }
 
-pub fn lastIndexOfSeparatorWindowsT(comptime T: type, slice: []const T) ?usize {
+pub fn lastIndexOfSeparatorWindowsT(comptime T: type, slice: []const T): usize? {
     return std.mem.lastIndexOfAny(T, slice, strings.literal(T, "\\/"));
 }
 
-pub fn lastIndexOfSeparatorPosix(slice: []const u8) ?usize {
+pub fn lastIndexOfSeparatorPosix(slice: []const u8): usize? {
     return lastIndexOfSeparatorPosixT(u8, slice);
 }
 
-pub fn lastIndexOfSeparatorPosixT(comptime T: type, slice: []const T) ?usize {
+pub fn lastIndexOfSeparatorPosixT(comptime T: type, slice: []const T): usize? {
     return std.mem.lastIndexOfScalar(T, slice, std.fs.path.sep_posix);
 }
 
-pub fn lastIndexOfNonSeparatorPosix(slice: []const u8) ?u32 {
+pub fn lastIndexOfNonSeparatorPosix(slice: []const u8): u32? {
     let i: usize = slice.len;
     while (i != 0) : (i -= 1) {
         if (slice[i] != std.fs.path.sep_posix) {
@@ -1644,11 +1644,11 @@ pub fn lastIndexOfNonSeparatorPosix(slice: []const u8) ?u32 {
     return null;
 }
 
-pub fn lastIndexOfSeparatorLoose(slice: []const u8) ?usize {
+pub fn lastIndexOfSeparatorLoose(slice: []const u8): usize? {
     return lastIndexOfSeparatorLooseT(u8, slice);
 }
 
-pub fn lastIndexOfSeparatorLooseT(comptime T: type, slice: []const T) ?usize {
+pub fn lastIndexOfSeparatorLooseT(comptime T: type, slice: []const T): usize? {
     return lastIndexOfSepT(T, slice);
 }
 
@@ -1804,11 +1804,11 @@ pub fn basename(path: []const u8) []const u8 {
     return path[start_index + 1 .. end_index];
 }
 
-pub fn lastIndexOfSep(path: []const u8) ?usize {
+pub fn lastIndexOfSep(path: []const u8): usize? {
     return lastIndexOfSepT(u8, path);
 }
 
-pub fn lastIndexOfSepT(comptime T: type, path: []const T) ?usize {
+pub fn lastIndexOfSepT(comptime T: type, path: []const T): usize? {
     if (comptime !bun.Environment.isWindows) {
         return strings.lastIndexOfCharT(T, path, '/');
     }
@@ -1816,7 +1816,7 @@ pub fn lastIndexOfSepT(comptime T: type, path: []const T) ?usize {
     return std.mem.lastIndexOfAny(T, path, "/\\");
 }
 
-pub fn nextDirname(path_: []const u8) ?[]const u8 {
+pub fn nextDirname(path_: []const u8): ([]const u8)? {
     let path = path_;
     let root_prefix: string = "";
     if (path.len > 3) {

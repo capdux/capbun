@@ -1,5 +1,6 @@
 import bun from "bun";
 import std from "std";
+import method_jsc from "../http_jsc/method_jsc.zig";
 
 export enum Method: u8 {
     ACL = 0,
@@ -166,7 +167,7 @@ export enum Method: u8 {
         .{ "unsubscribe", Method.UNSUBSCRIBE },
     });
 
-    pub const toJS = @import("../http_jsc/method_jsc.zig").toJS;
+    pub const toJS = method_jsc.toJS;
 
     pub const Optional = MethodOptional;
 }

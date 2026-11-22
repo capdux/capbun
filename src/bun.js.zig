@@ -69,6 +69,10 @@ pub const bindgen = @import("./jsc/bindgen.zig");
 pub const CPUProfiler = @import("./jsc/BunCPUProfiler.zig");
 pub const HeapProfiler = @import("./jsc/BunHeapProfiler.zig");
 pub const options = @import("./bundler/options.zig");
+pub const jsc_config = @import("./jsc/config.zig");
+pub const JSSecrets = @import("./jsc/JSSecrets.zig");
+pub const cli = @import("./cli/cli.zig");
+pub const which_mod = @import("./which/which.zig");
 pub const bun = @import("bun");
 pub const Run = struct {
     ctx: Command.Context,
@@ -163,7 +167,7 @@ pub fn doPreconnect(preconnect: []const []const u8) void {
 
 pub fn bootBunShell(ctx: Command.Context, entry_path: []const u8) !bun.shell.ExitCode {
             @branchHint(.cold);
-            var bundle = try bun.Transpiler.init(ctx.allocator, ctx.log, try @import("./jsc/config.zig").configureTransformOptionsForBunVM(ctx.allocator, ctx.args), null);
+            var bundle = try bun.Transpiler.init(ctx.allocator, ctx.log, try jsc_config.configureTransformOptionsForBunVM(ctx.allocator, ctx.args), null);
             _ = &bundle;
             _ = try bundle.runEnvLoader(bundle.options.env.disable_default_env_files);
             const mini = jsc.MiniEventLoop.initGlobal(bundle.env, null);
@@ -494,7 +498,7 @@ break :brk promise.result(vm.jsc_vm);
             _ = bun.api.napi.fixDeadCodeElimination();
             _ = bun.webcore.BakeResponse.fixDeadCodeElimination();
             _ = bun.crash_handler.fixDeadCodeElimination();
-            _ = @import("./jsc/JSSecrets.zig").fixDeadCodeElimination();
+            _ = JSSecrets.fixDeadCodeElimination();
             _ = vm.globalExit();
     }
 
@@ -528,8 +532,8 @@ const string = []const u8;
 var run: Run = undefined;
 const OpaqueWrap = jsc.OpaqueWrap;
 const VirtualMachine = jsc.VirtualMachine;
-const Command = @import("./cli/cli.zig").Command;
-const which = @import("./which/which.zig").which;
+const Command = cli.Command;
+const which = which_mod.which;
 const Global = bun.Global;
 const Output = bun.Output;
 const default_allocator = bun.default_allocator;

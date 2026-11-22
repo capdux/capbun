@@ -1,8 +1,7 @@
 // POSIX Signal Handle and task queue bridging for JavaScriptCore in CP
 import { Environment, Output, jsc } from "bun";
+import bun from "bun";
 const VirtualMachine = jsc.VirtualMachine;
-const std = @import("std");
-const bun = @import("bun");
 
 const buffer_size: usize = 8192;
 const log = Output.scoped(.PosixSignalHandle, .hidden);

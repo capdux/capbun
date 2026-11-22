@@ -1,13 +1,13 @@
 // Per-SocketKind handler adapters in CP language
 // Converted from src/runtime/socket/uws_handlers.zig
 
-const IPC = @import("../../jsc/ipc.zig");
-const js_valkey = @import("../valkey_jsc/js_valkey.zig");
-const mysql = @import("../../sql_jsc/mysql.zig");
-const websocket_client = @import("../../http_jsc/websocket_client.zig");
-const websocket_upgrade_client = @import("../../http_jsc/websocket_client/WebSocketUpgradeClient.zig");
+import IPC from "../../jsc/ipc.zig";
+import js_valkey from "../valkey_jsc/js_valkey.zig";
+import mysql from "../../sql_jsc/mysql.zig";
+import websocket_client from "../../http_jsc/websocket_client.zig";
+import websocket_upgrade_client from "../../http_jsc/websocket_client/WebSocketUpgradeClient.zig";
 
-const bun = @import("bun");
+import bun from "bun";
 const api = bun.jsc.API;
 
 const uws = bun.uws;

@@ -1,8 +1,8 @@
 // S3 error JavaScript bridges in CP
-const s3_error = @import("../../../s3_signing/error.zig");
+import * as s3_error from "../../../s3_signing/error.zig";
 const getSignErrorMessage = s3_error.getSignErrorMessage;
 
-const bun = @import("bun");
+import bun from "bun";
 const jsc = bun.jsc;
 
 pub const S3Error = s3_error.S3Error;

@@ -1,6 +1,5 @@
 // Route parameter mapping and storage in CP
-const std = @import("std");
-const bun = @import("bun");
+import bun from "bun";
 
 const strings = bun.strings;
 

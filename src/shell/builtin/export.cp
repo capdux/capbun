@@ -4,8 +4,6 @@ import bun from "bun";
 const debug = bun.Output.scoped(.ShellExport, .hidden);
 const log = debug;
 
-const std = @import("std");
-
 const EnvStr = interpreter.EnvStr;
 const Interpreter = interpreter.Interpreter;
 

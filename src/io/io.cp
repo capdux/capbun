@@ -6,10 +6,18 @@
 import bun from "bun";
 import std from "std";
 
-pub const heap = @import("./heap.zig");
-pub const openForWriting = @import("./openForWriting.zig").openForWriting;
-pub const openForWritingImpl = @import("./openForWriting.zig").openForWritingImpl;
-pub const Source = @import("./source.zig").Source;
+import _heap from "./heap.zig";
+import _openForWriting from "./openForWriting.zig";
+import _source from "./source.zig";
+import _pipes from "./pipes.zig";
+import _PipeReader from "./PipeReader.zig";
+import _PipeWriter from "./PipeWriter.zig";
+import _MaxBuf from "./MaxBuf.zig";
+
+pub const heap = _heap;
+pub const openForWriting = _openForWriting.openForWriting;
+pub const openForWritingImpl = _openForWriting.openForWritingImpl;
+pub const Source = _source.Source;
 
 const log = bun.Output.scoped(.loop, .visible);
 
@@ -698,16 +706,16 @@ pub struct Poll {
 
 pub const retry = bun.sys.E.AGAIN;
 
-pub const ReadState = @import("./pipes.zig").ReadState;
-pub const PipeReader = @import("./PipeReader.zig").PipeReader;
-pub const BufferedReader = @import("./PipeReader.zig").BufferedReader;
-pub const BufferedWriter = @import("./PipeWriter.zig").BufferedWriter;
-pub const WriteResult = @import("./PipeWriter.zig").WriteResult;
-pub const WriteStatus = @import("./PipeWriter.zig").WriteStatus;
-pub const StreamingWriter = @import("./PipeWriter.zig").StreamingWriter;
-pub const StreamBuffer = @import("./PipeWriter.zig").StreamBuffer;
-pub const FileType = @import("./pipes.zig").FileType;
-pub const MaxBuf = @import("./MaxBuf.zig");
+pub const ReadState = _pipes.ReadState;
+pub const PipeReader = _PipeReader.PipeReader;
+pub const BufferedReader = _PipeReader.BufferedReader;
+pub const BufferedWriter = _PipeWriter.BufferedWriter;
+pub const WriteResult = _PipeWriter.WriteResult;
+pub const WriteStatus = _PipeWriter.WriteStatus;
+pub const StreamingWriter = _PipeWriter.StreamingWriter;
+pub const StreamBuffer = _PipeWriter.StreamBuffer;
+pub const FileType = _pipes.FileType;
+pub const MaxBuf = _MaxBuf;
 
 const Environment = bun.Environment;
 const assert = bun.assert;

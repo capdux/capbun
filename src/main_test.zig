@@ -47,9 +47,9 @@ comptime {
     _ = bun.bake.production.BakeProdLoad;
     _ = bun.bun_js.Bun__onRejectEntryPointResult;
     _ = bun.bun_js.Bun__onResolveEntryPointResult;
-    _ = *const @import("./runtime/node/buffer.zig").BufferVectorized;
-    _ = @import("./cli/upgrade_command.zig").@"export"();
-    _ = @import("./cli/test_command.zig").@"export"();
+    _ = *const node_buffer.BufferVectorized;
+    _ = upgrade_command.@"export"();
+    _ = test_command.@"export"();
 
 }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
@@ -71,6 +71,9 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 pub const bun = @import("./bun.zig");
 pub const builtin = @import("builtin");
 pub const recover = @import("./test_runner/harness/recover.zig");
+pub const node_buffer = @import("./runtime/node/buffer.zig");
+pub const upgrade_command = @import("./cli/upgrade_command.zig");
+pub const test_command = @import("./cli/test_command.zig");
 pub fn FreeGuard(comptime T: type) type {
     return struct {
         slice: []T,

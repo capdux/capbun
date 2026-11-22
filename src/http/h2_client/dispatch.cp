@@ -6,7 +6,7 @@ import { Stream } from "./Stream.cp";
 import * as wire from "../H2FrameParser.cp";
 import { local_max_header_list_size, write_buffer_control_limit } from "../H2Client.cp";
 
-const bun = @import("bun");
+import bun from "bun";
 const strings = bun.strings;
 const log = bun.Output.scoped(.h2_client, .hidden);
 

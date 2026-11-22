@@ -78,6 +78,7 @@ pub const Error = @import("../../../s3_signing/error.zig");
 pub const Credentials = @import("../../../s3_signing/credentials.zig");
 pub const S3SimpleRequest = @import("./simple_request.zig");
 pub const S3ListObjects = @import("./list_objects.zig");
+pub const ResumableSinkMod = @import("../ResumableSink.zig");
 pub const bun = @import("bun");
 pub fn FreeGuard(comptime T: type) type {
     return struct {
@@ -298,7 +299,7 @@ pub fn deinit(self: *S3UploadStreamWrapper) void {
     const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, .{});
     pub const ref = RefCount.ref;
     pub const deref = RefCount.deref;
-    pub const ResumableSink = @import("../ResumableSink.zig").ResumableS3UploadSink;
+    pub const ResumableSink = ResumableSinkMod.ResumableS3UploadSink;
 };
 
 pub const S3DownloadStreamWrapper = struct {

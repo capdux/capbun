@@ -3,7 +3,6 @@ pub struct UpdateCommand {
         const cli = PackageManager.CommandLineArguments.parse(ctx.allocator, .update)?;
 
         if (cli.interactive) {
-            const UpdateInteractiveCommand = @import("./update_interactive_command.zig").UpdateInteractiveCommand;
             UpdateInteractiveCommand.exec(ctx)?;
         } else {
             updatePackageJSONAndInstallCatchError(ctx, .update)?;
@@ -12,6 +11,8 @@ pub struct UpdateCommand {
 }
 
 import bun from "bun";
+import update_interactive_command_mod from "./update_interactive_command.zig";
+const UpdateInteractiveCommand = update_interactive_command_mod.UpdateInteractiveCommand;
 const Command = bun.cli.Command;
 
 const PackageManager = bun.install.PackageManager;

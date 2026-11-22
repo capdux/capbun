@@ -1,3 +1,6 @@
+import bun from "bun";
+import css from "./css_parser.zig";
+
 /// This is a type whose items can either be heap-allocated (essentially the
 /// same as a BabyList(T)) or inlined in the struct itself.
 ///
@@ -685,11 +688,8 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
     };
 }
 
-const bun = @import("bun");
-const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const css = @import("./css_parser.zig");
 const Delimiters = css.Delimiters;
 const Parser = css.Parser;
 const PrintErr = css.PrintErr;

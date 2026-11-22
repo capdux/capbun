@@ -64,6 +64,7 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 
 pub const boring = @import("../boringssl_sys/boringssl.zig");
 pub const builtin = @import("builtin");
+pub const boringssl_jsc = @import("../runtime/crypto/boringssl_jsc.zig");
 pub const bun = @import("bun");
 pub const X509 = @import("../runtime/api/bun/x509.zig");
 pub const c_ares = @import("../cares_sys/c_ares.zig");
@@ -87,7 +88,7 @@ pub const SSL_Ptr = *boring.SSL;
 pub const X509_Ptr = *boring.X509;
 pub const ASN1_OCTET_STRING_Ptr = *boring.ASN1_OCTET_STRING;
 pub const c = boring;
-pub const ERR_toJS = @import("../runtime/crypto/boringssl_jsc.zig").ERR_toJS;
+pub const ERR_toJS = boringssl_jsc.ERR_toJS;
 const strings = bun.strings;
 const INET6_ADDRSTRLEN = (if (bun.Environment.isWindows) 65 else 46);
 const INET6_ADDRSTRLEN_BUF = (if (bun.Environment.isWindows) 66 else 47);

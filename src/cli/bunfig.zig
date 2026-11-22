@@ -63,8 +63,13 @@ fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .poi
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
+pub const OfflineModeMod = @import("../options_types/OfflineMode.zig");
 pub const options = @import("../bundler/options.zig");
 pub const resolver = @import("../resolver/resolver.zig");
+pub const cli = @import("./cli.zig");
+pub const package_json = @import("../resolver/package_json.zig");
+pub const test_command = @import("./test_command.zig");
+pub const url_mod = @import("../url/url.zig");
 pub const bun = @import("bun");
 pub fn ErrDeinitGuard(comptime T: type) type {
     return struct {
@@ -1462,8 +1467,8 @@ pub fn parse(allocator: std.mem.Allocator, source: *const logger.Source, ctx: Co
             _ = &parser;
             _ = try parser.parse(cmd);
     }
-    pub const OfflineMode = @import("../options_types/OfflineMode.zig").OfflineMode;
-    const Prefer = @import("../options_types/OfflineMode.zig").Prefer;
+    pub const OfflineMode = OfflineModeMod.OfflineMode;
+    const Prefer = OfflineModeMod.Prefer;
     const Parser = BunfigParser;
 };
 
@@ -1472,12 +1477,12 @@ pub const MacroImportReplacementMap = bun.StringArrayHashMap(string);
 pub const MacroMap = bun.StringArrayHashMapUnmanaged(MacroImportReplacementMap);
 pub const BundlePackageOverride = bun.StringArrayHashMapUnmanaged(options.BundleOverride);
 const LoaderMap = bun.StringArrayHashMapUnmanaged(options.Loader);
-const OfflineMode = @import("../options_types/OfflineMode.zig").OfflineMode;
-const Prefer = @import("../options_types/OfflineMode.zig").Prefer;
-const Command = @import("./cli.zig").Command;
-const PackageJSON = @import("../resolver/package_json.zig").PackageJSON;
-const TestCommand = @import("./test_command.zig").TestCommand;
-const URL = @import("../url/url.zig").URL;
+const OfflineMode = OfflineModeMod.OfflineMode;
+const Prefer = OfflineModeMod.Prefer;
+const Command = cli.Command;
+const PackageJSON = package_json.PackageJSON;
+const TestCommand = test_command.TestCommand;
+const URL = url_mod.URL;
 const JSONParser = bun.json;
 const default_allocator = bun.default_allocator;
 const js_ast = bun.ast;

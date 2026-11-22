@@ -5,9 +5,12 @@ type OptCStr = ([*:0]u8)?;
 // for interacting with the filesystem from JavaScript.
 // The top-level functions assume the arguments are already validated
 import constants from "./node_fs_constant.zig";
-pub const Binding = @import("./node_fs_binding.zig").Binding;
-pub const Watcher = @import("./node_fs_watcher.zig").FSWatcher;
-pub const StatWatcher = @import("./node_fs_stat_watcher.zig").StatWatcher;
+import node_fs_binding from "./node_fs_binding.zig";
+import node_fs_watcher from "./node_fs_watcher.zig";
+import node_fs_stat_watcher from "./node_fs_stat_watcher.zig";
+pub const Binding = node_fs_binding.Binding;
+pub const Watcher = node_fs_watcher.FSWatcher;
+pub const StatWatcher = node_fs_stat_watcher.StatWatcher;
 
 pub const default_permission = if (Environment.isPosix)
     Syscall.S.IRUSR |

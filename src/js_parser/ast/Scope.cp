@@ -202,7 +202,7 @@ pub enum Kind: u8 {
     }
 }
 
-const bun = @import("bun");
+import bun from "bun";
 const BabyList = bun.BabyList;
 const logger = bun.logger;
 

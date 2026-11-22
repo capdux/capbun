@@ -83,6 +83,7 @@ fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
 }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
+pub const build_options = @import("build_options");
 pub const bun = @import("bun");
 pub const RuntimeServerComponentsMode = enum {
     none,
@@ -263,13 +264,15 @@ pub fn count(self: RuntimeImports) usize {
             "__jsonParse",
             "__promiseAll",
         };
-    const all_sorted: [all.len]string = brk: {
-            @setEvalBranchQuota(1000000);
+    const all_sorted: [all.len][]const u8 = brk: {
+            _ = @setEvalBranchQuota(1000000);
             var list = all;
+            _ = &list;
             const empty_sort_ctx: void = undefined;
-            std.sort.pdq(string, &list, empty_sort_ctx, _RuntimeImportsSorter.compare);
+            _ = &empty_sort_ctx;
+            _ = std.sort.pdq(string, (&list), empty_sort_ctx, _RuntimeImportsSorter.compare);
             break :brk list;
-        };
+    };
     pub const all_sorted_index = brk: {
             _ = @setEvalBranchQuota(1000000);
             const all_len = all.len;
@@ -391,7 +394,7 @@ pub fn renderBackend(allocator: std.mem.Allocator, msg: *const api.FallbackMessa
     pub const HTMLTemplate = @embedFile("../fallback.html");
     pub const HTMLBackendTemplate = @embedFile("../fallback-backend.html");
     const Base64FallbackMessage = _Base64FallbackMessage;
-    pub const version_hash = @import("build_options").fallback_html_version;
+    pub const version_hash = build_options.fallback_html_version;
 };
 
 pub const _RuntimeReplaceableExportInject = struct {

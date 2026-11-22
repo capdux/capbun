@@ -33,7 +33,8 @@ pub fn toStrictEqual(client: *Expect, globalThis: *JSGlobalObject, callFrame: *C
 }
 
 import bun from "bun";
-const DiffFormatter = @import("../diff_format.zig").DiffFormatter;
+import diff_format from "../diff_format.zig";
+const DiffFormatter = diff_format.DiffFormatter;
 
 const jsc = bun.jsc;
 const CallFrame = bun.jsc.CallFrame;

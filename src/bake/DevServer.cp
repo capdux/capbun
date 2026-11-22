@@ -10,6 +10,7 @@ import Assets from "./DevServer/Assets.zig";
 import SourceMapStore from "./DevServer/SourceMapStore.zig";
 import ErrorReportRequest from "./DevServer/ErrorReportRequest.zig";
 import bun from "bun";
+import IncrementalGraphMod from "./DevServer/IncrementalGraph.zig";
 const Route = FrameworkRouter.Route;
 const BundleV2 = bun.bundle_v2.BundleV2;
 const Chunk = bun.bundle_v2.Chunk;
@@ -3900,7 +3901,7 @@ pub enum FileKind: u2 {
     }
 }
 
-pub const IncrementalGraph = @import("./DevServer/IncrementalGraph.zig").IncrementalGraph;
+pub const IncrementalGraph = IncrementalGraphMod.IncrementalGraph;
 
 pub struct IncrementalResult {
     /// When tracing a file's dependencies via `traceDependencies`, this is

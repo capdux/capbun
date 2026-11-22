@@ -109,6 +109,11 @@ pub const DirMod = @import("./dir.zig");
 pub const FileMod = @import("./File.zig");
 pub const builtin = @import("builtin");
 pub const bun = @import("bun");
+pub const workaround_missing_symbols_mod = @import("../workaround_missing_symbols.zig");
+pub const PosixStatMod = @import("./PosixStat.zig");
+pub const libuv_error_map_mod = @import("./libuv_error_map.zig");
+pub const coreutils_error_map_mod = @import("./coreutils_error_map.zig");
+pub const error_jsc = @import("../sys_jsc/error_jsc.zig");
 pub const Tag = enum(u8) {
     TODO,
     dup,
@@ -606,7 +611,7 @@ const platform_defs = (switch (Environment.os) {
     }
 },
 });
-pub const workaround_symbols = @import("../workaround_missing_symbols.zig").current;
+pub const workaround_symbols = workaround_missing_symbols_mod.current;
 pub const E = platform_defs.E;
 pub const UV_E = platform_defs.UV_E;
 pub const S = platform_defs.S;
@@ -761,7 +766,7 @@ pub const O = (switch (Environment.os) {
 },
 });
 pub var tag_strings: std.EnumMap(Tag, jsc.C.JSStringRef) = std.EnumMap(Tag, jsc.C.JSStringRef).initFull(null);
-pub const PosixStat = @import("./PosixStat.zig").PosixStat;
+pub const PosixStat = PosixStatMod.PosixStat;
 const syscall_or_c = (if (Environment.isLinux) syscall else bun.c);
 pub var supports_statx_on_linux = std.atomic.Value(bool).init(true);
 var linux_kernel_cached = std.atomic.Value(LinuxKernel).init(.unknown);
@@ -795,8 +800,8 @@ const MFD_CLOEXEC: u32 = std.os.linux.MFD.CLOEXEC;
 const MFD_ALLOW_SEALING: u32 = std.os.linux.MFD.ALLOW_SEALING;
 var memfd_enosys = std.atomic.Value(bool).init(false);
 const FILE_SHARE = ((w.FILE_SHARE_WRITE | w.FILE_SHARE_READ) | w.FILE_SHARE_DELETE);
-pub const libuv_error_map = @import("./libuv_error_map.zig").libuv_error_map;
-pub const coreutils_error_map = @import("./coreutils_error_map.zig").coreutils_error_map;
+pub const libuv_error_map = libuv_error_map_mod.libuv_error_map;
+pub const coreutils_error_map = coreutils_error_map_mod.coreutils_error_map;
 pub const preallocate_length = (switch (bun.Environment.os) {
 .linux => (2048 * 1024),
 else => {
@@ -809,7 +814,7 @@ pub const umask = (switch (Environment.os) {
 else => bun.c.umask,
 .windows => @extern(*const fn (u16) callconv(.c) u16, .{ .name = "_umask" }),
 });
-pub const TestingAPIs = @import("../sys_jsc/error_jsc.zig").TestingAPIs;
+pub const TestingAPIs = error_jsc.TestingAPIs;
 const sys = @This();
 const Environment = bun.Environment;
 const FD = bun.FD;

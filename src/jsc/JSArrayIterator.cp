@@ -1,3 +1,6 @@
+import bun from "bun";
+import js_object_mod from "./JSObject.zig";
+
 @c {
     fn Bun__JSArray__getContiguousVector(value: JSValue, length: *u32): ([*]const JSValue)? ;
     fn Bun__JSArray__contiguousVectorIsStillValid(value: JSValue, vector: [*]const JSValue, length: u32): bool ;
@@ -46,8 +49,7 @@ pub struct JSArrayIterator {
     }
 }
 
-import bun from "bun";
-const JSObject = @import("./JSObject.zig").JSObject;
+const JSObject = js_object_mod.JSObject;
 
 const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;

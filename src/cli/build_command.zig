@@ -67,6 +67,9 @@ pub const MetafileBuilder = @import("../bundler/linker_context/MetafileBuilder.z
 pub const fs = @import("../resolver/fs.zig");
 pub const options = @import("../bundler/options.zig");
 pub const resolve_path = @import("../paths/resolve_path.zig");
+pub const bundle_v2 = @import("../bundler/bundle_v2.zig");
+pub const cli = @import("./cli.zig");
+pub const runtime = @import("../js_parser/runtime.zig");
 pub const bun = @import("bun");
 pub fn CloseGuard(comptime T: type) type {
     return struct {
@@ -692,9 +695,9 @@ else => std.math.maxInt(usize),
 };
 
 const string = []const u8;
-const BundleV2 = @import("../bundler/bundle_v2.zig").BundleV2;
-const Command = @import("./cli.zig").Command;
-const Runtime = @import("../js_parser/runtime.zig").Runtime;
+const BundleV2 = bundle_v2.BundleV2;
+const Command = cli.Command;
+const Runtime = runtime.Runtime;
 const Global = bun.Global;
 const Output = bun.Output;
 const default_allocator = bun.default_allocator;

@@ -4,7 +4,7 @@
 import bun from "bun";
 import std from "std";
 
-const Environment = @import("../bun_core/env.zig");
+import Environment from "../bun_core/env.zig";
 const mimalloc = bun.mimalloc;
 const Alignment = std.mem.Alignment;
 const Allocator = std.mem.Allocator;

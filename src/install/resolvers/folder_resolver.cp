@@ -8,16 +8,13 @@ const strings = bun.strings;
 const Semver = bun.Semver;
 const String = Semver.String;
 
-const Dependency = @import("../dependency.zig");
-const Npm = @import("../npm.zig");
-const FileSystem = @import("../../resolver/fs.zig").FileSystem;
-const IdentityContext = @import("../../collections/identity_context.zig").IdentityContext;
-const Resolution = @import("../resolution.zig").Resolution;
+import Dependency from "../dependency.zig";
+import Npm from "../npm.zig";
+import { FileSystem } from "../../resolver/fs.zig";
+import { IdentityContext } from "../../collections/identity_context.zig";
+import { Resolution } from "../resolution.zig";
 
-const Features = @import("../install.zig").Features;
-const Lockfile = @import("../install.zig").Lockfile;
-const PackageID = @import("../install.zig").PackageID;
-const PackageManager = @import("../install.zig").PackageManager;
+import { Features, Lockfile, PackageID, PackageManager } from "../install.zig";
 
 type stringZ = [:0]const u8;
 const joined_buf_len = bun.MAX_PATH_BYTES + 2;

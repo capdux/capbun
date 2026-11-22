@@ -1,4 +1,5 @@
 import bun from "bun";
+import fetch_enums_jsc from "../http_jsc/fetch_enums_jsc.zig";
 
 export enum FetchRedirect: u2 {
     follow,
@@ -11,5 +12,5 @@ export enum FetchRedirect: u2 {
         .{ "error", .@"error" },
     });
 
-    pub const toJS = @import("../http_jsc/fetch_enums_jsc.zig").fetchRedirectToJS;
+    pub const toJS = fetch_enums_jsc.fetchRedirectToJS;
 }

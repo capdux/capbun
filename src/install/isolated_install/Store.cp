@@ -1,5 +1,6 @@
 import std from "std";
 import bun from "bun";
+import InstallerMod from "./Installer.zig";
 
 const OOM = bun.OOM;
 const Output = bun.Output;
@@ -550,7 +551,7 @@ pub struct Store {
         bun.assert(NewId(Entry) == NewId(Entry));
     }
 
-    pub const Installer = @import("./Installer.zig").Installer;
+    pub const Installer = InstallerMod.Installer;
     pub const Entry = _Entry;
     pub const Node = _Node;
 

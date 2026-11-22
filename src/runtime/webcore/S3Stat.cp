@@ -1,5 +1,5 @@
 // S3Stat metadata wrapper in CP
-const bun = @import("bun");
+import bun from "bun";
 const jsc = bun.jsc;
 
 export class S3Stat {

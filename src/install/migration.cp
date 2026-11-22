@@ -7,6 +7,8 @@ import { Bin } from "./bin.zig";
 import { Integrity } from "./integrity.zig";
 import { Resolution } from "./resolution.zig";
 import Lockfile from "./lockfile.zig";
+import yarn_mod from "./yarn.zig";
+import pnpm_mod from "./pnpm.zig";
 
 const debug = Output.scoped(.migrate, .visible);
 
@@ -130,7 +132,7 @@ pub fn detectAndLoadOtherLockfile(
         const lockfile_file = File.openat(dir, "yarn.lock", bun.O.RDONLY, 0).unwrap() catch break :yarn;
         const lockfile_file_guard = CloseGuard<File>{ val: lockfile_file };
         const data = lockfile_file.readToEnd(allocator).unwrap() catch break :yarn;
-        const migrate_result = @import("./yarn.zig").migrateYarnLockfile(lockfile, manager, allocator, log, data, dir) catch |e| {
+        const migrate_result = yarn_mod.migrateYarnLockfile(lockfile, manager, allocator, log, data, dir) catch |e| {
             return LoadResult{ err: .{
                 step: .migrating,
                 value: e,
@@ -154,7 +156,7 @@ pub fn detectAndLoadOtherLockfile(
         const lockfile_file = File.openat(dir, "pnpm-lock.yaml", bun.O.RDONLY, 0).unwrap() catch break :pnpm;
         const lockfile_file_guard = CloseGuard<File>{ val: lockfile_file };
         const data = lockfile_file.readToEnd(allocator).unwrap() catch break :pnpm;
-        const migrate_result = @import("./pnpm.zig").migratePnpmLockfile(lockfile, manager, allocator, log, data, dir) catch |e| {
+        const migrate_result = pnpm_mod.migratePnpmLockfile(lockfile, manager, allocator, log, data, dir) catch |e| {
             if (e == error.PnpmLockfileTooOld) {
                 Output.prettyErrorln(
                     "<red><b>warning<r><d>:<r> pnpm-lock.yaml version is too old (\\< v7)\n\nPlease upgrade using 'pnpm install --lockfile-only' first, then try again.",

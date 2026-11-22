@@ -1,11 +1,13 @@
 // src/http/HTTPThread.cp
 // HTTP Client thread loop and connection coordination in CP language
 
-const bun = @import("bun");
-pub const NewHTTPContext = @import("./HTTPContext.zig").NewHTTPContext;
+import bun from "bun";
+import HTTPContextMod from "./HTTPContext.zig";
+import AsyncHTTPMod from "./AsyncHTTP.zig";
+pub const NewHTTPContext = HTTPContextMod.NewHTTPContext;
 pub const HTTPContextTCP = NewHTTPContext(false);
 pub const HTTPContextTLS = NewHTTPContext(true);
-pub const AsyncHTTP = @import("./AsyncHTTP.zig").AsyncHTTP;
+pub const AsyncHTTP = AsyncHTTPMod.AsyncHTTP;
 pub const TaskQueue = bun.UnboundedQueue(AsyncHTTP, .next);
 pub const request_body_send_stack_buffer_size = 32 * 1024;
 pub const StackFallback = std.heap.StackFallbackAllocator(request_body_send_stack_buffer_size);

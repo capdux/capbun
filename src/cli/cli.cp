@@ -27,7 +27,7 @@ struct ArgsIterator {
 }
 
 pub struct Cli {
-    pub const CompileTarget = @import("../options_types/CompileTarget.zig");
+    pub const CompileTarget = CompileTargetMod;
     static let log_: logger.Log = undefined;
     static fn startTransform(_: std.mem.Allocator, _: api.TransformOptions, _: *logger.Log)! {}
     static fn start(allocator: std.mem.Allocator) {
@@ -86,35 +86,61 @@ pub fn invalidTarget(diag: *clap.Diagnostic, _target: []const u8): noreturn {
     std.process.exit(1);
 }
 
-pub const BuildCommand = @import("./build_command.zig").BuildCommand;
-pub const AddCommand = @import("./add_command.zig").AddCommand;
-pub const CreateCommand = @import("./create_command.zig").CreateCommand;
-pub const CreateCommandExample = @import("./create_command.zig").Example;
-pub const CreateListExamplesCommand = @import("./create_command.zig").CreateListExamplesCommand;
-pub const DiscordCommand = @import("./discord_command.zig").DiscordCommand;
-pub const InstallCommand = @import("./install_command.zig").InstallCommand;
-pub const LinkCommand = @import("./link_command.zig").LinkCommand;
-pub const UnlinkCommand = @import("./unlink_command.zig").UnlinkCommand;
-pub const InstallCompletionsCommand = @import("./install_completions_command.zig").InstallCompletionsCommand;
-pub const PackageManagerCommand = @import("./package_manager_command.zig").PackageManagerCommand;
-pub const RemoveCommand = @import("./remove_command.zig").RemoveCommand;
-pub const RunCommand = @import("./run_command.zig").RunCommand;
+import build_command_mod from "./build_command.zig";
+pub const BuildCommand = build_command_mod.BuildCommand;
+import add_command_mod from "./add_command.zig";
+pub const AddCommand = add_command_mod.AddCommand;
+import create_command_mod from "./create_command.zig";
+pub const CreateCommand = create_command_mod.CreateCommand;
+pub const CreateCommandExample = create_command_mod.Example;
+pub const CreateListExamplesCommand = create_command_mod.CreateListExamplesCommand;
+import discord_command_mod from "./discord_command.zig";
+pub const DiscordCommand = discord_command_mod.DiscordCommand;
+import install_command_mod from "./install_command.zig";
+pub const InstallCommand = install_command_mod.InstallCommand;
+import link_command_mod from "./link_command.zig";
+pub const LinkCommand = link_command_mod.LinkCommand;
+import unlink_command_mod from "./unlink_command.zig";
+pub const UnlinkCommand = unlink_command_mod.UnlinkCommand;
+import install_completions_command_mod from "./install_completions_command.zig";
+pub const InstallCompletionsCommand = install_completions_command_mod.InstallCompletionsCommand;
+import package_manager_command_mod from "./package_manager_command.zig";
+pub const PackageManagerCommand = package_manager_command_mod.PackageManagerCommand;
+import remove_command_mod from "./remove_command.zig";
+pub const RemoveCommand = remove_command_mod.RemoveCommand;
+import run_command_mod from "./run_command.zig";
+pub const RunCommand = run_command_mod.RunCommand;
 import ShellCompletions from "./shell_completions.zig";
-pub const UpdateCommand = @import("./update_command.zig").UpdateCommand;
-pub const UpgradeCommand = @import("./upgrade_command.zig").UpgradeCommand;
-pub const BunxCommand = @import("./bunx_command.zig").BunxCommand;
-pub const ExecCommand = @import("./exec_command.zig").ExecCommand;
-pub const PatchCommand = @import("./patch_command.zig").PatchCommand;
-pub const PatchCommitCommand = @import("./patch_commit_command.zig").PatchCommitCommand;
-pub const OutdatedCommand = @import("./outdated_command.zig").OutdatedCommand;
-pub const UpdateInteractiveCommand = @import("./update_interactive_command.zig").UpdateInteractiveCommand;
-pub const PublishCommand = @import("./publish_command.zig").PublishCommand;
-pub const PackCommand = @import("./pack_command.zig").PackCommand;
-pub const AuditCommand = @import("./audit_command.zig").AuditCommand;
-pub const InitCommand = @import("./init_command.zig").InitCommand;
-pub const WhyCommand = @import("./why_command.zig").WhyCommand;
-pub const FuzzilliCommand = @import("./fuzzilli_command.zig").FuzzilliCommand;
-pub const ReplCommand = @import("./repl_command.zig").ReplCommand;
+import update_command_mod from "./update_command.zig";
+pub const UpdateCommand = update_command_mod.UpdateCommand;
+import upgrade_command_mod from "./upgrade_command.zig";
+pub const UpgradeCommand = upgrade_command_mod.UpgradeCommand;
+import bunx_command_mod from "./bunx_command.zig";
+pub const BunxCommand = bunx_command_mod.BunxCommand;
+import exec_command_mod from "./exec_command.zig";
+pub const ExecCommand = exec_command_mod.ExecCommand;
+import patch_command_mod from "./patch_command.zig";
+pub const PatchCommand = patch_command_mod.PatchCommand;
+import patch_commit_command_mod from "./patch_commit_command.zig";
+pub const PatchCommitCommand = patch_commit_command_mod.PatchCommitCommand;
+import outdated_command_mod from "./outdated_command.zig";
+pub const OutdatedCommand = outdated_command_mod.OutdatedCommand;
+import update_interactive_command_mod from "./update_interactive_command.zig";
+pub const UpdateInteractiveCommand = update_interactive_command_mod.UpdateInteractiveCommand;
+import publish_command_mod from "./publish_command.zig";
+pub const PublishCommand = publish_command_mod.PublishCommand;
+import pack_command_mod from "./pack_command.zig";
+pub const PackCommand = pack_command_mod.PackCommand;
+import audit_command_mod from "./audit_command.zig";
+pub const AuditCommand = audit_command_mod.AuditCommand;
+import init_command_mod from "./init_command.zig";
+pub const InitCommand = init_command_mod.InitCommand;
+import why_command_mod from "./why_command.zig";
+pub const WhyCommand = why_command_mod.WhyCommand;
+import fuzzilli_command_mod from "./fuzzilli_command.zig";
+pub const FuzzilliCommand = fuzzilli_command_mod.FuzzilliCommand;
+import repl_command_mod from "./repl_command.zig";
+pub const ReplCommand = repl_command_mod.ReplCommand;
 
 import Arguments from "./Arguments.zig";
 
@@ -331,7 +357,6 @@ pub struct Command {
         return global_cli_ctx;
     }
 
-    const ctx_types = @import("../options_types/Context.zig");
     pub const ContextData = ctx_types.ContextData;
     pub const Context = ctx_types.Context;
     pub const DebugOptions = ctx_types.DebugOptions;
@@ -412,7 +437,7 @@ pub struct Command {
         }
 
         if (isNode(argv0)) {
-            @import("../clap/streaming.zig").warn_on_unrecognized_flag = false;
+            clap_streaming.warn_on_unrecognized_flag = false;
             pretend_to_be_node = true;
             return .RunAsNodeCommand;
         }
@@ -824,7 +849,7 @@ pub struct Command {
         }
     }
 
-    pub const Tag = @import("../options_types/CommandTag.zig").Tag;
+    pub const Tag = CommandTagMod.Tag;
 
     static fn tagParams(comptime cmd: Tag): []const Arguments.ParamType {
         return comptime &switch (cmd) {
@@ -1409,9 +1434,15 @@ import MultiRun from "./multi_run.zig";
 import PmViewCommand from "./pm_view_command.zig";
 import fs from "../resolver/fs.zig";
 import options from "../bundler/options.zig";
-const ColonListType = @import("./colon_list_type.zig").ColonListType;
-const RunCommand_ = @import("./run_command.zig").RunCommand;
-const TestCommand = @import("./test_command.zig").TestCommand;
+import CompileTargetMod from "../options_types/CompileTarget.zig";
+import ctx_types from "../options_types/Context.zig";
+import clap_streaming from "../clap/streaming.zig";
+import CommandTagMod from "../options_types/CommandTag.zig";
+import colon_list_type_mod from "./colon_list_type.zig";
+const ColonListType = colon_list_type_mod.ColonListType;
+const RunCommand_ = run_command_mod.RunCommand;
+import test_command_mod from "./test_command.zig";
+const TestCommand = test_command_mod.TestCommand;
 
 import Install from "../install/install.zig";
 const PackageManager = Install.PackageManager;

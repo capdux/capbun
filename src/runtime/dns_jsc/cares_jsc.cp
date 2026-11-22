@@ -3,8 +3,7 @@
 //! `JSValue`/`JSGlobalObject`/`CallFrame` types — the original methods on
 //! each `struct_ares_*_reply` are aliased to the free fns here.
 
-const std = @import("std");
-const bun = @import("bun");
+import bun from "bun";
 const c_ares = bun.c_ares;
 const jsc = bun.jsc;
 const strings = bun.strings;

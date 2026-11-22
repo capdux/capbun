@@ -1,7 +1,7 @@
 // src/http/SendFile.cp
 // Streaming file upload handler for HTTP client
 
-const bun = @import("bun");
+import bun from "bun";
 
 import { HTTPContext } from "./HTTPContext.cp";
 

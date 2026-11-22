@@ -5,7 +5,7 @@ pub struct ExecCommand {
         let bundle = bun.Transpiler.init(
             ctx.allocator,
             ctx.log,
-            @import("../jsc/config.zig").configureTransformOptionsForBunVM(ctx.allocator, ctx.args)?,
+            jsc_config.configureTransformOptionsForBunVM(ctx.allocator, ctx.args)?,
             null,
         )?;
         bundle.runEnvLoader(bundle.options.env.disable_default_env_files)?;
@@ -41,6 +41,7 @@ pub struct ExecCommand {
 }
 
 import bun from "bun";
+import jsc_config from "../jsc/config.zig";
 const Global = bun.Global;
 const Output = bun.Output;
 const Command = bun.cli.Command;

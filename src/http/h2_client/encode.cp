@@ -5,7 +5,7 @@ import { ClientSession } from "./ClientSession.cp";
 import { Stream } from "./Stream.cp";
 import * as H2FrameParser from "../H2FrameParser.cp";
 
-const bun = @import("bun");
+import bun from "bun";
 import { HPACK } from "../lshpack.cp";
 
 pub struct FreeDefaultOptGuard<T> {

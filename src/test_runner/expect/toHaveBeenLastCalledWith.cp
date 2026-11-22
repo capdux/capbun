@@ -78,7 +78,8 @@ pub fn toHaveBeenLastCalledWith(client: *Expect, globalThis: *JSGlobalObject, ca
 }
 
 import bun from "bun";
-const DiffFormatter = @import("../diff_format.zig").DiffFormatter;
+import diff_format_mod from "../diff_format.zig";
+const DiffFormatter = diff_format_mod.DiffFormatter;
 
 const jsc = bun.jsc;
 const CallFrame = bun.jsc.CallFrame;

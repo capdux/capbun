@@ -69,6 +69,12 @@ pub const SourceFileProjectGenerator = @import("./create/SourceFileProjectGenera
 pub const Zlib = @import("../zlib/zlib.zig");
 pub const fs = @import("../resolver/fs.zig");
 pub const resolve_path = @import("../paths/resolve_path.zig");
+pub const Walker = @import("../sys/walker_skippable.zig");
+pub const open = @import("./open.zig");
+pub const cli_mod = @import("./cli.zig");
+pub const which_npm_client_mod = @import("./which_npm_client.zig");
+pub const url_mod = @import("../url/url.zig");
+pub const which_mod = @import("../which/which.zig");
 pub const bun = @import("bun");
 pub const ExampleTag = enum {
     unknown,
@@ -289,7 +295,6 @@ _ = outfile.chmod((if (comptime @typeInfo(@TypeOf(stat.mode)) == .@"enum") cp_ca
                 break :blk_catch_7 Global.crash(); }); });
             }
     }
-    const Walker = @import("../sys/walker_skippable.zig");
 };
 
 pub const _CreateAnalyzer = struct {
@@ -491,7 +496,6 @@ var template_parts: [1][]const u8 = .{ template };
                 template_path_buf[cp_cast_int(usize, src_without_trailing_slash.len)] = std.fs.path.sep;
             }
             const destination_dir = destination_dir__;
-            const Walker = @import("../sys/walker_skippable.zig");
             var walker_ = try Walker.walk(.fromStdDir(template_dir), ctx.allocator, skip_files, skip_dirs);
             _ = &walker_;
             var _guard_walker = DeinitGuard(Walker){ .ptr = (&walker_) };
@@ -898,7 +902,6 @@ else => {
                     child.stdin_behavior = .Inherit;
                     child.stdout_behavior = .Inherit;
                     child.stderr_behavior = .Inherit;
-                    const open = @import("./open.zig");
                     _ = open.openURL("http://localhost:3000/");
                     _ = try child.spawn();
                     _ = (blk_catch_27: { break :blk_catch_27 ((child.wait()) catch |__ce_27| { _ = &__ce_27;  }); });
@@ -1551,10 +1554,10 @@ var app_name_buf: [512]u8 = undefined;
 var github_repository_url_buf: [1024]u8 = undefined;
 var git_success: std.atomic.Value(u32) = undefined;
 var git_thread: std.Thread = undefined;
-const Command = @import("./cli.zig").Command;
-const NPMClient = @import("./which_npm_client.zig").NPMClient;
-const URL = @import("../url/url.zig").URL;
-const which = @import("../which/which.zig").which;
+const Command = cli_mod.Command;
+const NPMClient = which_npm_client_mod.NPMClient;
+const URL = url_mod.URL;
+const which = which_mod.which;
 const Environment = bun.Environment;
 const Futex = bun.Futex;
 const Global = bun.Global;

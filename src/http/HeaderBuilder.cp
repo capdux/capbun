@@ -1,7 +1,7 @@
 // src/http/HeaderBuilder.cp
 // Fast HTTP Request Header Builder in CP language
 
-const bun = @import("bun");
+import bun from "bun";
 
 import { Headers } from "./Headers.cp";
 

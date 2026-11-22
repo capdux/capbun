@@ -1,3 +1,6 @@
+import bun from "bun";
+import cares_jsc from "../runtime/dns_jsc/cares_jsc.zig";
+
 pub const socklen_t = c.socklen_t;
 pub const ares_ssize_t = isize;
 pub const ares_socket_t = if (bun.Environment.isWindows) std.os.windows.ws2_32.SOCKET else c_int;
@@ -184,7 +187,7 @@ const ares_evsys_t = c_uint;
     maxtimeout: c_int = 0,
     qcache_max_ttl: c_uint = 0,
     evsys: ares_evsys_t = 0,
-    server_failover_opts: struct_ares_server_failover_options = @import("std").mem.zeroes(struct_ares_server_failover_options),
+    server_failover_opts: struct_ares_server_failover_options = std.mem.zeroes(struct_ares_server_failover_options),
 }
 
 const hostent_int = if (bun.Environment.isWindows) c_short else c_int;
@@ -283,7 +286,7 @@ fn hostentCallbackWrapper(
     h_length: hostent_int,
     h_addr_list: ([*:null]NullableCStr)?,
 
-    pub const toJSResponse = @import("../runtime/dns_jsc/cares_jsc.zig").hostentToJSResponse;
+    pub const toJSResponse = cares_jsc.hostentToJSResponse;
     pub const Callback = hostentCallback;
     pub const hostCallbackWrapper = hostentHostCallbackWrapper;
     pub const callbackWrapper = hostentCallbackWrapper;
@@ -297,7 +300,7 @@ pub struct hostent_with_ttls {
     hostent: *struct_hostent,
     ttls: [256]c_int = @splat(-1),
 
-    pub const toJSResponse = @import("../runtime/dns_jsc/cares_jsc.zig").hostentWithTtlsToJSResponse;
+    pub const toJSResponse = cares_jsc.hostentWithTtlsToJSResponse;
 
     static fn Callback(comptime Type: type): type {
         return CallbackSigPtr(Type, hostent_with_ttls);
@@ -308,7 +311,7 @@ pub struct hostent_with_ttls {
         comptime function: Callback(Type),
     ): ares_host_callback {
         return &struct {
-            pub fn handle(ctx: *!?, status: c_int, timeouts: c_int, hostent: ?*hostent_with_ttls) callconv(.c) void {
+            pub fn handle(ctx: *!?, status: c_int, timeouts: c_int, hostent: (*hostent_with_ttls)?) callconv(.c) void {
                 const this = bun.cast(*Type, ctx.?);
                 if (status != ARES_SUCCESS) {
                     function(this, Error.get(status), timeouts, null);
@@ -392,7 +395,7 @@ pub struct hostent_with_ttls {
     node: [*c]u8,
     service: [*c]u8,
 
-    pub const toJSResponse = @import("../runtime/dns_jsc/cares_jsc.zig").nameinfoToJSResponse;
+    pub const toJSResponse = cares_jsc.nameinfoToJSResponse;
 
     static fn Callback(comptime Type: type): type {
         return CallbackSig(Type, struct_nameinfo?);
@@ -449,7 +452,7 @@ pub const struct_timeval = std.posix.timeval;
     node: *AddrInfo_node? = null,
     name_: [*:0]u8? = null,
 
-    pub const toJSArray = @import("../runtime/dns_jsc/cares_jsc.zig").addrInfoToJSArray;
+    pub const toJSArray = cares_jsc.addrInfoToJSArray;
 
     pub inline fn name(_: *const AddrInfo): []const u8 {
         const name_ = this.name_ orelse return "";
@@ -470,7 +473,7 @@ pub const struct_timeval = std.posix.timeval;
         comptime function: Callback(Type),
     ): ares_addrinfo_callback {
         return &struct {
-            pub fn handleAddrInfo(ctx: *!?, status: c_int, timeouts: c_int, addr_info: ?*AddrInfo) callconv(.c) void {
+            pub fn handleAddrInfo(ctx: *!?, status: c_int, timeouts: c_int, addr_info: (*AddrInfo)?) callconv(.c) void {
                 const this = bun.cast(*Type, ctx.?);
 
                 function(this, Error.get(status), timeouts, addr_info);
@@ -734,9 +737,9 @@ pub extern fn ares_queue_active_queries(channel: *const Channel): usize;
     value: [*c]u8,
     length: usize,
 
-    pub const toJSResponse = @import("../runtime/dns_jsc/cares_jsc.zig").caaReplyToJSResponse;
+    pub const toJSResponse = cares_jsc.caaReplyToJSResponse;
 
-    pub const toJS = @import("../runtime/dns_jsc/cares_jsc.zig").caaReplyToJS;
+    pub const toJS = cares_jsc.caaReplyToJS;
 
     static fn Callback(comptime Type: type): type {
         return CallbackSigPtr(Type, struct_ares_caa_reply);
@@ -777,9 +780,9 @@ pub extern fn ares_queue_active_queries(channel: *const Channel): usize;
     weight: c_ushort,
     port: c_ushort,
 
-    pub const toJSResponse = @import("../runtime/dns_jsc/cares_jsc.zig").srvReplyToJSResponse;
+    pub const toJSResponse = cares_jsc.srvReplyToJSResponse;
 
-    pub const toJS = @import("../runtime/dns_jsc/cares_jsc.zig").srvReplyToJS;
+    pub const toJS = cares_jsc.srvReplyToJS;
 
     static fn Callback(comptime Type: type): type {
         return CallbackSigPtr(Type, struct_ares_srv_reply);
@@ -818,9 +821,9 @@ pub extern fn ares_queue_active_queries(channel: *const Channel): usize;
     host: [*c]u8,
     priority: c_ushort,
 
-    pub const toJSResponse = @import("../runtime/dns_jsc/cares_jsc.zig").mxReplyToJSResponse;
+    pub const toJSResponse = cares_jsc.mxReplyToJSResponse;
 
-    pub const toJS = @import("../runtime/dns_jsc/cares_jsc.zig").mxReplyToJS;
+    pub const toJS = cares_jsc.mxReplyToJS;
 
     static fn Callback(comptime Type: type): type {
         return CallbackSigPtr(Type, struct_ares_mx_reply);
@@ -859,11 +862,11 @@ pub extern fn ares_queue_active_queries(channel: *const Channel): usize;
     txt: [*c]u8,
     length: usize,
 
-    pub const toJSResponse = @import("../runtime/dns_jsc/cares_jsc.zig").txtReplyToJSResponse;
+    pub const toJSResponse = cares_jsc.txtReplyToJSResponse;
 
-    pub const toJS = @import("../runtime/dns_jsc/cares_jsc.zig").txtReplyToJS;
+    pub const toJS = cares_jsc.txtReplyToJS;
 
-    pub const toJSForAny = @import("../runtime/dns_jsc/cares_jsc.zig").txtReplyToJSForAny;
+    pub const toJSForAny = cares_jsc.txtReplyToJSForAny;
 
     static fn Callback(comptime Type: type): type {
         return CallbackSigPtr(Type, struct_ares_txt_reply);
@@ -912,9 +915,9 @@ pub extern fn ares_queue_active_queries(channel: *const Channel): usize;
     order: c_ushort,
     preference: c_ushort,
 
-    pub const toJSResponse = @import("../runtime/dns_jsc/cares_jsc.zig").naptrReplyToJSResponse;
+    pub const toJSResponse = cares_jsc.naptrReplyToJSResponse;
 
-    pub const toJS = @import("../runtime/dns_jsc/cares_jsc.zig").naptrReplyToJS;
+    pub const toJS = cares_jsc.naptrReplyToJS;
 
     static fn Callback(comptime Type: type): type {
         return CallbackSigPtr(Type, struct_ares_naptr_reply);
@@ -957,9 +960,9 @@ pub extern fn ares_queue_active_queries(channel: *const Channel): usize;
     expire: c_uint,
     minttl: c_uint,
 
-    pub const toJSResponse = @import("../runtime/dns_jsc/cares_jsc.zig").soaReplyToJSResponse;
+    pub const toJSResponse = cares_jsc.soaReplyToJSResponse;
 
-    pub const toJS = @import("../runtime/dns_jsc/cares_jsc.zig").soaReplyToJS;
+    pub const toJS = cares_jsc.soaReplyToJS;
 
     static fn Callback(comptime Type: type): type {
         return CallbackSigPtr(Type, struct_ares_soa_reply);
@@ -1014,9 +1017,9 @@ pub struct struct_any_reply {
     soa_reply: *struct_ares_soa_reply? = null,
     caa_reply: *struct_ares_caa_reply? = null,
 
-    pub const toJSResponse = @import("../runtime/dns_jsc/cares_jsc.zig").anyReplyToJSResponse;
+    pub const toJSResponse = cares_jsc.anyReplyToJSResponse;
 
-    pub const toJS = @import("../runtime/dns_jsc/cares_jsc.zig").anyReplyToJS;
+    pub const toJS = cares_jsc.anyReplyToJS;
 
     static fn Callback(comptime Type: type): type {
         return CallbackSigPtr(Type, struct_any_reply);
@@ -1036,7 +1039,7 @@ pub struct struct_any_reply {
                 }
 
                 let any_success = false;
-                let last_error: ?c_int = null;
+                let last_error: c_int? = null;
                 let reply = bun.handleOom(bun.default_allocator.create(struct_any_reply));
                 reply.* = .{};
 
@@ -1235,10 +1238,10 @@ pub enum Error: i32 {
     ESERVICE = ARES_ESERVICE,
     ENOSERVER = ARES_ENOSERVER,
 
-    const Deferred = @import("../runtime/dns_jsc/cares_jsc.zig").ErrorDeferred;
-    const toDeferred = @import("../runtime/dns_jsc/cares_jsc.zig").errorToDeferred;
-    const toJSWithSyscall = @import("../runtime/dns_jsc/cares_jsc.zig").errorToJSWithSyscall;
-    const toJSWithSyscallAndHostname = @import("../runtime/dns_jsc/cares_jsc.zig").errorToJSWithSyscallAndHostname;
+    const Deferred = cares_jsc.ErrorDeferred;
+    const toDeferred = cares_jsc.errorToDeferred;
+    const toJSWithSyscall = cares_jsc.errorToJSWithSyscall;
+    const toJSWithSyscallAndHostname = cares_jsc.errorToJSWithSyscallAndHostname;
 
     static fn initEAI(rc: i32): Error? {
         if (comptime bun.Environment.isWindows) {
@@ -1495,15 +1498,13 @@ pub fn getSockaddr(addr: []const u8, port: u16, sa: *std.posix.sockaddr): c_int 
     return -1;
 }
 
-const std = @import("std");
-const iovec = @import("std").os.iovec;
+const iovec = std.os.iovec;
 
-const bun = @import("bun");
 const jsc = bun.jsc;
 const strings = bun.strings;
 const libuv = bun.windows.libuv;
 
-const c = @import("std").c;
+const c = std.c;
 const ares_socklen_t = c.socklen_t;
 const fd_set = c.fd_set;
 

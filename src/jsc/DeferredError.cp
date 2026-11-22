@@ -33,7 +33,7 @@ pub struct DeferredError {
 }
 
 import bun from "bun";
-const ZigString = @import("./ZigString.zig").ZigString;
+import { ZigString } from "./ZigString.zig";
 
 const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;

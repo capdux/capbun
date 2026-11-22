@@ -79,6 +79,8 @@ const Bin = @import("./bin.zig").Bin;
 const Integrity = @import("./integrity.zig").Integrity;
 const Resolution = @import("./resolution.zig").Resolution;
 pub const Lockfile = @import("./lockfile.zig");
+pub const yarn_mod = @import("./yarn.zig");
+pub const pnpm_mod = @import("./pnpm.zig");
 pub fn CloseGuard(comptime T: type) type {
     return struct {
         val: ?T,
@@ -183,7 +185,7 @@ pub fn detectAndLoadOtherLockfile(lockfile: *Lockfile, dir: bun.FD, manager: *In
         var __lockfile_file_guard_moved = false; _ = &__lockfile_file_guard_moved;
         defer if (!__lockfile_file_guard_moved) { __lockfile_file_guard_moved = true; const __T = @TypeOf(lockfile_file_guard); if (@typeInfo(__T) == .optional) { if (lockfile_file_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { lockfile_file_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = lockfile_file_guard; _drop_val.__cp_deinit(); } };
         const data = (blk_catch_7: { break :blk_catch_7 ((lockfile_file.readToEnd(allocator).unwrap()) catch |__ce_7| { _ = &__ce_7; break :yarn; }); });
-        const migrate_result = (blk_catch_8: { break :blk_catch_8 ((@import("./yarn.zig").migrateYarnLockfile(lockfile, manager, allocator, log, data, dir)) catch |e| { _ = &e; return LoadResult{ .err = .{ .step = .migrating, .value = e, .lockfile_path = "yarn.lock", .format = .text } }; }); });
+        const migrate_result = (blk_catch_8: { break :blk_catch_8 ((yarn_mod.migrateYarnLockfile(lockfile, manager, allocator, log, data, dir)) catch |e| { _ = &e; return LoadResult{ .err = .{ .step = .migrating, .value = e, .lockfile_path = "yarn.lock", .format = .text } }; }); });
         if ((migrate_result == .ok)) {
             _ = Output.printElapsed((@as(f64, @floatFromInt(timer.read())) / std.time.ns_per_ms));
             _ = Output.prettyError(" ", .{});
@@ -201,7 +203,7 @@ pub fn detectAndLoadOtherLockfile(lockfile: *Lockfile, dir: bun.FD, manager: *In
         var __lockfile_file_guard_moved = false; _ = &__lockfile_file_guard_moved;
         defer if (!__lockfile_file_guard_moved) { __lockfile_file_guard_moved = true; const __T = @TypeOf(lockfile_file_guard); if (@typeInfo(__T) == .optional) { if (lockfile_file_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { lockfile_file_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = lockfile_file_guard; _drop_val.__cp_deinit(); } };
         const data = (blk_catch_11: { break :blk_catch_11 ((lockfile_file.readToEnd(allocator).unwrap()) catch |__ce_11| { _ = &__ce_11; break :pnpm; }); });
-        const migrate_result = (blk_catch_12: { break :blk_catch_12 ((@import("./pnpm.zig").migratePnpmLockfile(lockfile, manager, allocator, log, data, dir)) catch |e| { _ = &e; if ((e == error.PnpmLockfileTooOld)) {
+        const migrate_result = (blk_catch_12: { break :blk_catch_12 ((pnpm_mod.migratePnpmLockfile(lockfile, manager, allocator, log, data, dir)) catch |e| { _ = &e; if ((e == error.PnpmLockfileTooOld)) {
             _ = Output.prettyErrorln("<red><b>warning<r><d>:<r> pnpm-lock.yaml version is too old (\\< v7)\n\nPlease upgrade using 'pnpm install --lockfile-only' first, then try again.", .{});
         } else {
             if ((e == error.NonExistentWorkspaceDependency)) {

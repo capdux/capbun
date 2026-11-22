@@ -95,6 +95,7 @@ pub const EncodingMod = @import("../http_types/Encoding.zig");
 pub const FetchRedirectMod = @import("../http_types/FetchRedirect.zig");
 pub const FetchCacheModeMod = @import("../http_types/FetchCacheMode.zig");
 pub const FetchRequestModeMod = @import("../http_types/FetchRequestMode.zig");
+pub const bun = @import("bun");
 pub const HTTPVerboseLevel = enum {
     none,
     headers,
@@ -2233,7 +2234,6 @@ pub const Encoding = EncodingMod.Encoding;
 pub const FetchRedirect = FetchRedirectMod.FetchRedirect;
 pub const FetchCacheMode = FetchCacheModeMod.FetchCacheMode;
 pub const FetchRequestMode = FetchRequestModeMod.FetchRequestMode;
-const bun = @import("bun");
 const Output = bun.Output;
 const picohttp = bun.picohttp;
 const FeatureFlags = bun.FeatureFlags;
@@ -2247,7 +2247,7 @@ const Global = bun.Global;
 const URL = bun.URL;
 const print_every = 0;
 var print_every_i: usize = 0;
-pub const HTTPContextTLS = @import("./HTTPContext.zig").NewHTTPContext(true);
+pub const HTTPContextTLS = HTTPContextMod.NewHTTPContext(true);
 pub var default_allocator: std.mem.Allocator = undefined;
 pub var default_arena: bun.allocators.MimallocArena = undefined;
 pub var http_thread: HTTPThread = undefined;

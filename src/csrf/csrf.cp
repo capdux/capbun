@@ -3,11 +3,11 @@
 // Provides protection against Cross-Site Request Forgery attacks
 // by generating and validating tokens using HMAC signatures
 
-const std = @import("std");
-const bun = @import("bun");
+import bun from "bun";
 const jsc = bun.jsc;
 const boring = bun.BoringSSL.c;
-const hmac = @import("../sha_hmac/hmac.zig");
+import hmac from "../sha_hmac/hmac.zig";
+import csrf_jsc from "../runtime/api/csrf_jsc.zig";
 
 pub const CSRF = @This();
 
@@ -153,5 +153,5 @@ pub fn verify(options: VerifyOptions): bool {
     ) == 0;
 }
 
-pub const csrf__generate = @import("../runtime/api/csrf_jsc.zig").csrf__generate;
-pub const csrf__verify = @import("../runtime/api/csrf_jsc.zig").csrf__verify;
+pub const csrf__generate = csrf_jsc.csrf__generate;
+pub const csrf__verify = csrf_jsc.csrf__verify;

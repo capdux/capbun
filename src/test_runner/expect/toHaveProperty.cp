@@ -88,7 +88,8 @@ pub fn toHaveProperty(client: *Expect, globalThis: *JSGlobalObject, callFrame: *
     return client.throw(globalThis, signature, "\n\nExpected path: <green>{f}<r>\n\nUnable to find property\n", .{ expected_property_path.toFmt(&formatter) });
 }
 
-const DiffFormatter = @import("../diff_format.zig").DiffFormatter;
+import diff_format_mod from "../diff_format.zig";
+const DiffFormatter = diff_format_mod.DiffFormatter;
 
 import bun from "bun";
 const ZigString = bun.ZigString;

@@ -1,7 +1,7 @@
 // src/http/websocket.cp
 // WebSocket opcodes and header framing in pure CP language
 
-const bun = @import("bun");
+import bun from "bun";
 
 export enum Opcode(u4) {
     Continue = 0x0,

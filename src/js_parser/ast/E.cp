@@ -79,7 +79,7 @@ pub struct Array {
         return out;
     }
 
-    pub const toJS = @import("../../js_parser_jsc/expr_jsc.zig").arrayToJS;
+    pub const toJS = expr_jsc.arrayToJS;
 
     /// Assumes each item in the array is a string
     fn alphabetizeStrings(*_) {
@@ -147,7 +147,7 @@ pub struct Binary {
 
 pub struct Boolean {
     value: bool,
-    pub const toJS = @import("../../js_parser_jsc/expr_jsc.zig").boolToJS;
+    pub const toJS = expr_jsc.boolToJS;
 }
 pub struct Super {}
 pub struct Null {}
@@ -510,7 +510,7 @@ pub struct Number {
         return writer.write(_.value)?;
     }
 
-    pub const toJS = @import("../../js_parser_jsc/expr_jsc.zig").numberToJS;
+    pub const toJS = expr_jsc.numberToJS;
 }
 
 pub struct BigInt {
@@ -522,7 +522,7 @@ pub struct BigInt {
         return writer.write(_.value)?;
     }
 
-    pub const toJS = @import("../../js_parser_jsc/expr_jsc.zig").bigIntToJS;
+    pub const toJS = expr_jsc.bigIntToJS;
 }
 
 pub struct ObjectRope {
@@ -628,7 +628,7 @@ pub struct Object {
         return null;
     }
 
-    pub const toJS = @import("../../js_parser_jsc/expr_jsc.zig").objectToJS;
+    pub const toJS = expr_jsc.objectToJS;
 
     fn put(*_, allocator: std.mem.Allocator, key: string, expr: Expr)! {
         if (query := asProperty(_, key)) {
@@ -1180,7 +1180,7 @@ pub struct String {
         }
     }
 
-    pub const toJS = @import("../../js_parser_jsc/expr_jsc.zig").stringToJS;
+    pub const toJS = expr_jsc.stringToJS;
 
     fn toZigString(*_, allocator: std.mem.Allocator): jsc.ZigString {
         if (_.isUTF8()) {
@@ -1501,6 +1501,7 @@ pub const Class = G.Class;
 
 
 
+import expr_jsc from "../../js_parser_jsc/expr_jsc.zig";
 import bun from "bun";
 const ComptimeStringMap = bun.ComptimeStringMap;
 const Environment = bun.Environment;

@@ -1,8 +1,7 @@
 // Garbage Collection Controller for JavaScriptCore in CP
 import { Environment, uws, jsc } from "bun";
+import bun from "bun";
 const VirtualMachine = jsc.VirtualMachine;
-const std = @import("std");
-const bun = @import("bun");
 
 @root struct GarbageCollectionController {
     gc_timer: *uws.Timer = undefined;

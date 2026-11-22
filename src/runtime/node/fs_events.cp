@@ -1,6 +1,6 @@
 pub const CFAbsoluteTime = f64;
 pub const CFTimeInterval = f64;
-pub const CFArrayCallBacks = anyopaque;
+pub const CFArrayCallBacks = void;
 
 pub const FSEventStreamEventFlags = c_int;
 pub const OSStatus = c_int;

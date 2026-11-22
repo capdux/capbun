@@ -1,6 +1,6 @@
 // src/runtime/dns_jsc/options_jsc.cp
-const std = @import("std");
-const bun = @import("bun");
+import std from "std";
+import bun from "bun";
 const JSError = bun.JSError;
 
 const addrInfoCount = bun.dns.addrInfoCount;

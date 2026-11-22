@@ -1397,7 +1397,7 @@ fn coldHandleErrorReturnTrace(err_int_workaround_for_zig_ccall_bug: ErrInt, trac
     handleErrorReturnTraceExtra(err, maybe_trace, false);
 }
 
-@c fn WTF__DumpStackTrace(ptr: [*]usize!, count: usize): void;
+@c fn WTF__DumpStackTrace(ptr: [*]usize!, count: usize);
 
 pub fn dumpStackTrace(trace: std.builtin.StackTrace, limits: WriteStackTraceLimits) {
     Output.flush();

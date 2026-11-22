@@ -1,8 +1,9 @@
 const Position = position.Position;
 
-pub const CustomPropertyName = @import("./custom.zig").CustomPropertyName;
+pub const CustomPropertyName = custom.CustomPropertyName;
 
-pub const @"align" = @import("./align.zig");
+import align_mod from "./align.zig";
+pub const @"align" = align_mod;
 import animation from "./animation.zig";
 import background from "./background.zig";
 import border from "./border.zig";

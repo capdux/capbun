@@ -86,6 +86,10 @@ pub const ast = @import("../options_types/import_record.zig");
 pub const node_module_module = @import("./NodeModuleModule.zig");
 pub const options = @import("../bundler/options.zig");
 pub const bun = @import("bun");
+pub const async_module_mod = @import("./AsyncModule.zig");
+pub const runtime_transpiler_store_mod = @import("./RuntimeTranspilerStore.zig");
+pub const hardcoded_module_mod = @import("../resolve_builtins/HardcodedModule.zig");
+pub const package_json_mod = @import("../resolver/package_json.zig");
 pub const FetchFlags = enum {
     transpile,
     print_source,
@@ -270,19 +274,19 @@ pub fn resetArena(self: *ModuleLoader, jsc_vm: *VirtualMachine) void {
         }
 }
 const string = []const u8;
-pub const AsyncModule = @import("./AsyncModule.zig").AsyncModule;
-pub const RuntimeTranspilerStore = @import("./RuntimeTranspilerStore.zig").RuntimeTranspilerStore;
-pub const HardcodedModule = @import("../resolve_builtins/HardcodedModule.zig").HardcodedModule;
+pub const AsyncModule = async_module_mod.AsyncModule;
+pub const RuntimeTranspilerStore = runtime_transpiler_store_mod.RuntimeTranspilerStore;
+pub const HardcodedModule = hardcoded_module_mod.HardcodedModule;
 pub var is_allowed_to_use_internal_testing_apis = false;
 const always_sync_modules = .{ "reflect-metadata" };
 const debug = Output.scoped(.ModuleLoader, .hidden);
 const panic = std.debug.panic;
 const ModuleType = options.ModuleType;
-const MacroRemap = @import("../resolver/package_json.zig").MacroMap;
-const PackageJSON = @import("../resolver/package_json.zig").PackageJSON;
-const dumpSource = @import("./RuntimeTranspilerStore.zig").dumpSource;
-const dumpSourceString = @import("./RuntimeTranspilerStore.zig").dumpSourceString;
-const setBreakPointOnFirstLine = @import("./RuntimeTranspilerStore.zig").setBreakPointOnFirstLine;
+const MacroRemap = package_json_mod.MacroMap;
+const PackageJSON = package_json_mod.PackageJSON;
+const dumpSource = runtime_transpiler_store_mod.dumpSource;
+const dumpSourceString = runtime_transpiler_store_mod.dumpSourceString;
+const setBreakPointOnFirstLine = runtime_transpiler_store_mod.setBreakPointOnFirstLine;
 const Environment = bun.Environment;
 const FD = bun.FD;
 const MutableString = bun.MutableString;

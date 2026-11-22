@@ -87,6 +87,7 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 const ClientSession = @import("./ClientSession.zig").ClientSession;
 const Stream = @import("./Stream.zig").Stream;
 pub const H2FrameParser = @import("../H2FrameParser.zig");
+pub const bun = @import("bun");
 const HPACK = @import("../lshpack.zig").HPACK;
 pub const RequestHeader = enum {
     drop,
@@ -117,7 +118,6 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
-const bun = @import("bun");
 
 pub fn classifyHeader(name: []const u8) ?RequestHeader {
         if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(name, "host")) {

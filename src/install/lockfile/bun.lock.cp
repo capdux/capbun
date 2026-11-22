@@ -2280,7 +2280,7 @@ fn parseAppendDependencies(
 type string = []const u8;
 
 import ExtractTarball from "../extract_tarball.zig";
-const Integrity = @import("../integrity.zig").Integrity;
+import { Integrity } from "../integrity.zig";
 
 import bun from "bun";
 const Environment = bun.Environment;

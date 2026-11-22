@@ -1,8 +1,9 @@
 // src/http/ProxyTunnel.cp
 // Fast HTTP Proxy Tunnel in CP language
 
-const bun = @import("bun");
-const SSLWrapper = @import("../runtime/socket/ssl_wrapper.zig").SSLWrapper;
+import bun from "bun";
+import ssl_wrapper from "../runtime/socket/ssl_wrapper.zig";
+const SSLWrapper = ssl_wrapper.SSLWrapper;
 pub const HTTPClient = bun.http.HTTPClient;
 pub type ProxyTunnelWrapper = SSLWrapper(*HTTPClient);
 pub const HTTPSocketTCP = bun.http.NewHTTPContext(false).HTTPSocket;

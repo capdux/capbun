@@ -63,7 +63,33 @@ fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .poi
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
+pub const build_command_mod = @import("./build_command.zig");
+pub const add_command_mod = @import("./add_command.zig");
+pub const create_command_mod = @import("./create_command.zig");
+pub const discord_command_mod = @import("./discord_command.zig");
+pub const install_command_mod = @import("./install_command.zig");
+pub const link_command_mod = @import("./link_command.zig");
+pub const unlink_command_mod = @import("./unlink_command.zig");
+pub const install_completions_command_mod = @import("./install_completions_command.zig");
+pub const package_manager_command_mod = @import("./package_manager_command.zig");
+pub const remove_command_mod = @import("./remove_command.zig");
+pub const run_command_mod = @import("./run_command.zig");
 pub const ShellCompletions = @import("./shell_completions.zig");
+pub const update_command_mod = @import("./update_command.zig");
+pub const upgrade_command_mod = @import("./upgrade_command.zig");
+pub const bunx_command_mod = @import("./bunx_command.zig");
+pub const exec_command_mod = @import("./exec_command.zig");
+pub const patch_command_mod = @import("./patch_command.zig");
+pub const patch_commit_command_mod = @import("./patch_commit_command.zig");
+pub const outdated_command_mod = @import("./outdated_command.zig");
+pub const update_interactive_command_mod = @import("./update_interactive_command.zig");
+pub const publish_command_mod = @import("./publish_command.zig");
+pub const pack_command_mod = @import("./pack_command.zig");
+pub const audit_command_mod = @import("./audit_command.zig");
+pub const init_command_mod = @import("./init_command.zig");
+pub const why_command_mod = @import("./why_command.zig");
+pub const fuzzilli_command_mod = @import("./fuzzilli_command.zig");
+pub const repl_command_mod = @import("./repl_command.zig");
 pub const Arguments = @import("./Arguments.zig");
 pub const AddCompletions = @import("./add_completions.zig");
 pub const FilterRun = @import("./filter_run.zig");
@@ -71,6 +97,12 @@ pub const MultiRun = @import("./multi_run.zig");
 pub const PmViewCommand = @import("./pm_view_command.zig");
 pub const fs = @import("../resolver/fs.zig");
 pub const options = @import("../bundler/options.zig");
+pub const CompileTargetMod = @import("../options_types/CompileTarget.zig");
+pub const ctx_types = @import("../options_types/Context.zig");
+pub const clap_streaming = @import("../clap/streaming.zig");
+pub const CommandTagMod = @import("../options_types/CommandTag.zig");
+pub const colon_list_type_mod = @import("./colon_list_type.zig");
+pub const test_command_mod = @import("./test_command.zig");
 pub const Install = @import("../install/install.zig");
 pub const bun = @import("bun");
 pub const HelpCommandReason = enum {
@@ -117,7 +149,7 @@ pub fn start(allocator: std.mem.Allocator) void {
             _ = (blk_catch_0: { break :blk_catch_0 ((Command.start(allocator, log)) catch |e| { _ = &e; _ = (blk_catch_1: { break :blk_catch_1 ((log.print(Output.errorWriter())) catch |__ce_1| { _ = &__ce_1;  }); });
             break :blk_catch_0 @as(void, bun.crash_handler.handleRootError(e, @errorReturnTrace())); }); });
     }
-    pub const CompileTarget = @import("../options_types/CompileTarget.zig");
+    pub const CompileTarget = CompileTargetMod;
 };
 
 pub const AutoCommand = struct {
@@ -357,7 +389,7 @@ pub fn which() Tag {
                 return .BunxCommand;
             }
             if (isNode(argv0)) {
-                @import("../clap/streaming.zig").warn_on_unrecognized_flag = false;
+                clap_streaming.warn_on_unrecognized_flag = false;
                 pretend_to_be_node = true;
                 return .RunAsNodeCommand;
             }
@@ -1211,7 +1243,6 @@ pub fn @"bun info"(allocator: std.mem.Allocator, log: *logger.Log) !void {
             }
             _ = try PmViewCommand.view(allocator, pm, package_name, property_path, cli.json_output);
     }
-    const ctx_types = @import("../options_types/Context.zig");
     pub const ContextData = ctx_types.ContextData;
     pub const Context = ctx_types.Context;
     pub const DebugOptions = ctx_types.DebugOptions;
@@ -1223,7 +1254,7 @@ pub fn @"bun info"(allocator: std.mem.Allocator, log: *logger.Log) !void {
     pub const init = createContextData;
     const default_completions_list: [17][]const u8 = .{ "build", "install", "add", "run", "update", "link", "unlink", "remove", "create", "bun", "upgrade", "discord", "test", "pm", "x", "repl", "info" };
     const reject_list: [20][]const u8 = (default_completions_list ++ .{ "build", "completions", "help" });
-    pub const Tag = @import("../options_types/CommandTag.zig").Tag;
+    pub const Tag = CommandTagMod.Tag;
 };
 
 const string = []const u8;
@@ -1259,39 +1290,39 @@ pub fn hasPrintBreakpoint(path: fs.Path) bool {
 } else @compileError("Do not access this namespace in a release build"));
 pub const LoaderColonList = ColonListType(api.Loader, Arguments.loader_resolver);
 pub const DefineColonList = ColonListType(string, Arguments.noop_resolver);
-pub const BuildCommand = @import("./build_command.zig").BuildCommand;
-pub const AddCommand = @import("./add_command.zig").AddCommand;
-pub const CreateCommand = @import("./create_command.zig").CreateCommand;
-pub const CreateCommandExample = @import("./create_command.zig").Example;
-pub const CreateListExamplesCommand = @import("./create_command.zig").CreateListExamplesCommand;
-pub const DiscordCommand = @import("./discord_command.zig").DiscordCommand;
-pub const InstallCommand = @import("./install_command.zig").InstallCommand;
-pub const LinkCommand = @import("./link_command.zig").LinkCommand;
-pub const UnlinkCommand = @import("./unlink_command.zig").UnlinkCommand;
-pub const InstallCompletionsCommand = @import("./install_completions_command.zig").InstallCompletionsCommand;
-pub const PackageManagerCommand = @import("./package_manager_command.zig").PackageManagerCommand;
-pub const RemoveCommand = @import("./remove_command.zig").RemoveCommand;
-pub const RunCommand = @import("./run_command.zig").RunCommand;
-pub const UpdateCommand = @import("./update_command.zig").UpdateCommand;
-pub const UpgradeCommand = @import("./upgrade_command.zig").UpgradeCommand;
-pub const BunxCommand = @import("./bunx_command.zig").BunxCommand;
-pub const ExecCommand = @import("./exec_command.zig").ExecCommand;
-pub const PatchCommand = @import("./patch_command.zig").PatchCommand;
-pub const PatchCommitCommand = @import("./patch_commit_command.zig").PatchCommitCommand;
-pub const OutdatedCommand = @import("./outdated_command.zig").OutdatedCommand;
-pub const UpdateInteractiveCommand = @import("./update_interactive_command.zig").UpdateInteractiveCommand;
-pub const PublishCommand = @import("./publish_command.zig").PublishCommand;
-pub const PackCommand = @import("./pack_command.zig").PackCommand;
-pub const AuditCommand = @import("./audit_command.zig").AuditCommand;
-pub const InitCommand = @import("./init_command.zig").InitCommand;
-pub const WhyCommand = @import("./why_command.zig").WhyCommand;
-pub const FuzzilliCommand = @import("./fuzzilli_command.zig").FuzzilliCommand;
-pub const ReplCommand = @import("./repl_command.zig").ReplCommand;
+pub const BuildCommand = build_command_mod.BuildCommand;
+pub const AddCommand = add_command_mod.AddCommand;
+pub const CreateCommand = create_command_mod.CreateCommand;
+pub const CreateCommandExample = create_command_mod.Example;
+pub const CreateListExamplesCommand = create_command_mod.CreateListExamplesCommand;
+pub const DiscordCommand = discord_command_mod.DiscordCommand;
+pub const InstallCommand = install_command_mod.InstallCommand;
+pub const LinkCommand = link_command_mod.LinkCommand;
+pub const UnlinkCommand = unlink_command_mod.UnlinkCommand;
+pub const InstallCompletionsCommand = install_completions_command_mod.InstallCompletionsCommand;
+pub const PackageManagerCommand = package_manager_command_mod.PackageManagerCommand;
+pub const RemoveCommand = remove_command_mod.RemoveCommand;
+pub const RunCommand = run_command_mod.RunCommand;
+pub const UpdateCommand = update_command_mod.UpdateCommand;
+pub const UpgradeCommand = upgrade_command_mod.UpgradeCommand;
+pub const BunxCommand = bunx_command_mod.BunxCommand;
+pub const ExecCommand = exec_command_mod.ExecCommand;
+pub const PatchCommand = patch_command_mod.PatchCommand;
+pub const PatchCommitCommand = patch_commit_command_mod.PatchCommitCommand;
+pub const OutdatedCommand = outdated_command_mod.OutdatedCommand;
+pub const UpdateInteractiveCommand = update_interactive_command_mod.UpdateInteractiveCommand;
+pub const PublishCommand = publish_command_mod.PublishCommand;
+pub const PackCommand = pack_command_mod.PackCommand;
+pub const AuditCommand = audit_command_mod.AuditCommand;
+pub const InitCommand = init_command_mod.InitCommand;
+pub const WhyCommand = why_command_mod.WhyCommand;
+pub const FuzzilliCommand = fuzzilli_command_mod.FuzzilliCommand;
+pub const ReplCommand = repl_command_mod.ReplCommand;
 pub var pretend_to_be_node = false;
 pub var is_bunx_exe = false;
-const ColonListType = @import("./colon_list_type.zig").ColonListType;
-const RunCommand_ = @import("./run_command.zig").RunCommand;
-const TestCommand = @import("./test_command.zig").TestCommand;
+const ColonListType = colon_list_type_mod.ColonListType;
+const RunCommand_ = run_command_mod.RunCommand;
+const TestCommand = test_command_mod.TestCommand;
 const PackageManager = Install.PackageManager;
 const Environment = bun.Environment;
 const Global = bun.Global;

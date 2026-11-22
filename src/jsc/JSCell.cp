@@ -1,3 +1,7 @@
+import bun from "bun";
+import custom_getter_setter_mod from "./CustomGetterSetter.zig";
+import getter_setter_mod from "./GetterSetter.zig";
+
 @c {
     fn JSC__JSCell__getObject(cell: *JSCell): *jsc.JSObject ;
     fn JSC__JSCell__toObject(cell: *JSCell, global: *JSGlobalObject): *jsc.JSObject ;
@@ -52,9 +56,8 @@
     }
 }
 
-import bun from "bun";
-const CustomGetterSetter = @import("./CustomGetterSetter.zig").CustomGetterSetter;
-const GetterSetter = @import("./GetterSetter.zig").GetterSetter;
+const CustomGetterSetter = custom_getter_setter_mod.CustomGetterSetter;
+const GetterSetter = getter_setter_mod.GetterSetter;
 
 const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;

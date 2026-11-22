@@ -67,6 +67,11 @@ pub const DotEnv = @import("../dotenv/env_loader.zig");
 pub const ShellCompletions = @import("./shell_completions.zig");
 pub const options = @import("../bundler/options.zig");
 pub const resolve_path = @import("../paths/resolve_path.zig");
+pub const DirInfo = @import("../resolver/dir_info.zig");
+pub const shim_impl = @import("../install/windows-shim/bun_shim_impl.zig");
+pub const package_json_mod = @import("../resolver/package_json.zig");
+pub const which_mod = @import("../which/which.zig");
+pub const list_of_yarn_commands_mod = @import("./list-of-yarn-commands.zig");
 pub const bun = @import("bun");
 pub const _RunFilter = enum {
     script,
@@ -1717,7 +1722,6 @@ pub fn @"bun feedback"(ctx: Command.Context) !noreturn {
     else => (if (Environment.isAndroid) "/data/local/tmp" else "/tmp"),
     }) ++ (if ((!Environment.isDebug)) ("/bun-node" ++ (if ((Environment.git_sha_short.len > 0)) ("-" ++ Environment.git_sha_short) else "")) else "/bun-node-debug"));
     pub const Filter = _RunFilter;
-    const DirInfo = @import("../resolver/dir_info.zig");
     const RemoteImageDownload = _RemoteImageDownload;
 };
 
@@ -1839,7 +1843,6 @@ pub fn directLaunchCallback(wpath: []u16, ctx: Command.Context) void {
             _ = Output.err(e, "Failed to run bin \"<b>{s}<r>\"", .{ std.fs.path.basename(utf8) });
             break :blk_catch_83 Global.exit(1); }); });
     }
-    const shim_impl = @import("../install/windows-shim/bun_shim_impl.zig");
     const debug = Output.scoped(.BunXFastPath, .visible);
 };
 
@@ -1849,9 +1852,9 @@ var path_buf: bun.PathBuffer = undefined;
 var path_buf2: bun.PathBuffer = undefined;
 var find_shell_buf: bun.PathBuffer = undefined;
 var find_shell_once = bun.once(findShellRun);
-const PackageJSON = @import("../resolver/package_json.zig").PackageJSON;
-const which = @import("../which/which.zig").which;
-const yarn_commands = @import("./list-of-yarn-commands.zig").all_yarn_commands;
+const PackageJSON = package_json_mod.PackageJSON;
+const which = which_mod.which;
+const yarn_commands = list_of_yarn_commands_mod.all_yarn_commands;
 const windows = std.os.windows;
 const Environment = bun.Environment;
 const Global = bun.Global;

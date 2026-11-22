@@ -1591,12 +1591,11 @@ pub struct ESModule {
 
         // If resolved contains any percent encodings of "/" or "\" ("%2f" and "%5C"
         // respectively), then throw an Invalid Module Specifier error.
-        const PercentEncoding = @import("../url/url.zig").PercentEncoding;
         const bufs_ptr = module_bufs.get();
         const resolved_path_buf_percent = &bufs_ptr.resolved_path_buf_percent;
         let fbs = std.io.fixedBufferStream(resolved_path_buf_percent);
         let writer = fbs.writer();
-        const len = PercentEncoding.decode(@TypeOf(&writer), &writer, result.path) catch return Resolution{
+        const len = url_mod.PercentEncoding.decode(@TypeOf(&writer), &writer, result.path) catch return Resolution{
             status: .InvalidModuleSpecifier,
             path: result.path,
             debug: result.debug,
@@ -2208,8 +2207,10 @@ import options from "../bundler/options.zig";
 import resolve_path from "../paths/resolve_path.zig";
 import resolver from "./resolver.zig";
 
-const Architecture = @import("../install/npm.zig").Architecture;
-const OperatingSystem = @import("../install/npm.zig").OperatingSystem;
+import npm from "../install/npm.zig";
+import url_mod from "../url/url.zig";
+const Architecture = npm.Architecture;
+const OperatingSystem = npm.OperatingSystem;
 
 import bun from "bun";
 const Environment = bun.Environment;

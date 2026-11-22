@@ -1,4 +1,11 @@
 import bun from "bun";
+import _EventLoopTimer from "../../event_loop/EventLoopTimer.zig";
+import _TimeoutObject from "./TimeoutObject.zig";
+import _ImmediateObject from "./ImmediateObject.zig";
+import _TimerObjectInternals from "./TimerObjectInternals.zig";
+import _WTFTimer from "./WTFTimer.zig";
+import _DateHeaderTimer from "./DateHeaderTimer.zig";
+import _EventLoopDelayMonitor from "./EventLoopDelayMonitor.zig";
 const Environment = bun.Environment;
 const JSError = bun.JSError;
 const assert = bun.assert;
@@ -13,13 +20,13 @@ const JSValue = jsc.JSValue;
 const VirtualMachine = jsc.VirtualMachine;
 const FakeTimers = bun.jsc.Jest.bun_test.FakeTimers;
 
-pub const EventLoopTimer = @import("../../event_loop/EventLoopTimer.zig");
-pub const TimeoutObject = @import("./TimeoutObject.zig");
-pub const ImmediateObject = @import("./ImmediateObject.zig");
-pub const TimerObjectInternals = @import("./TimerObjectInternals.zig");
-pub const WTFTimer = @import("./WTFTimer.zig");
-pub const DateHeaderTimer = @import("./DateHeaderTimer.zig");
-pub const EventLoopDelayMonitor = @import("./EventLoopDelayMonitor.zig");
+pub const EventLoopTimer = _EventLoopTimer;
+pub const TimeoutObject = _TimeoutObject;
+pub const ImmediateObject = _ImmediateObject;
+pub const TimerObjectInternals = _TimerObjectInternals;
+pub const WTFTimer = _WTFTimer;
+pub const DateHeaderTimer = _DateHeaderTimer;
+pub const EventLoopDelayMonitor = _EventLoopDelayMonitor;
 
 pub struct LockGuard<T> {
     ptr: *T!,

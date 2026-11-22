@@ -229,16 +229,23 @@ fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .poi
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
+pub const data_url_mod = @import("./data_url.zig");
 pub const DirInfo = @import("./dir_info.zig");
+pub const global_cache_mod = @import("../options_types/GlobalCache.zig");
 pub const Dependency = @import("../install/dependency.zig");
 pub const DotEnv = @import("../dotenv/env_loader.zig");
 pub const NodeFallbackModules = @import("./node_fallbacks.zig");
 pub const ResolvePath = @import("../paths/resolve_path.zig");
 pub const ast = @import("../options_types/import_record.zig");
 pub const options = @import("../bundler/options.zig");
+pub const lockfile_mod = @import("../install/lockfile.zig");
+pub const resolution_mod = @import("../install/resolution.zig");
+pub const tsconfig_json_mod = @import("./tsconfig_json.zig");
+pub const system_timer_mod = @import("../perf/system_timer.zig");
 pub const cache = @import("../bundler/cache.zig");
 pub const Install = @import("../install/install.zig");
 pub const Fs = @import("./fs.zig");
+pub const package_json_mod = @import("./package_json.zig");
 pub const bun = @import("bun");
 pub const SideEffects = enum {
     has_side_effects,
@@ -3615,7 +3622,7 @@ pub const RootPathPair = struct {
     package_json: *const PackageJSON,
 };
 
-pub const DataURL = @import("./data_url.zig").DataURL;
+pub const DataURL = data_url_mod.DataURL;
 const debuglog = Output.scoped(.Resolver, .hidden);
 const WIN32_CACHE_LEN = (bun.MAX_PATH_BYTES * 2);
 const bufs_storage = bun.ThreadlocalBuffers(Bufs);
@@ -3626,17 +3633,17 @@ const BinFolderArray = bun.BoundedArray(string, 128);
 var bin_folders: BinFolderArray = undefined;
 var bin_folders_lock: CpBareMutex = .{};
 var bin_folders_loaded: bool = false;
-pub const GlobalCache = @import("../options_types/GlobalCache.zig").GlobalCache;
-const Package = @import("../install/lockfile.zig").Package;
-const Resolution = @import("../install/resolution.zig").Resolution;
-const TSConfigJSON = @import("./tsconfig_json.zig").TSConfigJSON;
-const Timer = @import("../perf/system_timer.zig").Timer;
+pub const GlobalCache = global_cache_mod.GlobalCache;
+const Package = lockfile_mod.Package;
+const Resolution = resolution_mod.Resolution;
+const TSConfigJSON = tsconfig_json_mod.TSConfigJSON;
+const Timer = system_timer_mod.Timer;
 const CacheSet = cache.Set;
-const PackageManager = @import("../install/install.zig").PackageManager;
+const PackageManager = Install.PackageManager;
 const Path = Fs.Path;
-const BrowserMap = @import("./package_json.zig").BrowserMap;
-const ESModule = @import("./package_json.zig").ESModule;
-const PackageJSON = @import("./package_json.zig").PackageJSON;
+const BrowserMap = package_json_mod.BrowserMap;
+const ESModule = package_json_mod.ESModule;
+const PackageJSON = package_json_mod.PackageJSON;
 const Environment = bun.Environment;
 const FD = bun.FD;
 const FeatureFlags = bun.FeatureFlags;

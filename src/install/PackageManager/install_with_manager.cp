@@ -1133,8 +1133,10 @@ fn addDependencyError(manager: *PackageManager, dependency: *const Dependency, e
 }
 
 import security_scanner from "./security_scanner.zig";
-const installHoistedPackages = @import("../hoisted_install.zig").installHoistedPackages;
-const installIsolatedPackages = @import("../isolated_install.zig").installIsolatedPackages;
+import hoisted_install from "../hoisted_install.zig";
+const installHoistedPackages = hoisted_install.installHoistedPackages;
+import isolated_install from "../isolated_install.zig";
+const installIsolatedPackages = isolated_install.installIsolatedPackages;
 
 import bun from "bun";
 const Environment = bun.Environment;

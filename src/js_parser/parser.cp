@@ -1296,13 +1296,22 @@ import TypeScript from "./ast/TypeScript.zig";
 import fs from "../resolver/fs.zig";
 import options from "../bundler/options.zig";
 import renamer from "../js_printer/renamer.zig";
-pub const KnownGlobal = @import("./ast/KnownGlobal.zig").KnownGlobal;
-pub const Parser = @import("./ast/Parser.zig").Parser;
-pub const SideEffects = @import("./ast/SideEffects.zig").SideEffects;
-pub const foldStringAddition = @import("./ast/foldStringAddition.zig").foldStringAddition;
-pub const isPackagePath = @import("../resolver/resolver.zig").isPackagePath;
+import KnownGlobal_mod from "./ast/KnownGlobal.zig";
+import Parser_mod from "./ast/Parser.zig";
+import SideEffects_mod from "./ast/SideEffects.zig";
+import foldStringAddition_mod from "./ast/foldStringAddition.zig";
+import resolver_mod from "../resolver/resolver.zig";
+import ast_base_mod from "./ast/base.zig";
+import ast_P_mod from "./ast/P.zig";
+import defines_mod from "../bundler/defines.zig";
+import pool_mod from "../collections/pool.zig";
+pub const KnownGlobal = KnownGlobal_mod.KnownGlobal;
+pub const Parser = Parser_mod.Parser;
+pub const SideEffects = SideEffects_mod.SideEffects;
+pub const foldStringAddition = foldStringAddition_mod.foldStringAddition;
+pub const isPackagePath = resolver_mod.isPackagePath;
 
-pub const Ref = @import("./ast/base.zig").Ref;
+pub const Ref = ast_base_mod.Ref;
 
 import importRecord from "../options_types/import_record.zig";
 pub const ImportKind = importRecord.ImportKind;
@@ -1312,7 +1321,7 @@ pub const RuntimeFeatures = _runtime.Runtime.Features;
 pub const RuntimeImports = _runtime.Runtime.Imports;
 pub const RuntimeNames = _runtime.Runtime.Names;
 
-pub const NewParser_ = @import("./ast/P.zig").NewParser_;
+pub const NewParser_ = ast_P_mod.NewParser_;
 
 pub const StringHashMap = bun.StringHashMap;
 pub const js_printer = bun.js_printer;
@@ -1351,12 +1360,12 @@ const ListManaged = std.array_list.Managed;
 const Allocator = std.mem.Allocator;
 
 import _runtime from "./runtime.zig";
-const Define = @import("../bundler/defines.zig").Define;
-const NewParser = @import("./ast/P.zig").NewParser;
-const ObjectPool = @import("../collections/pool.zig").ObjectPool;
+const Define = defines_mod.Define;
+const NewParser = ast_P_mod.NewParser;
+const ObjectPool = pool_mod.ObjectPool;
 
-const Index = @import("./ast/base.zig").Index;
-const RefCtx = @import("./ast/base.zig").RefCtx;
+const Index = ast_base_mod.Index;
+const RefCtx = ast_base_mod.RefCtx;
 
 import bun from "bun";
 const Output = bun.Output;

@@ -72,6 +72,23 @@ fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .poi
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
+pub const bun = @import("bun");
+pub const _WebSocketServerContext = @import("./WebSocketServerContext.zig");
+pub const _HTTPStatusText = @import("./HTTPStatusText.zig");
+pub const _HTMLBundle = @import("./HTMLBundle.zig");
+pub const _StaticRoute = @import("./StaticRoute.zig");
+pub const _FileRouteMod = @import("./FileRoute.zig");
+pub const _FileResponseStream = @import("./FileResponseStream.zig");
+pub const _RangeRequest = @import("./RangeRequest.zig");
+pub const _ServerConfig = @import("./ServerConfig.zig");
+pub const _ServerWebSocket = @import("./ServerWebSocket.zig");
+pub const _NodeHTTPResponseMod = @import("./NodeHTTPResponse.zig");
+pub const _AnyRequestContext = @import("./AnyRequestContext.zig");
+pub const _RequestContextMod = @import("./RequestContext.zig");
+pub const Sys = @import("../../sys/sys.zig");
+pub const options = @import("../../bundler/options.zig");
+pub const _URLMod = @import("../../url/url.zig");
+pub const Runtime = @import("../../js_parser/runtime.zig");
 pub const ProtocolEnum = enum {
     http,
     https,
@@ -1379,30 +1396,26 @@ pub fn devServer(self: *const AnyServer) ?*bun.bake.DevServer {
 
 const httplog = Output.scoped(.Server, .visible);
 const ctxLog = Output.scoped(.RequestContext, .visible);
-pub const WebSocketServerContext = @import("./WebSocketServerContext.zig");
-pub const HTTPStatusText = @import("./HTTPStatusText.zig");
-pub const HTMLBundle = @import("./HTMLBundle.zig");
-pub const StaticRoute = @import("./StaticRoute.zig");
-pub const FileRoute = @import("./FileRoute.zig").FileRoute;
-pub const FileResponseStream = @import("./FileResponseStream.zig");
-pub const RangeRequest = @import("./RangeRequest.zig");
-pub const ServerConfig = @import("./ServerConfig.zig");
-pub const ServerWebSocket = @import("./ServerWebSocket.zig");
-pub const NodeHTTPResponse = @import("./NodeHTTPResponse.zig").NodeHTTPResponse;
+pub const WebSocketServerContext = _WebSocketServerContext;
+pub const HTTPStatusText = _HTTPStatusText;
+pub const HTMLBundle = _HTMLBundle;
+pub const StaticRoute = _StaticRoute;
+pub const FileRoute = _FileRouteMod.FileRoute;
+pub const FileResponseStream = _FileResponseStream;
+pub const RangeRequest = _RangeRequest;
+pub const ServerConfig = _ServerConfig;
+pub const ServerWebSocket = _ServerWebSocket;
+pub const NodeHTTPResponse = _NodeHTTPResponseMod.NodeHTTPResponse;
 var did_send_idletimeout_warning_once: bool = false;
-pub const AnyRequestContext = @import("./AnyRequestContext.zig");
-pub const NewRequestContext = @import("./RequestContext.zig").NewRequestContext;
+pub const AnyRequestContext = _AnyRequestContext;
+pub const NewRequestContext = _RequestContextMod.NewRequestContext;
 pub const HTTPServer = NewServer(.http, .production);
 pub const HTTPSServer = NewServer(.https, .production);
 pub const DebugHTTPServer = NewServer(.http, .debug);
 pub const DebugHTTPSServer = NewServer(.https, .debug);
-const Sys = @import("../../sys/sys.zig");
-const options = @import("../../bundler/options.zig");
-const URL = @import("../../url/url.zig").URL;
+const URL = _URLMod.URL;
 const Allocator = std.mem.Allocator;
-const Runtime = @import("../../js_parser/runtime.zig");
 const Fallback = Runtime.Fallback;
-const bun = @import("bun");
 const Async = bun.Async;
 const Environment = bun.Environment;
 const Global = bun.Global;

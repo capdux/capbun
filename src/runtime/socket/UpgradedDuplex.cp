@@ -2,7 +2,8 @@
 // Converted from src/runtime/socket/UpgradedDuplex.zig
 
 import bun from "bun";
-const SSLWrapper = @import("./ssl_wrapper.zig").SSLWrapper;
+import ssl_wrapper from "./ssl_wrapper.zig";
+const SSLWrapper = ssl_wrapper.SSLWrapper;
 const jsc = bun.jsc;
 const BoringSSL = bun.BoringSSL.c;
 type EventLoopTimer = bun.api.Timer.EventLoopTimer;

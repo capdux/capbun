@@ -69,6 +69,7 @@ const Stream = @import("./Stream.zig").Stream;
 pub const wire = @import("../H2FrameParser.zig");
 const local_max_header_list_size = @import("../H2Client.zig").local_max_header_list_size;
 const write_buffer_control_limit = @import("../H2Client.zig").write_buffer_control_limit;
+pub const bun = @import("bun");
 pub fn ClearRetainingCapacityGuard(comptime T: type) type {
     return struct {
         ptr: *T,
@@ -100,7 +101,6 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
-const bun = @import("bun");
 const strings = bun.strings;
 const log = bun.Output.scoped(.h2_client, .hidden);
 

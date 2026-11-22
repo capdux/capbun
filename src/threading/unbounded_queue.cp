@@ -1,11 +1,12 @@
 // Intrusive lock-free unbounded queue in CP
 import bun from "bun";
+import builtin from "builtin";
 const assertf = bun.assertf;
 
 const atomic = std.atomic;
 const meta = std.meta;
 
-pub const cache_line_length = switch (@import("builtin").target.cpu.arch) {
+pub const cache_line_length = switch (builtin.target.cpu.arch) {
     .x86_64, .aarch64, .powerpc64 => 128,
     .arm, .mips, .mips64, .riscv64 => 32,
     .s390x => 256,

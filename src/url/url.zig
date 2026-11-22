@@ -90,6 +90,10 @@ const jsc = @import("bun").jsc;
 const strings = @import("bun").strings;
 const schema = @import("bun").schema;
 pub const bun = @import("bun");
+pub const resolve_path = @import("../paths/resolve_path.zig");
+pub const router = @import("../router/router.zig");
+pub const url_jsc = @import("../url_jsc/url_jsc.zig");
+pub const form_data_mod = @import("../runtime/webcore/FormData.zig");
 pub fn DerefGuard(comptime T: type) type {
     return struct {
         val: T,
@@ -599,7 +603,7 @@ pub fn deinit(self: *URL) void {
             _ = self.release();
     }
     const log = Output.scoped(.URL, .visible);
-    pub const fromJS = @import("../url_jsc/url_jsc.zig").urlFromJS;
+    pub const fromJS = url_jsc.urlFromJS;
 };
 
 pub const QueryStringMapResult = struct {
@@ -1125,12 +1129,11 @@ else => {
     pub const Result = ScannerResult;
 };
 
-const resolve_path = @import("../paths/resolve_path.zig");
-const ParamsList = @import("../router/router.zig").Param.List;
+const ParamsList = router.Param.List;
 const api = bun.schema.api;
 const blob_specifier_len = ("blob:".len + 36);
 const slash_slash: u16 = std.mem.readInt(u16, "//", .little);
-pub const FormData = @import("../runtime/webcore/FormData.zig").FormData;
+pub const FormData = form_data_mod.FormData;
 
 pub fn stringPointerFromStrings(parent: []const u8, input_str: []const u8) api.StringPointer {
         if (((input_str.len == 0) or (parent.len == 0))) {

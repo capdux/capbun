@@ -1,16 +1,19 @@
 // S3 simple request executor in CP
-const std = @import("std");
-const ListObjects = @import("./list_objects.zig");
-const ACL = @import("../../../s3_signing/acl.zig").ACL;
-const StorageClass = @import("../../../s3_signing/storage_class.zig").StorageClass;
+import * as ListObjects from "./list_objects.zig";
+import * as S3Acl from "../../../s3_signing/acl.zig";
+import * as S3StorageClass from "../../../s3_signing/storage_class.zig";
+import * as S3CredentialsMod from "../../../s3_signing/credentials.zig";
+import * as S3ErrorMod from "../../../s3_signing/error.zig";
+import bun from "bun";
 
-const S3Credentials = @import("../../../s3_signing/credentials.zig").S3Credentials;
-const SignResult = @import("../../../s3_signing/credentials.zig").S3Credentials.SignResult;
+const ACL = S3Acl.ACL;
+const StorageClass = S3StorageClass.StorageClass;
 
-const S3Error = @import("../../../s3_signing/error.zig").S3Error;
-const getSignErrorCodeAndMessage = @import("../../../s3_signing/error.zig").getSignErrorCodeAndMessage;
+const S3Credentials = S3CredentialsMod.S3Credentials;
+const SignResult = S3CredentialsMod.S3Credentials.SignResult;
 
-const bun = @import("bun");
+const S3Error = S3ErrorMod.S3Error;
+const getSignErrorCodeAndMessage = S3ErrorMod.getSignErrorCodeAndMessage;
 const jsc = bun.jsc;
 const picohttp = bun.picohttp;
 const strings = bun.strings;

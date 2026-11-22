@@ -1,7 +1,7 @@
 // src/http/h2_client/Stream.cp
 // One in-flight request on a multiplexed HTTP/2 ClientSession in CP language
 
-const bun = @import("bun");
+import bun from "bun";
 
 import { ClientSession } from "./ClientSession.cp";
 import * as H2FrameParser from "../H2FrameParser.cp";

@@ -4,8 +4,9 @@
 const std = @import("std");
 const string = []const u8;
 
+pub const fallback_z = @import("./fallback/z.zig");
 pub const c_allocator = std.heap.c_allocator;
-pub const z_allocator = @import("./fallback/z.zig").allocator;
+pub const z_allocator = fallback_z.allocator;
 
 pub fn freeWithoutSize(ptr: ?*anyopaque) void {
         _ = std.c.free(ptr);

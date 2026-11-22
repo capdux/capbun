@@ -78,6 +78,13 @@ pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub const _heap = @import("./heap.zig");
+pub const _openForWriting = @import("./openForWriting.zig");
+pub const _source = @import("./source.zig");
+pub const _pipes = @import("./pipes.zig");
+pub const _PipeReader = @import("./PipeReader.zig");
+pub const _PipeWriter = @import("./PipeWriter.zig");
+pub const _MaxBuf = @import("./MaxBuf.zig");
 pub const PollableTag = enum(bun.TaggedPointer.Tag) {
     empty,
     ReadFile,
@@ -754,25 +761,25 @@ else => @compileError("unreachable"),
 };
 
 const RequestCallback = *const fn (*Request) Action;
-pub const heap = @import("./heap.zig");
-pub const openForWriting = @import("./openForWriting.zig").openForWriting;
-pub const openForWritingImpl = @import("./openForWriting.zig").openForWritingImpl;
-pub const Source = @import("./source.zig").Source;
+pub const heap = _heap;
+pub const openForWriting = _openForWriting.openForWriting;
+pub const openForWritingImpl = _openForWriting.openForWritingImpl;
+pub const Source = _source.Source;
 const log = bun.Output.scoped(.loop, .visible);
 const EV_EOF: u16 = (if (@hasDecl(std.c.EV, "EOF")) std.c.EV.EOF else 32768);
 const KEvent = (if (Environment.isFreeBSD) std.c.Kevent else std.posix.system.kevent64_s);
 const EventType = (if (Environment.isLinux) linux.epoll_event else KEvent);
 pub const retry = bun.sys.E.AGAIN;
-pub const ReadState = @import("./pipes.zig").ReadState;
-pub const PipeReader = @import("./PipeReader.zig").PipeReader;
-pub const BufferedReader = @import("./PipeReader.zig").BufferedReader;
-pub const BufferedWriter = @import("./PipeWriter.zig").BufferedWriter;
-pub const WriteResult = @import("./PipeWriter.zig").WriteResult;
-pub const WriteStatus = @import("./PipeWriter.zig").WriteStatus;
-pub const StreamingWriter = @import("./PipeWriter.zig").StreamingWriter;
-pub const StreamBuffer = @import("./PipeWriter.zig").StreamBuffer;
-pub const FileType = @import("./pipes.zig").FileType;
-pub const MaxBuf = @import("./MaxBuf.zig");
+pub const ReadState = _pipes.ReadState;
+pub const PipeReader = _PipeReader.PipeReader;
+pub const BufferedReader = _PipeReader.BufferedReader;
+pub const BufferedWriter = _PipeWriter.BufferedWriter;
+pub const WriteResult = _PipeWriter.WriteResult;
+pub const WriteStatus = _PipeWriter.WriteStatus;
+pub const StreamingWriter = _PipeWriter.StreamingWriter;
+pub const StreamBuffer = _PipeWriter.StreamBuffer;
+pub const FileType = _pipes.FileType;
+pub const MaxBuf = _MaxBuf;
 const Environment = bun.Environment;
 const assert = bun.assert;
 const sys = bun.sys;

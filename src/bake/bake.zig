@@ -75,6 +75,7 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 pub const production = @import("./production.zig");
 pub const DevServer = @import("./DevServer.zig");
 pub const FrameworkRouter = @import("./FrameworkRouter.zig");
+pub const bun = @import("bun");
 pub const Mode = enum {
     development,
     production_dynamic,
@@ -716,7 +717,6 @@ var empty_fsr_types: [0]BakeFileSystemRouterType = undefined;
 pub const server_virtual_source: bun.logger.Source = .{ .path = bun.fs.Path.initForKitBuiltIn("bun", "bake/server"), .contents = "", .index = bun.ast.Index.bake_server_data };
 pub const client_virtual_source: bun.logger.Source = .{ .path = bun.fs.Path.initForKitBuiltIn("bun", "bake/client"), .contents = "", .index = bun.ast.Index.bake_client_data };
 const Allocator = std.mem.Allocator;
-const bun = @import("bun");
 const Environment = bun.Environment;
 const jsc = bun.jsc;
 const JSValue = jsc.JSValue;

@@ -1,7 +1,7 @@
 // src/http/zlib.cp
 // Zlib buffer pool and decompression helpers in CP language
 
-const bun = @import("bun");
+import bun from "bun";
 const MutableString = bun.MutableString;
 
 fn initMutableString(allocator: std.mem.Allocator): !MutableString {

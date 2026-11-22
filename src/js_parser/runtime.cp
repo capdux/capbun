@@ -312,7 +312,7 @@ pub struct Fallback {
             bun.runtimeEmbedFile(.codegen, "fallback-decoder.js");
     }
 
-    pub const version_hash = @import("build_options").fallback_html_version;
+    pub const version_hash = build_options.fallback_html_version;
     static fn versionHash(): u32 {
         if (fallback_version_hash_int == 0) {
             fallback_version_hash_int = @as(u32, @truncate(std.fmt.parseInt(u64, version(), 16) catch unreachable));
@@ -560,6 +560,7 @@ pub struct Runtime {
 type string = []const u8;
 
 
+import build_options from "build_options";
 import bun from "bun";
 const Environment = bun.Environment;
 const Output = bun.Output;

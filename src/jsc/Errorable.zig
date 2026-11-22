@@ -5,8 +5,10 @@ const std = @import("std");
 const string = []const u8;
 
 pub const bun = @import("bun");
-const ErrorCode = @import("./ErrorCode.zig").ErrorCode;
-const ZigErrorType = @import("./ZigErrorType.zig").ZigErrorType;
+pub const error_code_mod = @import("./ErrorCode.zig");
+pub const zig_error_type_mod = @import("./ZigErrorType.zig");
+const ErrorCode = error_code_mod.ErrorCode;
+const ZigErrorType = zig_error_type_mod.ZigErrorType;
 
 pub fn ErrorableResult(comptime Type: type) type {
         return extern union {
