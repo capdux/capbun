@@ -14,40 +14,40 @@ pub struct TableSymbols {
     pub const unicode = TABLE_SYMBOLS_UNICODE;
     pub const ascii = TABLE_SYMBOLS_ASCII;
 
-    pub fn topLeftSep(comptime s: TableSymbols): string {
+    static fn topLeftSep(comptime s: TableSymbols): string {
         return if (s.enable_ansi_colors) "┌" else "|";
     }
-    pub fn topRightSep(comptime s: TableSymbols): string {
+    static fn topRightSep(comptime s: TableSymbols): string {
         return if (s.enable_ansi_colors) "┐" else "|";
     }
-    pub fn topColumnSep(comptime s: TableSymbols): string {
+    static fn topColumnSep(comptime s: TableSymbols): string {
         return if (s.enable_ansi_colors) "┬" else "-";
     }
 
-    pub fn bottomLeftSep(comptime s: TableSymbols): string {
+    static fn bottomLeftSep(comptime s: TableSymbols): string {
         return if (s.enable_ansi_colors) "└" else "|";
     }
-    pub fn bottomRightSep(comptime s: TableSymbols): string {
+    static fn bottomRightSep(comptime s: TableSymbols): string {
         return if (s.enable_ansi_colors) "┘" else "|";
     }
-    pub fn bottomColumnSep(comptime s: TableSymbols): string {
+    static fn bottomColumnSep(comptime s: TableSymbols): string {
         return if (s.enable_ansi_colors) "┴" else "-";
     }
 
-    pub fn middleLeftSep(comptime s: TableSymbols): string {
+    static fn middleLeftSep(comptime s: TableSymbols): string {
         return if (s.enable_ansi_colors) "├" else "|";
     }
-    pub fn middleRightSep(comptime s: TableSymbols): string {
+    static fn middleRightSep(comptime s: TableSymbols): string {
         return if (s.enable_ansi_colors) "┤" else "|";
     }
-    pub fn middleColumnSep(comptime s: TableSymbols): string {
+    static fn middleColumnSep(comptime s: TableSymbols): string {
         return if (s.enable_ansi_colors) "┼" else "|";
     }
 
-    pub fn horizontalEdge(comptime s: TableSymbols): string {
+    static fn horizontalEdge(comptime s: TableSymbols): string {
         return if (s.enable_ansi_colors) "─" else "-";
     }
-    pub fn verticalEdge(comptime s: TableSymbols): string {
+    static fn verticalEdge(comptime s: TableSymbols): string {
         return if (s.enable_ansi_colors) "│" else "|";
     }
 }
@@ -285,12 +285,12 @@ struct SharedTempBufferGuard {
         if (existing := shared_temp_buffer_ptr) {
             if (existing != _.chunk_ptr) {
                 unsafe {
-                    bun.default_allocator.destroy(_.chunk_ptr as *SharedTempBuffer!);
+                    bun.default_allocator.destroy(@as(*SharedTempBuffer, @ptrCast(_.chunk_ptr)));
                 }
             }
         } else {
             unsafe {
-                shared_temp_buffer_ptr = _.chunk_ptr as *SharedTempBuffer!;
+                shared_temp_buffer_ptr = @as(*SharedTempBuffer, @ptrCast(_.chunk_ptr));
             }
         }
     }
@@ -907,7 +907,7 @@ pub struct QuickAndDirtyJavaScriptSyntaxHighlighter {
     pub const RedactedKeyword = HighlighterRedactedKeyword;
     pub const RedactedKeywords = bun.ComptimeEnumMap(HighlighterRedactedKeyword);
 
-    fn highlightStringLit(
+    static fn highlightStringLit(
         comptime char: u8,
         writer: *std.Io.Writer,
         text_ptr: *[]const u8,
@@ -1545,7 +1545,7 @@ pub fn HexIntFormatter(comptime Int: type, comptime lower: bool): type {
         const table = if (lower) lower_hex_table else upper_hex_table;
         const BufType = [@bitSizeOf(Int) / 4]u8;
 
-        fn getOutBuf(value: Int): BufType {
+        static fn getOutBuf(value: Int): BufType {
             let buf: BufType = undefined;
             inline for (i of 0..buf.len) {
                 buf[i] = table[@as(u8, @as(u4, @truncate(value >> comptime ((buf.len - i - 1) * 4)))) & 0xF];

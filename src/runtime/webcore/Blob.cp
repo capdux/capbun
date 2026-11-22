@@ -2129,7 +2129,7 @@ pub struct BlobExternalSharedDescriptor {
             ref_count: .init(0),
             globalThis: _.globalThis,
             last_modified: _.last_modified,
-            name: _.name.clone(),
+            name: _.name.dupeRef(),
         };
     }
 
@@ -2154,7 +2154,7 @@ pub struct BlobExternalSharedDescriptor {
             ref_count: .init(0),
             globalThis: _.globalThis,
             last_modified: _.last_modified,
-            name: _.name.clone(),
+            name: _.name.dupeRef(),
         };
     }
 

@@ -1001,7 +1001,7 @@ pub noinline fn sendInitialRequestPayload(self: *HTTPClient, comptime is_first_c
             _ = assert((!socket.isShutdown()));
             _ = assert((!socket.isClosed()));
         }
-        const amount = try HTTPClient.writeToSocket(is_ssl, socket, to_send);
+        const amount = try self.writeToSocket(is_ssl, socket, to_send);
         if (comptime is_first_call) {
             if ((amount == 0)) {
                 return .{ .has_sent_headers = (self.state.request_sent_len >= headers_len), .has_sent_body = false, .try_sending_more_data = false };
@@ -1023,7 +1023,8 @@ pub fn flushStream(self: *HTTPClient, comptime is_ssl: bool, socket: NewHTTPCont
         _ = self.writeToStream(is_ssl, socket, "");
 }
 
-pub fn writeToSocket(comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket, data: []const u8) !usize {
+pub fn writeToSocket(self: HTTPClient, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket, data: []const u8) !usize {
+    _ = self;
         var remaining = data;
         _ = &remaining;
         var total_written: usize = 0;
@@ -1043,8 +1044,8 @@ pub fn writeToSocket(comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPS
         return total_written;
 }
 
-pub fn writeToSocketWithBufferFallback(comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket, buffer: *bun.io.StreamBuffer, data: []const u8) !usize {
-        const amount = try writeToSocket(is_ssl, socket, data);
+pub fn writeToSocketWithBufferFallback(self: HTTPClient, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket, buffer: *bun.io.StreamBuffer, data: []const u8) !usize {
+        const amount = try self.writeToSocket(is_ssl, socket, data);
         if ((amount < data.len)) {
             _ = bun.handleOom(buffer.write(data[@intCast(amount)..]));
         }
@@ -1054,7 +1055,7 @@ pub fn writeToSocketWithBufferFallback(comptime is_ssl: bool, socket: NewHTTPCon
 pub fn writeToStreamUsingBuffer(self: *HTTPClient, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket, buffer: *bun.io.StreamBuffer, data: []const u8) !bool {
         const to_send = buffer.slice();
         if ((to_send.len > 0)) {
-            const amount = try HTTPClient.writeToSocket(is_ssl, socket, to_send);
+            const amount = try self.writeToSocket(is_ssl, socket, to_send);
             self.state.request_sent_len = (self.state.request_sent_len + amount);
             buffer.cursor = (buffer.cursor + amount);
             if ((amount < to_send.len)) {
@@ -1068,7 +1069,7 @@ pub fn writeToStreamUsingBuffer(self: *HTTPClient, comptime is_ssl: bool, socket
             }
         }
         if ((data.len > 0)) {
-            const sent = try HTTPClient.writeToSocketWithBufferFallback(is_ssl, socket, buffer, data);
+            const sent = try self.writeToSocketWithBufferFallback(is_ssl, socket, buffer, data);
             self.state.request_sent_len = (self.state.request_sent_len + sent);
             return (sent < data.len);
         }
@@ -1179,7 +1180,7 @@ _ = log("send body", .{});
 .bytes => {
 const to_send = self.state.request_body;
         if ((to_send.len > 0)) {
-            const sent = (blk_catch_6: { break :blk_catch_6 ((HTTPClient.writeToSocket(is_ssl, socket, to_send)) catch |e| { _ = &e; _ = self.closeAndFail(e, is_ssl, socket);
+            const sent = (blk_catch_6: { break :blk_catch_6 ((self.writeToSocket(is_ssl, socket, to_send)) catch |e| { _ = &e; _ = self.closeAndFail(e, is_ssl, socket);
             return; }); });
             self.state.request_sent_len = (self.state.request_sent_len + sent);
             self.state.request_body = self.state.request_body[sent..];

@@ -435,12 +435,12 @@ pub fn __cp_deinit(self: *SharedTempBufferGuard) void {
                 _ = &existing;
                 if ((existing != self.chunk_ptr)) {
                     {
-                        _ = bun.default_allocator.destroy(@as(*SharedTempBuffer, @ptrCast(&(self.chunk_ptr))));
+                        _ = bun.default_allocator.destroy(@as(*SharedTempBuffer, @alignCast(@ptrCast(self.chunk_ptr))));
                     }
                 }
             } else {
                 {
-                    shared_temp_buffer_ptr = @as(*SharedTempBuffer, @ptrCast(&(self.chunk_ptr)));
+                    shared_temp_buffer_ptr = @as(*SharedTempBuffer, @alignCast(@ptrCast(self.chunk_ptr)));
                 }
             }
     }

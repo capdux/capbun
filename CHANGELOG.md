@@ -2148,3 +2148,6 @@
 
 ### [2026-11-23] Wave #66（补全 `fetch`/`Blob`/`Response`/`copy_file`/`c_ares`/`subprocess`/`streams` 核心逻辑）
 - 补全 `fetch.cp`（`needsToReadFile`/`isS3`/协议校验）、`Blob.cp`（`BlobAny.isS3`）、`uws_sys/Response.cp`、`blob/copy_file.cp`（`CopyFileWindows`）、`cares_sys/c_ares.cp`、`subprocess.cp`（IPC 关闭与接收者纯化）及 `streams.cp`（`WrappedPtr`），通过 `bun run zig:check`（5/5）及 `bun bd test`（8/8 + `serve.test.ts` `Content-Type` 2/2）。
+
+### [2026-11-23] Wave #67（运行时排雷修复：`DevServer`/`computeChunks`/`fmt`/`Blob`/`node_fs`/`Terminal`/`napi`/`cli`/`rect`）
+- 修复 `DevServer.cp`（`ensureRouteIsBundled` 补全 `return;` 消除 `heap-use-after-free`）、`computeChunks.cp`（`usize` 消除 `{d:0>8}` `+` 号）、`fmt.cp`（消除 `stack-buffer-overflow`）、`Blob.cp`（`dupeRef` 保留 `String.dead`）、`Terminal.cp`（Windows `makeLibUVOwned`）、`json.cp`（恢复 `json_.zig` 备份与 `expectPrintedJSON`）、`node_fs.cp`/`node_fs_binding.cp`/`http.cp`/`path.cp`/`meta.cp`/`napi.cp`/`cli.cp`/`css_string.cp`/`rect.cp`，通过 `bun run zig:check`（5/5）、`hspec.test.ts`（40/40）及 `form-data-set-append.test.js`（4/4）。

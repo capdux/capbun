@@ -728,7 +728,7 @@ const ctx = (blk_catch_5: { break :blk_catch_5 ((Command.init(allocator, log, .A
             if ((ctx.runtime_options.eval.script.len > 0)) {
                 return try @"bun --eval --print"(ctx);
             }
-            const extension: []const u8 = (if ((ctx.args.entry_points.len > 0)) std.fs.path.extension(ctx.args.entry_points[0]) else @as([]const u8, @ptrCast(&(""))));
+            const extension: []const u8 = (if ((ctx.args.entry_points.len > 0)) std.fs.path.extension(ctx.args.entry_points[0]) else "");
             if ((ctx.args.entry_points.len == 1)) {
                 if (strings.eqlComptime(extension, ".lockb")) {
                     return try @"bun ./bun.lockb"(ctx);

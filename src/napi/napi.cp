@@ -804,13 +804,10 @@ pub extern fn napi_get_reference_value(env: napi_env, ref: napi_ref, result: *na
         return env.setLastError(.function_expected);
     }
 
-    let call_args: []const jsc.JSValue = [];
-    if (arg_count > 0 && args != null) {
-        unsafe {
-            const raw_args: [*]const jsc.JSValue = @ptrCast(args.?);
-            call_args = @as([]const jsc.JSValue, raw_args[0..arg_count]);
-        }
-    }
+    const call_args: []const jsc.JSValue = if (arg_count > 0 && args != null)
+        unsafe { @as([*]const jsc.JSValue, @ptrCast(args.?))[0..arg_count] }
+    else
+        [];
     const res = func.call(
         env.toJS(),
         if (recv != .zero)

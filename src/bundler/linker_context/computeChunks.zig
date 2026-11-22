@@ -317,7 +317,6 @@ pub noinline fn computeChunks(ctx: *LinkerContext, unique_key: u64) ![]Chunk {
                         js_chunks_with_css = (js_chunks_with_css + 1);
                         if ((!css_chunk_entry.found_existing)) {
                             const CSSPartsMap = std.AutoArrayHashMapUnmanaged(Index.Int, usize);
-                            _ = &CSSPartsMap;
                             var css_files_with_parts_in_chunk = CSSPartsMap{  };
                             _ = &css_files_with_parts_in_chunk;
                             for (cp_iter_slice(order.slice())) |entry| {
@@ -469,7 +468,7 @@ pub noinline fn computeChunks(ctx: *LinkerContext, unique_key: u64) ![]Chunk {
             while (chunk_id < __end_10) : (chunk_id += 1) {
                 var chunk = (&chunks[@as(usize, @intCast(chunk_id))]);
                 _ = &chunk;
-                chunk.unique_key = unique_key_builder.fmt("{f}C{d:0>8}", .{ bun.fmt.hexIntLower(unique_key), chunk_id });
+                chunk.unique_key = unique_key_builder.fmt("{f}C{d:0>8}", .{ bun.fmt.hexIntLower(unique_key), @as(usize, @intCast(chunk_id)) });
                 if ((ctx.unique_key_prefix.len == 0)) {
                     ctx.unique_key_prefix = chunk.unique_key[0..std.fmt.count("{f}", .{ bun.fmt.hexIntLower(unique_key) })];
                 }

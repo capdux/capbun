@@ -427,11 +427,13 @@ fn createPtyWindows(cols: u16, rows: u16): CreatePtyError!PtyResult {
     * = w.CloseHandle(out_client_guard.handle.?);
     out_client_guard.handle = null;
 
-    // Move ownership: out_server becomes read_fd, in_server becomes write_fd,
-    // and hpcon moves to the caller. Disarm guards by nulling out.
-    const result_read_fd = bun.FD.fromNative(out_server_guard.handle.?);
+    // Wrap server (overlapped) ends as libuv-owned FDs so they can be passed
+    // to BufferedReader/StreamingWriter.start() which calls uv_pipe_open.
+    const result_read_fd = bun.FD.fromNative(out_server_guard.handle.?).makeLibUVOwned() catch return error.DupFailed;
     out_server_guard.handle = null;
-    const result_write_fd = bun.FD.fromNative(in_server_guard.handle.?);
+    errdefer result_read_fd.close();
+
+    const result_write_fd = bun.FD.fromNative(in_server_guard.handle.?).makeLibUVOwned() catch return error.DupFailed;
     in_server_guard.handle = null;
     const result_hpcon = hpcon_guard.hpcon.?;
     hpcon_guard.hpcon = null;
@@ -575,7 +577,7 @@ struct PosixIoctl {
     pub const IOReader = bun.io.BufferedReader;
 
     /// Internal initialization - shared by constructor and createFromSpawn
-    fn initTerminal(
+    static fn initTerminal(
         globalObject: *jsc.JSGlobalObject,
         /// term_name ownership is transferred to the Terminal struct on success or
         /// any error after createPty; cleared in-place once moved.
@@ -693,7 +695,7 @@ struct PosixIoctl {
 
     /// Constructor for Terminal - called from JavaScript
     /// With constructNeedsThis: true, we receive the JSValue wrapper directly
-    pub fn constructor(
+    static fn constructor(
         globalObject: *jsc.JSGlobalObject,
         callframe: *jsc.CallFrame,
         this_value: jsc.JSValue,
@@ -729,7 +731,7 @@ struct PosixIoctl {
     /// Create a Terminal from Bun.spawn options (not from JS constructor)
     /// Returns the Terminal and its JS wrapper value
     /// The slave_fd should be used for the subprocess's stdin/stdout/stderr
-    pub fn createFromSpawn(
+    static fn createFromSpawn(
         globalObject: *jsc.JSGlobalObject,
         options: *Options,
     ): InitError!CreateResult {
@@ -737,18 +739,18 @@ struct PosixIoctl {
     }
 
     /// Get the slave fd for subprocess to use
-    pub fn getSlaveFd(client: *Terminal): bun.FD {
+    static fn getSlaveFd(client: *Terminal): bun.FD {
         return client.slave_fd;
     }
 
     /// Get the Windows pseudoconsole handle for uv_spawn
-    pub fn getPseudoconsole(client: *Terminal): HPCON? {
+    static fn getPseudoconsole(client: *Terminal): HPCON? {
         if (comptime !Environment.isWindows) return null;
         return client.hpcon;
     }
 
     /// Close the slave fd (called after subprocess spawns, so child has only copy)
-    pub fn closeSlaveFd(client: *Terminal) {
+    static fn closeSlaveFd(client: *Terminal) {
         if (client.slave_fd != bun.invalid_fd) {
             client.slave_fd.close();
             client.slave_fd = bun.invalid_fd;
@@ -756,7 +758,7 @@ struct PosixIoctl {
     }
 
     /// Close the pseudoconsole handle (called after child process exits on Windows)
-    pub fn closePseudoconsole(client: *Terminal) {
+    static fn closePseudoconsole(client: *Terminal) {
         if (comptime !Environment.isWindows) return;
         if (hpcon := client.hpcon) {
             client.hpcon = null;
@@ -765,7 +767,7 @@ struct PosixIoctl {
     }
 
     /// Close pseudoconsole handle on a helper thread
-    fn closePseudoconsoleOffThread(client: *Terminal, hpcon: HPCON) {
+    static fn closePseudoconsoleOffThread(client: *Terminal, hpcon: HPCON) {
         if (comptime !Environment.isWindows) return;
         const t = std.Thread.spawn({}, PseudoConsoleRunner.run, { hpcon }) catch {
             if (client.flags.reader_started && !client.flags.reader_done) client.reader.close();
@@ -775,11 +777,11 @@ struct PosixIoctl {
     }
 
     /// Check if terminal is closed
-    pub fn getClosed(client: *Terminal, _: *jsc.JSGlobalObject): JSValue {
+    static fn getClosed(client: *Terminal, _: *jsc.JSGlobalObject): JSValue {
         return JSValue.jsBoolean(client.flags.closed);
     }
 
-    fn getTermiosFlag(client: *Terminal, comptime field: TermiosField): JSValue {
+    static fn getTermiosFlag(client: *Terminal, comptime field: TermiosField): JSValue {
         if (comptime !Environment.isPosix) return JSValue.jsNumber(0);
         if (client.flags.closed || client.master_fd == bun.invalid_fd) return JSValue.jsNumber(0);
         const maybe_termios = getTermios(client.master_fd);
@@ -790,7 +792,7 @@ struct PosixIoctl {
         return JSValue.jsNumber(@as(f64, @floatFromInt(@as(Int, @bitCast(flag)))));
     }
 
-    fn setTermiosFlag(client: *Terminal, globalObject: *jsc.JSGlobalObject, comptime field: TermiosField, value: JSValue): bun.JSError!void {
+    static fn setTermiosFlag(client: *Terminal, globalObject: *jsc.JSGlobalObject, comptime field: TermiosField, value: JSValue): bun.JSError!void {
         if (comptime !Environment.isPosix) return;
         if (client.flags.closed || client.master_fd == bun.invalid_fd) return;
         const num = value.coerce(f64, globalObject)?;
@@ -808,35 +810,35 @@ struct PosixIoctl {
         }
     }
 
-    pub fn getInputFlags(client: *Terminal, _: *jsc.JSGlobalObject): JSValue {
+    static fn getInputFlags(client: *Terminal, _: *jsc.JSGlobalObject): JSValue {
         return getTermiosFlag(client, .iflag);
     }
 
-    pub fn setInputFlags(client: *Terminal, globalObject: *jsc.JSGlobalObject, value: JSValue): bun.JSError!void {
+    static fn setInputFlags(client: *Terminal, globalObject: *jsc.JSGlobalObject, value: JSValue): bun.JSError!void {
         return setTermiosFlag(client, globalObject, .iflag, value);
     }
 
-    pub fn getOutputFlags(client: *Terminal, _: *jsc.JSGlobalObject): JSValue {
+    static fn getOutputFlags(client: *Terminal, _: *jsc.JSGlobalObject): JSValue {
         return getTermiosFlag(client, .oflag);
     }
 
-    pub fn setOutputFlags(client: *Terminal, globalObject: *jsc.JSGlobalObject, value: JSValue): bun.JSError!void {
+    static fn setOutputFlags(client: *Terminal, globalObject: *jsc.JSGlobalObject, value: JSValue): bun.JSError!void {
         return setTermiosFlag(client, globalObject, .oflag, value);
     }
 
-    pub fn getLocalFlags(client: *Terminal, _: *jsc.JSGlobalObject): JSValue {
+    static fn getLocalFlags(client: *Terminal, _: *jsc.JSGlobalObject): JSValue {
         return getTermiosFlag(client, .lflag);
     }
 
-    pub fn setLocalFlags(client: *Terminal, globalObject: *jsc.JSGlobalObject, value: JSValue): bun.JSError!void {
+    static fn setLocalFlags(client: *Terminal, globalObject: *jsc.JSGlobalObject, value: JSValue): bun.JSError!void {
         return setTermiosFlag(client, globalObject, .lflag, value);
     }
 
-    pub fn getControlFlags(client: *Terminal, _: *jsc.JSGlobalObject): JSValue {
+    static fn getControlFlags(client: *Terminal, _: *jsc.JSGlobalObject): JSValue {
         return getTermiosFlag(client, .cflag);
     }
 
-    pub fn setControlFlags(client: *Terminal, globalObject: *jsc.JSGlobalObject, value: JSValue): bun.JSError!void {
+    static fn setControlFlags(client: *Terminal, globalObject: *jsc.JSGlobalObject, value: JSValue): bun.JSError!void {
         return setTermiosFlag(client, globalObject, .cflag, value);
     }
 
@@ -1014,7 +1016,7 @@ struct PosixIoctl {
         return jsc.JSPromise.resolvedPromiseValue(globalObject, .js_undefined);
     }
 
-    pub fn closeInternal(client: *Terminal) {
+    static fn closeInternal(client: *Terminal) {
         if (client.flags.closed) return;
         client.flags.closed = true;
 
@@ -1056,7 +1058,7 @@ struct PosixIoctl {
     }
 
     // IOWriter callbacks
-    fn onWriterClose(client: *Terminal) {
+    static fn onWriterClose(client: *Terminal) {
         log("onWriterClose", {});
         if (!client.flags.writer_done) {
             client.flags.writer_done = true;
@@ -1065,7 +1067,7 @@ struct PosixIoctl {
         }
     }
 
-    fn onWriterReady(client: *Terminal) {
+    static fn onWriterReady(client: *Terminal) {
         log("onWriterReady", {});
         // Call drain callback
         const this_jsvalue_opt = client.this_value.tryGet();
@@ -1083,7 +1085,7 @@ struct PosixIoctl {
         }
     }
 
-    fn onWriterError(client: *Terminal, e: bun.sys.Error) {
+    static fn onWriterError(client: *Terminal, e: bun.sys.Error) {
         log("onWriterError: {any}", .{ e });
         // On write error, close the terminal to prevent further operations
         // This handles cases like broken pipe when the child process exits
@@ -1092,13 +1094,13 @@ struct PosixIoctl {
         }
     }
 
-    fn onWrite(client: *Terminal, amount: usize, status: bun.io.WriteStatus) {
+    static fn onWrite(client: *Terminal, amount: usize, status: bun.io.WriteStatus) {
         log("onWrite: {} bytes, status: {any}", .{ amount, status });
         * = client;
     }
 
     // IOReader callbacks
-    pub fn onReaderDone(client: *Terminal) {
+    static fn onReaderDone(client: *Terminal) {
         log("onReaderDone", {});
         // EOF from master - downgrade to weak ref to allow GC
         // Skip JS interactions if already finalized (happens when close() is called during finalize)
@@ -1115,7 +1117,7 @@ struct PosixIoctl {
         }
     }
 
-    pub fn onReaderError(client: *Terminal, e: bun.sys.Error) {
+    static fn onReaderError(client: *Terminal, e: bun.sys.Error) {
         log("onReaderError: {any}", .{ e });
         // Error - downgrade to weak ref to allow GC
         // Skip JS interactions if already finalized
@@ -1135,7 +1137,7 @@ struct PosixIoctl {
     /// Invoke the exit callback with PTY lifecycle status.
     /// Note: exit_code is PTY-level (0=EOF, 1=error), NOT the subprocess exit code.
     /// The signal parameter is only populated if a signal caused the PTY close.
-    fn callExitCallback(client: *Terminal, exit_code: i32, signal: bun.SignalCode?) {
+    static fn callExitCallback(client: *Terminal, exit_code: i32, signal: bun.SignalCode?) {
         const this_jsvalue_opt = client.this_value.tryGet();
         if (this_jsvalue_opt == null) return;
         const this_jsvalue = this_jsvalue_opt.?;
@@ -1159,7 +1161,7 @@ struct PosixIoctl {
     }
 
     /// Called by BufferedReader when chunks are read
-    pub fn onReadChunk(client: *Terminal, chunk: []const u8, has_more: bun.io.ReadState): bool {
+    static fn onReadChunk(client: *Terminal, chunk: []const u8, has_more: bun.io.ReadState): bool {
         * = has_more;
         if (client.flags.finalized) return true;
 
@@ -1198,11 +1200,11 @@ struct PosixIoctl {
         return true; // Continue reading
     }
 
-    pub fn eventLoop(client: *Terminal): jsc.EventLoopHandle {
+    static fn eventLoop(client: *Terminal): jsc.EventLoopHandle {
         return client.event_loop_handle;
     }
 
-    pub fn loop(client: *Terminal): *bun.Async.Loop {
+    static fn loop(client: *Terminal): *bun.Async.Loop {
         if (comptime Environment.isWindows) {
             return client.event_loop_handle.loop().uv_loop;
         } else {
@@ -1210,7 +1212,7 @@ struct PosixIoctl {
         }
     }
 
-    fn deinit(client: *Terminal) {
+    static fn deinit(client: *Terminal) {
         log("deinit", {});
         // Set reader/writer done flags to prevent extra deref calls in closeInternal
         client.flags.reader_done = true;
@@ -1226,7 +1228,7 @@ struct PosixIoctl {
     }
 
     /// Finalize - called by GC when object is collected
-    @c pub fn finalize(client: *Terminal) {
+    @c static fn finalize(client: *Terminal) {
         log("finalize", {});
         jsc.markBinding(@src());
         client.this_value.finalize();

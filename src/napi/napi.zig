@@ -927,7 +927,7 @@ pub const napi_async_cleanup_hook_handle = ?*struct_napi_async_cleanup_hook_hand
 pub const NapiAsyncCleanupHookFn = *const fn (napi_async_cleanup_hook_handle, ?*anyopaque) callconv(.c) void;
 pub const napi_async_cleanup_hook = ?NapiAsyncCleanupHookFn;
 pub const napi_addon_register_func = *const fn (napi_env, napi_value) callconv(.c) napi_value;
-const TODO_EXCEPTION = (if (@typeInfo(jsc.C.ExceptionRef) == .@"enum") @as(jsc.C.ExceptionRef, @enumFromInt(null)) else @as(jsc.C.ExceptionRef, null));
+const TODO_EXCEPTION = (if (@typeInfo(jsc.C.ExceptionRef) == .@"enum" and (@typeInfo(@TypeOf(null)) == .int or @typeInfo(@TypeOf(null)) == .comptime_int)) @as(jsc.C.ExceptionRef, @enumFromInt(null)) else @as(jsc.C.ExceptionRef, null));
 const log = bun.Output.scoped(.napi, .visible);
 pub const napi_ref = *Ref;
 pub const napi_callback_info = *jsc.CallFrame;
@@ -947,329 +947,329 @@ const napi_event_loop = (if (bun.Environment.isWindows) *bun.windows.libuv.Loop 
 const NAPI_AUTO_LENGTH = std.math.maxInt(usize);
 const V8API = (if ((!bun.Environment.isWindows)) struct {
 
-pub extern "c" fn _ZN2v87Isolate10GetCurrentEv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v87Isolate10GetCurrentEv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v87Isolate13TryGetCurrentEv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v87Isolate13TryGetCurrentEv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v87Isolate17GetCurrentContextEv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v87Isolate17GetCurrentContextEv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN4node25AddEnvironmentCleanupHookEPN2v87IsolateEPFvPvES3_() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN4node25AddEnvironmentCleanupHookEPN2v87IsolateEPFvPvES3_(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN4node28RemoveEnvironmentCleanupHookEPN2v87IsolateEPFvPvES3_() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN4node28RemoveEnvironmentCleanupHookEPN2v87IsolateEPFvPvES3_(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v86Number3NewEPNS_7IsolateEd() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v86Number3NewEPNS_7IsolateEd(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZNK2v86Number5ValueEv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZNK2v86Number5ValueEv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v86String11NewFromUtf8EPNS_7IsolateEPKcNS_13NewStringTypeEi() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v86String11NewFromUtf8EPNS_7IsolateEPKcNS_13NewStringTypeEi(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZNK2v86String9WriteUtf8EPNS_7IsolateEPciPii() callconv(.c) *anyopaque;
+pub extern "c" fn _ZNK2v86String9WriteUtf8EPNS_7IsolateEPciPii(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v812api_internal12ToLocalEmptyEv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v812api_internal12ToLocalEmptyEv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZNK2v86String6LengthEv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZNK2v86String6LengthEv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v88External3NewEPNS_7IsolateEPv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v88External3NewEPNS_7IsolateEPv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZNK2v88External5ValueEv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZNK2v88External5ValueEv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v86Object3NewEPNS_7IsolateE() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v86Object3NewEPNS_7IsolateE(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v86Object3SetENS_5LocalINS_7ContextEEENS1_INS_5ValueEEES5_() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v86Object3SetENS_5LocalINS_7ContextEEENS1_INS_5ValueEEES5_(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v86Object3SetENS_5LocalINS_7ContextEEEjNS1_INS_5ValueEEE() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v86Object3SetENS_5LocalINS_7ContextEEEjNS1_INS_5ValueEEE(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v86Object16SetInternalFieldEiNS_5LocalINS_4DataEEE() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v86Object16SetInternalFieldEiNS_5LocalINS_4DataEEE(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v86Object20SlowGetInternalFieldEi() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v86Object20SlowGetInternalFieldEi(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v86Object3GetENS_5LocalINS_7ContextEEENS1_INS_5ValueEEE() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v86Object3GetENS_5LocalINS_7ContextEEENS1_INS_5ValueEEE(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v86Object3GetENS_5LocalINS_7ContextEEEj() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v86Object3GetENS_5LocalINS_7ContextEEEj(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v811HandleScope12CreateHandleEPNS_8internal7IsolateEm() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v811HandleScope12CreateHandleEPNS_8internal7IsolateEm(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v811HandleScopeC1EPNS_7IsolateE() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v811HandleScopeC1EPNS_7IsolateE(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v811HandleScopeD1Ev() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v811HandleScopeD1Ev(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v811HandleScopeD2Ev() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v811HandleScopeD2Ev(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v816FunctionTemplate11GetFunctionENS_5LocalINS_7ContextEEE() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v816FunctionTemplate11GetFunctionENS_5LocalINS_7ContextEEE(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v816FunctionTemplate3NewEPNS_7IsolateEPFvRKNS_20FunctionCallbackInfoINS_5ValueEEEENS_5LocalIS4_EENSA_INS_9SignatureEEEiNS_19ConstructorBehaviorENS_14SideEffectTypeEPKNS_9CFunctionEttt() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v816FunctionTemplate3NewEPNS_7IsolateEPFvRKNS_20FunctionCallbackInfoINS_5ValueEEEENS_5LocalIS4_EENSA_INS_9SignatureEEEiNS_19ConstructorBehaviorENS_14SideEffectTypeEPKNS_9CFunctionEttt(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v814ObjectTemplate11NewInstanceENS_5LocalINS_7ContextEEE() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v814ObjectTemplate11NewInstanceENS_5LocalINS_7ContextEEE(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v814ObjectTemplate21SetInternalFieldCountEi() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v814ObjectTemplate21SetInternalFieldCountEi(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZNK2v814ObjectTemplate18InternalFieldCountEv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZNK2v814ObjectTemplate18InternalFieldCountEv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v814ObjectTemplate3NewEPNS_7IsolateENS_5LocalINS_16FunctionTemplateEEE() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v814ObjectTemplate3NewEPNS_7IsolateENS_5LocalINS_16FunctionTemplateEEE(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v824EscapableHandleScopeBase10EscapeSlotEPm() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v824EscapableHandleScopeBase10EscapeSlotEPm(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v824EscapableHandleScopeBaseC2EPNS_7IsolateE() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v824EscapableHandleScopeBaseC2EPNS_7IsolateE(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v88internal35IsolateFromNeverReadOnlySpaceObjectEm() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v88internal35IsolateFromNeverReadOnlySpaceObjectEm(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v85Array3NewEPNS_7IsolateEPNS_5LocalINS_5ValueEEEm() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v85Array3NewEPNS_7IsolateEPNS_5LocalINS_5ValueEEEm(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZNK2v85Array6LengthEv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZNK2v85Array6LengthEv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v85Array3NewEPNS_7IsolateEi() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v85Array3NewEPNS_7IsolateEi(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v85Array7IterateENS_5LocalINS_7ContextEEEPFNS0_14CallbackResultEjNS1_INS_5ValueEEEPvES7_() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v85Array7IterateENS_5LocalINS_7ContextEEEPFNS0_14CallbackResultEjNS1_INS_5ValueEEEPvES7_(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v85Array9CheckCastEPNS_5ValueE() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v85Array9CheckCastEPNS_5ValueE(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v88Function7SetNameENS_5LocalINS_6StringEEE() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v88Function7SetNameENS_5LocalINS_6StringEEE(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZNK2v85Value9IsBooleanEv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZNK2v85Value9IsBooleanEv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZNK2v87Boolean5ValueEv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZNK2v87Boolean5ValueEv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZNK2v85Value10FullIsTrueEv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZNK2v85Value10FullIsTrueEv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZNK2v85Value11FullIsFalseEv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZNK2v85Value11FullIsFalseEv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v820EscapableHandleScopeC1EPNS_7IsolateE() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v820EscapableHandleScopeC1EPNS_7IsolateE(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v820EscapableHandleScopeC2EPNS_7IsolateE() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v820EscapableHandleScopeC2EPNS_7IsolateE(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v820EscapableHandleScopeD1Ev() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v820EscapableHandleScopeD1Ev(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v820EscapableHandleScopeD2Ev() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v820EscapableHandleScopeD2Ev(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZNK2v85Value8IsObjectEv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZNK2v85Value8IsObjectEv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZNK2v85Value8IsNumberEv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZNK2v85Value8IsNumberEv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZNK2v85Value8IsUint32Ev() callconv(.c) *anyopaque;
+pub extern "c" fn _ZNK2v85Value8IsUint32Ev(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZNK2v85Value11Uint32ValueENS_5LocalINS_7ContextEEE() callconv(.c) *anyopaque;
+pub extern "c" fn _ZNK2v85Value11Uint32ValueENS_5LocalINS_7ContextEEE(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZNK2v85Value11IsUndefinedEv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZNK2v85Value11IsUndefinedEv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZNK2v85Value6IsNullEv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZNK2v85Value6IsNullEv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZNK2v85Value17IsNullOrUndefinedEv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZNK2v85Value17IsNullOrUndefinedEv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZNK2v85Value6IsTrueEv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZNK2v85Value6IsTrueEv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZNK2v85Value7IsFalseEv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZNK2v85Value7IsFalseEv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZNK2v85Value8IsStringEv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZNK2v85Value8IsStringEv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZNK2v85Value12StrictEqualsENS_5LocalIS0_EE() callconv(.c) *anyopaque;
+pub extern "c" fn _ZNK2v85Value12StrictEqualsENS_5LocalIS0_EE(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v87Boolean3NewEPNS_7IsolateEb() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v87Boolean3NewEPNS_7IsolateEb(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v86Object16GetInternalFieldEi() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v86Object16GetInternalFieldEi(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v87Context10GetIsolateEv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v87Context10GetIsolateEv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v86String14NewFromOneByteEPNS_7IsolateEPKhNS_13NewStringTypeEi() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v86String14NewFromOneByteEPNS_7IsolateEPKhNS_13NewStringTypeEi(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZNK2v86String10Utf8LengthEPNS_7IsolateE() callconv(.c) *anyopaque;
+pub extern "c" fn _ZNK2v86String10Utf8LengthEPNS_7IsolateE(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZNK2v86String10IsExternalEv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZNK2v86String10IsExternalEv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZNK2v86String17IsExternalOneByteEv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZNK2v86String17IsExternalOneByteEv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZNK2v86String17IsExternalTwoByteEv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZNK2v86String17IsExternalTwoByteEv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZNK2v86String9IsOneByteEv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZNK2v86String9IsOneByteEv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZNK2v86String19ContainsOnlyOneByteEv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZNK2v86String19ContainsOnlyOneByteEv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v812api_internal18GlobalizeReferenceEPNS_8internal7IsolateEm() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v812api_internal18GlobalizeReferenceEPNS_8internal7IsolateEm(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v812api_internal13DisposeGlobalEPm() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v812api_internal13DisposeGlobalEPm(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v812api_internal23GetFunctionTemplateDataEPNS_7IsolateENS_5LocalINS_4DataEEE() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v812api_internal23GetFunctionTemplateDataEPNS_7IsolateENS_5LocalINS_4DataEEE(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZNK2v88Function7GetNameEv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZNK2v88Function7GetNameEv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZNK2v85Value10IsFunctionEv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZNK2v85Value10IsFunctionEv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZNK2v85Value5IsMapEv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZNK2v85Value5IsMapEv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZNK2v85Value7IsArrayEv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZNK2v85Value7IsArrayEv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZNK2v85Value7IsInt32Ev() callconv(.c) *anyopaque;
+pub extern "c" fn _ZNK2v85Value7IsInt32Ev(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZNK2v85Value8IsBigIntEv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZNK2v85Value8IsBigIntEv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn _ZN2v812api_internal17FromJustIsNothingEv() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v812api_internal17FromJustIsNothingEv(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn uv_os_getpid() callconv(.c) *anyopaque;
+pub extern "c" fn uv_os_getpid(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn uv_os_getppid() callconv(.c) *anyopaque;
+pub extern "c" fn uv_os_getppid(self: *const @This()) callconv(.c) *anyopaque;
 } else struct {
 
-pub extern "c" fn @"?TryGetCurrent@Isolate@v8@@SAPEAV12@XZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?TryGetCurrent@Isolate@v8@@SAPEAV12@XZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?GetCurrent@Isolate@v8@@SAPEAV12@XZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?GetCurrent@Isolate@v8@@SAPEAV12@XZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?GetCurrentContext@Isolate@v8@@QEAA?AV?$Local@VContext@v8@@@2@XZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?GetCurrentContext@Isolate@v8@@QEAA?AV?$Local@VContext@v8@@@2@XZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?AddEnvironmentCleanupHook@node@@YAXPEAVIsolate@v8@@P6AXPEAX@Z1@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?AddEnvironmentCleanupHook@node@@YAXPEAVIsolate@v8@@P6AXPEAX@Z1@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?RemoveEnvironmentCleanupHook@node@@YAXPEAVIsolate@v8@@P6AXPEAX@Z1@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?RemoveEnvironmentCleanupHook@node@@YAXPEAVIsolate@v8@@P6AXPEAX@Z1@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?New@Number@v8@@SA?AV?$Local@VNumber@v8@@@2@PEAVIsolate@2@N@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?New@Number@v8@@SA?AV?$Local@VNumber@v8@@@2@PEAVIsolate@2@N@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?Value@Number@v8@@QEBANXZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?Value@Number@v8@@QEBANXZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?NewFromUtf8@String@v8@@SA?AV?$MaybeLocal@VString@v8@@@2@PEAVIsolate@2@PEBDW4NewStringType@2@H@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?NewFromUtf8@String@v8@@SA?AV?$MaybeLocal@VString@v8@@@2@PEAVIsolate@2@PEBDW4NewStringType@2@H@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?WriteUtf8@String@v8@@QEBAHPEAVIsolate@2@PEADHPEAHH@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?WriteUtf8@String@v8@@QEBAHPEAVIsolate@2@PEADHPEAHH@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?ToLocalEmpty@api_internal@v8@@YAXXZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?ToLocalEmpty@api_internal@v8@@YAXXZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?Length@String@v8@@QEBAHXZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?Length@String@v8@@QEBAHXZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?New@External@v8@@SA?AV?$Local@VExternal@v8@@@2@PEAVIsolate@2@PEAX@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?New@External@v8@@SA?AV?$Local@VExternal@v8@@@2@PEAVIsolate@2@PEAX@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?Value@External@v8@@QEBAPEAXXZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?Value@External@v8@@QEBAPEAXXZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?New@Object@v8@@SA?AV?$Local@VObject@v8@@@2@PEAVIsolate@2@@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?New@Object@v8@@SA?AV?$Local@VObject@v8@@@2@PEAVIsolate@2@@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?Set@Object@v8@@QEAA?AV?$Maybe@_N@2@V?$Local@VContext@v8@@@2@V?$Local@VValue@v8@@@2@1@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?Set@Object@v8@@QEAA?AV?$Maybe@_N@2@V?$Local@VContext@v8@@@2@V?$Local@VValue@v8@@@2@1@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?Set@Object@v8@@QEAA?AV?$Maybe@_N@2@V?$Local@VContext@v8@@@2@IV?$Local@VValue@v8@@@2@@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?Set@Object@v8@@QEAA?AV?$Maybe@_N@2@V?$Local@VContext@v8@@@2@IV?$Local@VValue@v8@@@2@@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?SetInternalField@Object@v8@@QEAAXHV?$Local@VData@v8@@@2@@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?SetInternalField@Object@v8@@QEAAXHV?$Local@VData@v8@@@2@@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?SlowGetInternalField@Object@v8@@AEAA?AV?$Local@VData@v8@@@2@H@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?SlowGetInternalField@Object@v8@@AEAA?AV?$Local@VData@v8@@@2@H@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?Get@Object@v8@@QEAA?AV?$MaybeLocal@VValue@v8@@@2@V?$Local@VContext@v8@@@2@I@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?Get@Object@v8@@QEAA?AV?$MaybeLocal@VValue@v8@@@2@V?$Local@VContext@v8@@@2@I@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?Get@Object@v8@@QEAA?AV?$MaybeLocal@VValue@v8@@@2@V?$Local@VContext@v8@@@2@V?$Local@VValue@v8@@@2@@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?Get@Object@v8@@QEAA?AV?$MaybeLocal@VValue@v8@@@2@V?$Local@VContext@v8@@@2@V?$Local@VValue@v8@@@2@@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?CreateHandle@HandleScope@v8@@KAPEA_KPEAVIsolate@internal@2@_K@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?CreateHandle@HandleScope@v8@@KAPEA_KPEAVIsolate@internal@2@_K@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"??0HandleScope@v8@@QEAA@PEAVIsolate@1@@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"??0HandleScope@v8@@QEAA@PEAVIsolate@1@@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"??1HandleScope@v8@@QEAA@XZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"??1HandleScope@v8@@QEAA@XZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?GetFunction@FunctionTemplate@v8@@QEAA?AV?$MaybeLocal@VFunction@v8@@@2@V?$Local@VContext@v8@@@2@@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?GetFunction@FunctionTemplate@v8@@QEAA?AV?$MaybeLocal@VFunction@v8@@@2@V?$Local@VContext@v8@@@2@@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?New@FunctionTemplate@v8@@SA?AV?$Local@VFunctionTemplate@v8@@@2@PEAVIsolate@2@P6AXAEBV?$FunctionCallbackInfo@VValue@v8@@@2@@ZV?$Local@VValue@v8@@@2@V?$Local@VSignature@v8@@@2@HW4ConstructorBehavior@2@W4SideEffectType@2@PEBVCFunction@2@GGG@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?New@FunctionTemplate@v8@@SA?AV?$Local@VFunctionTemplate@v8@@@2@PEAVIsolate@2@P6AXAEBV?$FunctionCallbackInfo@VValue@v8@@@2@@ZV?$Local@VValue@v8@@@2@V?$Local@VSignature@v8@@@2@HW4ConstructorBehavior@2@W4SideEffectType@2@PEBVCFunction@2@GGG@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?NewInstance@ObjectTemplate@v8@@QEAA?AV?$MaybeLocal@VObject@v8@@@2@V?$Local@VContext@v8@@@2@@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?NewInstance@ObjectTemplate@v8@@QEAA?AV?$MaybeLocal@VObject@v8@@@2@V?$Local@VContext@v8@@@2@@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?SetInternalFieldCount@ObjectTemplate@v8@@QEAAXH@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?SetInternalFieldCount@ObjectTemplate@v8@@QEAAXH@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?InternalFieldCount@ObjectTemplate@v8@@QEBAHXZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?InternalFieldCount@ObjectTemplate@v8@@QEBAHXZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?New@ObjectTemplate@v8@@SA?AV?$Local@VObjectTemplate@v8@@@2@PEAVIsolate@2@V?$Local@VFunctionTemplate@v8@@@2@@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?New@ObjectTemplate@v8@@SA?AV?$Local@VObjectTemplate@v8@@@2@PEAVIsolate@2@V?$Local@VFunctionTemplate@v8@@@2@@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?EscapeSlot@EscapableHandleScopeBase@v8@@IEAAPEA_KPEA_K@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?EscapeSlot@EscapableHandleScopeBase@v8@@IEAAPEA_KPEA_K@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"??0EscapableHandleScopeBase@v8@@QEAA@PEAVIsolate@1@@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"??0EscapableHandleScopeBase@v8@@QEAA@PEAVIsolate@1@@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?IsolateFromNeverReadOnlySpaceObject@internal@v8@@YAPEAVIsolate@12@_K@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?IsolateFromNeverReadOnlySpaceObject@internal@v8@@YAPEAVIsolate@12@_K@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?New@Array@v8@@SA?AV?$Local@VArray@v8@@@2@PEAVIsolate@2@PEAV?$Local@VValue@v8@@@2@_K@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?New@Array@v8@@SA?AV?$Local@VArray@v8@@@2@PEAVIsolate@2@PEAV?$Local@VValue@v8@@@2@_K@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?Length@Array@v8@@QEBAIXZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?Length@Array@v8@@QEBAIXZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?New@Array@v8@@SA?AV?$Local@VArray@v8@@@2@PEAVIsolate@2@H@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?New@Array@v8@@SA?AV?$Local@VArray@v8@@@2@PEAVIsolate@2@H@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?New@Array@v8@@SA?AV?$MaybeLocal@VArray@v8@@@2@V?$Local@VContext@v8@@@2@_KV?$function@$$A6A?AV?$MaybeLocal@VValue@v8@@@v8@@XZ@std@@@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?New@Array@v8@@SA?AV?$MaybeLocal@VArray@v8@@@2@V?$Local@VContext@v8@@@2@_KV?$function@$$A6A?AV?$MaybeLocal@VValue@v8@@@v8@@XZ@std@@@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?Iterate@Array@v8@@QEAA?AV?$Maybe@X@2@V?$Local@VContext@v8@@@2@P6A?AW4CallbackResult@12@IV?$Local@VValue@v8@@@2@PEAX@Z2@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?Iterate@Array@v8@@QEAA?AV?$Maybe@X@2@V?$Local@VContext@v8@@@2@P6A?AW4CallbackResult@12@IV?$Local@VValue@v8@@@2@PEAX@Z2@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?CheckCast@Array@v8@@CAXPEAVValue@2@@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?CheckCast@Array@v8@@CAXPEAVValue@2@@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?SetName@Function@v8@@QEAAXV?$Local@VString@v8@@@2@@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?SetName@Function@v8@@QEAAXV?$Local@VString@v8@@@2@@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?IsBoolean@Value@v8@@QEBA_NXZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?IsBoolean@Value@v8@@QEBA_NXZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?Value@Boolean@v8@@QEBA_NXZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?Value@Boolean@v8@@QEBA_NXZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?FullIsTrue@Value@v8@@AEBA_NXZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?FullIsTrue@Value@v8@@AEBA_NXZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?FullIsFalse@Value@v8@@AEBA_NXZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?FullIsFalse@Value@v8@@AEBA_NXZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"??1EscapableHandleScope@v8@@QEAA@XZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"??1EscapableHandleScope@v8@@QEAA@XZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"??0EscapableHandleScope@v8@@QEAA@PEAVIsolate@1@@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"??0EscapableHandleScope@v8@@QEAA@PEAVIsolate@1@@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?IsObject@Value@v8@@QEBA_NXZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?IsObject@Value@v8@@QEBA_NXZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?IsNumber@Value@v8@@QEBA_NXZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?IsNumber@Value@v8@@QEBA_NXZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?IsUint32@Value@v8@@QEBA_NXZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?IsUint32@Value@v8@@QEBA_NXZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?Uint32Value@Value@v8@@QEBA?AV?$Maybe@I@2@V?$Local@VContext@v8@@@2@@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?Uint32Value@Value@v8@@QEBA?AV?$Maybe@I@2@V?$Local@VContext@v8@@@2@@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?IsUndefined@Value@v8@@QEBA_NXZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?IsUndefined@Value@v8@@QEBA_NXZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?IsNull@Value@v8@@QEBA_NXZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?IsNull@Value@v8@@QEBA_NXZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?IsNullOrUndefined@Value@v8@@QEBA_NXZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?IsNullOrUndefined@Value@v8@@QEBA_NXZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?IsTrue@Value@v8@@QEBA_NXZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?IsTrue@Value@v8@@QEBA_NXZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?IsFalse@Value@v8@@QEBA_NXZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?IsFalse@Value@v8@@QEBA_NXZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?IsString@Value@v8@@QEBA_NXZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?IsString@Value@v8@@QEBA_NXZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?StrictEquals@Value@v8@@QEBA_NV?$Local@VValue@v8@@@2@@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?StrictEquals@Value@v8@@QEBA_NV?$Local@VValue@v8@@@2@@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?New@Boolean@v8@@SA?AV?$Local@VBoolean@v8@@@2@PEAVIsolate@2@_N@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?New@Boolean@v8@@SA?AV?$Local@VBoolean@v8@@@2@PEAVIsolate@2@_N@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?GetInternalField@Object@v8@@QEAA?AV?$Local@VData@v8@@@2@H@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?GetInternalField@Object@v8@@QEAA?AV?$Local@VData@v8@@@2@H@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?GetIsolate@Context@v8@@QEAAPEAVIsolate@2@XZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?GetIsolate@Context@v8@@QEAAPEAVIsolate@2@XZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?NewFromOneByte@String@v8@@SA?AV?$MaybeLocal@VString@v8@@@2@PEAVIsolate@2@PEBEW4NewStringType@2@H@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?NewFromOneByte@String@v8@@SA?AV?$MaybeLocal@VString@v8@@@2@PEAVIsolate@2@PEBEW4NewStringType@2@H@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?IsExternal@String@v8@@QEBA_NXZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?IsExternal@String@v8@@QEBA_NXZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?IsExternalOneByte@String@v8@@QEBA_NXZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?IsExternalOneByte@String@v8@@QEBA_NXZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?IsExternalTwoByte@String@v8@@QEBA_NXZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?IsExternalTwoByte@String@v8@@QEBA_NXZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?IsOneByte@String@v8@@QEBA_NXZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?IsOneByte@String@v8@@QEBA_NXZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?Utf8Length@String@v8@@QEBAHPEAVIsolate@2@@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?Utf8Length@String@v8@@QEBAHPEAVIsolate@2@@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?ContainsOnlyOneByte@String@v8@@QEBA_NXZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?ContainsOnlyOneByte@String@v8@@QEBA_NXZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?GlobalizeReference@api_internal@v8@@YAPEA_KPEAVIsolate@internal@2@_K@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?GlobalizeReference@api_internal@v8@@YAPEA_KPEAVIsolate@internal@2@_K@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?DisposeGlobal@api_internal@v8@@YAXPEA_K@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?DisposeGlobal@api_internal@v8@@YAXPEA_K@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?GetFunctionTemplateData@api_internal@v8@@YA?AV?$Local@VValue@v8@@@2@PEAVIsolate@2@V?$Local@VData@v8@@@2@@Z"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?GetFunctionTemplateData@api_internal@v8@@YA?AV?$Local@VValue@v8@@@2@PEAVIsolate@2@V?$Local@VData@v8@@@2@@Z"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?GetName@Function@v8@@QEBA?AV?$Local@VValue@v8@@@2@XZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?GetName@Function@v8@@QEBA?AV?$Local@VValue@v8@@@2@XZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?IsFunction@Value@v8@@QEBA_NXZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?IsFunction@Value@v8@@QEBA_NXZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?IsMap@Value@v8@@QEBA_NXZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?IsMap@Value@v8@@QEBA_NXZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?IsArray@Value@v8@@QEBA_NXZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?IsArray@Value@v8@@QEBA_NXZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?IsInt32@Value@v8@@QEBA_NXZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?IsInt32@Value@v8@@QEBA_NXZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?IsBigInt@Value@v8@@QEBA_NXZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?IsBigInt@Value@v8@@QEBA_NXZ"(self: *const @This()) callconv(.c) *anyopaque;
 
-pub extern "c" fn @"?FromJustIsNothing@api_internal@v8@@YAXXZ"() callconv(.c) *anyopaque;
+pub extern "c" fn @"?FromJustIsNothing@api_internal@v8@@YAXXZ"(self: *const @This()) callconv(.c) *anyopaque;
 });
 const posix_platform_specific_v8_apis = (if ((bun.Environment.os == .windows)) struct {
 } else (if (bun.Environment.isAndroid) struct {
 
-pub extern "c" fn _ZN2v85Array3NewENS_5LocalINS_7ContextEEEmNSt6__ndk18functionIFNS_10MaybeLocalINS_5ValueEEEvEEE() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v85Array3NewENS_5LocalINS_7ContextEEEmNSt6__ndk18functionIFNS_10MaybeLocalINS_5ValueEEEvEEE(self: *const @This()) callconv(.c) *anyopaque;
 } else (if ((bun.Environment.isMac or bun.Environment.isFreeBSD)) struct {
 
-pub extern "c" fn _ZN2v85Array3NewENS_5LocalINS_7ContextEEEmNSt3__18functionIFNS_10MaybeLocalINS_5ValueEEEvEEE() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v85Array3NewENS_5LocalINS_7ContextEEEmNSt3__18functionIFNS_10MaybeLocalINS_5ValueEEEvEEE(self: *const @This()) callconv(.c) *anyopaque;
 } else struct {
 
-pub extern "c" fn _ZN2v85Array3NewENS_5LocalINS_7ContextEEEmSt8functionIFNS_10MaybeLocalINS_5ValueEEEvEE() callconv(.c) *anyopaque;
+pub extern "c" fn _ZN2v85Array3NewENS_5LocalINS_7ContextEEEmSt8functionIFNS_10MaybeLocalINS_5ValueEEEvEE(self: *const @This()) callconv(.c) *anyopaque;
 })));
 const napi_functions_to_export = .{ napi_acquire_threadsafe_function, napi_add_async_cleanup_hook, napi_add_env_cleanup_hook, napi_add_finalizer, napi_adjust_external_memory, napi_async_destroy, napi_async_init, napi_call_function, napi_call_threadsafe_function, napi_cancel_async_work, napi_check_object_type_tag, napi_close_callback_scope, napi_close_escapable_handle_scope, napi_close_handle_scope, napi_coerce_to_bool, napi_coerce_to_number, napi_coerce_to_object, napi_create_array, napi_create_array_with_length, napi_create_arraybuffer, napi_create_async_work, napi_create_bigint_int64, napi_create_bigint_uint64, napi_create_bigint_words, napi_create_buffer, napi_create_buffer_copy, napi_create_dataview, napi_create_date, napi_create_double, napi_create_error, napi_create_external, napi_create_external_arraybuffer, napi_create_external_buffer, napi_create_int32, napi_create_int64, napi_create_object, napi_create_promise, napi_create_range_error, napi_create_reference, napi_create_string_latin1, napi_create_string_utf16, napi_create_string_utf8, napi_create_symbol, napi_create_threadsafe_function, napi_create_type_error, napi_create_typedarray, napi_create_uint32, napi_define_class, napi_define_properties, napi_delete_async_work, napi_delete_element, napi_delete_reference, napi_detach_arraybuffer, napi_escape_handle, napi_fatal_error, napi_fatal_exception, napi_get_all_property_names, napi_get_and_clear_last_exception, napi_get_array_length, napi_get_arraybuffer_info, napi_get_boolean, napi_get_buffer_info, napi_get_cb_info, napi_get_dataview_info, napi_get_date_value, napi_get_element, napi_get_global, napi_get_instance_data, napi_get_last_error_info, napi_get_new_target, napi_get_node_version, napi_get_null, napi_get_prototype, napi_get_reference_value, napi_get_threadsafe_function_context, napi_get_typedarray_info, napi_get_undefined, napi_get_uv_event_loop, napi_get_value_bigint_int64, napi_get_value_bigint_uint64, napi_get_value_bigint_words, napi_get_value_bool, napi_get_value_double, napi_get_value_external, napi_get_value_int32, napi_get_value_int64, napi_get_value_string_latin1, napi_get_value_string_utf16, napi_get_value_string_utf8, napi_get_value_uint32, napi_get_version, napi_has_element, napi_instanceof, napi_is_array, napi_is_arraybuffer, napi_is_buffer, napi_is_dataview, napi_is_date, napi_is_detached_arraybuffer, napi_is_error, napi_is_exception_pending, napi_is_promise, napi_is_typedarray, napi_make_callback, napi_new_instance, napi_open_callback_scope, napi_open_escapable_handle_scope, napi_open_handle_scope, napi_queue_async_work, napi_ref_threadsafe_function, napi_reference_ref, napi_reference_unref, napi_reject_deferred, napi_release_threadsafe_function, napi_remove_async_cleanup_hook, napi_remove_env_cleanup_hook, napi_remove_wrap, napi_resolve_deferred, napi_run_script, napi_set_element, napi_set_instance_data, napi_strict_equals, napi_throw, napi_throw_error, napi_throw_range_error, napi_throw_type_error, napi_type_tag_object, napi_typeof, napi_unref_threadsafe_function, napi_unwrap, napi_wrap, node_api_create_syntax_error, node_api_symbol_for, node_api_throw_syntax_error, node_api_create_external_string_latin1, node_api_create_external_string_utf16 };
 const uv_functions_to_export = (if (bun.Environment.isPosix) struct {
@@ -1767,7 +1767,7 @@ pub export fn napi_create_string_latin1(env_: napi_env, str: ?[*]const u8, lengt
             _ = &ptr;
             if ((NAPI_AUTO_LENGTH == length)) {
                 {
-                    break :brk bun.sliceTo(@as([*:0]const u8, @ptrCast(ptr)), 0);
+                    break :brk bun.sliceTo(@as([*:0]const u8, @alignCast(@ptrCast(ptr))), 0);
                 }
             } else {
                 if ((length > std.math.maxInt(i32))) {
@@ -1817,7 +1817,7 @@ pub export fn napi_create_string_utf8(env_: napi_env, str: ?[*]const u8, length:
             _ = &ptr;
             if ((NAPI_AUTO_LENGTH == length)) {
                 {
-                    break :brk bun.sliceTo(@as([*:0]const u8, @ptrCast(ptr)), 0);
+                    break :brk bun.sliceTo(@as([*:0]const u8, @alignCast(@ptrCast(ptr))), 0);
                 }
             } else {
                 if ((length > std.math.maxInt(i32))) {
@@ -1856,7 +1856,7 @@ pub export fn napi_create_string_utf16(env_: napi_env, str: ?[*]const char16_t, 
             _ = &ptr;
             if ((NAPI_AUTO_LENGTH == length)) {
                 {
-                    break :brk bun.sliceTo(@as([*:0]const u16, @ptrCast(ptr)), 0);
+                    break :brk bun.sliceTo(@as([*:0]const u16, @alignCast(@ptrCast(ptr))), 0);
                 }
             } else {
                 if ((length > std.math.maxInt(i32))) {
@@ -2098,14 +2098,10 @@ pub export fn napi_make_callback(env_: napi_env, _: *anyopaque, recv_: napi_valu
         if ((func.isEmptyOrUndefinedOrNull() or ((!func.isCallable()) and (!func.isAsyncContextFrame())))) {
             return env.setLastError(.function_expected);
         }
-        var call_args: []const jsc.JSValue = &.{};
-        _ = &call_args;
-        if (((arg_count > 0) and (args != null))) {
-            {
-                const raw_args: [*]const jsc.JSValue = @ptrCast(args.?);
-                call_args = @as([]const jsc.JSValue, @ptrCast(&(raw_args[0..arg_count])));
-            }
-        }
+        const call_args: []const jsc.JSValue = (if (((arg_count > 0) and (args != null))) (blk: {
+        break :blk @as([*]const jsc.JSValue, @alignCast(@ptrCast(args.?)))[0..arg_count];
+
+}) else &.{});
         const res = (blk_catch_12: { break :blk_catch_12 ((func.call(env.toJS(), (if ((recv != .zero)) recv else .js_undefined), call_args)) catch |e| { _ = &e; break :blk_catch_12 env.toJS().takeException(e); }); });
         if (maybe_result) |result| {
             _ = &result;
@@ -2120,7 +2116,8 @@ pub export fn napi_make_callback(env_: napi_env, _: *anyopaque, recv_: napi_valu
 pub fn notImplementedYet(comptime name: []const u8) void {
         _ = bun.onceUnsafe((struct {
 
-pub fn warn() void {
+pub fn warn(self: @This()) void {
+        _ = self;
             if (jsc.VirtualMachine.get().log.level.atLeast(.warn)) {
                 _ = bun.Output.prettyErrorln("<r><yellow>warning<r><d>:<r> Node-API function <b>\"{s}\"<r> is not implemented yet.\n Track the status of Node-API in Bun: https://github.com/oven-sh/bun/issues/158", .{ name });
                 _ = bun.Output.flush();

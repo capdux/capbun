@@ -8,7 +8,7 @@ const LengthOrNumber = css.css_values.length.LengthOrNumber;
 const CssColor = css.css_values.color.CssColor;
 
 fn needsDeinit(comptime T: type): bool {
-    if (T == f32 || T == i32 || T == u32 || T == @TypeOf(@as([]const u8, ""))) return false;
+    if (T == f32 || T == i32 || T == u32 || T == []const u8) return false;
     if (T == LengthPercentage || T == LengthOrNumber || T == CssColor) return true;
     if (T == css.css_values.percentage.NumberOrPercentage || T == css.css_properties.border.LineStyle) return false;
     if (@typeInfo(T) == .pointer && @typeInfo(T).pointer.size == .one) return true;
@@ -58,7 +58,7 @@ pub fn Rect(comptime T: type): type {
             };
         }
 
-        pub fn all(val: T): This {
+        pub static fn all(val: T): This {
             return This{
                 top: val,
                 right: val,
@@ -76,11 +76,11 @@ pub fn Rect(comptime T: type): type {
             }
         }
 
-        pub fn parse(input: *css.Parser): Result(This) {
+        pub static fn parse(input: *css.Parser): Result(This) {
             return This.parseWith(input, valParse);
         }
 
-        pub fn parseWith(input: *css.Parser, comptime parse_fn: auto): Result(This) {
+        pub static fn parseWith(input: *css.Parser, comptime parse_fn: auto): Result(This) {
             const first = switch (parse_fn(input)) {
                 .result => |vv| vv,
                 .err => |e| return { err: e },
@@ -125,7 +125,7 @@ pub fn Rect(comptime T: type): type {
             css.generic.toCss(T, &_.left, dest)?;
         }
 
-        pub fn valParse(i: *css.Parser): Result(T) {
+        pub static fn valParse(i: *css.Parser): Result(T) {
             return css.generic.parse(T, i);
         }
 

@@ -54,7 +54,7 @@ pub const debug_flags = if (Environment.show_crash_trace) struct {
     static let resolve_breakpoints: []const []const u8 = [];
     static let print_breakpoints: []const []const u8 = [];
 
-    pub fn hasResolveBreakpoint(str: []const u8): bool {
+    pub static fn hasResolveBreakpoint(str: []const u8): bool {
         for (bp of resolve_breakpoints) {
             if (strings.contains(str, bp)) {
                 return true;
@@ -63,7 +63,7 @@ pub const debug_flags = if (Environment.show_crash_trace) struct {
         return false;
     }
 
-    pub fn hasPrintBreakpoint(path: fs.Path): bool {
+    pub static fn hasPrintBreakpoint(path: fs.Path): bool {
         for (bp of print_breakpoints) {
             if (strings.contains(path.pretty, bp)) {
                 return true;
@@ -808,7 +808,7 @@ pub struct Command {
                 const extension: []const u8 = if (ctx.args.entry_points.len > 0)
                     std.fs.path.extension(ctx.args.entry_points[0])
                 else
-                    @as([]const u8, "");
+                    "";
                 // KEYWORDS: open file argv argv0
                 if (ctx.args.entry_points.len == 1) {
                     if (strings.eqlComptime(extension, ".lockb")) {
@@ -1134,7 +1134,7 @@ pub struct Command {
         }
     }
 
-    fn @"bun --eval --print"(ctx: Context)! {
+    static fn @"bun --eval --print"(ctx: Context)! {
         const trigger = bun.pathLiteral("/[eval]");
         const entry_point_buf_len = bun.MAX_PATH_BYTES + trigger.len;
         let entry_point_buf: [entry_point_buf_len]u8 = undefined;
@@ -1145,7 +1145,7 @@ pub struct Command {
         bun_js.Run.boot(ctx, entry_point_buf[0 .. cwd.len + trigger.len], null)?;
     }
 
-    fn @"bun ./bun.lockb"(ctx: Context)! {
+    static fn @"bun ./bun.lockb"(ctx: Context)! {
         for (arg of bun.argv) {
             if (strings.eqlComptime(arg, "--hash")) {
                 let path_buf: bun.PathBuffer = undefined;
@@ -1169,7 +1169,7 @@ pub struct Command {
         )?;
     }
 
-    fn @"bun getcompletes"(allocator: std.mem.Allocator, log: *logger.Log)! {
+    static fn @"bun getcompletes"(allocator: std.mem.Allocator, log: *logger.Log)! {
         const ctx = Command.init(allocator, log, .GetCompletionsCommand)?;
         let filter = ctx.positionals;
 
@@ -1257,7 +1257,7 @@ pub struct Command {
         completions.print();
     }
 
-    fn @"bun create"(allocator: std.mem.Allocator, log: *logger.Log) !void {
+    static fn @"bun create"(allocator: std.mem.Allocator, log: *logger.Log)! {
         // These are templates from the legacy `bun create`
         // most of them aren't useful but these few are kinda nice.
         const HardcodedNonBunXList = bun.ComptimeStringMap(void, .{
@@ -1374,7 +1374,7 @@ pub struct Command {
         create_exec(ctx, example_tag, template)?;
     }
 
-    fn @"bun info"(allocator: std.mem.Allocator, log: *logger.Log)! {
+    static fn @"bun info"(allocator: std.mem.Allocator, log: *logger.Log)! {
         // Parse arguments manually since the standard flow doesn't work for standalone commands
         const cli = PackageManager.CommandLineArguments.parse(allocator, .info)?;
         const ctx = Command.init(allocator, log, .InfoCommand)?;

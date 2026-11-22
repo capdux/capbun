@@ -195,7 +195,7 @@ fn CreateUniqueTuple(comptime N: comptime_int, comptime types: [N]type): type {
         @setEvalBranchQuota(10_000);
         let num_buf: [128]u8 = undefined;
         tuple_fields[i] = std.builtin.Type.StructField{
-            name: std.fmt.bufPrintZ(&num_buf, "{d}", [i]) catch unreachable,
+            name: std.fmt.bufPrintZ(&num_buf, "{d}", [@as(usize, @intCast(i))]) catch unreachable,
             type: T,
             default_value_ptr: null,
             is_comptime: false,

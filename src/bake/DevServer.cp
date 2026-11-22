@@ -1573,6 +1573,7 @@ fn ensureRouteIsBundled(
                 false,
                 std.time.Timer.start() catch @panic("timers unsupported"),
             ) catch |e| bun.handleOom(e);
+            return;
         },
         .deferred_to_next_bundle => {
             bun.assert(dev.next_bundle.route_queue.get(route_bundle_index) != null);
@@ -2040,6 +2041,7 @@ fn generateHTMLPayload(dev: *DevServer, route_bundle_index: RouteBundle.Index, r
     // DevServer used to put the script tag before the body end, but to match the regular bundler it does not do this.
     array.appendSliceAssumeCapacity(after_head_end);
     assert(array.items.len == array.capacity); // incorrect memory allocation size
+    array_guard.active = false;
     return array.items;
 }
 

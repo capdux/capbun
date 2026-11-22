@@ -42,7 +42,7 @@ fn Bindings(comptime function_name: NodeFSFunctionEnum): type {
     const Arguments = fn_info.params[1].@"type".?;
 
     return struct {
-        pub fn runSync(binding: *Binding, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+        static fn runSync(binding: *Binding, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
             let slice_guard = DeinitGuard<ArgumentsSlice>{ val: ArgumentsSlice.init(globalObject.bunVM(), callframe.arguments()) };
 
             let args_guard = OptionalDeinitGuard<Arguments>{
@@ -63,7 +63,7 @@ fn Bindings(comptime function_name: NodeFSFunctionEnum): type {
             };
         }
 
-        pub fn runAsync(binding: *Binding, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+        static fn runAsync(binding: *Binding, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
             let slice_guard = DeinitGuard<ArgumentsSlice>{
                 val: ArgumentsSlice.init(globalObject.bunVM(), callframe.arguments()),
                 armed: false,

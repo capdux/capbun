@@ -550,8 +550,8 @@ pub fn initWithListAllocator(allocator: std.mem.Allocator, list_allocator: std.m
             return Parser{ .lexer = try Lexer.init(log, source_, allocator), .allocator = allocator, .log = log, .list_allocator = list_allocator, .stack_check = bun.StackCheck.init() };
     }
 
-pub inline fn source(p: *const Parser) *const logger.Source {
-            return (&p.lexer.source);
+pub inline fn source(self: *const @This()) *const logger.Source {
+            return (&self.lexer.source);
     }
 
 pub fn parseExpr(self: *@This(), comptime maybe_auto_quote: bool, comptime force_utf8: bool) !Expr {
@@ -937,4 +937,47 @@ else => {
         var parser = try TSConfigParser.init(allocator, source, log);
         _ = &parser;
         return parser.parseExpr(false, force_utf8);
+}
+
+pub fn expectPrintedJSON(_contents: []const u8, expected: []const u8) !void {
+        _ = Expr.Data.Store.create(default_allocator);
+        _ = Stmt.Data.Store.create(default_allocator);
+        defer {
+        {
+            _ = Expr.Data.Store.reset();
+            _ = Stmt.Data.Store.reset();
+        }
+        }
+        var contents = ((default_allocator.alloc(u8, (_contents.len + 1))) catch unreachable);
+        _ = &contents;
+        _ = bun.copy(u8, contents, _contents);
+        contents[cp_cast_int(usize, (contents.len - 1))] = 59;
+        var log = logger.Log.init(default_allocator);
+        _ = &log;
+        defer {
+        _ = log.msgs.deinit();
+        }
+        const source = (&logger.Source.initPathString("source.json", contents));
+        const expr = try parse(source, (&log), default_allocator);
+        if ((log.msgs.items.len > 0)) {
+            _ = Output.panic("--FAIL--\nExpr {s}\nLog: {s}\n--FAIL--", .{ expr, log.msgs.items[0].data.text });
+        }
+        const buffer_writer = js_printer.BufferWriter.init(default_allocator);
+        var writer = js_printer.BufferPrinter.init(buffer_writer);
+        _ = &writer;
+        const written = try js_printer.printJSON(@TypeOf((&writer)), (&writer), expr, source, .{ .mangled_props = null });
+        var js = (blk: {
+        break :blk writer.ctx.buffer.list.items.ptr[0..(written + 1)];
+
+});
+        _ = &js;
+        if ((js.len > 1)) {
+            while ((js[@as(usize, @intCast((js.len - 1)))] == 10)) {
+                js = js[0..(js.len - 1)];
+            }
+            if ((js[@as(usize, @intCast((js.len - 1)))] == 59)) {
+                js = js[0..(js.len - 1)];
+            }
+        }
+        _ = try std.testing.expectEqualStrings(expected, js);
 }

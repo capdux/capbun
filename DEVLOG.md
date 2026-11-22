@@ -1695,3 +1695,8 @@
 - `cpc` 将形参类型 `*(T?)` 错误降低为 `?*T`（指向 `T` 的可空指针）而非 `*?T`（指向可空 `T` 的指针），需通过模块顶层 `pub type OptT = T?;` 再声明 `*OptT` 绕过。
 - 大结构体方法若被 `ZigGeneratedClasses.zig` 通过 `@call(..., .{thisValue})` 传入指针调用（如 `Subprocess.memoryCost`），接收者必须声明为 `*_` 以生成 `*Subprocess` 形参，避免无接收者被降低为按值传递。
 - `return struct` 泛型工厂块内的 `bun.cast(*Wrapped, ptr)` 需改用成员类型别名 `pub type WrappedPtr = *Wrapped;`，避免 `*Wrapped` 在调用实参位被误解析为 `&Wrapped`。
+
+### [2026-11-23] Wave #67 技术要点（`while (true) { switch }` 跳转与 `for (i of 0..)` 符号性）
+- 原 Zig `sw: switch (state)` 改写为 CP `while (true) { switch (mut_state) { ... } }` 时，非 `continue` 分支末尾必须显式 `return;` 或 `break;`，否则控制流会回绕重复执行状态机。
+- CP `for (i of 0..len)` 当前生成有符号 `i32` 循环变量，在 Zig 0.15 `std.fmt` `{d}` / `{d:0>8}` 中会带出 `+` 号；传给格式化输出前需显式 `@as(usize, @intCast(i))`。
+- `String.clone()` 会将 `String.dead`（`.Dead`）归一化为 `String.empty`（`.Empty`），导致 `Blob.getNameString()` 跳过 `stored_name` 回退；复制 `Blob.name` 必须使用 `dupeRef()`。

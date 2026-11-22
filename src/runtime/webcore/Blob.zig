@@ -1406,7 +1406,7 @@ pub fn dupe(self: Blob) Blob {
             _ = store.ref();
         }
         const content_type = (if (self.content_type_allocated) bun.handleOom(default_allocator.dupe(u8, self.content_type)) else self.content_type);
-        return Blob{ .reported_estimated_size = self.reported_estimated_size, .size = self.size, .offset = self.offset, .store = self.store, .content_type = content_type, .content_type_allocated = self.content_type_allocated, .content_type_was_set = self.content_type_was_set, .charset = self.charset, .is_jsdom_file = self.is_jsdom_file, .ref_count = .init(0), .globalThis = self.globalThis, .last_modified = self.last_modified, .name = self.name.clone() };
+        return Blob{ .reported_estimated_size = self.reported_estimated_size, .size = self.size, .offset = self.offset, .store = self.store, .content_type = content_type, .content_type_allocated = self.content_type_allocated, .content_type_was_set = self.content_type_was_set, .charset = self.charset, .is_jsdom_file = self.is_jsdom_file, .ref_count = .init(0), .globalThis = self.globalThis, .last_modified = self.last_modified, .name = self.name.dupeRef() };
 }
 
 pub fn dupeWithContentType(self: Blob, preserve_type: bool) Blob {
@@ -1415,7 +1415,7 @@ pub fn dupeWithContentType(self: Blob, preserve_type: bool) Blob {
             _ = store.ref();
         }
         const content_type = (if (preserve_type) (if (self.content_type_allocated) bun.handleOom(default_allocator.dupe(u8, self.content_type)) else self.content_type) else "");
-        return Blob{ .reported_estimated_size = self.reported_estimated_size, .size = self.size, .offset = self.offset, .store = self.store, .content_type = content_type, .content_type_allocated = (if (preserve_type) self.content_type_allocated else false), .content_type_was_set = (if (preserve_type) self.content_type_was_set else false), .charset = self.charset, .is_jsdom_file = self.is_jsdom_file, .ref_count = .init(0), .globalThis = self.globalThis, .last_modified = self.last_modified, .name = self.name.clone() };
+        return Blob{ .reported_estimated_size = self.reported_estimated_size, .size = self.size, .offset = self.offset, .store = self.store, .content_type = content_type, .content_type_allocated = (if (preserve_type) self.content_type_allocated else false), .content_type_was_set = (if (preserve_type) self.content_type_was_set else false), .charset = self.charset, .is_jsdom_file = self.is_jsdom_file, .ref_count = .init(0), .globalThis = self.globalThis, .last_modified = self.last_modified, .name = self.name.dupeRef() };
 }
 
 pub fn init(data: []u8, allocator: std.mem.Allocator, globalThis: *JSGlobalObject) Blob {

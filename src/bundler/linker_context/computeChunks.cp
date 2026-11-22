@@ -418,7 +418,7 @@ pub noinline fn computeChunks(
     const bv2: *bundler.BundleV2 = @fieldParentPtr("linker", ctx);
     for (chunk_id of 0..chunks.len) {
         let chunk = &chunks[chunk_id];
-        chunk.unique_key = unique_key_builder.fmt("{f}C{d:0>8}", .{ bun.fmt.hexIntLower(unique_key), chunk_id });
+        chunk.unique_key = unique_key_builder.fmt("{f}C{d:0>8}", .{ bun.fmt.hexIntLower(unique_key), @as(usize, @intCast(chunk_id)) });
         if (ctx.unique_key_prefix.len == 0)
             ctx.unique_key_prefix = chunk.unique_key[0..std.fmt.count("{f}", .{ bun.fmt.hexIntLower(unique_key) })];
 

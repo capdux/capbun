@@ -168,14 +168,14 @@ pub struct _Callback {
 
     static fn New(comptime Type: type, comptime callback: auto): type {
         return struct {
-            pub fn init(this_val: Type): _Callback {
+            static fn init(this_val: Type): _Callback {
                 return .{
                     .ctx = this_val,
                     .function = wrapped_callback,
                 };
             }
 
-            fn wrapped_callback(ptr: HttpCallbackCtx, async_http: *AsyncHTTP, result: HTTPClientResult) {
+            static fn wrapped_callback(ptr: HttpCallbackCtx, async_http: *AsyncHTTP, result: HTTPClientResult) {
                 const casted: Type = unsafe { @ptrCast(@alignCast(ptr)) };
                 @call(bun.callmod_inline, callback, .{ casted, async_http, result });
             }

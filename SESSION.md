@@ -579,3 +579,27 @@
   - `src/runtime/webcore/streams.cp`（`SignalVTableFunctions.WrappedPtr` 适配新版 `cpc` `return struct` lowering）。
 - 验证：`bun run zig:check` 5/5 通过（25s）；`bun bd test test/regression/issue/29181.test.ts test/js/bun/util/bun-file.test.ts` 8/8 通过（460 expect）；`bun bd test test/js/bun/http/serve.test.ts -t "propagates content-type|does propagate type for Blob"` 2/2 通过（此前失败的 `Bun.file()` `fetch` body 读取已修复）。
 - 推导下一阶段 Wave #67：按“1 路 `bun bd test` 分批回归 + 1 路完整性补全”并行推进——执行 `temp/test_plan.txt` Batch 1（174 个测试文件），同时准备补全 `Blob.cp`（`doReadFromS3`/`S3BlobDownloadTask`/`onStructuredClone*`）、`Terminal.cp`（Windows `makeLibUVOwned`）与 `json.cp`（恢复 `json_.zig` 原始备份与 `expectPrintedJSON`）。
+
+### [2026-11-23] 向 `cp_agy` 提交 `*(T?)` 指针到可选类型 lowering 缺陷工单
+- `task-bun-20261123-ptr-to-optional-lowering` (`repro_ptr_opt.cp`)：`p: *(u8?)` 被 `cpc` 错误降低为 `p: ?*u8`（指向 `u8` 的可空指针）而非 `p: *?u8`（指向可选 `u8` 的非空指针）。
+
+### [2026-11-23] 收到 `cp_agy` 结单验收通知（`task-bun-20261123-ptr-to-optional-lowering`）
+- 根因为 `parser/types.rs`、`parser/primary.rs` 未区分 `inner_is_paren` 且 `codegen/types/map_type.rs` 强制将 `BorrowType(Optional(T))` 翻转为 `?*T`；现已按括号语义精确区分 `*(T?) -> *?T`、`*const (T?) -> *const ?T`、`*[N](T?) -> *[N]?T`、`[](T?) -> []?T`，同时保持 `*T?` / `(*T)? -> ?*T` 兼容，已验证通过并执行 `ack`。
+
+### [2026-11-23] 向 `cp_agy` 提交 `_.p as *T` 误对指针字段取地址 `&(...)` 缺陷工单
+- `task-bun-20261123-as-ptr-field-addr-of` (`repro_as_ptr_field.cp`)：`_.p as *u64` 被 `cpc` 错误降低为 `@as(*u64, @ptrCast(&(self.p)))`（对栈/结构体上的指针字段本身取地址 `&`，导致 `src/bun_core/fmt.cp` `SharedTempBufferGuard.~init` 发生 ASan `stack-buffer-overflow`）。
+
+### [2026-11-23] 收到 `cp_agy` 结单验收通知（`task-bun-20261123-as-ptr-field-addr-of`）
+- 根因为 `codegen/expr/ops.rs` `Expr::Cast -> is_target_ptr` 分支以 `starts_with('[')` 误将 `[*]T`/`[]T` 等当作定长数组并插入 `@ptrCast(&(expr))`；现已补全指针与严格切片/定长数组判定，优先对 `is_src_ptr` 生成 `@ptrCast(@alignCast(inner))`，已验证通过并执行 `ack`。
+
+## [2026-11-23] Wave #67：Batch 1a 回归排雷与 `DevServer`/`fmt`/`Blob`/`node_fs`/`Terminal`/`napi`/`cli` 修复完成与提交
+- 完成 13 个模块的修复与静态排雷（均通过 `cpc_brief.py` 4 项门禁）：
+  - `src/bake/DevServer.cp`（`ensureRouteIsBundled` `.unqueued` 分支补全 `return;` 根治 `HttpResponse::setTimeout` `heap-use-after-free`）；
+  - `src/bundler/linker_context/computeChunks.cp`（`chunk_id` 转为 `usize` 根治 `{d:0>8}` 输出 `+` 号与 `Invalid output piece boundary`）；
+  - `src/bun_core/fmt.cp`（`SharedTempBufferGuard.~init()` `@ptrCast(_.chunk_ptr)` 根治 `formatUTF16Type` ASan `stack-buffer-overflow`，并补全 `TableSymbols` 等 `static fn`）；
+  - `src/runtime/webcore/Blob.cp`（`dupe` / `dupeWithContentType` 改回 `_.name.dupeRef()` 保留 `String.dead`）；
+  - `src/runtime/node/node_fs.cp`、`src/runtime/node/node_fs_binding.cp`、`src/http/http.cp`、`src/interchange/json.cp`（恢复 `json_.zig` 原始备份与 `expectPrintedJSON`）、`src/runtime/api/bun/Terminal.cp`（Windows `makeLibUVOwned` + `errdefer` + `static fn`）；
+  - `src/runtime/node/path.cp`、`src/meta/meta.cp`（`for (i of 0..)` 传 `{d}` 转为 `usize`）；
+  - `src/napi/napi.cp`、`src/cli/cli.cp`、`src/css/values/css_string.cp`、`src/css/values/rect.cp`（消除 `@ptrCast(&(` 误取地址并补全 `static fn`）。
+- 验证：`bun run zig:check` 5/5 通过（29s）；`hspec.test.ts` 40/40 通过；`form-data-set-append.test.js` 4/4 通过；`bun-serve-html.test.ts` 崩溃与 `DevServer` JSX 用例修复（8 pass / 8 fail，余下为 CSS snapshot 展开与 `ParseTask` 缓存 fd 复用）。
+- 推导下一阶段 Wave #68：继续按“1 路 `bun bd test` 分批回归 + 1 路语义修复”并行推进——Subagent 1 重跑 `test/js/bun/http`（重点验证 `hspec.test.ts` 之后余下 29 个未跑文件及 `serve-protocols`/`bun-serve-static`），Subagent 2 补全 `Blob.cp`（`doReadFromS3` / `S3BlobDownloadTask` / `onStructuredClone*`）。

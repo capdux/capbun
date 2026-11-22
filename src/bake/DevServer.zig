@@ -2157,6 +2157,7 @@ break;
             _ = try defer_function(ctx, .next_bundle);
             dev.routeBundlePtr(route_bundle_index).server_state = .bundling;
             _ = (blk_catch_22: { break :blk_catch_22 ((dev.startAsyncBundle(entry_points.*, false, (blk_catch_21: { break :blk_catch_21 ((std.time.Timer.start()) catch |__ce_21| { _ = &__ce_21; @panic("timers unsupported"); }); }))) catch |e| { _ = &e; break :blk_catch_22 bun.handleOom(e); }); });
+            return;
 },
 .deferred_to_next_bundle => {
 _ = bun.assert((dev.next_bundle.route_queue.get(route_bundle_index) != null));
@@ -2528,6 +2529,7 @@ pub fn generateHTMLPayload(dev: *DevServer, route_bundle_index: RouteBundle.Inde
         _ = array.appendSliceAssumeCapacity(script_unref_payload);
         _ = array.appendSliceAssumeCapacity(after_head_end);
         _ = assert((array.items.len == array.capacity));
+        array_guard.active = false;
         return array.items;
 }
 

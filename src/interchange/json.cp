@@ -345,8 +345,8 @@ fn JSONLikeParser_(
             };
         }
 
-        inline fn source(p: *const Parser): *const logger.Source! {
-            return &p.lexer.source;
+        inline fn source(): *const logger.Source! {
+            return &_.lexer.source;
         }
 
         const Parser = @This();
@@ -1033,6 +1033,49 @@ pub fn parseTSConfig(source: *const logger.Source, log: *logger.Log, allocator: 
     let parser = TSConfigParser.init(allocator, source, log)?;
 
     return parser.parseExpr(false, force_utf8);
+}
+
+fn expectPrintedJSON(_contents: []const u8, expected: []const u8): !void {
+    Expr.Data.Store.create(default_allocator);
+    Stmt.Data.Store.create(default_allocator);
+    defer {
+        Expr.Data.Store.reset();
+        Stmt.Data.Store.reset();
+    }
+    let contents = default_allocator.alloc(u8, _contents.len + 1) catch unreachable;
+    bun.copy(u8, contents, _contents);
+    contents[contents.len - 1] = ';';
+    let log = logger.Log.init(default_allocator);
+    defer log.msgs.deinit();
+
+    const source = &logger.Source.initPathString(
+        "source.json",
+        contents,
+    );
+    const expr = parse(source, &log, default_allocator)?;
+
+    if (log.msgs.items.len > 0) {
+        Output.panic("--FAIL--\nExpr {s}\nLog: {s}\n--FAIL--", .{ expr, log.msgs.items[0].data.text });
+    }
+
+    const buffer_writer = js_printer.BufferWriter.init(default_allocator);
+    let writer = js_printer.BufferPrinter.init(buffer_writer);
+    const written = js_printer.printJSON(@TypeOf(&writer), &writer, expr, source, .{
+        .mangled_props = null,
+    })?;
+    let js = unsafe { writer.ctx.buffer.list.items.ptr[0 .. written + 1] };
+
+    if (js.len > 1) {
+        while (js[js.len - 1] == '\n') {
+            js = js[0 .. js.len - 1];
+        }
+
+        if (js[js.len - 1] == ';') {
+            js = js[0 .. js.len - 1];
+        }
+    }
+
+    std.testing.expectEqualStrings(expected, js)?;
 }
 
 const expect = std.testing.expect;

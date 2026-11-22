@@ -989,9 +989,12 @@ pub fn createPtyWindows(cols: u16, rows: u16) CreatePtyError!PtyResult {
         in_client_guard.handle = null;
         _ = w.CloseHandle(out_client_guard.handle.?);
         out_client_guard.handle = null;
-        const result_read_fd = bun.FD.fromNative(out_server_guard.handle.?);
+        const result_read_fd = (blk_catch_6: { break :blk_catch_6 ((bun.FD.fromNative(out_server_guard.handle.?).makeLibUVOwned()) catch |__ce_6| { _ = &__ce_6; return error.DupFailed; }); });
         out_server_guard.handle = null;
-        const result_write_fd = bun.FD.fromNative(in_server_guard.handle.?);
+        errdefer {
+        _ = result_read_fd.close();
+        }
+        const result_write_fd = (blk_catch_7: { break :blk_catch_7 ((bun.FD.fromNative(in_server_guard.handle.?).makeLibUVOwned()) catch |__ce_7| { _ = &__ce_7; return error.DupFailed; }); });
         in_server_guard.handle = null;
         const result_hpcon = hpcon_guard.hpcon.?;
         hpcon_guard.hpcon = null;
@@ -1016,14 +1019,14 @@ pub fn getTermios(fd: bun.FD) ?Termios {
         if (comptime (!Environment.isPosix)) {
             return null;
         }
-        return (blk_catch_6: { break :blk_catch_6 ((std.posix.tcgetattr(fd.cast())) catch |__ce_6| { _ = &__ce_6; break :blk_catch_6 null; }); });
+        return (blk_catch_8: { break :blk_catch_8 ((std.posix.tcgetattr(fd.cast())) catch |__ce_8| { _ = &__ce_8; break :blk_catch_8 null; }); });
 }
 
 pub fn setTermios(fd: bun.FD, termios_p: *const Termios) bool {
         if (comptime (!Environment.isPosix)) {
             return false;
         }
-        _ = (blk_catch_7: { break :blk_catch_7 ((std.posix.tcsetattr(fd.cast(), .NOW, termios_p.*)) catch |__ce_7| { _ = &__ce_7; return false; }); });
+        _ = (blk_catch_9: { break :blk_catch_9 ((std.posix.tcsetattr(fd.cast(), .NOW, termios_p.*)) catch |__ce_9| { _ = &__ce_9; return false; }); });
         return true;
 }
 

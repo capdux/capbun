@@ -4,7 +4,7 @@ pub const Printer = css.Printer;
 pub const PrintErr = css.PrintErr;
 
 /// A quoted CSS string.
-pub const CSSString = @TypeOf(@as([]const u8, ""));
+pub const CSSString = []const u8;
 pub struct CSSStringFns {
     static fn parse(input: *css.Parser): Result(CSSString) {
         return input.expectString();

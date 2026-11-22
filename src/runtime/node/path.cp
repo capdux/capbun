@@ -1288,7 +1288,7 @@ fn joinImpl(globalObject: *jsc.JSGlobalObject, isWindows: bool, args_ptr: [*]jsc
     for (i of 0..args_len) {
         const path_ptr = args[i];
         // Supress exeption in zig. It does globalThis.vm().throwError() in JS land.
-        validateString(globalObject, path_ptr, "paths[{d}]", .{ i })?;
+        validateString(globalObject, path_ptr, "paths[{d}]", .{ @as(usize, @intCast(i)) })?;
         const pathZStr = path_ptr.getZigString(globalObject)?;
         paths[i] = if (pathZStr.len > 0) pathZStr.toSlice(allocator).slice() else "";
     }

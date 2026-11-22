@@ -571,7 +571,7 @@ pub struct Async {
             pub const have_abort_signal = @hasField(ArgumentType, "signal");
             pub const heap_label = "Async" ++ bun.@"meta".typeBaseName(@typeName(ArgumentType)) ++ "Task";
 
-            pub fn create(
+            static fn create(
                 globalObject: *jsc.JSGlobalObject,
                 _: *bun.api.node.fs.Binding,
                 args: ArgumentType,
@@ -681,7 +681,7 @@ pub fn NewAsyncCpSingleTask(comptime ThisAsyncCpTask: type): type {
 
         const ThisSingleTask = @This();
 
-        pub fn create(
+        static fn create(
             parent: *ThisAsyncCpTask,
             src: bun.OSPathSliceZ,
             dest: bun.OSPathSliceZ,
@@ -785,7 +785,7 @@ pub fn NewAsyncCpTask(comptime is_shell: bool): type {
             task.cpOnFinish(result);
         }
 
-        pub fn create(
+        static fn create(
             globalObject: *jsc.JSGlobalObject,
             _: *jsc.Node.fs.Binding,
             cp_args: Arguments.Cp,
@@ -796,7 +796,7 @@ pub fn NewAsyncCpTask(comptime is_shell: bool): type {
             return task.promise.value();
         }
 
-        pub fn createWithShellTask(
+        static fn createWithShellTask(
             globalObject: *jsc.JSGlobalObject,
             cp_args: Arguments.Cp,
             vm: *jsc.VirtualMachine,
@@ -828,7 +828,7 @@ pub fn NewAsyncCpTask(comptime is_shell: bool): type {
             return task;
         }
 
-        pub fn createMini(
+        static fn createMini(
             cp_args: Arguments.Cp,
             mini: *jsc.MiniEventLoop,
             arena_: bun.ArenaAllocator,
@@ -3833,7 +3833,7 @@ pub struct NodeFS {
     }
 
     // since we use a 64 KB stack buffer, we should not let this function get inlined
-    pub noinline fn copyFileUsingReadWriteLoop(src: [:0]const u8, dest: [:0]const u8, src_fd: FD, dest_fd: FD, stat_size: usize, wrote: *u64): Maybe(Return.CopyFile) {
+    static noinline fn copyFileUsingReadWriteLoop(src: [:0]const u8, dest: [:0]const u8, src_fd: FD, dest_fd: FD, stat_size: usize, wrote: *u64): Maybe(Return.CopyFile) {
         const stack_buf_size = 64 * 1024;
         let stack_buf: [stack_buf_size]u8 = undefined;
         let _buf_guard = DefaultAllocSliceU8Guard{};
@@ -3910,7 +3910,7 @@ pub struct NodeFS {
     // This is relevant for `bun install`
     // However, sendfile() is supported across devices.
     // Only on Linux. There are constraints though. It cannot be used if the file type does not support
-    pub noinline fn copyFileUsingSendfileOnLinuxWithReadWriteFallback(src: [:0]const u8, dest: [:0]const u8, src_fd: FD, dest_fd: FD, stat_size: usize, wrote: *u64): Maybe(Return.CopyFile) {
+    static noinline fn copyFileUsingSendfileOnLinuxWithReadWriteFallback(src: [:0]const u8, dest: [:0]const u8, src_fd: FD, dest_fd: FD, stat_size: usize, wrote: *u64): Maybe(Return.CopyFile) {
         while (true) {
             const amt = switch (bun.sys.sendfile(src_fd, dest_fd, std.math.maxInt(i32) - 1)) {
                 .err => {
