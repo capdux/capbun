@@ -5,6 +5,7 @@ const Allocator = std.mem.Allocator;
 const Environment = bun.Environment;
 const assert = bun.assert;
 type U8Slice = []u8;
+let empty_buf: [0]u8 = undefined;
 
 pub struct DeinitGuard<T> {
     val: T,
@@ -244,8 +245,9 @@ pub struct DeinitGuard<T> {
     }
 
     pub fn allocatedSlice(*_): []u8 {
-        let empty_buf: [0]u8 = std.mem.zeroes([0]u8);
-        let ptr = this.ptr orelse return &empty_buf;
+        const ptr_opt = this.ptr;
+        if (ptr_opt == null) return empty_buf[0..0];
+        let ptr = ptr_opt.?;
         if (comptime Environment.allow_assert) {
             assert(this.cap > 0);
         }
@@ -253,8 +255,9 @@ pub struct DeinitGuard<T> {
     }
 
     pub fn writable(*_): []u8 {
-        let empty_buf: [0]u8 = std.mem.zeroes([0]u8);
-        let ptr = this.ptr orelse return &empty_buf;
+        const ptr_opt = this.ptr;
+        if (ptr_opt == null) return empty_buf[0..0];
+        let ptr = ptr_opt.?;
         if (comptime Environment.allow_assert) {
             assert(this.cap > 0);
         }

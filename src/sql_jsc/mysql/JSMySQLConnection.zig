@@ -60,7 +60,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .array and @typeInfo(@typeInfo(__T).pointer.child).array.child == u8)) { return val[0..]; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const AnyMySQLError = @import("../../sql/mysql/protocol/AnyMySQLError.zig");
 pub const CachedStructure = @import("../../sql_jsc/shared/CachedStructure.zig");
@@ -829,7 +829,11 @@ pub fn consumeOnConnectCallback(self: *const JSMySQLConnection, globalObject: *j
         }
         if (self.#js_value.tryGet()) |value| {
             _ = &value;
-            const on_connect = ((js.onconnectGetCached(value)) orelse { return null; });
+            const on_connect_opt = js.onconnectGetCached(value);
+            if ((on_connect_opt == null)) {
+                return null;
+            }
+            const on_connect = on_connect_opt.?;
             _ = js.onconnectSetCached(value, globalObject, .zero);
             return on_connect;
         }
@@ -842,7 +846,11 @@ pub fn consumeOnCloseCallback(self: *const JSMySQLConnection, globalObject: *jsc
         }
         if (self.#js_value.tryGet()) |value| {
             _ = &value;
-            const on_close = ((js.oncloseGetCached(value)) orelse { return null; });
+            const on_close_opt = js.oncloseGetCached(value);
+            if ((on_close_opt == null)) {
+                return null;
+            }
+            const on_close = on_close_opt.?;
             _ = js.oncloseSetCached(value, globalObject, .zero);
             return on_close;
         }
@@ -920,7 +928,11 @@ pub fn failWithJSValue(self: *JSMySQLConnection, value: JSValue) void {
         if (self.#vm.isShuttingDown()) {
             return;
         }
-        const on_close = ((self.consumeOnCloseCallback(self.#globalObject)) orelse { return; });
+        const on_close_opt = self.consumeOnCloseCallback(self.#globalObject);
+        if ((on_close_opt == null)) {
+            return;
+        }
+        const on_close = on_close_opt.?;
         _ = on_close.ensureStillAlive();
         const loop = self.#vm.eventLoop();
         _ = self.ensureJSValueIsAlive();
@@ -945,7 +957,11 @@ pub fn onConnectionEstabilished(self: *JSMySQLConnection) void {
         if (self.#vm.isShuttingDown()) {
             return;
         }
-        const on_connect = ((self.consumeOnConnectCallback(self.#globalObject)) orelse { return; });
+        const on_connect_opt = self.consumeOnConnectCallback(self.#globalObject);
+        if ((on_connect_opt == null)) {
+            return;
+        }
+        const on_connect = on_connect_opt.?;
         _ = on_connect.ensureStillAlive();
         var js_value = ((self.#js_value.tryGet()) orelse (.js_undefined));
         _ = &js_value;

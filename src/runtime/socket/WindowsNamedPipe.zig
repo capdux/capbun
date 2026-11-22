@@ -270,9 +270,11 @@ pub fn internalWrite(self: *WindowsNamedPipe, encoded_data: []const u8) void {
     }
 
 pub fn resumeStream(self: *WindowsNamedPipe) bool {
-            const stream = ((self.writer.getStream()) orelse {
-            return false;
-});
+            const stream_opt = self.writer.getStream();
+            if ((stream_opt == null)) {
+                return false;
+            }
+            const stream = stream_opt.?;
             const readStartResult = stream.readStart(self, onReadAlloc, onReadError, onRead);
             if ((readStartResult == .err)) {
                 return false;
@@ -281,10 +283,11 @@ pub fn resumeStream(self: *WindowsNamedPipe) bool {
     }
 
 pub fn pauseStream(self: *WindowsNamedPipe) bool {
-            const pipe = ((self.pipe) orelse {
-            return false;
-});
-            _ = pipe.readStop();
+            const pipe_opt = self.pipe;
+            if ((pipe_opt == null)) {
+                return false;
+            }
+            _ = pipe_opt.?.readStop();
             return true;
     }
 
@@ -474,10 +477,12 @@ pub fn start(self: *WindowsNamedPipe, is_client: bool) bool {
                 _ = self.onError(startPipeResult.err);
                 return false;
             }
-            const stream = ((self.writer.getStream()) orelse {
-            _ = self.onError(bun.sys.Error.fromCode(bun.sys.E.PIPE, .read));
-            return false;
-});
+            const stream_opt = self.writer.getStream();
+            if ((stream_opt == null)) {
+                _ = self.onError(bun.sys.Error.fromCode(bun.sys.E.PIPE, .read));
+                return false;
+            }
+            const stream = stream_opt.?;
             const readStartResult = stream.readStart(self, onReadAlloc, onReadError, onRead);
             if ((readStartResult == .err)) {
                 _ = self.onError(readStartResult.err);

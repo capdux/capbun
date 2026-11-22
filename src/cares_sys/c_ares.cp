@@ -455,7 +455,9 @@ pub const struct_timeval = std.posix.timeval;
     pub const toJSArray = cares_jsc.addrInfoToJSArray;
 
     pub inline fn name(_: *const AddrInfo): []const u8 {
-        const name_ = this.name_ orelse return "";
+        const name_opt = this.name_;
+        if (name_opt == null) return "";
+        const name_ = name_opt.?;
         return bun.span(name_);
     }
 

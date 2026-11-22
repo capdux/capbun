@@ -1070,10 +1070,13 @@ if (((!installer.manager.options.do.run_scripts) or (self.entry_id == .root))) {
                     current_step_val = self.nextStep(.@"run (post)install && (pre/post)prepare");
                     continue;
                 }
-                var list = ((entry_scripts[@as(usize, @intCast(self.entry_id.get()))]) orelse {
-                current_step_val = self.nextStep(.@"run (post)install && (pre/post)prepare");
-                continue;
-});
+                var list_opt = entry_scripts[@as(usize, @intCast(self.entry_id.get()))];
+                _ = &list_opt;
+                if ((list_opt == null)) {
+                    current_step_val = self.nextStep(.@"run (post)install && (pre/post)prepare");
+                    continue;
+                }
+                var list = list_opt.?;
                 _ = &list;
                 if ((list.first_index == 0)) {
                     var i: usize = 1;

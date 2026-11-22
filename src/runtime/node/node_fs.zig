@@ -5062,7 +5062,11 @@ if (comptime ((flavor == .sync) and (string_type == .default))) {
                         _ = &vm;
                         const array_buffer = (blk_catch_15: { break :blk_catch_15 ((jsc.ArrayBuffer.createBuffer(vm.global, temporary_read_buffer)) catch |__ce_15| { _ = &__ce_15; break :blk_catch_15 .zero; }); });
                         _ = array_buffer.ensureStillAlive();
-                        const ab = ((array_buffer.asArrayBuffer(vm.global)) orelse { return .{ .err = Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path) }; });
+                        const ab_opt = array_buffer.asArrayBuffer(vm.global);
+                        if ((ab_opt == null)) {
+                            return .{ .err = Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path) };
+                        }
+                        const ab = ab_opt.?;
                         return .{ .result = .{ .buffer = jsc.MarkedArrayBuffer{ .buffer = ab } } };
                     }
                 }
@@ -6946,7 +6950,11 @@ return e;
 
 pub fn zigDeleteTreeMinStackSizeWithKindHint(client: std.fs.Dir, sub_path: []const u8, kind_hint: std.fs.File.Kind) !void {
         start_over: while (true) {
-            var dir = ((try zigDeleteTreeOpenInitialSubpath(client, sub_path, kind_hint)) orelse { return; });
+            const dir_opt = try zigDeleteTreeOpenInitialSubpath(client, sub_path, kind_hint);
+            if ((dir_opt == null)) {
+                return;
+            }
+            var dir = dir_opt.?;
             _ = &dir;
             var _parent_guard = StdDirOptGuard{  };
             _ = &_parent_guard;

@@ -410,9 +410,11 @@ pub fn ptr_(globalThis: *JSGlobalObject, value: JSValue, byteOffset: ?JSValue) J
         if ((value == .zero)) {
             return jsc.JSValue.jsNull();
         }
-        const array_buffer = ((value.asArrayBuffer(globalThis)) orelse {
-        return globalThis.toInvalidArguments("Expected ArrayBufferView but received {s}", .{ @tagName(value.jsType()) });
-});
+        const array_buffer_opt = value.asArrayBuffer(globalThis);
+        if ((array_buffer_opt == null)) {
+            return globalThis.toInvalidArguments("Expected ArrayBufferView but received {s}", .{ @tagName(value.jsType()) });
+        }
+        const array_buffer = array_buffer_opt.?;
         if ((array_buffer.len == 0)) {
             return globalThis.toInvalidArguments("ArrayBufferView must have a length > 0. A pointer to empty memory doesn't work", .{});
         }

@@ -125,7 +125,7 @@ pub struct WorkerLoop {
                 if (_.cmds.pending_idx != null || _.cmds.done) break;
                 _.vm.eventLoop().autoTick();
             }
-            const idx = _.cmds.pending_idx orelse break;
+            const idx = _.cmds.pending_idx ?? break;
             _.cmds.pending_idx = null;
 
             _.reporter.worker_ipc_file_idx = idx;
@@ -391,7 +391,7 @@ fn buildWorkerArgv(arena_alloc: std.mem.Allocator, ctx: Command.Context): !@Fiel
         argv.append(arena_alloc, "--feature")?;
         argv.append(arena_alloc, dupeZPtr(arena_alloc, value)?)?;
     }
-    if (ctx.args.preserve_symlinks orelse false) {
+    if (ctx.args.preserve_symlinks ?? false) {
         argv.append(arena_alloc, "--preserve-symlinks")?;
     }
     if (ctx.runtime_options.smol) {
@@ -522,7 +522,8 @@ fn workerFlushAggregates(reporter: *CommandLineReporter, vm: *jsc.VirtualMachine
 /// fully-formatted status line (✓/✗ + scopes + name + duration, including ANSI
 /// codes). The coordinator prints these bytes verbatim so output matches serial.
 pub fn workerEmitTestDone(file_idx: u32, formatted_line: []const u8) {
-    const cmds = worker_cmds orelse return;
+    if (worker_cmds == null) return;
+    const cmds = worker_cmds.?;
     worker_frame.begin(.test_done);
     worker_frame.u32_(file_idx);
     worker_frame.str(formatted_line);

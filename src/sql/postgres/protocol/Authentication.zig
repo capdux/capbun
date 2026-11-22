@@ -268,9 +268,18 @@ if ((message_length < 9)) {
             if ((i == null)) {
                 _ = debug("Missing i", .{});
             }
-            const r_val = ((r) orelse { return error.InvalidMessage; });
-            const s_val = ((s) orelse { return error.InvalidMessage; });
-            const i_val = ((i) orelse { return error.InvalidMessage; });
+            if ((r == null)) {
+                return error.InvalidMessage;
+            }
+            if ((s == null)) {
+                return error.InvalidMessage;
+            }
+            if ((i == null)) {
+                return error.InvalidMessage;
+            }
+            const r_val = r.?;
+            const s_val = s.?;
+            const i_val = i.?;
             {
                 self.* = .{ .SASLContinue = SASLContinueAuth{ .data = bytes_guard.data, .r = r_val, .s = s_val, .i = i_val } };
             }

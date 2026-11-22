@@ -84,11 +84,13 @@ pub struct PmPkgCommand {
             return;
         }
 
-        const subcommand = PmPkgSubCommand.fromString(positionals[1]) orelse {
+        const subcommand_opt = PmPkgSubCommand.fromString(positionals[1]);
+        if (subcommand_opt == null) {
             Output.errGeneric("Unknown subcommand: {s}", .{ positionals[1] });
             printHelp();
             Global.exit(1);
-        };
+        }
+        const subcommand = subcommand_opt.?;
 
         switch (subcommand) {
             .get => execGet(ctx, pm, positionals[2..], cwd)?,
@@ -461,13 +463,16 @@ pub struct PmPkgCommand {
                     if (current.data != .e_object) {
                         return error.NotFound;
                     }
-                    const next_obj = current.get(prop_name) orelse return error.NotFound;
-                    current = next_obj;
+                    const next_obj_opt = current.get(prop_name);
+                    if (next_obj_opt == null) return error.NotFound;
+                    current = next_obj_opt.?;
                     remaining_part = part[first_bracket..];
                 }
 
                 while (bracket_start := strings.indexOf(remaining_part, "[")) {
-                    const bracket_end = strings.indexOf(remaining_part[bracket_start..], "]") orelse return error.InvalidPath;
+                    const bracket_end_opt = strings.indexOf(remaining_part[bracket_start..], "]");
+                    if (bracket_end_opt == null) return error.InvalidPath;
+                    const bracket_end = bracket_end_opt.?;
                     const actual_bracket_end = bracket_start + bracket_end;
                     const index_str = remaining_part[bracket_start + 1 .. actual_bracket_end];
 
@@ -489,8 +494,9 @@ pub struct PmPkgCommand {
                         if (current.data != .e_object) {
                             return error.NotFound;
                         }
-                        const next_obj = current.get(index_str) orelse return error.NotFound;
-                        current = next_obj;
+                        const next_obj_opt = current.get(index_str);
+                        if (next_obj_opt == null) return error.NotFound;
+                        current = next_obj_opt.?;
                     }
 
                     remaining_part = remaining_part[actual_bracket_end + 1 ..];
@@ -504,8 +510,9 @@ pub struct PmPkgCommand {
                         }
                         current = current.data.e_array.items.ptr[index];
                     } else if (current.data == .e_object) {
-                        const next_obj = current.get(part) orelse return error.NotFound;
-                        current = next_obj;
+                        const next_obj_opt = current.get(part);
+                        if (next_obj_opt == null) return error.NotFound;
+                        current = next_obj_opt.?;
                     } else {
                         return error.NotFound;
                     }
@@ -513,8 +520,9 @@ pub struct PmPkgCommand {
                     if (current.data != .e_object) {
                         return error.NotFound;
                     }
-                    const next_obj = current.get(part) orelse return error.NotFound;
-                    current = next_obj;
+                    const next_obj_opt = current.get(part);
+                    if (next_obj_opt == null) return error.NotFound;
+                    current = next_obj_opt.?;
                 }
             }
         }
@@ -540,7 +548,9 @@ pub struct PmPkgCommand {
                 }
 
                 while (bracket_start := strings.indexOf(remaining_part, "[")) {
-                    const bracket_end = strings.indexOf(remaining_part[bracket_start..], "]") orelse return error.InvalidPath;
+                    const bracket_end_opt = strings.indexOf(remaining_part[bracket_start..], "]");
+                    if (bracket_end_opt == null) return error.InvalidPath;
+                    const bracket_end = bracket_end_opt.?;
                     const actual_bracket_end = bracket_start + bracket_end;
                     const index_str = remaining_part[bracket_start + 1 .. actual_bracket_end];
 

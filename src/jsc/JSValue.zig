@@ -1137,7 +1137,11 @@ pub fn toSliceCloneWithAllocator(self: JSValue, globalThis: *JSGlobalObject, all
     }
 
 pub fn toObject(self: JSValue, globalThis: *JSGlobalObject) JSError!*JSObject {
-            return ((JSC__JSValue__toObject(self, globalThis)) orelse (error.JSError));
+            if (JSC__JSValue__toObject(self, globalThis)) |obj| {
+                _ = &obj;
+                return obj;
+            }
+            return error.JSError;
     }
 
 pub fn getObject(self: JSValue) ?*JSObject {
@@ -1157,13 +1161,15 @@ pub fn eqlCell(self: JSValue, other: *JSCell) bool {
     }
 
 pub fn fastGetOrElse(self: JSValue, global: *JSGlobalObject, builtin_name: BuiltinName, alternate: ?jsc.JSValue) ?JSValue {
-            return ((try self.fastGet(global, builtin_name)) orelse {
+            if (try self.fastGet(global, builtin_name)) |val| {
+                _ = &val;
+                return val;
+            }
             if (alternate) |alt| {
                 _ = &alt;
                 return alt.fastGet(global, builtin_name);
             }
             return null;
-});
     }
 
 pub fn fastGet(self: JSValue, global: *JSGlobalObject, builtin_name: BuiltinName) JSError!?JSValue {
@@ -1270,7 +1276,11 @@ pub fn implementsToString(self: JSValue, global: *JSGlobalObject) bun.JSError!bo
             if ((!self.isObject())) {
                 return false;
             }
-            const function = ((try self.fastGet(global, BuiltinName.toString)) orelse { return false; });
+            const function_opt = try self.fastGet(global, BuiltinName.toString);
+            if ((function_opt == null)) {
+                return false;
+            }
+            const function = function_opt.?;
             return (function.isCell() and function.isCallable());
     }
 
@@ -1420,10 +1430,11 @@ pub fn getOwnArray(self: JSValue, globalThis: *JSGlobalObject, comptime property
 pub fn getOwnObject(self: JSValue, globalThis: *JSGlobalObject, comptime property_name: []const u8) JSError!?*jsc.JSObject {
             if (try JSValue.getOwnTruthy(self, globalThis, property_name)) |prop| {
                 _ = &prop;
-                const obj = ((prop.getObject()) orelse {
+                if (prop.getObject()) |obj| {
+                    _ = &obj;
+                    return obj;
+                }
                 return globalThis.throwInvalidArguments((property_name ++ " must be an object"), .{});
-});
-                return obj;
             }
             return null;
     }
@@ -1519,7 +1530,11 @@ pub fn getOptionalInt(self: JSValue, globalThis: *JSGlobalObject, comptime prope
     }
 
 pub fn getOwnOptional(self: JSValue, globalThis: *JSGlobalObject, comptime property_name: []const u8, comptime T: type) JSError!?T {
-            const prop = (((if (comptime BuiltinName.has(property_name)) JSValue.fastGetOwn(self, globalThis, @field(BuiltinName, property_name)) else self.getOwn(globalThis, property_name))) orelse { return null; });
+            const prop_opt = (if (comptime BuiltinName.has(property_name)) JSValue.fastGetOwn(self, globalThis, @field(BuiltinName, property_name)) else self.getOwn(globalThis, property_name));
+            if ((prop_opt == null)) {
+                return null;
+            }
+            const prop = prop_opt.?;
             if ((!prop.isEmptyOrUndefinedOrNull())) {
                 return JSValue.coerceOptional(prop, globalThis, property_name, T);
             }

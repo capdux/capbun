@@ -126,13 +126,15 @@ struct DarwinImpl {
                 break :blk c.__ulock_wait2(flags, addr, expect, timeout_ns, 0);
             }
 
-            const timeout_us: u32 = if (timeout_ns == 0)
-                0
-            else
-                std.math.cast(u32, (timeout_ns + 999) / 1000) orelse blk_overflow: {
+            let timeout_us: u32 = 0;
+            if (timeout_ns != 0) {
+                if (casted := std.math.cast(u32, (timeout_ns + 999) / 1000)) {
+                    timeout_us = casted;
+                } else {
                     timeout_overflowed = true;
-                    break :blk_overflow std.math.maxInt(u32);
-                };
+                    timeout_us = std.math.maxInt(u32);
+                }
+            }
 
             break :blk c.__ulock_wait(flags, addr, expect, timeout_us);
         };

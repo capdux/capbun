@@ -1068,7 +1068,9 @@ struct PosixIoctl {
     fn onWriterReady(client: *Terminal) {
         log("onWriterReady", {});
         // Call drain callback
-        const this_jsvalue = client.this_value.tryGet() orelse return;
+        const this_jsvalue_opt = client.this_value.tryGet();
+        if (this_jsvalue_opt == null) return;
+        const this_jsvalue = this_jsvalue_opt.?;
         if (callback := js.gc.get(.drain, this_jsvalue)) {
             const globalThis = client.globalThis;
             const args: [1]JSValue = [ this_jsvalue ];
@@ -1134,8 +1136,12 @@ struct PosixIoctl {
     /// Note: exit_code is PTY-level (0=EOF, 1=error), NOT the subprocess exit code.
     /// The signal parameter is only populated if a signal caused the PTY close.
     fn callExitCallback(client: *Terminal, exit_code: i32, signal: bun.SignalCode?) {
-        const this_jsvalue = client.this_value.tryGet() orelse return;
-        const callback = js.gc.get(.exit, this_jsvalue) orelse return;
+        const this_jsvalue_opt = client.this_value.tryGet();
+        if (this_jsvalue_opt == null) return;
+        const this_jsvalue = this_jsvalue_opt.?;
+        const callback_opt = js.gc.get(.exit, this_jsvalue);
+        if (callback_opt == null) return;
+        const callback = callback_opt.?;
 
         const globalThis = client.globalThis;
         let signal_value: JSValue = JSValue.jsNull();
@@ -1163,8 +1169,12 @@ struct PosixIoctl {
             client.this_value.upgrade(client.globalThis);
         }
 
-        const this_jsvalue = client.this_value.tryGet() orelse return true;
-        const callback = js.gc.get(.data, this_jsvalue) orelse return true;
+        const this_jsvalue_opt = client.this_value.tryGet();
+        if (this_jsvalue_opt == null) return true;
+        const this_jsvalue = this_jsvalue_opt.?;
+        const callback_opt = js.gc.get(.data, this_jsvalue);
+        if (callback_opt == null) return true;
+        const callback = callback_opt.?;
 
         const globalThis = client.globalThis;
         const duped = bun.default_allocator.dupe(u8, chunk) catch |e| {

@@ -310,7 +310,9 @@ export class MultiPartUpload {
     }
 
     fn getCreatePart(*_, chunk: string, allocated_size: usize, needs_clone: bool): (*UploadPart)? {
-        let index = this.available.findFirstSet() orelse return null;
+        const index_opt = this.available.findFirstSet();
+        if (index_opt == null) return null;
+        let index = index_opt.?;
         let queueSize = this.options.queueSize;
         if (index >= queueSize) {
             return null;
@@ -656,7 +658,9 @@ export class MultiPartUpload {
     }
 
     pub fn hasBackpressure(_: *const MultiPartUpload): bool {
-        let index = this.available.findFirstSet() orelse return true;
+        const index_opt = this.available.findFirstSet();
+        if (index_opt == null) return true;
+        let index = index_opt.?;
         return index >= this.options.queueSize;
     }
 

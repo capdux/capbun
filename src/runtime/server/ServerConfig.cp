@@ -490,7 +490,7 @@ fn validateRouteName(global: *jsc.JSGlobalObject, path: []const u8): !void {
     const _guard_route_names = DeinitGuard<@TypeOf(duped_route_names)>{ ptr: unsafe { &duped_route_names } };
     while (index := strings.indexOfChar(remaining, ':')) {
         remaining = remaining[index + 1 ..];
-        const end = strings.indexOfChar(remaining, '/') orelse remaining.len;
+        const end = strings.indexOfChar(remaining, '/') ?? remaining.len;
         const route_name = remaining[0..end];
         if (route_name.len > 0 and std.ascii.isDigit(route_name[0])) {
             return global.throwTODO(
@@ -552,7 +552,7 @@ pub static fn fromJS(
         }
     }
 
-    if (strings.eqlComptime(env.get("NODE_ENV") orelse "", "production")) {
+    if (strings.eqlComptime(env.get("NODE_ENV") ?? "", "production")) {
         args.development = .production;
     }
 
@@ -613,11 +613,13 @@ pub static fn fromJS(
         if (global.hasException()) return error.JSError;
 
         if (static_val := getRoutesObject(global, arg)?) {
-            const static_obj = static_val.getObject() orelse {
+            const static_obj_opt = static_val.getObject();
+            if (static_obj_opt == null) {
                 return global.throwInvalidArguments(
                     "Bun.serve() expects 'routes' to be an object shaped like:\n\n  {\n    \"/path\": {\n      GET: (req) => new Response(\"Hello\"),\n      POST: (req) => new Response(\"Hello\"),\n    },\n    \"/path2/:param\": new Response(\"Hello\"),\n    \"/path3/:param1/:param2\": (req) => new Response(\"Hello\")\n  }\n\nLearn more at https://bun.com/docs/api/http"
                 , .{});
-            };
+            }
+            const static_obj = static_obj_opt.?;
             args.had_routes_object = true;
 
             let iter = jsc.JSPropertyIterator(.{
@@ -733,13 +735,14 @@ pub static fn fromJS(
                 }
 
                 const route_opt = AnyRoute.fromJS(global, path, value, init_ctx)?;
-                const route = route_opt orelse {
+                if (route_opt == null) {
                     return global.throwInvalidArguments(
                         "'routes' expects a Record<string, Response | HTMLBundle | {[method: string]: (req: BunRequest) => Response|Promise<Response>}>\n\nTo bundle frontend apps on-demand with Bun.serve(), import HTML files.\n\nExample:\n\n```js\nimport { serve } from \"bun\";\nimport app from \"./app.html\";\n\nserve({\n  routes: {\n    \"/index.json\": Response.json({ message: \"Hello World\" }),\n    \"/app\": app,\n    \"/path/:param\": (req) => {\n      const param = req.params.param;\n      return Response.json({ message: `Hello ${param}` });\n    },\n    \"/path\": {\n      GET(req) {\n        return Response.json({ message: \"Hello World\" });\n      },\n      POST(req) {\n        return Response.json({ message: \"Hello World\" });\n      },\n    },\n  },\n\n  fetch(request) {\n    return new Response(\"fallback response\");\n  },\n});\n```\n\nSee https://bun.com/docs/api/http for more information."
                     ,
                         .{},
                     );
-                };
+                }
+                const route = route_opt.?;
                 args.static_routes.append(.{
                     .path = path,
                     .route = route,
@@ -992,7 +995,7 @@ pub static fn fromJS(
                             if (args.ssl_config == null) {
                                 args.ssl_config = ssl_config;
                             } else {
-                                if ((ssl_config.server_name orelse "")[0] == 0) {
+                                if ((ssl_config.server_name ?? "")[0] == 0) {
                                     const _guard_sni_ssl = DeinitGuard<SSLConfig>{ ptr: unsafe { &ssl_config } };
                                     return global.throwInvalidArguments("SNI tls object must have a serverName", .{});
                                 }

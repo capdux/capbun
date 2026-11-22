@@ -753,7 +753,7 @@ pub fn Package(comptime SemverIntType: type): type {
                                 &sliced,
                                 log,
                                 pm,
-                            ) orelse empty_version,
+                            ) ?? empty_version,
                         };
 
                         // If a dependency appears in both "dependencies" and "optionalDependencies", it is considered optional!
@@ -1109,9 +1109,11 @@ pub fn Package(comptime SemverIntType: type): type {
                                     break :update_mapping true;
                                 }
 
-                                const workspace_path = to_lockfile.workspace_paths.getPtr(from_dep.name_hash) orelse {
+                                const workspace_path_opt = to_lockfile.workspace_paths.getPtr(from_dep.name_hash);
+                                if (workspace_path_opt == null) {
                                     break :update_mapping false;
-                                };
+                                }
+                                const workspace_path = workspace_path_opt.?;
 
                                 let package_json_path: bun.AbsPath(.{ .sep = .auto }) = .initTopLevelDir();
                                 const package_json_path_guard = DeinitGuard<@TypeOf(package_json_path)>{ ptr: &package_json_path };
@@ -1269,7 +1271,7 @@ pub fn Package(comptime SemverIntType: type): type {
         ): !Dependency? {
             const external_version = brk: {
                 if (comptime Environment.isWindows) {
-                    switch (tag orelse Dependency.Version.Tag.infer(version)) {
+                    switch (tag ?? Dependency.Version.Tag.infer(version)) {
                         .workspace, .folder, .symlink, .tarball => {
                             if (String.canInline(version)) {
                                 let copy = string_builder.append(String, version);
@@ -1302,7 +1304,7 @@ pub fn Package(comptime SemverIntType: type): type {
                 &sliced,
                 log,
                 pm,
-            ) orelse empty_dep_version;
+            ) ?? empty_dep_version;
             let workspace_range: Semver.Query.Group? = null;
             const name_hash = switch (dependency_version.tag) {
                 .npm => String.Builder.stringHash(dependency_version.value.npm.name.slice(buf)),
@@ -1310,7 +1312,7 @@ pub fn Package(comptime SemverIntType: type): type {
                     const input = sliced.slice["workspace:".len..];
                     const trimmed = strings.trim(input, strings.whitespace_chars);
                     if (trimmed.len != 1 || (trimmed[0] != '*' && trimmed[0] != '^' && trimmed[0] != '~')) {
-                        const at = strings.lastIndexOfChar(input, '@') orelse 0;
+                        const at = strings.lastIndexOfChar(input, '@') ?? 0;
                         if (at > 0) {
                             workspace_range = Semver.Query.parse(allocator, input[at + 1 ..], sliced) catch |e| {
                                 switch (e) {
@@ -1611,8 +1613,8 @@ pub fn Package(comptime SemverIntType: type): type {
                     switch (bin.expr.data) {
                         .e_object => |obj| {
                             for (bin_prop of obj.properties.slice()) {
-                                string_builder.count(bin_prop.key.?.asString(allocator) orelse break :bin);
-                                string_builder.count(bin_prop.value.?.asString(allocator) orelse break :bin);
+                                string_builder.count(bin_prop.key.?.asString(allocator) ?? break :bin);
+                                string_builder.count(bin_prop.value.?.asString(allocator) ?? break :bin);
                             }
                             break :bin;
                         },
@@ -1700,7 +1702,7 @@ pub fn Package(comptime SemverIntType: type): type {
                                 continue;
                             }
 
-                            const key = prop.key.?.asString(allocator) orelse unreachable;
+                            const key = prop.key.?.asString(allocator).?;
                             optional_peer_dependencies.putAssumeCapacity(
                                 String.Builder.stringHash(key),
                                 key,
@@ -1910,7 +1912,7 @@ pub fn Package(comptime SemverIntType: type): type {
                     const value = prop.value.?;
                     if (key.isString() && value.isString()) {
                         let sfb = std.heap.stackFallback(1024, allocator);
-                        const keyhash = (key.asStringHash(sfb.get(), String.Builder.stringHash)?) orelse unreachable;
+                        const keyhash = (key.asStringHash(sfb.get(), String.Builder.stringHash)?).?;
                         const patch_path = string_builder.append(String, value.asString(allocator).?);
                         lockfile.patched_dependencies.put(allocator, keyhash, { path: patch_path }) catch unreachable;
                     }
@@ -1924,8 +1926,8 @@ pub fn Package(comptime SemverIntType: type): type {
                             switch (obj.properties.len) {
                                 0 => {},
                                 1 => {
-                                    const bin_name = obj.properties.ptr[0].key.?.asString(allocator) orelse break :bin;
-                                    const value = obj.properties.ptr[0].value.?.asString(allocator) orelse break :bin;
+                                    const bin_name = obj.properties.ptr[0].key.?.asString(allocator) ?? break :bin;
+                                    const value = obj.properties.ptr[0].value.?.asString(allocator) ?? break :bin;
 
                                     package.bin = {
                                         tag: .named_file,
@@ -1949,9 +1951,9 @@ pub fn Package(comptime SemverIntType: type): type {
 
                                     let i: usize = 0;
                                     for (bin_prop of obj.properties.slice()) {
-                                        extern_strings[i] = string_builder.append(ExternalString, bin_prop.key.?.asString(allocator) orelse break :bin);
+                                        extern_strings[i] = string_builder.append(ExternalString, bin_prop.key.?.asString(allocator) ?? break :bin);
                                         i += 1;
-                                        extern_strings[i] = string_builder.append(ExternalString, bin_prop.value.?.asString(allocator) orelse break :bin);
+                                        extern_strings[i] = string_builder.append(ExternalString, bin_prop.value.?.asString(allocator) ?? break :bin);
                                         i += 1;
                                     }
                                     if (comptime Environment.allow_assert) assert(i == extern_strings.len);
@@ -2016,14 +2018,14 @@ pub fn Package(comptime SemverIntType: type): type {
             const bundled_deps_guard = DeinitGuard<bun.StringSet>{ ptr: &bundled_deps };
             let bundle_all_deps = false;
             if (comptime ResolverContext != void && ResolverContext.checkBundledDependencies()) {
-                if (bundled_deps_expr := json.get("bundleDependencies") orelse json.get("bundledDependencies")) {
+                if (bundled_deps_expr := json.get("bundleDependencies") ?? json.get("bundledDependencies")) {
                     switch (bundled_deps_expr.data) {
                         .e_boolean => |boolean| {
                             bundle_all_deps = boolean.value;
                         },
                         .e_array => |arr| {
                             for (item of arr.slice()) {
-                                bundled_deps.insert(item.asString(allocator) orelse continue)?;
+                                bundled_deps.insert(item.asString(allocator) ?? continue)?;
                             }
                         },
                         else => {},
@@ -2156,7 +2158,7 @@ pub fn Package(comptime SemverIntType: type): type {
                                     const key = item.key.?;
                                     const value = item.value.?;
                                     const external_name = string_builder.append(ExternalString, key.asString(allocator).?);
-                                    const version = value.asString(allocator) orelse "";
+                                    const version = value.asString(allocator) ?? "";
 
                                     if (parseDependency(
                                         lockfile,

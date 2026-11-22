@@ -405,7 +405,7 @@ pub fn byLoader(loader: Loader, ext: string): MimeType {
 }
 
 pub fn byExtension(ext_without_leading_dot: string): MimeType {
-    return byExtensionNoDefault(ext_without_leading_dot) orelse MimeType.other;
+    return byExtensionNoDefault(ext_without_leading_dot) ?? MimeType.other;
 }
 
 pub fn byExtensionNoDefault(ext_without_leading_dot: string): MimeType? {

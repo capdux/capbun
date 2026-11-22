@@ -64,7 +64,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .array and @typeInfo(@typeInfo(__T).pointer.child).array.child == u8)) { return val[0..]; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 pub const DataCell = @import("./DataCell.zig");
@@ -149,63 +149,63 @@ pub fn _socket(s: SocketType) Socket {
             return Socket{ .SocketTCP = s };
     }
 
-pub fn onOpen(self: *PostgresSQLConnection, socket: SocketType) void {
-            if (self.vm.isShuttingDown()) {
+pub fn onOpen(conn: *PostgresSQLConnection, socket: SocketType) void {
+            if (conn.vm.isShuttingDown()) {
                 @branchHint(.unlikely);
-                _ = self.close();
+                _ = conn.close();
                 return;
             }
-            _ = self.onOpen(_socket(socket));
+            _ = conn.onOpen(_socket(socket));
     }
 
-pub fn onClose(self: *PostgresSQLConnection, socket: SocketType, _: i32, _: ?*anyopaque) void {
+pub fn onClose(conn: *PostgresSQLConnection, socket: SocketType, _: i32, _: ?*anyopaque) void {
             _ = &socket;
-            _ = self.onClose();
+            _ = conn.onClose();
     }
 
-pub fn onEnd(self: *PostgresSQLConnection, socket: SocketType) void {
+pub fn onEnd(conn: *PostgresSQLConnection, socket: SocketType) void {
             _ = &socket;
-            _ = self.onClose();
+            _ = conn.onClose();
     }
 
-pub fn onConnectError(self: *PostgresSQLConnection, socket: SocketType, _: i32) void {
+pub fn onConnectError(conn: *PostgresSQLConnection, socket: SocketType, _: i32) void {
             _ = &socket;
-            if (self.vm.isShuttingDown()) {
+            if (conn.vm.isShuttingDown()) {
                 @branchHint(.unlikely);
-                _ = self.close();
+                _ = conn.close();
                 return;
             }
-            _ = self.onClose();
+            _ = conn.onClose();
     }
 
-pub fn onTimeout(self: *PostgresSQLConnection, socket: SocketType) void {
+pub fn onTimeout(conn: *PostgresSQLConnection, socket: SocketType) void {
             _ = &socket;
-            if (self.vm.isShuttingDown()) {
+            if (conn.vm.isShuttingDown()) {
                 @branchHint(.unlikely);
-                _ = self.close();
+                _ = conn.close();
                 return;
             }
-            _ = self.onTimeout();
+            _ = conn.onTimeout();
     }
 
-pub fn onData(self: *PostgresSQLConnection, socket: SocketType, data: []const u8) void {
+pub fn onData(conn: *PostgresSQLConnection, socket: SocketType, data: []const u8) void {
             _ = &socket;
-            if (self.vm.isShuttingDown()) {
+            if (conn.vm.isShuttingDown()) {
                 @branchHint(.unlikely);
-                _ = self.close();
+                _ = conn.close();
                 return;
             }
-            _ = self.onData(data);
+            _ = conn.onData(data);
     }
 
-pub fn onWritable(self: *PostgresSQLConnection, socket: SocketType) void {
+pub fn onWritable(conn: *PostgresSQLConnection, socket: SocketType) void {
             _ = &socket;
-            if (self.vm.isShuttingDown()) {
+            if (conn.vm.isShuttingDown()) {
                 @branchHint(.unlikely);
-                _ = self.close();
+                _ = conn.close();
                 return;
             }
-            _ = self.onDrain();
+            _ = conn.onDrain();
     }
     const SocketType = uws.NewSocketHandler(false);
     pub const onHandshake = null;
@@ -217,72 +217,72 @@ pub fn _socket(s: SocketType) Socket {
             return Socket{ .SocketTLS = s };
     }
 
-pub fn onOpen(self: *PostgresSQLConnection, socket: SocketType) void {
-            if (self.vm.isShuttingDown()) {
+pub fn onOpen(conn: *PostgresSQLConnection, socket: SocketType) void {
+            if (conn.vm.isShuttingDown()) {
                 @branchHint(.unlikely);
-                _ = self.close();
+                _ = conn.close();
                 return;
             }
-            _ = self.onOpen(_socket(socket));
+            _ = conn.onOpen(_socket(socket));
     }
 
-pub fn onHandshake_(self: *PostgresSQLConnection, _: anytype, success: i32, ssl_error: uws.us_bun_verify_error_t) void {
-            if (self.vm.isShuttingDown()) {
+pub fn onHandshake_(conn: *PostgresSQLConnection, _: anytype, success: i32, ssl_error: uws.us_bun_verify_error_t) void {
+            if (conn.vm.isShuttingDown()) {
                 @branchHint(.unlikely);
-                _ = self.close();
+                _ = conn.close();
                 return;
             }
-            _ = self.onHandshake(success, ssl_error);
+            _ = conn.onHandshake(success, ssl_error);
     }
 
-pub fn onClose(self: *PostgresSQLConnection, socket: SocketType, _: i32, _: ?*anyopaque) void {
+pub fn onClose(conn: *PostgresSQLConnection, socket: SocketType, _: i32, _: ?*anyopaque) void {
             _ = &socket;
-            _ = self.onClose();
+            _ = conn.onClose();
     }
 
-pub fn onEnd(self: *PostgresSQLConnection, socket: SocketType) void {
+pub fn onEnd(conn: *PostgresSQLConnection, socket: SocketType) void {
             _ = &socket;
-            _ = self.onClose();
+            _ = conn.onClose();
     }
 
-pub fn onConnectError(self: *PostgresSQLConnection, socket: SocketType, _: i32) void {
+pub fn onConnectError(conn: *PostgresSQLConnection, socket: SocketType, _: i32) void {
             _ = &socket;
-            if (self.vm.isShuttingDown()) {
+            if (conn.vm.isShuttingDown()) {
                 @branchHint(.unlikely);
-                _ = self.close();
+                _ = conn.close();
                 return;
             }
-            _ = self.onClose();
+            _ = conn.onClose();
     }
 
-pub fn onTimeout(self: *PostgresSQLConnection, socket: SocketType) void {
+pub fn onTimeout(conn: *PostgresSQLConnection, socket: SocketType) void {
             _ = &socket;
-            if (self.vm.isShuttingDown()) {
+            if (conn.vm.isShuttingDown()) {
                 @branchHint(.unlikely);
-                _ = self.close();
+                _ = conn.close();
                 return;
             }
-            _ = self.onTimeout();
+            _ = conn.onTimeout();
     }
 
-pub fn onData(self: *PostgresSQLConnection, socket: SocketType, data: []const u8) void {
+pub fn onData(conn: *PostgresSQLConnection, socket: SocketType, data: []const u8) void {
             _ = &socket;
-            if (self.vm.isShuttingDown()) {
+            if (conn.vm.isShuttingDown()) {
                 @branchHint(.unlikely);
-                _ = self.close();
+                _ = conn.close();
                 return;
             }
-            _ = self.onData(data);
+            _ = conn.onData(data);
     }
 
-pub fn onWritable(self: *PostgresSQLConnection, socket: SocketType) void {
+pub fn onWritable(conn: *PostgresSQLConnection, socket: SocketType) void {
             _ = &socket;
-            if (self.vm.isShuttingDown()) {
+            if (conn.vm.isShuttingDown()) {
                 @branchHint(.unlikely);
-                _ = self.close();
+                _ = conn.close();
                 return;
             }
-            _ = self.onDrain();
+            _ = conn.onDrain();
     }
     const SocketType = uws.NewSocketHandler(true);
     pub const onHandshake = onHandshake_;
@@ -679,10 +679,12 @@ pub fn setOnClose(self: *PostgresSQLConnection, thisValue: jsc.JSValue, globalOb
 pub fn setupTLS(self: *PostgresSQLConnection) void {
         _ = debug("setupTLS", .{});
         const tls_group = self.vm.rareData().postgresGroup(self.vm, true);
-        const new_socket = ((self.socket.SocketTCP.socket.connected.adoptTLS(tls_group, .postgres_tls, self.secure.?, self.tls_config.server_name, @sizeOf(*PostgresSQLConnection), @sizeOf(*PostgresSQLConnection))) orelse {
-        _ = self.fail("Failed to upgrade to TLS", error.TLSUpgradeFailed);
-        return;
-});
+        const new_socket_opt = self.socket.SocketTCP.socket.connected.adoptTLS(tls_group, .postgres_tls, self.secure.?, self.tls_config.server_name, @sizeOf(*PostgresSQLConnection), @sizeOf(*PostgresSQLConnection));
+        if ((new_socket_opt == null)) {
+            _ = self.fail("Failed to upgrade to TLS", error.TLSUpgradeFailed);
+            return;
+        }
+        const new_socket = new_socket_opt.?;
         {
             (new_socket.ext(*PostgresSQLConnection)).* = self;
         }
@@ -769,7 +771,11 @@ pub fn setStatus(self: *PostgresSQLConnection, status: Status) void {
         }
         switch (status) {
 .connected => {
-const on_connect = ((self.consumeOnConnectCallback(self.globalObject)) orelse { return; });
+const on_connect_opt = self.consumeOnConnectCallback(self.globalObject);
+        if ((on_connect_opt == null)) {
+            return;
+        }
+        const on_connect = on_connect_opt.?;
         const js_value = self.js_value;
         _ = js_value.ensureStillAlive();
         _ = self.globalObject.queueMicrotask(on_connect, (&.{ JSValue.jsNull(), js_value }));
@@ -831,7 +837,11 @@ pub fn failWithJSValue(self: *PostgresSQLConnection, value: JSValue) void {
         _ = &_ref_close_guard;
         var ___ref_close_guard_moved = false; _ = &___ref_close_guard_moved;
         defer if (!___ref_close_guard_moved) { ___ref_close_guard_moved = true; const __T = @TypeOf(_ref_close_guard); if (@typeInfo(__T) == .optional) { if (_ref_close_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _ref_close_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _ref_close_guard; _drop_val.__cp_deinit(); } };
-        const on_close = ((self.consumeOnCloseCallback(self.globalObject)) orelse { return; });
+        const on_close_opt = self.consumeOnCloseCallback(self.globalObject);
+        if ((on_close_opt == null)) {
+            return;
+        }
+        const on_close = on_close_opt.?;
         const loop = self.vm.eventLoop();
         _ = loop.enter();
         var js_error = ((value.toError()) orelse (value));
@@ -1491,17 +1501,19 @@ _ = debug("stmt failed", .{});
                     continue;
 },
 .prepared => {
-const thisValue = ((req.thisValue.tryGet()) orelse {
-                    _ = bun.assertf(false, "query value was freed earlier than expected", .{});
-                    if ((offset == 0)) {
-                        _ = req.deref();
-                        _ = self.requests.discard(1);
-                    } else {
-                        req.status = .fail;
-                        offset = (offset + 1);
+const thisValue_opt = req.thisValue.tryGet();
+                    if ((thisValue_opt == null)) {
+                        _ = bun.assertf(false, "query value was freed earlier than expected", .{});
+                        if ((offset == 0)) {
+                            _ = req.deref();
+                            _ = self.requests.discard(1);
+                        } else {
+                            req.status = .fail;
+                            offset = (offset + 1);
+                        }
+                        continue;
                     }
-                    continue;
-});
+                    const thisValue = thisValue_opt.?;
                     const binding_value = ((PostgresSQLQuery.js.bindingGetCached(thisValue)) orelse (.zero));
                     const columns_value = ((PostgresSQLQuery.js.columnsGetCached(thisValue)) orelse (.zero));
                     req.flags.binary = (statement.fields.len > 0);
@@ -1570,17 +1582,19 @@ if ((!self.canPrepareQuery())) {
                     defer if (!___query_str_deinit_guard_moved) { ___query_str_deinit_guard_moved = true; const __T = @TypeOf(_query_str_deinit_guard); if (@typeInfo(__T) == .optional) { if (_query_str_deinit_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _query_str_deinit_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _query_str_deinit_guard; _drop_val.__cp_deinit(); } };
                     const has_params = (statement.signature.fields.len > 0);
                     if ((!has_params)) {
-                        const thisValue = ((req.thisValue.tryGet()) orelse {
-                        _ = bun.assertf(false, "query value was freed earlier than expected", .{});
-                        if ((offset == 0)) {
-                            _ = req.deref();
-                            _ = self.requests.discard(1);
-                        } else {
-                            req.status = .fail;
-                            offset = (offset + 1);
+                        const thisValue_opt = req.thisValue.tryGet();
+                        if ((thisValue_opt == null)) {
+                            _ = bun.assertf(false, "query value was freed earlier than expected", .{});
+                            if ((offset == 0)) {
+                                _ = req.deref();
+                                _ = self.requests.discard(1);
+                            } else {
+                                req.status = .fail;
+                                offset = (offset + 1);
+                            }
+                            continue;
                         }
-                        continue;
-});
+                        const thisValue = thisValue_opt.?;
                         const binding_value = ((PostgresSQLQuery.js.bindingGetCached(thisValue)) orelse (.zero));
                         _ = debug("prepareAndQueryWithSignature", .{});
                         _ = (blk_catch_16: { break :blk_catch_16 ((PostgresRequest.prepareAndQueryWithSignature(self.globalObject, query_str.slice(), binding_value, Writer, self.writer(), (&statement.signature))) catch |e| { _ = &e; if (self.globalObject.tryTakeException()) |err_| {
@@ -1607,13 +1621,15 @@ if ((!self.canPrepareQuery())) {
                         return;
                     }
                     if (self.flags.use_unnamed_prepared_statements) {
-                        const thisValue = ((req.thisValue.tryGet()) orelse {
-                        _ = bun.assertf(false, "query value was freed earlier than expected", .{});
-                        _ = bun.assert((offset == 0));
-                        _ = req.deref();
-                        _ = self.requests.discard(1);
-                        continue;
-});
+                        const thisValue_opt = req.thisValue.tryGet();
+                        if ((thisValue_opt == null)) {
+                            _ = bun.assertf(false, "query value was freed earlier than expected", .{});
+                            _ = bun.assert((offset == 0));
+                            _ = req.deref();
+                            _ = self.requests.discard(1);
+                            continue;
+                        }
+                        const thisValue = thisValue_opt.?;
                         const binding_value = ((PostgresSQLQuery.js.bindingGetCached(thisValue)) orelse (.zero));
                         const columns_value = ((PostgresSQLQuery.js.columnsGetCached(thisValue)) orelse (.zero));
                         _ = debug("parseAndBindAndExecute (unnamed, first execution)", .{});
@@ -1789,10 +1805,12 @@ cached_structure = statement.structure(self.js_value, self.globalObject);
         } else {
             _ = try protocol.DataRow.decode((&putter), Context, reader, DataCell.Putter.put);
         }
-        const thisValue = ((request.thisValue.tryGet()) orelse {
-        _ = bun.assertf(false, "query value was freed earlier than expected", .{});
-        return error.ExpectedRequest;
-});
+        const thisValue_opt = request.thisValue.tryGet();
+        if ((thisValue_opt == null)) {
+            _ = bun.assertf(false, "query value was freed earlier than expected", .{});
+            return error.ExpectedRequest;
+        }
+        const thisValue = thisValue_opt.?;
         const pending_value = ((PostgresSQLQuery.js.pendingValueGetCached(thisValue)) orelse (.zero));
         _ = pending_value.ensureStillAlive();
         const result = try putter.toJS(self.globalObject, pending_value, structure, statement.fields_flags, request.flags.result_mode, cached_structure);
@@ -2134,10 +2152,12 @@ var err_resp: protocol.ErrorResponse = undefined;
             _ = bun.assert((self.requests.count == 0));
             return;
         }
-        var request = ((self.current()) orelse {
-        _ = debug("ErrorResponse: {f}", .{ err_resp });
-        return error.ExpectedRequest;
-});
+        const request_opt = self.current();
+        if ((request_opt == null)) {
+            _ = debug("ErrorResponse: {f}", .{ err_resp });
+            return error.ExpectedRequest;
+        }
+        var request = request_opt.?;
         _ = &request;
         var _err_resp_guard = ConditionalDeinitGuard(@TypeOf(err_resp)){ .val = err_resp };
         _ = &_err_resp_guard;
@@ -2229,7 +2249,11 @@ pub fn getConnected(self: *PostgresSQLConnection, _: *jsc.JSGlobalObject) JSValu
 
 pub fn consumeOnConnectCallback(self: *const PostgresSQLConnection, globalObject: *jsc.JSGlobalObject) ?jsc.JSValue {
         _ = debug("consumeOnConnectCallback", .{});
-        const on_connect = ((js.onconnectGetCached(self.js_value)) orelse { return null; });
+        const on_connect_opt = js.onconnectGetCached(self.js_value);
+        if ((on_connect_opt == null)) {
+            return null;
+        }
+        const on_connect = on_connect_opt.?;
         _ = debug("consumeOnConnectCallback exists", .{});
         _ = js.onconnectSetCached(self.js_value, globalObject, .zero);
         return on_connect;
@@ -2237,7 +2261,11 @@ pub fn consumeOnConnectCallback(self: *const PostgresSQLConnection, globalObject
 
 pub fn consumeOnCloseCallback(self: *const PostgresSQLConnection, globalObject: *jsc.JSGlobalObject) ?jsc.JSValue {
         _ = debug("consumeOnCloseCallback", .{});
-        const on_close = ((js.oncloseGetCached(self.js_value)) orelse { return null; });
+        const on_close_opt = js.oncloseGetCached(self.js_value);
+        if ((on_close_opt == null)) {
+            return null;
+        }
+        const on_close = on_close_opt.?;
         _ = debug("consumeOnCloseCallback exists", .{});
         _ = js.oncloseSetCached(self.js_value, globalObject, .zero);
         return on_close;

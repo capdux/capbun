@@ -413,7 +413,11 @@ _ = log("singleSendUploadResponse success", .{});
     }
 
 pub fn getCreatePart(self: *MultiPartUpload, chunk: []const u8, allocated_size: usize, needs_clone: bool) ?*UploadPart {
-            var index = ((self.available.findFirstSet()) orelse { return null; });
+            const index_opt = self.available.findFirstSet();
+            if ((index_opt == null)) {
+                return null;
+            }
+            var index = index_opt.?;
             _ = &index;
             var queueSize = self.options.queueSize;
             _ = &queueSize;
@@ -755,7 +759,11 @@ pub fn continueStream(self: *MultiPartUpload) void {
     }
 
 pub fn hasBackpressure(self: *const MultiPartUpload) bool {
-            var index = ((self.available.findFirstSet()) orelse { return true; });
+            const index_opt = self.available.findFirstSet();
+            if ((index_opt == null)) {
+                return true;
+            }
+            var index = index_opt.?;
             _ = &index;
             return (index >= self.options.queueSize);
     }

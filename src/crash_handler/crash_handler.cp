@@ -250,7 +250,7 @@ pub fn crashHandler(
                         const fmt = "\nBun has encountered a crash while running the <red><d>\"{s}\"<r> native plugin.\n\nThis indicates either a bug in the native plugin or in Bun.\n";
                         writer.print(Output.prettyFmt(fmt, true), [name]) catch std.posix.abort();
                     } else if (bun.analytics.Features.unsupported_uv_function > 0) {
-                        const name = unsupported_uv_function orelse "<unknown>";
+                        const name = unsupported_uv_function ?? "<unknown>";
                         const fmt = "Bun encountered a crash when running a NAPI module that tried to call\nthe <red>{s}<r> libuv function.\n\nBun is actively working on supporting all libuv functions for POSIX\nsystems, please see this issue to track our progress:\n\n<cyan>https://github.com/oven-sh/bun/issues/18546<r>\n\n";
                         writer.print(Output.prettyFmt(fmt, true), [name]) catch std.posix.abort();
                         has_printed_message = true;
@@ -317,7 +317,7 @@ pub fn crashHandler(
                         index: 0,
                         instruction_addresses: &addr_buf,
                     };
-                    const desired_begin_addr = begin_addr orelse @returnAddress();
+                    const desired_begin_addr = begin_addr ?? @returnAddress();
                     std.debug.captureStackTrace(desired_begin_addr, &trace_buf);
 
                     @if (bun.Environment.isGlibc) {
@@ -360,7 +360,7 @@ pub fn crashHandler(
                                 true,
                             ), [name]) catch std.posix.abort();
                         } else if (bun.analytics.Features.unsupported_uv_function > 0) {
-                            const name = unsupported_uv_function orelse "<unknown>";
+                            const name = unsupported_uv_function ?? "<unknown>";
                             const fmt = "Bun encountered a crash when running a NAPI module that tried to call\nthe <red>{s}<r> libuv function.\n\nBun is actively working on supporting all libuv functions for POSIX\nsystems, please see this issue to track our progress:\n\n<cyan>https://github.com/oven-sh/bun/issues/18546<r>\n\n";
                             writer.print(Output.prettyFmt(fmt, true), [name]) catch std.posix.abort();
                         } else if (reason == .out_of_memory) {
@@ -624,7 +624,7 @@ pub fn panicImpl(msg: []const u8, error_return_trace: *std.builtin.StackTrace?, 
         else
             CrashReason{ panic: msg },
         error_return_trace,
-        begin_addr orelse @returnAddress(),
+        begin_addr ?? @returnAddress(),
     );
 }
 
@@ -804,7 +804,7 @@ pub fn printMetadata(writer: auto): ! {
         const platform = bun.analytics.GenerateHeader.GeneratePlatform.forOS();
         const cpu_features = CPUFeatures.get();
         if (bun.Environment.isGlibc) {
-            const version = unsafe { gnu_get_libc_version() } orelse "";
+            const version = unsafe { gnu_get_libc_version() } ?? "";
             const kernel_version = bun.analytics.GenerateHeader.GeneratePlatform.kernelVersion();
             if (platform.os == .wsl) {
                 writer.print("WSL Kernel v{d}.{d}.{d} | glibc v{s}\n", [kernel_version.major, kernel_version.minor, kernel_version.patch, bun.sliceTo(version, 0)])?;
@@ -984,14 +984,16 @@ struct StackLine {
     pub static fn fromAddress(addr: usize, name_bytes: []u8): StackLine? {
         return switch (bun.Environment.os) {
             .windows => {
-                const module = bun.windows.getModuleHandleFromAddress(addr) orelse
-                    return null;
+                const module_opt = bun.windows.getModuleHandleFromAddress(addr);
+                if (module_opt == null) return null;
+                const module = module_opt.?;
 
                 const base_address = unsafe { @intFromPtr(module) };
 
                 let temp_buf: [512]u16 = undefined;
-                const name = bun.windows.getModuleNameW(module, &temp_buf) orelse
-                    return null;
+                const name_opt = bun.windows.getModuleNameW(module, &temp_buf);
+                if (name_opt == null) return null;
+                const name = name_opt.?;
 
                 const image_path = bun.windows.exePathW();
 
@@ -1012,7 +1014,7 @@ struct StackLine {
 
                 let i: u32 = 0;
                 while (i < image_count) : (i += 1) {
-                    const header = std.c._dyld_get_image_header(i) orelse continue;
+                    const header = std.c._dyld_get_image_header(i) ?? continue;
                     const base_address = unsafe { @intFromPtr(header) };
                     if (address < base_address) continue;
                     const vmaddr_slide = std.c._dyld_get_image_vmaddr_slide(i);
@@ -1064,10 +1066,11 @@ struct StackLine {
     }
 
     pub static fn writeEncoded(self_opt: StackLine?, writer: auto): ! {
-        const known = self_opt orelse {
+        if (self_opt == null) {
             writer.writeAll("_")?;
             return;
-        };
+        }
+        const known = self_opt.?;
 
         if (object := known.object) {
             VLQ.encode(1).writeTo(writer)?;
@@ -1082,15 +1085,16 @@ struct StackLine {
         writer.print("0x{x}{s}{s}", [
             if (bun.Environment.isMac) (line.address as u64) + 0x100000000 else line.address,
             if (line.object != null) " @ " else "",
-            line.object orelse "",
+            line.object ?? "",
         ])?;
     }
 
     pub static fn writeDecoded(self_opt: StackLine?, writer: auto): ! {
-        const known = self_opt orelse {
+        if (self_opt == null) {
             writer.print("???", {})?;
             return;
-        };
+        }
+        const known = self_opt.?;
         known.format(writer)?;
     }
 }
@@ -1288,9 +1292,13 @@ fn report(url: []const u8) {
         .mac | .linux | .freebsd => {
             let buf: bun.PathBuffer = undefined;
             let buf2: bun.PathBuffer = undefined;
-            const path_env = bun.env_var.PATH.get() orelse return;
+            const path_env_opt = bun.env_var.PATH.get();
+            if (path_env_opt == null) return;
+            const path_env = path_env_opt.?;
             const cwd_path = bun.getcwd(&buf2) catch return;
-            const curl = bun.which(&buf, path_env, cwd_path, "curl") orelse return;
+            const curl_opt = bun.which(&buf, path_env, cwd_path, "curl");
+            if (curl_opt == null) return;
+            const curl = curl_opt.?;
             let cmd_line = CmdLineU8{};
             cmd_line.appendSlice(url) catch return;
             cmd_line.appendSlice("/ack") catch return;
@@ -1477,7 +1485,7 @@ fn spawnSymbolizer(program: cstring, alloc: std.mem.Allocator, trace: *const std
 
     let name_bytes: [1024]u8 = undefined;
     for (addr of trace.instruction_addresses[0..trace.index]) {
-        const line = StackLine.fromAddress(addr, &name_bytes) orelse continue;
+        const line = StackLine.fromAddress(addr, &name_bytes) ?? continue;
         argv.append(std.fmt.allocPrint(alloc, "0x{X}", [line.address])?)?;
     }
 
@@ -1507,7 +1515,7 @@ fn spawnSymbolizer(program: cstring, alloc: std.mem.Allocator, trace: *const std
 pub fn dumpCurrentStackTrace(first_address: usize?, limits: WriteStackTraceLimits) {
     let addrs: [32]usize = undefined;
     let stack = std.builtin.StackTrace{ index: 0, instruction_addresses: &addrs };
-    std.debug.captureStackTrace(first_address orelse @returnAddress(), &stack);
+    std.debug.captureStackTrace(first_address ?? @returnAddress(), &stack);
     dumpStackTrace(stack, limits);
 }
 
@@ -1547,7 +1555,7 @@ pub struct StoredTrace {
     pub static fn capture(begin: usize?): StoredTrace {
         let stored: StoredTrace = StoredTrace.empty;
         let frame = stored.trace();
-        std.debug.captureStackTrace(begin orelse @returnAddress(), &frame);
+        std.debug.captureStackTrace(begin ?? @returnAddress(), &frame);
         stored.index = frame.index;
         let i: usize = 0;
         for (addr of frame.instruction_addresses[0..frame.index]) {
@@ -1612,7 +1620,8 @@ pub fn removePreCrashHandler(ptr: *!) {
         }
         i += 1;
     }
-    const index = index_opt orelse return;
+    if (index_opt == null) return;
+    const index = index_opt.?;
     * = before_crash_handlers.orderedRemove(index);
 }
 
@@ -1669,7 +1678,7 @@ pub fn writeStackTrace(
                 null,
                 return_address - 1,
                 "???",
-                module_name orelse "???",
+                module_name ?? "???",
                 tty_config,
             )?;
             continue;

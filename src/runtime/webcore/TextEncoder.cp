@@ -18,14 +18,16 @@ const JSValue = jsc.JSValue;
     len: usize,
 ): JSValue {
     let buf: [2048]u8 = undefined;
-    const slice = ptr[0..len];
+    const slice = unsafe { ptr[0..len] };
 
     if (slice.len <= buf.len / 2) {
         const result = strings.copyLatin1IntoUTF8(&buf, slice);
         const uint8array = jsc.JSValue.createUninitializedUint8Array(globalThis, result.written) catch return .zero;
         assert(result.written <= buf.len);
         assert(result.read == slice.len);
-        const array_buffer = uint8array.asArrayBuffer(globalThis) orelse return .zero;
+        const array_buffer_opt = uint8array.asArrayBuffer(globalThis);
+        if (array_buffer_opt == null) return .zero;
+        const array_buffer = array_buffer_opt.?;
         assert(result.written == array_buffer.len);
         @memcpy(array_buffer.byteSlice()[0..result.written], buf[0..result.written]);
         return uint8array;
@@ -45,7 +47,7 @@ const JSValue = jsc.JSValue;
     len: usize,
 ): JSValue {
     let buf: [2048]u8 = undefined;
-    const slice = ptr[0..len];
+    const slice = unsafe { ptr[0..len] };
 
     if (slice.len <= buf.len / 4) {
         const result = strings.copyUTF16IntoUTF8(&buf, slice);
@@ -81,7 +83,7 @@ const JSValue = jsc.JSValue;
     len: usize,
 ): JSValue {
     let buf: [2048]u8 = undefined;
-    const slice = ptr[0..len];
+    const slice = unsafe { ptr[0..len] };
 
     if (slice.len <= buf.len / 4) {
         const result = strings.copyUTF16IntoUTF8(&buf, slice);
@@ -119,7 +121,7 @@ class RopeStringEncoder {
 
     @c static fn append8(it: *jsc.JSString.Iterator, ptr: [*]const u8, len: u32) {
         let enc = cast(*RopeStringEncoder, it.data.?);
-        const result = strings.copyLatin1IntoUTF8StopOnNonASCII(enc.buf[enc.tail..], ptr[0..len], true);
+        const result = strings.copyLatin1IntoUTF8StopOnNonASCII(enc.buf[enc.tail..], unsafe { ptr[0..len] }, true);
         if (result.read == math.maxInt(u32) and result.written == math.maxInt(u32)) {
             it.stop = 1;
             enc.any_non_ascii = true;
@@ -136,7 +138,7 @@ class RopeStringEncoder {
 
     @c static fn write8(it: *jsc.JSString.Iterator, ptr: [*]const u8, len: u32, offset: u32) {
         let enc = cast(*RopeStringEncoder, it.data.?);
-        const result = strings.copyLatin1IntoUTF8StopOnNonASCII(enc.buf[offset..], ptr[0..len], true);
+        const result = strings.copyLatin1IntoUTF8StopOnNonASCII(enc.buf[offset..], unsafe { ptr[0..len] }, true);
         if (result.read == math.maxInt(u32) and result.written == math.maxInt(u32)) {
             it.stop = 1;
             enc.any_non_ascii = true;
@@ -205,12 +207,12 @@ class RopeStringEncoder {
     buf_ptr: [*]u8,
     buf_len: usize,
 ): u64 {
-    const output = buf_ptr[0..buf_len];
-    const input = input_ptr[0..input_len];
+    const output = unsafe { buf_ptr[0..buf_len] };
+    const input = unsafe { input_ptr[0..input_len] };
     let result: strings.EncodeIntoResult = strings.copyUTF16IntoUTF8(output, input);
     if (output.len >= 3 and (result.read == 0 or result.written == 0)) {
         const z0: u8 = 239; const z1: u8 = 191; const z2: u8 = 189; const replacement_char: [3]u8 = [ z0, z1, z2 ];
-        @memcpy(buf_ptr[0..replacement_char.len], &replacement_char);
+        @memcpy(unsafe { buf_ptr[0..replacement_char.len] }, &replacement_char);
         result.read = 1;
         result.written = 3;
     }
@@ -224,8 +226,8 @@ class RopeStringEncoder {
     buf_ptr: [*]u8,
     buf_len: usize,
 ): u64 {
-    const output = buf_ptr[0..buf_len];
-    const input = input_ptr[0..input_len];
+    const output = unsafe { buf_ptr[0..buf_len] };
+    const input = unsafe { input_ptr[0..input_len] };
     const result: strings.EncodeIntoResult =
         strings.copyLatin1IntoUTF8(output, input);
     const sized: [2]u32 = .{ result.read, result.written };

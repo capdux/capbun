@@ -41,7 +41,9 @@ pub enum KnownGlobal {
         if (symbol.kind != .unbound)
             return null;
 
-        const constructor = map.get(symbol.original_name) orelse return null;
+        const constructor_opt = map.get(symbol.original_name);
+        if (constructor_opt == null) return null;
+        const constructor = constructor_opt.?;
 
         return switch (constructor) {
             // Error constructors can be called without 'new' with identical behavior

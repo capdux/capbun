@@ -771,7 +771,11 @@ pub fn seedWindow(self: InternalSourceMap, sync_idx: u32, state: *State, reader:
 pub fn findWithCache(self: InternalSourceMap, line: bun.Ordinal, column: bun.Ordinal, set: *FindCache) ?Mapping {
         const target_line = line.zeroBased();
         const target_col = column.zeroBased();
-        const sync_idx = ((self.locateWindow(target_line, target_col)) orelse { return null; });
+        const sync_idx_opt = self.locateWindow(target_line, target_col);
+        if ((sync_idx_opt == null)) {
+            return null;
+        }
+        const sync_idx = sync_idx_opt.?;
         const cache = set.slotFor(self.data, sync_idx);
         if ((((cache.data != self.data) or (cache.sync_idx != sync_idx)) or (cache.decoded_count == 0))) {
             _ = self.seedWindow(sync_idx, (&cache.decoded[0]), (&cache.reader));
@@ -815,7 +819,11 @@ pub fn findWithCache(self: InternalSourceMap, line: bun.Ordinal, column: bun.Ord
 pub fn find(self: InternalSourceMap, line: bun.Ordinal, column: bun.Ordinal) ?Mapping {
         const target_line = line.zeroBased();
         const target_col = column.zeroBased();
-        const sync_idx = ((self.locateWindow(target_line, target_col)) orelse { return null; });
+        const sync_idx_opt = self.locateWindow(target_line, target_col);
+        if ((sync_idx_opt == null)) {
+            return null;
+        }
+        const sync_idx = sync_idx_opt.?;
         var state: State = .{};
         _ = &state;
         var reader: WindowReader = undefined;

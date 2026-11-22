@@ -702,25 +702,30 @@ pub fn commitRopePart(self: *Parser, arena_allocator: Allocator, ropealloc: Allo
     }
 
 pub fn strToRope(ropealloc: Allocator, key: []const u8) OOM!*Rope {
-            var dot_idx = ((nextDot(key)) orelse {
-            const rope = try ropealloc.create(Rope);
-            rope.* = .{ .head = Expr.init(E.String, E.String.init(key), Loc.Empty) };
-            return rope;
-});
+            const dot_idx_opt = nextDot(key);
+            if ((dot_idx_opt == null)) {
+                const rope = try ropealloc.create(Rope);
+                rope.* = .{ .head = Expr.init(E.String, E.String.init(key), Loc.Empty) };
+                return rope;
+            }
+            var dot_idx = dot_idx_opt.?;
             _ = &dot_idx;
             var rope = try ropealloc.create(Rope);
             _ = &rope;
             const head = rope;
             rope.* = .{ .head = Expr.init(E.String, E.String.init(key[0..dot_idx]), Loc.Empty), .next = null };
             while (((dot_idx + 1) < key.len)) {
-                const next_dot_idx = ((dot_idx + 1) + ((nextDot(key[(dot_idx + 1)..])) orelse {
-                const rest = key[(dot_idx + 1)..];
-                rope = try rope.append(Expr.init(E.String, E.String.init(rest), Loc.Empty), ropealloc);
-                break;
-}));
-                const part = key[(dot_idx + 1)..next_dot_idx];
-                rope = try rope.append(Expr.init(E.String, E.String.init(part), Loc.Empty), ropealloc);
-                dot_idx = next_dot_idx;
+                if (nextDot(key[(dot_idx + 1)..])) |next_dot| {
+                    _ = &next_dot;
+                    const next_dot_idx = ((dot_idx + 1) + next_dot);
+                    const part = key[(dot_idx + 1)..next_dot_idx];
+                    rope = try rope.append(Expr.init(E.String, E.String.init(part), Loc.Empty), ropealloc);
+                    dot_idx = next_dot_idx;
+                } else {
+                    const rest = key[(dot_idx + 1)..];
+                    rope = try rope.append(Expr.init(E.String, E.String.init(rest), Loc.Empty), ropealloc);
+                    break;
+                }
             }
             return head;
     }
@@ -1355,7 +1360,7 @@ _ = unreachable;
                     while (i < __end_12) : (i += 1) {
                         const k = scope_keys[@as(usize, @intCast(i))];
                         const v = (&scope_vals[@as(usize, @intCast(i))]);
-                        const url = ((url_map.get(k)) orelse (unreachable));
+                        const url = (url_map.get(k)).?;
                         if ((std.mem.eql(u8, bun.strings.withoutTrailingSlash(url.host), bun.strings.withoutTrailingSlash(conf_item_url.host)) and std.mem.eql(u8, bun.strings.withoutTrailingSlash(url.pathname), bun.strings.withoutTrailingSlash(conf_item_url.pathname)))) {
                             if ((conf_item_url.hostname.len > 0)) {
                                 if ((!std.mem.eql(u8, bun.strings.withoutTrailingSlash(url.hostname), bun.strings.withoutTrailingSlash(conf_item_url.hostname)))) {
@@ -1419,14 +1424,16 @@ pub fn @"handle _auth"(allocator: Allocator, v: *bun.schema.api.NpmRegistry, con
                 return;
             }
             const user_pass = decoded[0..result.count];
-            const colon_idx = ((std.mem.indexOfScalar(u8, user_pass, 58)) orelse {
-            var _g_up = FreeGuard(u8){ .ptr = user_pass, .alloc = allocator };
-            _ = &_g_up;
-            var ___g_up_moved = false; _ = &___g_up_moved;
-            defer if (!___g_up_moved) { ___g_up_moved = true; const __T = @TypeOf(_g_up); if (@typeInfo(__T) == .optional) { if (_g_up) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _g_up.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _g_up; _drop_val.__cp_deinit(); } };
-            _ = try log.addErrorOpts("invalid _auth value, expected base64 encoded \"<username>:<password>\"", .{ .source = source, .loc = conf_item.loc, .redact_sensitive_information = true });
-            return;
-});
+            const colon_idx_opt = std.mem.indexOfScalar(u8, user_pass, 58);
+            if ((colon_idx_opt == null)) {
+                var _g_up = FreeGuard(u8){ .ptr = user_pass, .alloc = allocator };
+                _ = &_g_up;
+                var ___g_up_moved = false; _ = &___g_up_moved;
+                defer if (!___g_up_moved) { ___g_up_moved = true; const __T = @TypeOf(_g_up); if (@typeInfo(__T) == .optional) { if (_g_up) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _g_up.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _g_up; _drop_val.__cp_deinit(); } };
+                _ = try log.addErrorOpts("invalid _auth value, expected base64 encoded \"<username>:<password>\"", .{ .source = source, .loc = conf_item.loc, .redact_sensitive_information = true });
+                return;
+            }
+            const colon_idx = colon_idx_opt.?;
             const username = user_pass[0..colon_idx];
             if (((colon_idx + 1) >= user_pass.len)) {
                 var _g_up = FreeGuard(u8){ .ptr = user_pass, .alloc = allocator };

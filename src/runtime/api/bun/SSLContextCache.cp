@@ -108,7 +108,9 @@ pub struct Entry {
         // file I/O / cert parsing and on Windows the system-CA load — none of
         // which has a reason to serialize, and holding a non-reentrant SRWLock
         // across an SSL_CTX_free that *did* tombstone would self-deadlock.
-        const ctx = opts.createSSLContext(e) orelse return null;
+        const ctx_opt = opts.createSSLContext(e);
+        if (ctx_opt == null) return null;
+        const ctx = ctx_opt.?;
 
         const _guard = MutexGuard.lock(&_.mutex);
 
@@ -199,7 +201,8 @@ pub struct c {
     * = index;
     * = argl;
     * = argp;
-    const p = ptr orelse return;
+    if (ptr == null) return;
+    const p = ptr.?;
     const entry: *Entry = unsafe { @ptrCast(@alignCast(p)) };
     const _guard = MutexGuard.lock(&entry.owner.mutex);
     entry.ctx = null;

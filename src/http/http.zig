@@ -624,7 +624,10 @@ pub fn fail(self: *HTTPClient, err: anyerror) void {
 }
 
 pub fn resolvePendingH2(self: *HTTPClient, resolution: PendingH2Resolution) void {
-        const pc = ((self.pending_h2) orelse { return; });
+        if ((self.pending_h2 == null)) {
+            return;
+        }
+        const pc = self.pending_h2.?;
         self.pending_h2 = null;
         _ = pc.unregisterFrom(self.getSslCtx(true));
         var _pc_guard = DeinitGuard(@TypeOf(pc.*)){ .ptr = pc };
@@ -888,20 +891,24 @@ pub fn start_(self: *HTTPClient, comptime is_ssl: bool) void {
                 _ = self.fail(error.HTTP3Unsupported);
                 return;
             }
-            const ctx = ((H3.ClientContext.getOrCreate(http_thread.loop.loop)) orelse {
-            _ = self.fail(error.HTTP3Unsupported);
-            return;
-});
+            const maybe_ctx = H3.ClientContext.getOrCreate(http_thread.loop.loop);
+            if ((maybe_ctx == null)) {
+                _ = self.fail(error.HTTP3Unsupported);
+                return;
+            }
+            const ctx = maybe_ctx.?;
             if ((!ctx.connect(self, self.url.hostname, self.url.getPortAuto()))) {
                 _ = self.fail(error.ConnectionRefused);
             }
             return;
         }
-        var socket = (((blk_catch_3: { break :blk_catch_3 ((http_thread.connect(is_ssl, self)) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
+        const maybe_socket = (blk_catch_3: { break :blk_catch_3 ((http_thread.connect(is_ssl, self)) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
         _ = self.fail(e);
-        return; }); })) orelse {
-        return;
-});
+        return; }); });
+        if ((maybe_socket == null)) {
+            return;
+        }
+        var socket = maybe_socket.?;
         _ = &socket;
         if ((socket.isClosed() and ((self.state.response_stage != .done) and (self.state.response_stage != .fail)))) {
             _ = NewHTTPContext(is_ssl).markSocketAsDead(socket);
@@ -1048,7 +1055,10 @@ pub fn writeToStream(self: *HTTPClient, comptime is_ssl: bool, socket: NewHTTPCo
         if ((self.state.original_request_body != .stream)) {
             return;
         }
-        const stream_buffer = ((self.state.original_request_body.stream.buffer) orelse { return; });
+        if ((self.state.original_request_body.stream.buffer == null)) {
+            return;
+        }
+        const stream_buffer = self.state.original_request_body.stream.buffer.?;
         if ((self.flags.upgrade_state == .pending)) {
             return;
         }
@@ -1477,7 +1487,10 @@ else => {
         if (self.state.flags.is_redirect_pending) {
             return;
         }
-        const body_out_str = ((self.state.body_out_str) orelse { return; });
+        if ((self.state.body_out_str == null)) {
+            return;
+        }
+        const body_out_str = self.state.body_out_str.?;
         if ((body_out_str.list.items.len == 0)) {
             return;
         }

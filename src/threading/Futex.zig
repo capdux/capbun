@@ -146,10 +146,17 @@ pub fn wait(ptr: *const atomic.Value(u32), expect: u32, timeout: ?u64) TimeoutEr
             if (supports_ulock_wait2) {
                 break :blk c.__ulock_wait2(flags, addr, expect, timeout_ns, 0);
             }
-            const timeout_us: u32 = (if ((timeout_ns == 0)) 0 else ((std.math.cast(u32, ((timeout_ns + 999) / 1000))) orelse (blk_overflow: {
-            timeout_overflowed = true;
-            break :blk_overflow std.math.maxInt(u32);
-})));
+            var timeout_us: u32 = 0;
+            _ = &timeout_us;
+            if ((timeout_ns != 0)) {
+                if (std.math.cast(u32, ((timeout_ns + 999) / 1000))) |casted| {
+                    _ = &casted;
+                    timeout_us = casted;
+                } else {
+                    timeout_overflowed = true;
+                    timeout_us = std.math.maxInt(u32);
+                }
+            }
             break :blk c.__ulock_wait(flags, addr, expect, timeout_us);
 };
             if ((status >= 0)) {

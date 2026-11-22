@@ -556,7 +556,7 @@ export struct ErrorDeferred {
             .code = bun.String.static(code_full),
             .message = msg,
             .syscall = bun.String.cloneUTF8(this.syscall),
-            .hostname = this.hostname orelse bun.String.empty,
+            .hostname = this.hostname ?? bun.String.empty,
         };
 
         const instance = system_error.toErrorInstanceWithAsyncStack(globalThis, this.promise.get());

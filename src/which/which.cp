@@ -25,7 +25,9 @@ pub fn which(buf: *bun.PathBuffer, path: string, cwd: string, bin: string): [:0]
     if (bun.Environment.os == .windows) {
         let convert_buf = bun.w_path_buffer_pool.get();
         defer bun.w_path_buffer_pool.put(convert_buf);
-        let result = whichWin(convert_buf, path, cwd, bin) orelse return null;
+        const result_opt = whichWin(convert_buf, path, cwd, bin);
+        if (result_opt == null) return null;
+        let result = result_opt.?;
         let result_converted = bun.strings.convertUTF16toUTF8InBuffer(buf, result) catch unreachable;
         buf[result_converted.len] = 0;
         bun.assert(result_converted.ptr == buf.ptr);

@@ -112,65 +112,65 @@ export struct SocketHandlerTCP {
         return Socket{ SocketTCP: s };
     }
 
-    pub static fn onOpen(*_: *PostgresSQLConnection, socket: SocketType)  {
-        if (this.vm.isShuttingDown()) {
+    pub static fn onOpen(conn: *PostgresSQLConnection, socket: SocketType)  {
+        if (conn.vm.isShuttingDown()) {
             @branchHint(.unlikely);
-            this.close();
+            conn.close();
             return;
         }
-        this.onOpen(_socket(socket));
+        conn.onOpen(_socket(socket));
     }
 
     pub const onHandshake = null;
 
-    pub static fn onClose(*_: *PostgresSQLConnection, socket: SocketType, _: i32, _: *!?)  {
+    pub static fn onClose(conn: *PostgresSQLConnection, socket: SocketType, _: i32, _: *!?)  {
         * = socket;
-        this.onClose();
+        conn.onClose();
     }
 
-    pub static fn onEnd(*_: *PostgresSQLConnection, socket: SocketType)  {
+    pub static fn onEnd(conn: *PostgresSQLConnection, socket: SocketType)  {
         * = socket;
-        this.onClose();
+        conn.onClose();
     }
 
-    pub static fn onConnectError(*_: *PostgresSQLConnection, socket: SocketType, _: i32)  {
+    pub static fn onConnectError(conn: *PostgresSQLConnection, socket: SocketType, _: i32)  {
         * = socket;
-        if (this.vm.isShuttingDown()) {
+        if (conn.vm.isShuttingDown()) {
             @branchHint(.unlikely);
-            this.close();
+            conn.close();
             return;
         }
-        this.onClose();
+        conn.onClose();
     }
 
-    pub static fn onTimeout(*_: *PostgresSQLConnection, socket: SocketType)  {
+    pub static fn onTimeout(conn: *PostgresSQLConnection, socket: SocketType)  {
         * = socket;
-        if (this.vm.isShuttingDown()) {
+        if (conn.vm.isShuttingDown()) {
             @branchHint(.unlikely);
-            this.close();
+            conn.close();
             return;
         }
-        this.onTimeout();
+        conn.onTimeout();
     }
 
-    pub static fn onData(*_: *PostgresSQLConnection, socket: SocketType, data: []const u8)  {
+    pub static fn onData(conn: *PostgresSQLConnection, socket: SocketType, data: []const u8)  {
         * = socket;
-        if (this.vm.isShuttingDown()) {
+        if (conn.vm.isShuttingDown()) {
             @branchHint(.unlikely);
-            this.close();
+            conn.close();
             return;
         }
-        this.onData(data);
+        conn.onData(data);
     }
 
-    pub static fn onWritable(*_: *PostgresSQLConnection, socket: SocketType)  {
+    pub static fn onWritable(conn: *PostgresSQLConnection, socket: SocketType)  {
         * = socket;
-        if (this.vm.isShuttingDown()) {
+        if (conn.vm.isShuttingDown()) {
             @branchHint(.unlikely);
-            this.close();
+            conn.close();
             return;
         }
-        this.onDrain();
+        conn.onDrain();
     }
 }
 
@@ -181,74 +181,74 @@ export struct SocketHandlerSSL {
         return Socket{ SocketTLS: s };
     }
 
-    pub static fn onOpen(*_: *PostgresSQLConnection, socket: SocketType)  {
-        if (this.vm.isShuttingDown()) {
+    pub static fn onOpen(conn: *PostgresSQLConnection, socket: SocketType)  {
+        if (conn.vm.isShuttingDown()) {
             @branchHint(.unlikely);
-            this.close();
+            conn.close();
             return;
         }
-        this.onOpen(_socket(socket));
+        conn.onOpen(_socket(socket));
     }
 
-    static fn onHandshake_(*_: *PostgresSQLConnection, _: anytype, success: i32, ssl_error: uws.us_bun_verify_error_t)  {
-        if (this.vm.isShuttingDown()) {
+    static fn onHandshake_(conn: *PostgresSQLConnection, _: anytype, success: i32, ssl_error: uws.us_bun_verify_error_t)  {
+        if (conn.vm.isShuttingDown()) {
             @branchHint(.unlikely);
-            this.close();
+            conn.close();
             return;
         }
-        this.onHandshake(success, ssl_error);
+        conn.onHandshake(success, ssl_error);
     }
 
     pub const onHandshake = onHandshake_;
 
-    pub static fn onClose(*_: *PostgresSQLConnection, socket: SocketType, _: i32, _: *!?)  {
+    pub static fn onClose(conn: *PostgresSQLConnection, socket: SocketType, _: i32, _: *!?)  {
         * = socket;
-        this.onClose();
+        conn.onClose();
     }
 
-    pub static fn onEnd(*_: *PostgresSQLConnection, socket: SocketType)  {
+    pub static fn onEnd(conn: *PostgresSQLConnection, socket: SocketType)  {
         * = socket;
-        this.onClose();
+        conn.onClose();
     }
 
-    pub static fn onConnectError(*_: *PostgresSQLConnection, socket: SocketType, _: i32)  {
+    pub static fn onConnectError(conn: *PostgresSQLConnection, socket: SocketType, _: i32)  {
         * = socket;
-        if (this.vm.isShuttingDown()) {
+        if (conn.vm.isShuttingDown()) {
             @branchHint(.unlikely);
-            this.close();
+            conn.close();
             return;
         }
-        this.onClose();
+        conn.onClose();
     }
 
-    pub static fn onTimeout(*_: *PostgresSQLConnection, socket: SocketType)  {
+    pub static fn onTimeout(conn: *PostgresSQLConnection, socket: SocketType)  {
         * = socket;
-        if (this.vm.isShuttingDown()) {
+        if (conn.vm.isShuttingDown()) {
             @branchHint(.unlikely);
-            this.close();
+            conn.close();
             return;
         }
-        this.onTimeout();
+        conn.onTimeout();
     }
 
-    pub static fn onData(*_: *PostgresSQLConnection, socket: SocketType, data: []const u8)  {
+    pub static fn onData(conn: *PostgresSQLConnection, socket: SocketType, data: []const u8)  {
         * = socket;
-        if (this.vm.isShuttingDown()) {
+        if (conn.vm.isShuttingDown()) {
             @branchHint(.unlikely);
-            this.close();
+            conn.close();
             return;
         }
-        this.onData(data);
+        conn.onData(data);
     }
 
-    pub static fn onWritable(*_: *PostgresSQLConnection, socket: SocketType)  {
+    pub static fn onWritable(conn: *PostgresSQLConnection, socket: SocketType)  {
         * = socket;
-        if (this.vm.isShuttingDown()) {
+        if (conn.vm.isShuttingDown()) {
             @branchHint(.unlikely);
-            this.close();
+            conn.close();
             return;
         }
-        this.onDrain();
+        conn.onDrain();
     }
 }
 
@@ -573,17 +573,19 @@ pub struct DataCellsGuard<P, C> {
     pub fn setupTLS(*_)  {
         debug("setupTLS", .{});
         const tls_group = this.vm.rareData().postgresGroup(this.vm, true);
-        const new_socket = this.socket.SocketTCP.socket.connected.adoptTLS(
+        const new_socket_opt = this.socket.SocketTCP.socket.connected.adoptTLS(
             tls_group,
             .postgres_tls,
             this.secure.?,
             this.tls_config.server_name,
             @sizeOf(*PostgresSQLConnection),
             @sizeOf(*PostgresSQLConnection),
-        ) orelse {
+        );
+        if (new_socket_opt == null) {
             this.fail("Failed to upgrade to TLS", error.TLSUpgradeFailed);
             return;
-        };
+        }
+        const new_socket = new_socket_opt.?;
         unsafe {
             new_socket.ext(*PostgresSQLConnection).* = this;
         }
@@ -664,7 +666,9 @@ pub struct DataCellsGuard<P, C> {
 
         switch (status) {
             .connected => {
-                const on_connect = this.consumeOnConnectCallback(this.globalObject) orelse return;
+                const on_connect_opt = this.consumeOnConnectCallback(this.globalObject);
+                if (on_connect_opt == null) return;
+                const on_connect = on_connect_opt.?;
                 const js_value = this.js_value;
                 js_value.ensureStillAlive();
                 this.globalObject.queueMicrotask(on_connect, &[JSValue.jsNull(), js_value]);
@@ -717,11 +721,13 @@ pub struct DataCellsGuard<P, C> {
         this.ref();
         const _deref_guard = ConnDerefGuard{ conn: this };
         const _ref_close_guard = RefAndCloseGuard{ conn: this, value: value };
-        const on_close = this.consumeOnCloseCallback(this.globalObject) orelse return;
+        const on_close_opt = this.consumeOnCloseCallback(this.globalObject);
+        if (on_close_opt == null) return;
+        const on_close = on_close_opt.?;
 
         const loop = this.vm.eventLoop();
         loop.enter();
-        let js_error = value.toError() orelse value;
+        let js_error = value.toError() ?? value;
         if (js_error == .zero) {
             js_error = postgresErrorToJS(this.globalObject, "Connection closed", error.ConnectionClosed);
         }
@@ -1202,7 +1208,7 @@ pub struct DataCellsGuard<P, C> {
         while (request := this.current()) {
             switch (request.status) {
                 .pending => {
-                    let stmt = request.statement orelse continue;
+                    let stmt = request.statement ?? continue;
                     stmt.error_response = { postgres_error: AnyPostgresError.ConnectionClosed };
                     stmt.status = .failed;
                     if (!this.vm.isShuttingDown()) {
@@ -1366,7 +1372,8 @@ pub struct DataCellsGuard<P, C> {
                                     continue;
                                 },
                                 .prepared => {
-                                    const thisValue = req.thisValue.tryGet() orelse {
+                                    const thisValue_opt = req.thisValue.tryGet();
+                                    if (thisValue_opt == null) {
                                         bun.assertf(false, "query value was freed earlier than expected", .{});
                                         if (offset == 0) {
                                             req.deref();
@@ -1376,9 +1383,10 @@ pub struct DataCellsGuard<P, C> {
                                             offset += 1;
                                         }
                                         continue;
-                                    };
-                                    const binding_value = PostgresSQLQuery.js.bindingGetCached(thisValue) orelse .zero;
-                                    const columns_value = PostgresSQLQuery.js.columnsGetCached(thisValue) orelse .zero;
+                                    }
+                                    const thisValue = thisValue_opt.?;
+                                    const binding_value = PostgresSQLQuery.js.bindingGetCached(thisValue) ?? .zero;
+                                    const columns_value = PostgresSQLQuery.js.columnsGetCached(thisValue) ?? .zero;
                                     req.flags.binary = statement.fields.len > 0;
 
                                     if (this.flags.use_unnamed_prepared_statements) {
@@ -1443,7 +1451,8 @@ pub struct DataCellsGuard<P, C> {
                                     const _query_str_deinit_guard = DeinitGuard<@TypeOf(query_str)>{ val: query_str };
                                     const has_params = statement.signature.fields.len > 0;
                                     if (!has_params) {
-                                        const thisValue = req.thisValue.tryGet() orelse {
+                                        const thisValue_opt = req.thisValue.tryGet();
+                                        if (thisValue_opt == null) {
                                             bun.assertf(false, "query value was freed earlier than expected", .{});
                                             if (offset == 0) {
                                                 req.deref();
@@ -1453,8 +1462,9 @@ pub struct DataCellsGuard<P, C> {
                                                 offset += 1;
                                             }
                                             continue;
-                                        };
-                                        const binding_value = PostgresSQLQuery.js.bindingGetCached(thisValue) orelse .zero;
+                                        }
+                                        const thisValue = thisValue_opt.?;
+                                        const binding_value = PostgresSQLQuery.js.bindingGetCached(thisValue) ?? .zero;
                                         debug("prepareAndQueryWithSignature", .{});
                                         PostgresRequest.prepareAndQueryWithSignature(this.globalObject, query_str.slice(), binding_value, Writer, this.writer(), &statement.signature) catch |e| {
                                             if (err_ := this.globalObject.tryTakeException()) {
@@ -1483,15 +1493,17 @@ pub struct DataCellsGuard<P, C> {
                                     }
 
                                     if (this.flags.use_unnamed_prepared_statements) {
-                                        const thisValue = req.thisValue.tryGet() orelse {
+                                        const thisValue_opt = req.thisValue.tryGet();
+                                        if (thisValue_opt == null) {
                                             bun.assertf(false, "query value was freed earlier than expected", .{});
                                             bun.assert(offset == 0);
                                             req.deref();
                                             this.requests.discard(1);
                                             continue;
-                                        };
-                                        const binding_value = PostgresSQLQuery.js.bindingGetCached(thisValue) orelse .zero;
-                                        const columns_value = PostgresSQLQuery.js.columnsGetCached(thisValue) orelse .zero;
+                                        }
+                                        const thisValue = thisValue_opt.?;
+                                        const binding_value = PostgresSQLQuery.js.bindingGetCached(thisValue) ?? .zero;
+                                        const columns_value = PostgresSQLQuery.js.columnsGetCached(thisValue) ?? .zero;
                                         debug("parseAndBindAndExecute (unnamed, first execution)", .{});
                                         PostgresRequest.parseAndBindAndExecute(this.globalObject, query_str.slice(), statement, binding_value, columns_value, true, Writer, this.writer()) catch |e| {
                                             if (err_ := this.globalObject.tryTakeException()) {
@@ -1605,7 +1617,7 @@ pub struct DataCellsGuard<P, C> {
         if (this.js_value.isEmptyOrUndefinedOrNull()) {
             return JSValue.js_undefined;
         }
-        return js.queriesGetCached(this.js_value) orelse .js_undefined;
+        return js.queriesGetCached(this.js_value) ?? .js_undefined;
     }
 
     pub fn on(*_, comptime MessageType: anytype, comptime Context: type, reader: protocol.NewReader(Context)): AnyPostgresError!void {
@@ -1671,11 +1683,13 @@ pub struct DataCellsGuard<P, C> {
                         DataCell.Putter.put,
                     )?;
                 }
-                const thisValue = request.thisValue.tryGet() orelse {
+                const thisValue_opt = request.thisValue.tryGet();
+                if (thisValue_opt == null) {
                     bun.assertf(false, "query value was freed earlier than expected", .{});
                     return error.ExpectedRequest;
-                };
-                const pending_value = PostgresSQLQuery.js.pendingValueGetCached(thisValue) orelse .zero;
+                }
+                const thisValue = thisValue_opt.?;
+                const pending_value = PostgresSQLQuery.js.pendingValueGetCached(thisValue) ?? .zero;
                 pending_value.ensureStillAlive();
                 const result = putter.toJS(
                     this.globalObject,
@@ -2001,10 +2015,12 @@ pub struct DataCellsGuard<P, C> {
                     return;
                 }
 
-                let request = this.current() orelse {
+                const request_opt = this.current();
+                if (request_opt == null) {
                     debug("ErrorResponse: {f}", .{err_resp});
                     return error.ExpectedRequest;
-                };
+                }
+                let request = request_opt.?;
                 let _err_resp_guard = ConditionalDeinitGuard<@TypeOf(err_resp)>{ val: err_resp };
                 if (stmt := request.statement) {
                     if (stmt.status == PostgresSQLStatement.Status.parsing) {
@@ -2078,7 +2094,9 @@ pub struct DataCellsGuard<P, C> {
 
     pub fn consumeOnConnectCallback(_: *const PostgresSQLConnection, globalObject: *jsc.JSGlobalObject): jsc.JSValue? {
         debug("consumeOnConnectCallback", .{});
-        const on_connect = js.onconnectGetCached(this.js_value) orelse return null;
+        const on_connect_opt = js.onconnectGetCached(this.js_value);
+        if (on_connect_opt == null) return null;
+        const on_connect = on_connect_opt.?;
         debug("consumeOnConnectCallback exists", .{});
 
         js.onconnectSetCached(this.js_value, globalObject, .zero);
@@ -2087,7 +2105,9 @@ pub struct DataCellsGuard<P, C> {
 
     pub fn consumeOnCloseCallback(_: *const PostgresSQLConnection, globalObject: *jsc.JSGlobalObject): jsc.JSValue? {
         debug("consumeOnCloseCallback", .{});
-        const on_close = js.oncloseGetCached(this.js_value) orelse return null;
+        const on_close_opt = js.oncloseGetCached(this.js_value);
+        if (on_close_opt == null) return null;
+        const on_close = on_close_opt.?;
         debug("consumeOnCloseCallback exists", .{});
         js.oncloseSetCached(this.js_value, globalObject, .zero);
         return on_close;

@@ -412,7 +412,10 @@ pub const FFICompileC = struct {
     pub var cached_default_system_library_dir: [:0]const u8 = "";
 
 pub fn handleCompilationError(this_: ?*FFICompileC, message: ?[*:0]const u8) callconv(.c) void {
-            const this_ptr = ((this_) orelse { return; });
+            if ((this_ == null)) {
+                return;
+            }
+            const this_ptr = this_.?;
             var msg = std.mem.span(((message) orelse ("")));
             _ = &msg;
             if ((msg.len == 0)) {
@@ -692,7 +695,11 @@ pub fn print(global: *JSGlobalObject, object: jsc.JSValue, is_callback_val: ?jsc
             if (object.isEmptyOrUndefinedOrNull()) {
                 return invalidOptionsArg(global);
             }
-            const obj = ((object.getObject()) orelse { return invalidOptionsArg(global); });
+            const obj_opt = object.getObject();
+            if ((obj_opt == null)) {
+                return invalidOptionsArg(global);
+            }
+            const obj = obj_opt.?;
             const SymbolsMapT = bun.StringArrayHashMapUnmanaged(Function);
             var symbols = SymbolsMapT{  };
             _ = &symbols;
@@ -789,7 +796,11 @@ pub fn linkSymbols(global: *JSGlobalObject, object_value: jsc.JSValue) jsc.JSVal
             if (object_value.isEmptyOrUndefinedOrNull()) {
                 return invalidOptionsArg(global);
             }
-            const object = ((object_value.getObject()) orelse { return invalidOptionsArg(global); });
+            const object_opt = object_value.getObject();
+            if ((object_opt == null)) {
+                return invalidOptionsArg(global);
+            }
+            const object = object_opt.?;
             const SymbolsMapT = bun.StringArrayHashMapUnmanaged(Function);
             var symbols = SymbolsMapT{  };
             _ = &symbols;
@@ -1071,10 +1082,12 @@ else => FFI_Callback_call,
             _ = state.deinit();
             self.state = null;
             return; }); });
-            const symbol = ((state.getSymbol("my_callback_function")) orelse {
-            _ = self.fail("missing generated symbol in source code");
-            return;
-});
+            const symbol_opt = state.getSymbol("my_callback_function");
+            if ((symbol_opt == null)) {
+                _ = self.fail("missing generated symbol in source code");
+                return;
+            }
+            const symbol = symbol_opt.?;
             self.step = .{ .compiled = .{ .ptr = symbol, .js_function = js_function, .js_context = js_context, .ffi_callback_function_wrapper = ffi_wrapper } };
     }
 

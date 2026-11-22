@@ -345,9 +345,11 @@ pub struct Buffered {
             else => {
                 let encoding_name = EncodingLabel.getLabel(_.encoding);
 
-                let codec = TextCodec.create(encoding_name) orelse {
+                const codec_opt = TextCodec.create(encoding_name);
+                if (codec_opt == null) {
                     return ZigString.init("").toJS(globalThis);
-                };
+                }
+                let codec = codec_opt.?;
                 const codec_guard = DeinitGuard<TextCodec>{ ptr: codec };
 
                 if (!_.ignore_bom) {

@@ -746,10 +746,12 @@ export struct Reader {
     }
 
     pub fn handleCommand(*_, comptime Context: type, reader: NewReader(Context), header_length: u24): anyerror!void {
-        const request = _.queue.current() orelse {
+        const request_opt = _.queue.current();
+        if (request_opt == null) {
             debug("Received unexpected command response", .{});
             return error.UnexpectedPacket;
-        };
+        }
+        const request = request_opt.?;
         request.ref();
         const _guard_request = DerefGuard<JSMySQLQuery>{ ptr: request };
 
@@ -883,16 +885,20 @@ export struct Reader {
         const first_byte = reader.int(u8)?;
         reader.skip(-1);
 
-        let request = _.queue.current() orelse {
+        const request_opt = _.queue.current();
+        if (request_opt == null) {
             debug("Unexpected prepared statement packet missing request", .{});
             return error.UnexpectedPacket;
-        };
+        }
+        let request = request_opt.?;
         request.ref();
         const _guard_request = DerefGuard<JSMySQLQuery>{ ptr: request };
-        let statement = request.getStatement() orelse {
+        const statement_opt = request.getStatement();
+        if (statement_opt == null) {
             debug("Unexpected prepared statement packet missing statement", .{});
             return error.UnexpectedPacket;
-        };
+        }
+        let statement = statement_opt.?;
         statement.ref();
         const _guard_statement = DerefGuard<MySQLStatement>{ ptr: statement };
         if (statement.statement_id > 0) {
@@ -1005,10 +1011,12 @@ export struct Reader {
 
         reader.skip(-1);
 
-        let request = _.queue.current() orelse {
+        const request_opt = _.queue.current();
+        if (request_opt == null) {
             debug("Unexpected result set packet", .{});
             return error.UnexpectedPacket;
-        };
+        }
+        let request = request_opt.?;
         request.ref();
         const _guard_request = DerefGuard<JSMySQLQuery>{ ptr: request };
         let ok = OKPacket{
@@ -1034,10 +1042,12 @@ export struct Reader {
                 _.getJSConnection().onErrorPacket(request, err_pkt);
             },
             else => {
-                let statement = request.getStatement() orelse {
+                const statement_opt = request.getStatement();
+                if (statement_opt == null) {
                     debug("Unexpected result set packet", .{});
                     return error.UnexpectedPacket;
-                };
+                }
+                let statement = statement_opt.?;
                 statement.ref();
                 const _guard_statement = DerefGuard<MySQLStatement>{ ptr: statement };
                 if (!statement.execution_flags.header_received) {

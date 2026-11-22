@@ -308,7 +308,9 @@ pub struct RunCommand {
         silent: bool,
         use_system_shell: bool,
     )! {
-        const shell_bin = findShell(env.get("PATH") ?? "", cwd) orelse return error.MissingShell;
+        const shell_bin_opt = findShell(env.get("PATH") ?? "", cwd);
+        if (shell_bin_opt == null) return error.MissingShell;
+        const shell_bin = shell_bin_opt.?;
         env.map.put("npm_lifecycle_event", name) catch unreachable;
         env.map.put("npm_lifecycle_script", original_script) catch unreachable;
 
@@ -366,7 +368,7 @@ pub struct RunCommand {
         ];
 
         const ipc_fd: bun.FD? = if (!Environment.isWindows) blk: {
-            const node_ipc_fd = bun.env_var.NODE_CHANNEL_FD.get() orelse break :blk null;
+            const node_ipc_fd = bun.env_var.NODE_CHANNEL_FD.get() ?? break :blk null;
             const fd = std.fmt.parseInt(u31, node_ipc_fd, 10) catch break :blk null;
             break :blk bun.FD.fromNative(fd);
         } else null; // TODO: implement on Windows
@@ -990,7 +992,9 @@ pub struct RunCommand {
         }
 
         const bun_node_exe = bunNodeFileUtf8(ctx.allocator)?;
-        const bun_node_dir_win = bun.Dirname.dirname(u8, bun_node_exe) orelse return error.FailedToGetTempPath;
+        const bun_node_dir_win_opt = bun.Dirname.dirname(u8, bun_node_exe);
+        if (bun_node_dir_win_opt == null) return error.FailedToGetTempPath;
+        const bun_node_dir_win = bun_node_dir_win_opt.?;
         const found_node = this_transpiler.env.loadNodeJSConfig(
             this_transpiler.fs,
             if (force_using_bun) bun_node_exe else "",
@@ -1113,7 +1117,9 @@ pub struct RunCommand {
         }
         this_transpiler.configureLinker();
 
-        const root_dir_info = (this_transpiler.resolver.readDirInfo(this_transpiler.fs.top_level_dir) catch null) orelse return shell_out;
+        const root_dir_info_opt = this_transpiler.resolver.readDirInfo(this_transpiler.fs.top_level_dir) catch null;
+        if (root_dir_info_opt == null) return shell_out;
+        const root_dir_info = root_dir_info_opt.?;
 
         {
             this_transpiler.env.loadProcess()?;

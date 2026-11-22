@@ -101,11 +101,11 @@ return (switch (self.symlink()) {
 .err => |symlink_err| (switch (symlink_err.getErrno()) {
 .NOENT => {
 {
-                const dest_parent = ((self.dest.dirname()) orelse {
-                return .success;
-});
-                _ = (blk_catch_0: { break :blk_catch_0 ((FD.cwd().makePath(u8, dest_parent)) catch |__ce_0| { _ = &__ce_0;  }); });
-                _ = self.symlink();
+                if (self.dest.dirname()) |dest_parent| {
+                    _ = &dest_parent;
+                    _ = (blk_catch_0: { break :blk_catch_0 ((FD.cwd().makePath(u8, dest_parent)) catch |__ce_0| { _ = &__ce_0;  }); });
+                    _ = self.symlink();
+                }
                 return .success;
             }
 },
@@ -118,12 +118,12 @@ return (switch (self.symlink()) {
 .result => .success,
 .err => |symlink_err1| (switch (symlink_err1.getErrno()) {
 .NOENT => {
-{
-                const dest_parent = ((self.dest.dirname()) orelse {
-                return .initErr(symlink_err1);
-});
+if (self.dest.dirname()) |dest_parent| {
+                _ = &dest_parent;
                 _ = (blk_catch_1: { break :blk_catch_1 ((FD.cwd().makePath(u8, dest_parent)) catch |__ce_1| { _ = &__ce_1;  }); });
                 return self.symlink();
+            } else {
+                return .initErr(symlink_err1);
             }
 },
 .EXIST => {
@@ -150,12 +150,12 @@ return (switch (readlink_err.getErrno()) {
 .result => .success,
 .err => |symlink_err| (switch (symlink_err.getErrno()) {
 .NOENT => {
-{
-                    const dest_parent = ((self.dest.dirname()) orelse {
-                    return .initErr(symlink_err);
-});
+if (self.dest.dirname()) |dest_parent| {
+                    _ = &dest_parent;
                     _ = (blk_catch_3: { break :blk_catch_3 ((FD.cwd().makePath(u8, dest_parent)) catch |__ce_3| { _ = &__ce_3;  }); });
                     return self.symlink();
+                } else {
+                    return .initErr(symlink_err);
                 }
 },
 else => .initErr(symlink_err),

@@ -371,7 +371,11 @@ pub fn getHandle() ?*anyopaque {
 
 pub fn lookup(dns_res: *Resolver, query: GetAddrInfo, globalThis: *jsc.JSGlobalObject) jsc.JSValue {
             _ = bun.Environment.onlyMac();
-            const getaddrinfo_async_start_ = ((LibInfo.getaddrinfo_async_start.get()) orelse { return LibC.lookup(dns_res, query, globalThis); });
+            const getaddrinfo_async_start_opt = LibInfo.getaddrinfo_async_start.get();
+            if ((getaddrinfo_async_start_opt == null)) {
+                return LibC.lookup(dns_res, query, globalThis);
+            }
+            const getaddrinfo_async_start_ = getaddrinfo_async_start_opt.?;
             const key = GetAddrInfoRequest.PendingCacheKey.init(query);
             var cache = dns_res.getOrPutIntoPendingCache(key, .pending_host_cache_native);
             _ = &cache;
@@ -1611,7 +1615,11 @@ pub fn workPoolCallback(req: *Request) void {
     }
 
 pub fn lookupLibinfo(req: *Request, loop: jsc.EventLoopHandle) bool {
-            const getaddrinfo_async_start_ = ((LibInfo.getaddrinfo_async_start.get()) orelse { return false; });
+            const getaddrinfo_async_start_opt = LibInfo.getaddrinfo_async_start.get();
+            if ((getaddrinfo_async_start_opt == null)) {
+                return false;
+            }
+            const getaddrinfo_async_start_ = getaddrinfo_async_start_opt.?;
             var machport: bun.mach_port = (if (comptime @typeInfo(bun.mach_port) == .@"enum") @as(bun.mach_port, @enumFromInt(0)) else @as(bun.mach_port, 0));
             _ = &machport;
             var service_buf: [32]u8 = undefined;
@@ -2004,17 +2012,18 @@ pub fn drainPendingCares(self: *Resolver, index: u8, err: ?c_ares.Error, timeout
             var ___deref_guard_moved = false; _ = &___deref_guard_moved;
             defer if (!___deref_guard_moved) { ___deref_guard_moved = true; const __T = @TypeOf(_deref_guard); if (@typeInfo(__T) == .optional) { if (_deref_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _deref_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _deref_guard; _drop_val.__cp_deinit(); } };
             const key = self.getKey(index, cache_name, request_type);
-            var addr: *cares_type = ((result) orelse {
-            var pending: ?*CAresLookup(cares_type, lookup_name) = key.lookup.head.next;
-            _ = &pending;
-            _ = key.lookup.head.processResolve(err, timeout, null);
-            _ = bun.default_allocator.destroy(key.lookup);
-            while (pending) |value| {
-                pending = value.next;
-                _ = value.processResolve(err, timeout, null);
+            if ((result == null)) {
+                var pending: ?*CAresLookup(cares_type, lookup_name) = key.lookup.head.next;
+                _ = &pending;
+                _ = key.lookup.head.processResolve(err, timeout, null);
+                _ = bun.default_allocator.destroy(key.lookup);
+                while (pending) |value| {
+                    pending = value.next;
+                    _ = value.processResolve(err, timeout, null);
+                }
+                return;
             }
-            return;
-});
+            var addr: *cares_type = result.?;
             _ = &addr;
             var pending: ?*CAresLookup(cares_type, lookup_name) = key.lookup.head.next;
             _ = &pending;
@@ -2050,17 +2059,18 @@ pub fn drainPendingHostCares(self: *Resolver, index: u8, err: ?c_ares.Error, tim
             _ = &_deref_guard;
             var ___deref_guard_moved = false; _ = &___deref_guard_moved;
             defer if (!___deref_guard_moved) { ___deref_guard_moved = true; const __T = @TypeOf(_deref_guard); if (@typeInfo(__T) == .optional) { if (_deref_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _deref_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _deref_guard; _drop_val.__cp_deinit(); } };
-            var addr = ((result) orelse {
-            var pending: ?*DNSLookup = key.lookup.head.next;
-            _ = &pending;
-            _ = key.lookup.head.processGetAddrInfo(err, timeout, null);
-            _ = bun.default_allocator.destroy(key.lookup);
-            while (pending) |value| {
-                pending = value.next;
-                _ = value.processGetAddrInfo(err, timeout, null);
+            if ((result == null)) {
+                var pending: ?*DNSLookup = key.lookup.head.next;
+                _ = &pending;
+                _ = key.lookup.head.processGetAddrInfo(err, timeout, null);
+                _ = bun.default_allocator.destroy(key.lookup);
+                while (pending) |value| {
+                    pending = value.next;
+                    _ = value.processGetAddrInfo(err, timeout, null);
+                }
+                return;
             }
-            return;
-});
+            var addr = result.?;
             _ = &addr;
             var pending: ?*DNSLookup = key.lookup.head.next;
             _ = &pending;
@@ -2097,19 +2107,21 @@ pub fn drainPendingHostNative(self: *Resolver, index: u8, globalObject: *jsc.JSG
             _ = &_deref_guard;
             var ___deref_guard_moved = false; _ = &___deref_guard_moved;
             defer if (!___deref_guard_moved) { ___deref_guard_moved = true; const __T = @TypeOf(_deref_guard); if (@typeInfo(__T) == .optional) { if (_deref_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _deref_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _deref_guard; _drop_val.__cp_deinit(); } };
-            var array = (((blk_catch_19: { break :blk_catch_19 ((result.toJS(globalObject)) catch |__ce_19| { _ = &__ce_19; break :blk_catch_19 .zero; }); })) orelse {
-            var pending: ?*DNSLookup = key.lookup.head.next;
-            _ = &pending;
-            var head = key.lookup.head;
-            _ = &head;
-            _ = head.processGetAddrInfoNative(err, null);
-            _ = bun.default_allocator.destroy(key.lookup);
-            while (pending) |value| {
-                pending = value.next;
-                _ = value.processGetAddrInfoNative(err, null);
+            const array_opt = (blk_catch_19: { break :blk_catch_19 ((result.toJS(globalObject)) catch |__ce_19| { _ = &__ce_19; break :blk_catch_19 .zero; }); });
+            if ((array_opt == null)) {
+                var pending: ?*DNSLookup = key.lookup.head.next;
+                _ = &pending;
+                var head = key.lookup.head;
+                _ = &head;
+                _ = head.processGetAddrInfoNative(err, null);
+                _ = bun.default_allocator.destroy(key.lookup);
+                while (pending) |value| {
+                    pending = value.next;
+                    _ = value.processGetAddrInfoNative(err, null);
+                }
+                return;
             }
-            return;
-});
+            var array = array_opt.?;
             _ = &array;
             var pending: ?*DNSLookup = key.lookup.head.next;
             _ = &pending;
@@ -2139,17 +2151,18 @@ pub fn drainPendingAddrCares(self: *Resolver, index: u8, err: ?c_ares.Error, tim
             _ = &_deref_guard;
             var ___deref_guard_moved = false; _ = &___deref_guard_moved;
             defer if (!___deref_guard_moved) { ___deref_guard_moved = true; const __T = @TypeOf(_deref_guard); if (@typeInfo(__T) == .optional) { if (_deref_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _deref_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _deref_guard; _drop_val.__cp_deinit(); } };
-            var addr = ((result) orelse {
-            var pending: ?*CAresReverse = key.lookup.head.next;
-            _ = &pending;
-            _ = key.lookup.head.processResolve(err, timeout, null);
-            _ = bun.default_allocator.destroy(key.lookup);
-            while (pending) |value| {
-                pending = value.next;
-                _ = value.processResolve(err, timeout, null);
+            if ((result == null)) {
+                var pending: ?*CAresReverse = key.lookup.head.next;
+                _ = &pending;
+                _ = key.lookup.head.processResolve(err, timeout, null);
+                _ = bun.default_allocator.destroy(key.lookup);
+                while (pending) |value| {
+                    pending = value.next;
+                    _ = value.processResolve(err, timeout, null);
+                }
+                return;
             }
-            return;
-});
+            var addr = result.?;
             _ = &addr;
             var pending: ?*CAresReverse = key.lookup.head.next;
             _ = &pending;
@@ -2181,17 +2194,18 @@ pub fn drainPendingNameInfoCares(self: *Resolver, index: u8, err: ?c_ares.Error,
             _ = &_deref_guard;
             var ___deref_guard_moved = false; _ = &___deref_guard_moved;
             defer if (!___deref_guard_moved) { ___deref_guard_moved = true; const __T = @TypeOf(_deref_guard); if (@typeInfo(__T) == .optional) { if (_deref_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _deref_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _deref_guard; _drop_val.__cp_deinit(); } };
-            var name_info = ((result) orelse {
-            var pending: ?*CAresNameInfo = key.lookup.head.next;
-            _ = &pending;
-            _ = key.lookup.head.processResolve(err, timeout, null);
-            _ = bun.default_allocator.destroy(key.lookup);
-            while (pending) |value| {
-                pending = value.next;
-                _ = value.processResolve(err, timeout, null);
+            if ((result == null)) {
+                var pending: ?*CAresNameInfo = key.lookup.head.next;
+                _ = &pending;
+                _ = key.lookup.head.processResolve(err, timeout, null);
+                _ = bun.default_allocator.destroy(key.lookup);
+                while (pending) |value| {
+                    pending = value.next;
+                    _ = value.processResolve(err, timeout, null);
+                }
+                return;
             }
-            return;
-});
+            var name_info = result.?;
             _ = &name_info;
             var pending: ?*CAresNameInfo = key.lookup.head.next;
             _ = &pending;
@@ -2331,11 +2345,12 @@ pub fn onDNSPoll(self: *Resolver, poll: *Async.FilePoll) void {
             _ = &_loop_guard;
             var ___loop_guard_moved = false; _ = &___loop_guard_moved;
             defer if (!___loop_guard_moved) { ___loop_guard_moved = true; const __T = @TypeOf(_loop_guard); if (@typeInfo(__T) == .optional) { if (_loop_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _loop_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _loop_guard; _drop_val.__cp_deinit(); } };
-            var channel = ((self.channel) orelse {
-            _ = self.polls.orderedRemove(poll.fd.native());
-            _ = poll.deinit();
-            return;
-});
+            if ((self.channel == null)) {
+                _ = self.polls.orderedRemove(poll.fd.native());
+                _ = poll.deinit();
+                return;
+            }
+            var channel = self.channel.?;
             _ = &channel;
             _ = self.ref();
             var _deref_guard = DerefGuard(*Resolver){ .val = self };
@@ -2439,9 +2454,11 @@ pub fn resolve(self: *Resolver, globalThis: *jsc.JSGlobalObject, callframe: *jsc
             if ((record_type_str.length() == 0)) {
                 break :blk RecordType.default;
             }
-            break :blk ((RecordType.map.getWithEql(record_type_str.getZigString(globalThis), jsc.ZigString.eqlComptime)) orelse {
-            return globalThis.throwInvalidArgumentPropertyValue("record", "one of: A, AAAA, ANY, CAA, CNAME, MX, NS, PTR, SOA, SRV, TXT", record_type_value);
-});
+            const rt_opt = RecordType.map.getWithEql(record_type_str.getZigString(globalThis), jsc.ZigString.eqlComptime);
+            if ((rt_opt == null)) {
+                return globalThis.throwInvalidArgumentPropertyValue("record", "one of: A, AAAA, ANY, CAA, CNAME, MX, NS, PTR, SOA, SRV, TXT", record_type_value);
+            }
+            break :blk rt_opt.?;
 });
             const name_value = arguments.ptr[0];
             if ((name_value.isEmptyOrUndefinedOrNull() or (!name_value.isString()))) {

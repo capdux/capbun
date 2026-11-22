@@ -427,10 +427,12 @@ pub fn run(task: *jsc.WorkPoolTask) void {
             _ = &_guard_task;
             var ___guard_task_moved = false; _ = &___guard_task_moved;
             defer if (!___guard_task_moved) { ___guard_task_moved = true; const __T = @TypeOf(_guard_task); if (@typeInfo(__T) == .optional) { if (_guard_task) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_task.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_task; _drop_val.__cp_deinit(); } };
-            const dirname = ((std.fs.path.dirname(unintall_task.absolute_path)) orelse {
-            _ = Output.debugWarn("Unexpectedly failed to get dirname of {s}", .{ unintall_task.absolute_path });
-            return;
-});
+            const dirname_opt = std.fs.path.dirname(unintall_task.absolute_path);
+            if ((dirname_opt == null)) {
+                _ = Output.debugWarn("Unexpectedly failed to get dirname of {s}", .{ unintall_task.absolute_path });
+                return;
+            }
+            const dirname = dirname_opt.?;
             const basename = std.fs.path.basename(unintall_task.absolute_path);
             var dir = (blk_catch_1: { break :blk_catch_1 ((bun.openDirA(std.fs.cwd(), dirname)) catch |e| { _ = &e; if (comptime (Environment.isDebug or Environment.enable_asan)) {
                 _ = Output.debugWarn("Failed to delete {s}: {s}", .{ unintall_task.absolute_path, @errorName(e) });
@@ -593,7 +595,12 @@ pub fn verifyPackageJSONNameAndVersion(self: *PackageInstall, root_node_modules_
             _ = &_guard_pool;
             var ___guard_pool_moved = false; _ = &___guard_pool_moved;
             defer if (!___guard_pool_moved) { ___guard_pool_moved = true; const __T = @TypeOf(_guard_pool); if (@typeInfo(__T) == .optional) { if (_guard_pool) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_pool.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_pool; _drop_val.__cp_deinit(); } };
-            const source = (&((self.getInstalledPackageJsonSource(root_node_modules_dir, (&mutable), resolution_tag)) orelse { return false; }));
+            const source_val = self.getInstalledPackageJsonSource(root_node_modules_dir, (&mutable), resolution_tag);
+            if ((source_val == null)) {
+                return false;
+            }
+            const source_unwrapped = source_val.?;
+            const source = (&source_unwrapped);
             var log = logger.Log.init(self.allocator);
             _ = &log;
             var _guard_log = DeinitGuard(@TypeOf(&log)){ .ptr = (&log) };
@@ -918,7 +925,11 @@ pub fn isDanglingWindowsBinLink(node_mod_fd: bun.FD, path: []const u16, temp_buf
             var ___guard_fd_moved = false; _ = &___guard_fd_moved;
             defer if (!___guard_fd_moved) { ___guard_fd_moved = true; const __T = @TypeOf(_guard_fd); if (@typeInfo(__T) == .optional) { if (_guard_fd) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_fd.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_fd; _drop_val.__cp_deinit(); } };
             const size = (blk_catch_27: { break :blk_catch_27 ((fd.stdFile().readAll(temp_buffer)) catch |__ce_27| { _ = &__ce_27; return true; }); });
-            const decoded = ((WinBinLinkingShim.looseDecode(temp_buffer[0..size])) orelse { return true; });
+            const decoded_opt = WinBinLinkingShim.looseDecode(temp_buffer[0..size]);
+            if ((decoded_opt == null)) {
+                return true;
+            }
+            const decoded = decoded_opt.?;
             _ = bun.assert(decoded.flags.isValid());
             break :bin_path decoded.bin_path;
 };
@@ -1055,7 +1066,8 @@ else => (blk_catch_33: { break :blk_catch_33 ((Syscall.directoryExistsAt(.fromSt
                 }
                 break :brk (!exists);
             }
-            const cache_dir_subpath_without_patch_hash = self.cache_dir_subpath[0..((std.mem.lastIndexOf(u8, self.cache_dir_subpath, "_patch_hash=")) orelse (@panic("Patched dependency cache dir subpath does not have the \"_patch_hash=HASH\" suffix. This is a bug, please file a GitHub issue.")))];
+            const patch_hash_idx = ((std.mem.lastIndexOf(u8, self.cache_dir_subpath, "_patch_hash=")) orelse (@panic("Patched dependency cache dir subpath does not have the \"_patch_hash=HASH\" suffix. This is a bug, please file a GitHub issue.")));
+            const cache_dir_subpath_without_patch_hash = self.cache_dir_subpath[0..patch_hash_idx];
             _ = @memcpy(bun.path.join_buf[0..cache_dir_subpath_without_patch_hash.len], cache_dir_subpath_without_patch_hash);
             bun.path.join_buf[cp_cast_int(usize, cache_dir_subpath_without_patch_hash.len)] = 0;
             const exists = (blk_catch_34: { break :blk_catch_34 ((Syscall.directoryExistsAt(.fromStdDir(self.cache_dir), bun.path.join_buf[0..cache_dir_subpath_without_patch_hash.len :0]).unwrap()) catch |__ce_34| { _ = &__ce_34; break :blk_catch_34 false; }); });

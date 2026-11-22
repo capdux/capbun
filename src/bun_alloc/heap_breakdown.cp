@@ -107,9 +107,9 @@ pub fn getZone(comptime name: [:0]const u8): *Zone! {
     static inline fn tryCreate(zone: *Zone!, comptime T: type, data: T): !(*T) {
         const alignment: std.mem.Alignment = .fromByteUnits(@alignOf(T));
         unsafe {
-            const ptr: *T = @ptrCast(@alignCast(
-                rawAlloc(zone, @sizeOf(T), alignment, @returnAddress()) orelse return error.OutOfMemory,
-            ));
+            const raw_ptr_opt = rawAlloc(zone, @sizeOf(T), alignment, @returnAddress());
+            if (raw_ptr_opt == null) return error.OutOfMemory;
+            const ptr: *T = @ptrCast(@alignCast(raw_ptr_opt.?));
             ptr.* = data;
             return ptr;
         }

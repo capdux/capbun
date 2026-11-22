@@ -136,7 +136,10 @@ struct MutexGuard {
 }
 
 @export @c fn WTFTimer__isActive(timer: *const WTFTimer): bool {
-    return timer.event_loop_timer.state == .ACTIVE or (timer.imminent.load(.seq_cst) orelse return false) == timer;
+    if (timer.event_loop_timer.state == .ACTIVE) return true;
+    const imminent_opt = timer.imminent.load(.seq_cst);
+    if (imminent_opt == null) return false;
+    return imminent_opt.? == timer;
 }
 
 @export @c fn WTFTimer__cancel(timer: *WTFTimer) {

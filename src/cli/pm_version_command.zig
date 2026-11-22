@@ -511,10 +511,12 @@ else => {
 pub fn isGitClean(cwd: []const u8) bun.OOM!bool {
             var path_buf: bun.PathBuffer = undefined;
             _ = &path_buf;
-            const git_path = ((bun.which((&path_buf), ((bun.env_var.PATH.get()) orelse ("")), cwd, "git")) orelse {
-            _ = Output.errGeneric("git must be installed to use `bun pm version --git-tag-version`", .{});
-            _ = Global.exit(1);
-});
+            const git_path_opt = bun.which((&path_buf), ((bun.env_var.PATH.get()) orelse ("")), cwd, "git");
+            if ((git_path_opt == null)) {
+                _ = Output.errGeneric("git must be installed to use `bun pm version --git-tag-version`", .{});
+                _ = Global.exit(1);
+            }
+            const git_path = git_path_opt.?;
             const proc = (blk_catch_9: { break :blk_catch_9 ((bun.spawnSync((&.{ .argv = (&.{ git_path, "status", "--porcelain" }), .stdout = .buffer, .stderr = .ignore, .stdin = .ignore, .cwd = cwd, .envp = null, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)) } else @as(void, undefined)) }))) catch |e| { _ = &e; _ = Output.errGeneric("Failed to spawn git process: {s}", .{ @errorName(e) });
             break :blk_catch_9 Global.exit(1); }); });
             switch (proc) {
@@ -531,10 +533,12 @@ return (result.isOK() and (result.stdout.items.len == 0));
 pub fn getVersionFromGit(allocator: std.mem.Allocator, cwd: []const u8) bun.OOM![]const u8 {
             var path_buf: bun.PathBuffer = undefined;
             _ = &path_buf;
-            const git_path = ((bun.which((&path_buf), ((bun.env_var.PATH.get()) orelse ("")), cwd, "git")) orelse {
-            _ = Output.errGeneric("git must be installed to use `bun pm version --git-tag-version`", .{});
-            _ = Global.exit(1);
-});
+            const git_path_opt = bun.which((&path_buf), ((bun.env_var.PATH.get()) orelse ("")), cwd, "git");
+            if ((git_path_opt == null)) {
+                _ = Output.errGeneric("git must be installed to use `bun pm version --git-tag-version`", .{});
+                _ = Global.exit(1);
+            }
+            const git_path = git_path_opt.?;
             const proc = (blk_catch_10: { break :blk_catch_10 ((bun.spawnSync((&.{ .argv = (&.{ git_path, "describe", "--tags", "--abbrev=0" }), .cwd = cwd, .stdout = .buffer, .stderr = .buffer, .stdin = .ignore, .envp = null, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)) } else @as(void, undefined)) }))) catch |e| { _ = &e; _ = Output.errGeneric("Failed to spawn git process: {s}", .{ @errorName(e) });
             break :blk_catch_10 Global.exit(1); }); });
             switch (proc) {
@@ -564,10 +568,12 @@ if ((!result.isOK())) {
 pub fn gitCommitAndTag(allocator: std.mem.Allocator, version: []const u8, custom_message: ?[]const u8, cwd: []const u8) bun.OOM!void {
             var path_buf: bun.PathBuffer = undefined;
             _ = &path_buf;
-            const git_path = ((bun.which((&path_buf), ((bun.env_var.PATH.get()) orelse ("")), cwd, "git")) orelse {
-            _ = Output.errGeneric("git must be installed to use `bun pm version --git-tag-version`", .{});
-            _ = Global.exit(1);
-});
+            const git_path_opt = bun.which((&path_buf), ((bun.env_var.PATH.get()) orelse ("")), cwd, "git");
+            if ((git_path_opt == null)) {
+                _ = Output.errGeneric("git must be installed to use `bun pm version --git-tag-version`", .{});
+                _ = Global.exit(1);
+            }
+            const git_path = git_path_opt.?;
             const stage_proc = (blk_catch_11: { break :blk_catch_11 ((bun.spawnSync((&.{ .argv = (&.{ git_path, "add", "package.json" }), .cwd = cwd, .stdout = .buffer, .stderr = .buffer, .stdin = .ignore, .envp = null, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)) } else @as(void, undefined)) }))) catch |e| { _ = &e; _ = Output.errGeneric("Failed to stage package.json: {s}", .{ @errorName(e) });
             break :blk_catch_11 Global.exit(1); }); });
             switch (stage_proc) {

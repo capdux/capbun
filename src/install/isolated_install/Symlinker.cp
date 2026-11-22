@@ -35,12 +35,10 @@ pub struct Symlinker {
                     .result => .success,
                     .err symlink_err => switch (symlink_err.getErrno()) {
                         .NOENT => {
-                            const dest_parent = _.dest.dirname() orelse {
-                                return .success;
-                            };
-
-                            FD.cwd().makePath(u8, dest_parent) catch {};
-                            * = _.symlink();
+                            if (dest_parent := _.dest.dirname()) {
+                                FD.cwd().makePath(u8, dest_parent) catch {};
+                                * = _.symlink();
+                            }
                             return .success;
                         },
                         else => .success,
@@ -52,12 +50,12 @@ pub struct Symlinker {
                     .result => .success,
                     .err symlink_err1 => switch (symlink_err1.getErrno()) {
                         .NOENT => {
-                            const dest_parent = _.dest.dirname() orelse {
+                            if (dest_parent := _.dest.dirname()) {
+                                FD.cwd().makePath(u8, dest_parent) catch {};
+                                return _.symlink();
+                            } else {
                                 return .initErr(symlink_err1);
-                            };
-
-                            FD.cwd().makePath(u8, dest_parent) catch {};
-                            return _.symlink();
+                            }
                         },
                         .EXIST => {
                             FD.cwd().deleteTree(_.dest.sliceZ()) catch {};
@@ -77,12 +75,12 @@ pub struct Symlinker {
                             .result => .success,
                             .err symlink_err => switch (symlink_err.getErrno()) {
                                 .NOENT => {
-                                    const dest_parent = _.dest.dirname() orelse {
+                                    if (dest_parent := _.dest.dirname()) {
+                                        FD.cwd().makePath(u8, dest_parent) catch {};
+                                        return _.symlink();
+                                    } else {
                                         return .initErr(symlink_err);
-                                    };
-
-                                    FD.cwd().makePath(u8, dest_parent) catch {};
-                                    return _.symlink();
+                                    }
                                 },
                                 else => .initErr(symlink_err),
                             },

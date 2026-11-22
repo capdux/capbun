@@ -302,9 +302,11 @@ pub fn reload(self: *Listener, globalObject: *jsc.JSGlobalObject, callframe: *js
         if (((opts.isEmptyOrUndefinedOrNull() or opts.isBoolean()) or (!opts.isObject()))) {
             return globalObject.throwValue(globalObject.toInvalidArguments("Expected options object", .{}));
         }
-        const socket_obj = ((try opts.get(globalObject, "socket")) orelse {
-        return globalObject.throw("Expected \"socket\" object", .{});
-});
+        const socket_obj_opt = try opts.get(globalObject, "socket");
+        if ((socket_obj_opt == null)) {
+            return globalObject.throw("Expected \"socket\" object", .{});
+        }
+        const socket_obj = socket_obj_opt.?;
         const handlers = try Handlers.fromJS(globalObject, socket_obj, (self.handlers.mode == .server));
         const active_connections = self.handlers.active_connections;
         _ = self.handlers.deinit();
@@ -862,24 +864,25 @@ const err: bun.jsc.SystemError = .{ .errno = @intFromEnum(bun.sys.SystemErrno.EI
         return globalObject.throwValue(err.toErrorInstance(globalObject));
 },
 }
-        const listen_socket: *uws.ListenSocket = ((maybe_ls) orelse {
-        const err = globalObject.createErrorInstance("Failed to listen at {s}", .{ hostname });
-        _ = log("Failed to listen {d}", .{ errno });
-        if ((errno != 0)) {
-            _ = err.put(globalObject, ZigString.static("syscall"), try bun.String.createUTF8ForJS(globalObject, "listen"));
-            _ = err.put(globalObject, ZigString.static("errno"), JSValue.jsNumber(errno));
-            _ = err.put(globalObject, ZigString.static("address"), ZigString.initUTF8(hostname).toJS(globalObject));
-            if (port) |p| {
-                _ = &p;
-                _ = err.put(globalObject, ZigString.static("port"), .jsNumber(p));
+        if ((maybe_ls == null)) {
+            const err = globalObject.createErrorInstance("Failed to listen at {s}", .{ hostname });
+            _ = log("Failed to listen {d}", .{ errno });
+            if ((errno != 0)) {
+                _ = err.put(globalObject, ZigString.static("syscall"), try bun.String.createUTF8ForJS(globalObject, "listen"));
+                _ = err.put(globalObject, ZigString.static("errno"), JSValue.jsNumber(errno));
+                _ = err.put(globalObject, ZigString.static("address"), ZigString.initUTF8(hostname).toJS(globalObject));
+                if (port) |p| {
+                    _ = &p;
+                    _ = err.put(globalObject, ZigString.static("port"), .jsNumber(p));
+                }
+                if (bun.sys.SystemErrno.init(errno)) |str| {
+                    _ = &str;
+                    _ = err.put(globalObject, ZigString.static("code"), ZigString.init(@tagName(str)).toJS(globalObject));
+                }
             }
-            if (bun.sys.SystemErrno.init(errno)) |str| {
-                _ = &str;
-                _ = err.put(globalObject, ZigString.static("code"), ZigString.init(@tagName(str)).toJS(globalObject));
-            }
+            return globalObject.throwValue(err);
         }
-        return globalObject.throwValue(err);
-});
+        const listen_socket: *uws.ListenSocket = maybe_ls.?;
         this_ptr.connection = connection;
         this_ptr.listener = .{ .uws = listen_socket };
         if ((socket_config.default_data != .zero)) {
@@ -887,7 +890,7 @@ const err: bun.jsc.SystemError = .{ .errno = @intFromEnum(bun.sys.SystemErrno.EI
         }
         if (ssl) |ssl_config| {
             _ = &ssl_config;
-            const secure = ((this_ptr.secure_ctx) orelse (unreachable));
+            const secure = this_ptr.secure_ctx.?;
             if (ssl_config.server_name) |server_name| {
                 _ = &server_name;
                 if ((std.mem.span(server_name).len > 0)) {

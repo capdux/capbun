@@ -1160,13 +1160,13 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
                             let it = std.mem.splitScalar(u8, header.value, ',');
                             while (ext_str := it.next()) {
                                 let ext_it = std.mem.splitScalar(u8, std.mem.trim(u8, ext_str, " \t"), ';');
-                                const ext_name = std.mem.trim(u8, ext_it.next() orelse "", " \t");
+                                const ext_name = std.mem.trim(u8, ext_it.next() ?? "", " \t");
                                 if (strings.eqlComptime(ext_name, "permessage-deflate")) {
                                     deflate_result.enabled = true;
                                     while (param_str := ext_it.next()) {
                                         let param_it = std.mem.splitScalar(u8, std.mem.trim(u8, param_str, " \t"), '=');
-                                        const key = std.mem.trim(u8, param_it.next() orelse "", " \t");
-                                        const value = std.mem.trim(u8, param_it.next() orelse "", " \t");
+                                        const key = std.mem.trim(u8, param_it.next() ?? "", " \t");
+                                        const value = std.mem.trim(u8, param_it.next() ?? "", " \t");
 
                                         if (strings.eqlComptime(key, "server_no_context_takeover")) {
                                             deflate_result.params.server_no_context_takeover = 1;

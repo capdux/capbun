@@ -807,28 +807,40 @@ pub fn relativeNormalized(from_: []const u8, to_: []const u8, comptime platform:
 pub fn dirname(str: []const u8, comptime platform: Platform) []const u8 {
         switch (platform) {
 .loose => {
-const separator = ((lastIndexOfSeparatorLoose(str)) orelse { return ""; });
-        return str[0..separator];
+if (lastIndexOfSeparatorLoose(str)) |separator| {
+            _ = &separator;
+            return str[0..separator];
+        }
+        return "";
 },
 .posix => {
-const separator = ((lastIndexOfSeparatorPosix(str)) orelse { return ""; });
-        if ((separator == 0)) {
-            return "/";
+if (lastIndexOfSeparatorPosix(str)) |separator| {
+            _ = &separator;
+            if ((separator == 0)) {
+                return "/";
+            }
+            return str[0..separator];
         }
-        return str[0..separator];
+        return "";
 },
 .windows, .nt => {
-const separator = ((lastIndexOfSeparatorWindows(str)) orelse { return ""; });
-        if ((separator == 0)) {
-            return "\\";
+if (lastIndexOfSeparatorWindows(str)) |separator| {
+            _ = &separator;
+            if ((separator == 0)) {
+                return "\\";
+            }
+            return str[0..separator];
         }
-        return str[0..separator];
+        return "";
 },
 }
 }
 
 pub fn dirnameW(str: []const u16) []const u16 {
-        const separator = ((lastIndexOfSeparatorWindowsT(u16, str)) orelse {
+        if (lastIndexOfSeparatorWindowsT(u16, str)) |separator| {
+            _ = &separator;
+            return str[0..separator];
+        }
         if ((str.len < 2)) {
             return (&.{});
         }
@@ -839,8 +851,6 @@ pub fn dirnameW(str: []const u16) []const u16 {
             return (&.{});
         }
         return str[0..2];
-});
-        return str[0..separator];
 }
 
 pub fn relative(from_: []const u8, to_: []const u8) []const u8 {

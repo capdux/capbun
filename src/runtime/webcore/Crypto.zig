@@ -126,9 +126,11 @@ pub fn getRandomValues(self: *Crypto, globalThis: *JSGlobalObject, callframe: *j
         if ((arguments.len == 0)) {
             return globalThis.throwDOMException(.TypeMismatchError, "The data argument must be an integer-type TypedArray", .{});
         }
-        var array_buffer = ((arguments[0].asArrayBuffer(globalThis)) orelse {
-        return globalThis.throwDOMException(.TypeMismatchError, "The data argument must be an integer-type TypedArray", .{});
-});
+        const ab_opt = arguments[0].asArrayBuffer(globalThis);
+        if ((ab_opt == null)) {
+            return globalThis.throwDOMException(.TypeMismatchError, "The data argument must be an integer-type TypedArray", .{});
+        }
+        var array_buffer = ab_opt.?;
         _ = &array_buffer;
         const slice = array_buffer.byteSlice();
         _ = randomData(globalThis, slice.ptr, slice.len);
@@ -213,9 +215,10 @@ pub fn Bun__randomUUIDv7_(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame
                 if (arguments[0].isString()) {
                     encoding_value = arguments[0];
                     const enc_opt = try jsc.Node.Encoding.fromJS(encoding_value, globalThis);
-                    break :brk ((enc_opt) orelse {
-                    return globalThis.ERR(.UNKNOWN_ENCODING, "Encoding must be one of base64, base64url, hex, or buffer", .{}).throw();
-});
+                    if ((enc_opt == null)) {
+                        return globalThis.ERR(.UNKNOWN_ENCODING, "Encoding must be one of base64, base64url, hex, or buffer", .{}).throw();
+                    }
+                    break :brk enc_opt.?;
                 }
             }
         }
@@ -257,9 +260,10 @@ pub fn Bun__randomUUIDv5_(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame
         if (((arguments.len > 2) and (!arguments[2].isUndefined()))) {
             if (arguments[2].isString()) {
                 const enc_opt = try jsc.Node.Encoding.fromJS(arguments[2], globalThis);
-                break :brk ((enc_opt) orelse {
-                return globalThis.ERR(.UNKNOWN_ENCODING, "Encoding must be one of base64, base64url, hex, or buffer", .{}).throw();
-});
+                if ((enc_opt == null)) {
+                    return globalThis.ERR(.UNKNOWN_ENCODING, "Encoding must be one of base64, base64url, hex, or buffer", .{}).throw();
+                }
+                break :brk enc_opt.?;
             }
         }
         break :brk jsc.Node.Encoding.hex;

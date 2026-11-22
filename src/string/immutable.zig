@@ -116,7 +116,11 @@ pub const AsciiStatus = enum {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 
 pub fn fromBool(is_all_ascii: ?bool) AsciiStatus {
-            return (if (((is_all_ascii) orelse { return .unknown; })) .all_ascii else .non_ascii);
+            if (is_all_ascii) |v| {
+                _ = &v;
+                return (if (v) .all_ascii else .non_ascii);
+            }
+            return .unknown;
     }
 };
 
@@ -146,7 +150,11 @@ pub fn first(self: *SplitIterator) []const u8 {
     }
 
 pub fn next(self: *SplitIterator) ?[]const u8 {
-            const start = ((self.index) orelse { return null; });
+            const start_opt = self.index;
+            if ((start_opt == null)) {
+                return null;
+            }
+            const start = start_opt.?;
             var end: usize = 0;
             _ = &end;
             if (indexOf(self.buffer[start..], self.delimiter)) |delim_start| {
@@ -313,8 +321,11 @@ pub fn init(input: []const u8) ANSIIterator {
 
 pub fn next(self: *ANSIIterator) ?[]const u8 {
             if (ANSIIterator.Bun__ANSI__next(self)) {
+                if ((self.slice_ptr == null)) {
+                    return null;
+                }
                 return (blk: {
-                break :blk ((self.slice_ptr) orelse { return null; })[0..self.slice_len];
+                break :blk self.slice_ptr.?[0..self.slice_len];
 
 });
             }
@@ -578,7 +589,11 @@ pub fn containsComptime(client: []const u8, comptime str: []const u8) bool {
         if (comptime (str.len == 0)) {
             _ = @compileError("Don't call this with an empty string plz.");
         }
-        const start = ((std.mem.indexOfScalar(u8, client, str[0])) orelse { return false; });
+        const start_opt = std.mem.indexOfScalar(u8, client, str[0]);
+        if ((start_opt == null)) {
+            return false;
+        }
+        const start = start_opt.?;
         var remain = client[start..];
         _ = &remain;
         const Int = std.@"meta".Int(.unsigned, (str.len * 8));
@@ -586,7 +601,11 @@ pub fn containsComptime(client: []const u8, comptime str: []const u8) bool {
             if ((@as(Int, @bitCast((remain.ptr[0..str.len]).*)) == @as(Int, @bitCast((str.ptr[0..str.len]).*)))) {
                 return true;
             }
-            const next_start = ((std.mem.indexOfScalar(u8, remain[1..], str[0])) orelse { return false; });
+            const next_start_opt = std.mem.indexOfScalar(u8, remain[1..], str[0]);
+            if ((next_start_opt == null)) {
+                return false;
+            }
+            const next_start = next_start_opt.?;
             remain = remain[(1 + next_start)..];
         }
         return false;
@@ -911,7 +930,11 @@ pub fn findUrlPassword(text: []const u8) ?TextRange {
         _ = &remain;
         const end = ((indexOfChar(remain, 10)) orelse (remain.len));
         remain = remain[0..end];
-        const at = ((indexOfChar(remain, 64)) orelse { return null; });
+        const at_opt = indexOfChar(remain, 64);
+        if ((at_opt == null)) {
+            return null;
+        }
+        const at = at_opt.?;
         const colon = indexOfCharNeg(remain[0..at], 58);
         if (((colon == -1) or (colon == (at - 1)))) {
             return null;
@@ -988,7 +1011,11 @@ pub fn indexOfCharNeg(client: []const u8, char: u8) i32 {
 }
 
 pub fn indexOfSigned(client: []const u8, str: []const u8) i32 {
-        const i = ((std.mem.indexOf(u8, client, str)) orelse { return -1; });
+        const i_opt = std.mem.indexOf(u8, client, str);
+        if ((i_opt == null)) {
+            return -1;
+        }
+        const i = i_opt.?;
         return (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(i32, @intFromEnum(i)) else cp_cast_int(i32, i)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(i32, @intFromEnum(i)) else cp_cast_int(i32, i)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(i32, @intFromEnum(i)) else cp_cast_int(i32, i))));
 }
 
@@ -1002,7 +1029,11 @@ pub fn lastIndexOfChar(str: []const u8, char: u8) ?usize {
             if (@inComptime()) {
                 return lastIndexOfCharT(u8, str, char);
             }
-            const start = ((bun.c.memrchr(str.ptr, char, str.len)) orelse { return null; });
+            const start_opt = bun.c.memrchr(str.ptr, char, str.len);
+            if ((start_opt == null)) {
+                return null;
+            }
+            const start = start_opt.?;
             const i = (blk: {
             break :blk (@intFromPtr(start) - @intFromPtr(str.ptr));
 
@@ -1034,7 +1065,11 @@ pub fn indexOf(client: []const u8, str: []const u8) ?usize {
         if ((str_len == 1)) {
             return indexOfCharUsize(client, str_ptr[0]);
         }
-        const start = ((memmem(self_ptr, self_len, str_ptr, str_len)) orelse { return null; });
+        const start_opt = memmem(self_ptr, self_len, str_ptr, str_len);
+        if ((start_opt == null)) {
+            return null;
+        }
+        const start = start_opt.?;
         const i = (blk: {
         break :blk (@intFromPtr(start) - @intFromPtr(self_ptr));
 
@@ -1594,7 +1629,11 @@ pub fn indexOfSpaceOrNewlineOrNonASCII(slice_: []const u8, offset: u32) ?u32 {
         if (((remaining[0] > 127) or ((remaining[0] < 32) and (remaining[0] != 9)))) {
             return offset;
         }
-        const i = ((bun.highway.indexOfSpaceOrNewlineOrNonASCII(remaining)) orelse { return null; });
+        const i_opt = bun.highway.indexOfSpaceOrNewlineOrNonASCII(remaining);
+        if ((i_opt == null)) {
+            return null;
+        }
+        const i = i_opt.?;
         return (@as(u32, @truncate(i)) + offset);
 }
 
@@ -1609,7 +1648,11 @@ pub fn indexOfNewlineOrNonASCIICheckStart(slice_: []const u8, offset: u32, compt
                 return offset;
             }
         }
-        const i = ((bun.highway.indexOfNewlineOrNonASCII(remaining)) orelse { return null; });
+        const i_opt = bun.highway.indexOfNewlineOrNonASCII(remaining);
+        if ((i_opt == null)) {
+            return null;
+        }
+        const i = i_opt.?;
         return (@as(u32, @truncate(i)) + offset);
 }
 
@@ -1673,11 +1716,19 @@ pub fn indexOfNeedsURLEncode(slice: []const u8) ?u32 {
 }
 
 pub fn indexOfCharZ(sliceZ: [:0]const u8, char: u8) ?u63 {
-        return @truncate(((bun.highway.indexOfChar(sliceZ, char)) orelse { return null; }));
+        const idx = bun.highway.indexOfChar(sliceZ, char);
+        if ((idx == null)) {
+            return null;
+        }
+        return @truncate(idx.?);
 }
 
 pub fn indexOfChar(slice: []const u8, char: u8) ?u32 {
-        return @as(u32, @truncate(((indexOfCharUsize(slice, char)) orelse { return null; })));
+        const idx = indexOfCharUsize(slice, char);
+        if ((idx == null)) {
+            return null;
+        }
+        return @as(u32, @truncate(idx.?));
 }
 
 pub fn indexOfCharUsize(slice: []const u8, char: u8) ?usize {
@@ -1694,7 +1745,11 @@ pub fn indexOfCharPos(slice: []const u8, char: u8, start_index: usize) ?usize {
         if ((start_index >= slice.len)) {
             return null;
         }
-        const result = ((bun.highway.indexOfChar(slice[start_index..], char)) orelse { return null; });
+        const result_opt = bun.highway.indexOfChar(slice[start_index..], char);
+        if ((result_opt == null)) {
+            return null;
+        }
+        const result = result_opt.?;
         _ = bun.debugAssert((slice.len > (result + start_index)));
         return (result + start_index);
 }
@@ -1889,12 +1944,14 @@ pub fn indexOfLineRanges(text: []const u8, target_line: u32, comptime line_range
         _ = &ranges;
         var current_line: u32 = 0;
         _ = &current_line;
-        const first_newline_or_nonascii_i = ((strings.indexOfNewlineOrNonASCIICheckStart(text, 0, true)) orelse {
-        if ((target_line == 0)) {
-            _ = ranges.appendAssumeCapacity(.{ .start = 0, .end = @truncate(text.len) });
+        const first_opt = strings.indexOfNewlineOrNonASCIICheckStart(text, 0, true);
+        if ((first_opt == null)) {
+            if ((target_line == 0)) {
+                _ = ranges.appendAssumeCapacity(.{ .start = 0, .end = @truncate(text.len) });
+            }
+            return ranges;
         }
-        return ranges;
-});
+        const first_newline_or_nonascii_i = first_opt.?;
         var iter = CodepointIterator.initOffset(text, 0);
         _ = &iter;
         var cursor = CodepointIterator.Cursor{ .i = first_newline_or_nonascii_i };

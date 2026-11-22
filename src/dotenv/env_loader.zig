@@ -103,7 +103,11 @@ pub fn iterator(self: Loader) EnvMap.HashTable.Iterator {
     }
 
 pub fn has(self: Loader, input: []const u8) bool {
-            const value = ((self.get(input)) orelse { return false; });
+            const maybe_value = self.get(input);
+            if ((maybe_value == null)) {
+                return false;
+            }
+            const value = maybe_value.?;
             if ((value.len == 0)) {
                 return false;
             }
@@ -111,12 +115,20 @@ pub fn has(self: Loader, input: []const u8) bool {
     }
 
 pub fn isProduction(self: Loader) bool {
-            const env = ((self.get("BUN_ENV")) orelse (((self.get("NODE_ENV")) orelse { return false; })));
+            const maybe_env = ((self.get("BUN_ENV")) orelse (self.get("NODE_ENV")));
+            if ((maybe_env == null)) {
+                return false;
+            }
+            const env = maybe_env.?;
             return strings.eqlComptime(env, "production");
     }
 
 pub fn isTest(self: Loader) bool {
-            const env = ((self.get("BUN_ENV")) orelse (((self.get("NODE_ENV")) orelse { return false; })));
+            const maybe_env = ((self.get("BUN_ENV")) orelse (self.get("NODE_ENV")));
+            if ((maybe_env == null)) {
+                return false;
+            }
+            const env = maybe_env.?;
             return strings.eqlComptime(env, "test");
     }
 
@@ -131,7 +143,11 @@ pub fn getNodePath(self: *Loader, fs: *Fs.FileSystem, buf: *bun.PathBuffer) ?[:0
                     }
                 }
             }
-            if (which(buf, ((self.get("PATH")) orelse { return null; }), fs.top_level_dir, "node")) |node| {
+            const path_val = self.get("PATH");
+            if ((path_val == null)) {
+                return null;
+            }
+            if (which(buf, path_val.?, fs.top_level_dir, "node")) |node| {
                 _ = &node;
                 return node;
             }
@@ -301,7 +317,10 @@ pub fn getHttpProxy(self: *Loader, is_http: bool, hostname: ?[]const u8, host: ?
     }
 
 pub fn isNoProxy(self: Loader, hostname: ?[]const u8, host: ?[]const u8) bool {
-            const hn = ((hostname) orelse { return false; });
+            if ((hostname == null)) {
+                return false;
+            }
+            const hn = hostname.?;
             const no_proxy_text: []const u8 = blk: {
             if (self.get("no_proxy")) |p| {
                 _ = &p;
@@ -309,7 +328,11 @@ pub fn isNoProxy(self: Loader, hostname: ?[]const u8, host: ?[]const u8) bool {
                     break :blk p;
                 }
             }
-            break :blk ((self.get("NO_PROXY")) orelse { return false; });
+            const maybe_no_proxy = self.get("NO_PROXY");
+            if ((maybe_no_proxy == null)) {
+                return false;
+            }
+            break :blk maybe_no_proxy.?;
 };
             if ((((no_proxy_text.len == 0) or strings.eqlComptime(no_proxy_text, "\"\"")) or strings.eqlComptime(no_proxy_text, "''"))) {
                 return false;
@@ -380,7 +403,11 @@ pub fn loadCCachePath(self: *Loader, fs: *Fs.FileSystem) void {
 pub fn loadCCachePathImpl(self: *Loader, fs: *Fs.FileSystem) !void {
             var buf: bun.PathBuffer = undefined;
             _ = &buf;
-            const path_val = ((self.get("PATH")) orelse { return; });
+            const maybe_path_val = self.get("PATH");
+            if ((maybe_path_val == null)) {
+                return;
+            }
+            const path_val = maybe_path_val.?;
             const ccache_path = ((bun.which((&buf), path_val, fs.top_level_dir, "ccache")) orelse (""));
             if ((ccache_path.len > 0)) {
                 const cxx_gop = try self.map.getOrPutWithoutValue("CMAKE_CXX_COMPILER_LAUNCHER");
@@ -405,7 +432,11 @@ pub fn loadNodeJSConfig(self: *Loader, fs: *Fs.FileSystem, override_node: []cons
                 if ((node_path_to_use_set_once.len > 0)) {
                     node_path_to_use = node_path_to_use_set_once;
                 } else {
-                    const node = ((self.getNodePath(fs, (&buf))) orelse { return false; });
+                    const maybe_node = self.getNodePath(fs, (&buf));
+                    if ((maybe_node == null)) {
+                        return false;
+                    }
+                    const node = maybe_node.?;
                     node_path_to_use = try fs.dirname_store.append(@TypeOf(node_path_to_use), bun.asByteSlice(node));
                 }
             }
@@ -416,7 +447,11 @@ pub fn loadNodeJSConfig(self: *Loader, fs: *Fs.FileSystem, override_node: []cons
     }
 
 pub fn getAs(self: Loader, comptime T: type, key: []const u8) ?T {
-            const value = ((self.get(key)) orelse { return null; });
+            const maybe_value = self.get(key);
+            if ((maybe_value == null)) {
+                return null;
+            }
+            const value = maybe_value.?;
             if ((comptime T) == bool) {
 if (strings.eqlComptime(value, "")) {
                 return false;
@@ -1131,10 +1166,12 @@ pub fn _parse(self: *Parser, allocator: std.mem.Allocator, map: *EnvMap, comptim
             var count = map.map.count();
             _ = &count;
             while ((self.pos < self.src.len)) {
-                const key = ((self.parseKey(true)) orelse {
-                _ = self.skipLine();
-                continue;
-});
+                const maybe_key = self.parseKey(true);
+                if ((maybe_key == null)) {
+                    _ = self.skipLine();
+                    continue;
+                }
+                const key = maybe_key.?;
                 const value = try self.parseValue(is_process);
                 const entry = try map.map.getOrPut(key);
                 if (entry.found_existing) {

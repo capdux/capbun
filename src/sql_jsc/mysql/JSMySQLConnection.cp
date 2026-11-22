@@ -456,7 +456,7 @@ struct TlsSetupGuard {
             tls_config = if (tls_object.isBoolean() && tls_object.toBoolean())
                 .{}
             else if (tls_object.isObject())
-                ((jsc.API.ServerConfig.SSLConfig.fromJS(vm, globalObject, tls_object) catch return JSValue.zero) orelse .{})
+                ((jsc.API.ServerConfig.SSLConfig.fromJS(vm, globalObject, tls_object) catch return JSValue.zero) ?? .{})
             else {
                 return globalObject.throwInvalidArguments("tls must be a boolean or an object", .{});
             };
@@ -674,7 +674,9 @@ struct TlsSetupGuard {
     fn consumeOnConnectCallback(_: *const @This(), globalObject: *jsc.JSGlobalObject): jsc.JSValue? {
         if (this.#vm.isShuttingDown()) return null;
         if (value := this.#js_value.tryGet()) {
-            const on_connect = js.onconnectGetCached(value) orelse return null;
+            const on_connect_opt = js.onconnectGetCached(value);
+            if (on_connect_opt == null) return null;
+            const on_connect = on_connect_opt.?;
             js.onconnectSetCached(value, globalObject, .zero);
             return on_connect;
         }
@@ -684,7 +686,9 @@ struct TlsSetupGuard {
     fn consumeOnCloseCallback(_: *const @This(), globalObject: *jsc.JSGlobalObject): jsc.JSValue? {
         if (this.#vm.isShuttingDown()) return null;
         if (value := this.#js_value.tryGet()) {
-            const on_close = js.oncloseGetCached(value) orelse return null;
+            const on_close_opt = js.oncloseGetCached(value);
+            if (on_close_opt == null) return null;
+            const on_close = on_close_opt.?;
             js.oncloseSetCached(value, globalObject, .zero);
             return on_close;
         }
@@ -694,7 +698,7 @@ struct TlsSetupGuard {
     pub fn getQueriesArray(*_): JSValue {
         if (this.#vm.isShuttingDown()) return .js_undefined;
         if (value := this.#js_value.tryGet()) {
-            return js.queriesGetCached(value) orelse .js_undefined;
+            return js.queriesGetCached(value) ?? .js_undefined;
         }
         return JSValue.js_undefined;
     }
@@ -749,11 +753,13 @@ struct TlsSetupGuard {
         this.#connection.status = .failed;
         if (this.#vm.isShuttingDown()) return;
 
-        const on_close = this.consumeOnCloseCallback(this.#globalObject) orelse return;
+        const on_close_opt = this.consumeOnCloseCallback(this.#globalObject);
+        if (on_close_opt == null) return;
+        const on_close = on_close_opt.?;
         on_close.ensureStillAlive();
         const loop = this.#vm.eventLoop();
         this.ensureJSValueIsAlive();
-        let js_error = value.toError() orelse value;
+        let js_error = value.toError() ?? value;
         if (js_error == .zero) {
             js_error = AnyMySQLError.mysqlErrorToJS(this.#globalObject, "Connection closed", err.ConnectionClosed);
         }
@@ -772,9 +778,11 @@ struct TlsSetupGuard {
 
     pub fn onConnectionEstabilished(*_) {
         if (this.#vm.isShuttingDown()) return;
-        const on_connect = this.consumeOnConnectCallback(this.#globalObject) orelse return;
+        const on_connect_opt = this.consumeOnConnectCallback(this.#globalObject);
+        if (on_connect_opt == null) return;
+        const on_connect = on_connect_opt.?;
         on_connect.ensureStillAlive();
-        let js_value = this.#js_value.tryGet() orelse .js_undefined;
+        let js_value = this.#js_value.tryGet() ?? .js_undefined;
         js_value.ensureStillAlive();
         const cb_args: [2]JSValue = [JSValue.jsNull(), js_value];
         this.#globalObject.queueMicrotask(on_connect, &cb_args);
@@ -824,7 +832,7 @@ struct TlsSetupGuard {
             request.reject(this.getQueriesArray(), @errorCast(e));
             return;
         };
-        const pending_value = request.getPendingValue() orelse .js_undefined;
+        const pending_value = request.getPendingValue() ?? .js_undefined;
         const row_value = row.toJS(
             this.#globalObject,
             pending_value,

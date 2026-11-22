@@ -335,7 +335,11 @@ delimiter = 0;
     }
 
 pub fn runPackageScriptForeground(ctx: Command.Context, allocator: std.mem.Allocator, original_script: []const u8, name: []const u8, cwd: []const u8, env: *DotEnv.Loader, passthrough: []const []const u8, silent: bool, use_system_shell: bool) !void {
-            const shell_bin = ((findShell(((env.get("PATH")) orelse ("")), cwd)) orelse { return error.MissingShell; });
+            const shell_bin_opt = findShell(((env.get("PATH")) orelse ("")), cwd);
+            if ((shell_bin_opt == null)) {
+                return error.MissingShell;
+            }
+            const shell_bin = shell_bin_opt.?;
             _ = ((env.map.put("npm_lifecycle_event", name)) catch unreachable);
             _ = ((env.map.put("npm_lifecycle_script", original_script)) catch unreachable);
             var copy_script_capacity: usize = original_script.len;
@@ -809,7 +813,11 @@ pub fn configurePathForRunWithPackageJsonDir(ctx: Command.Context, package_json_
                 original_path.* = PATH;
             }
             const bun_node_exe = try bunNodeFileUtf8(ctx.allocator);
-            const bun_node_dir_win = ((bun.Dirname.dirname(u8, bun_node_exe)) orelse { return error.FailedToGetTempPath; });
+            const bun_node_dir_win_opt = bun.Dirname.dirname(u8, bun_node_exe);
+            if ((bun_node_dir_win_opt == null)) {
+                return error.FailedToGetTempPath;
+            }
+            const bun_node_dir_win = bun_node_dir_win_opt.?;
             const found_node = (blk_catch_26: { break :blk_catch_26 ((this_transpiler.env.loadNodeJSConfig(this_transpiler.fs, (if (force_using_bun) bun_node_exe else ""))) catch |__ce_26| { _ = &__ce_26; break :blk_catch_26 false; }); });
             var needs_to_force_bun = (force_using_bun or (!found_node));
             _ = &needs_to_force_bun;
@@ -906,7 +914,11 @@ pub fn completions(ctx: Command.Context, default_completions: ?[]const []const u
             }
             }
             _ = this_transpiler.configureLinker();
-            const root_dir_info = (((blk_catch_29: { break :blk_catch_29 ((this_transpiler.resolver.readDirInfo(this_transpiler.fs.top_level_dir)) catch |__ce_29| { _ = &__ce_29; break :blk_catch_29 null; }); })) orelse { return shell_out; });
+            const root_dir_info_opt = (blk_catch_29: { break :blk_catch_29 ((this_transpiler.resolver.readDirInfo(this_transpiler.fs.top_level_dir)) catch |__ce_29| { _ = &__ce_29; break :blk_catch_29 null; }); });
+            if ((root_dir_info_opt == null)) {
+                return shell_out;
+            }
+            const root_dir_info = root_dir_info_opt.?;
             {
                 _ = try this_transpiler.env.loadProcess();
                 if (this_transpiler.env.get("NODE_ENV")) |node_env| {

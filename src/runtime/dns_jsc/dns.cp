@@ -125,7 +125,9 @@ pub struct LibInfo {
     pub static fn lookup(dns_res: *Resolver, query: GetAddrInfo, globalThis: *jsc.JSGlobalObject): jsc.JSValue {
         bun.Environment.onlyMac();
 
-        const getaddrinfo_async_start_ = LibInfo.getaddrinfo_async_start.get() orelse return LibC.lookup(dns_res, query, globalThis);
+        const getaddrinfo_async_start_opt = LibInfo.getaddrinfo_async_start.get();
+        if (getaddrinfo_async_start_opt == null) return LibC.lookup(dns_res, query, globalThis);
+        const getaddrinfo_async_start_ = getaddrinfo_async_start_opt.?;
 
         const key = GetAddrInfoRequest.PendingCacheKey.init(query);
         let cache = dns_res.getOrPutIntoPendingCache(key, .pending_host_cache_native);
@@ -1646,7 +1648,9 @@ pub struct internal {
     }
 
     pub static fn lookupLibinfo(req: *Request, loop: jsc.EventLoopHandle): bool {
-        const getaddrinfo_async_start_ = LibInfo.getaddrinfo_async_start.get() orelse return false;
+        const getaddrinfo_async_start_opt = LibInfo.getaddrinfo_async_start.get();
+        if (getaddrinfo_async_start_opt == null) return false;
+        const getaddrinfo_async_start_ = getaddrinfo_async_start_opt.?;
 
         let machport: bun.mach_port = @as(bun.mach_port, 0);
         let service_buf: [32]u8 = undefined;
@@ -1755,10 +1759,10 @@ pub struct internal {
 
                 if (entry.result != null) {
                     is_cache_hit.?.* = true;
-                    internal_log("getaddrinfo({s}) = cache hit", .{host orelse ""});
+                    internal_log("getaddrinfo({s}) = cache hit", .{host ?? ""});
                     dns_cache_hits_completed += 1;
                 } else {
-                    internal_log("getaddrinfo({s}) = cache hit (inflight)", .{host orelse ""});
+                    internal_log("getaddrinfo({s}) = cache hit (inflight)", .{host ?? ""});
                     dns_cache_hits_inflight += 1;
                 }
 
@@ -1781,12 +1785,12 @@ pub struct internal {
         if (Environment.isMac) {
             if (!bun.feature_flag.BUN_FEATURE_FLAG_DISABLE_DNS_CACHE_LIBINFO.get()) {
                 const res = lookupLibinfo(req, loop.internal_loop_data.getParent());
-                internal_log("getaddrinfo({s}) = cache miss (libinfo)", .{host orelse ""});
+                internal_log("getaddrinfo({s}) = cache miss (libinfo)", .{host ?? ""});
                 if (res) return req;
             }
         }
 
-        internal_log("getaddrinfo({s}) = cache miss (libc)", .{host orelse ""});
+        internal_log("getaddrinfo({s}) = cache miss (libc)", .{host ?? ""});
         bun.handleOom(bun.jsc.WorkPool.go(bun.default_allocator, *Request, req, workPoolCallback));
         return req;
     }
@@ -1986,7 +1990,7 @@ pub enum ResolverOrder: u8 {
     }
 
     static fn fromStringOrDie(order: []const u8): ResolverOrder {
-        return ResolverOrder.fromString(order) orelse ({
+        return ResolverOrder.fromString(order) ?? ({
             Output.prettyErrorln("<r><red>error<r><d>:<r> Invalid DNS result order.", .{});
             Global.exit(1);
         });
@@ -2157,7 +2161,7 @@ pub struct Resolver {
         }
 
         _.ref();
-        _.event_loop_timer.next = (now orelse &timespec.now(.allow_mocked_time)).addMs(1000);
+        _.event_loop_timer.next = (now ?? &timespec.now(.allow_mocked_time)).addMs(1000);
         _.vm.timer.incrementTimerRef(1);
         _.vm.timer.insert(&_.event_loop_timer);
         return true;
@@ -2194,7 +2198,7 @@ pub struct Resolver {
 
         const key = _.getKey(index, cache_name, request_type);
 
-        let addr: *cares_type = result orelse {
+        if (result == null) {
             let pending: (*CAresLookup(cares_type, lookup_name))? = key.lookup.head.next;
             key.lookup.head.processResolve(err, timeout, null);
             bun.default_allocator.destroy(key.lookup);
@@ -2204,7 +2208,8 @@ pub struct Resolver {
                 value.processResolve(err, timeout, null);
             }
             return;
-        };
+        }
+        let addr: *cares_type = result.?;
 
         let pending: (*CAresLookup(cares_type, lookup_name))? = key.lookup.head.next;
         let prev_global = key.lookup.head.globalThis;
@@ -2236,7 +2241,7 @@ pub struct Resolver {
         _.ref();
         const _deref_guard = DerefGuard<*Resolver!>{ val: _ };
 
-        let addr = result orelse {
+        if (result == null) {
             let pending: (*DNSLookup)? = key.lookup.head.next;
             key.lookup.head.processGetAddrInfo(err, timeout, null);
             bun.default_allocator.destroy(key.lookup);
@@ -2246,7 +2251,8 @@ pub struct Resolver {
                 value.processGetAddrInfo(err, timeout, null);
             }
             return;
-        };
+        }
+        let addr = result.?;
 
         let pending: (*DNSLookup)? = key.lookup.head.next;
         let prev_global = key.lookup.head.globalThis;
@@ -2279,7 +2285,8 @@ pub struct Resolver {
         _.ref();
         const _deref_guard = DerefGuard<*Resolver!>{ val: _ };
 
-        let array = (result.toJS(globalObject) catch .zero) orelse {
+        const array_opt = result.toJS(globalObject) catch .zero;
+        if (array_opt == null) {
             let pending: (*DNSLookup)? = key.lookup.head.next;
             let head = key.lookup.head;
             head.processGetAddrInfoNative(err, null);
@@ -2290,7 +2297,8 @@ pub struct Resolver {
                 value.processGetAddrInfoNative(err, null);
             }
             return;
-        };
+        }
+        let array = array_opt.?;
         let pending: (*DNSLookup)? = key.lookup.head.next;
         let prev_global = key.lookup.head.globalThis;
 
@@ -2319,7 +2327,7 @@ pub struct Resolver {
         _.ref();
         const _deref_guard = DerefGuard<*Resolver!>{ val: _ };
 
-        let addr = result orelse {
+        if (result == null) {
             let pending: (*CAresReverse)? = key.lookup.head.next;
             key.lookup.head.processResolve(err, timeout, null);
             bun.default_allocator.destroy(key.lookup);
@@ -2329,7 +2337,8 @@ pub struct Resolver {
                 value.processResolve(err, timeout, null);
             }
             return;
-        };
+        }
+        let addr = result.?;
 
         let pending: (*CAresReverse)? = key.lookup.head.next;
         let prev_global = key.lookup.head.globalThis;
@@ -2360,7 +2369,7 @@ pub struct Resolver {
         _.ref();
         const _deref_guard = DerefGuard<*Resolver!>{ val: _ };
 
-        let name_info = result orelse {
+        if (result == null) {
             let pending: (*CAresNameInfo)? = key.lookup.head.next;
             key.lookup.head.processResolve(err, timeout, null);
             bun.default_allocator.destroy(key.lookup);
@@ -2370,7 +2379,8 @@ pub struct Resolver {
                 value.processResolve(err, timeout, null);
             }
             return;
-        };
+        }
+        let name_info = result.?;
 
         let pending: (*CAresNameInfo)? = key.lookup.head.next;
         let prev_global = key.lookup.head.globalThis;
@@ -2517,11 +2527,12 @@ pub struct Resolver {
         let vm = _.vm;
         vm.eventLoop().enter();
         const _loop_guard = EventLoopExitGuard<@TypeOf(vm.eventLoop())>{ loop: vm.eventLoop() };
-        let channel = _.channel orelse {
+        if (_.channel == null) {
             * = _.polls.orderedRemove(poll.fd.native());
             poll.deinit();
             return;
-        };
+        }
+        let channel = _.channel.?;
 
         _.ref();
         const _deref_guard = DerefGuard<*Resolver!>{ val: _ };
@@ -2625,9 +2636,11 @@ pub struct Resolver {
                 break RecordType.default;
             }
 
-            break RecordType.map.getWithEql(record_type_str.getZigString(globalThis), jsc.ZigString.eqlComptime) orelse {
+            const rt_opt = RecordType.map.getWithEql(record_type_str.getZigString(globalThis), jsc.ZigString.eqlComptime);
+            if (rt_opt == null) {
                 return globalThis.throwInvalidArgumentPropertyValue("record", "one of: A, AAAA, ANY, CAA, CNAME, MX, NS, PTR, SOA, SRV, TXT", record_type_value);
-            };
+            }
+            break rt_opt.?;
         });
 
         const name_value = arguments.ptr[0];

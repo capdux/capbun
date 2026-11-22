@@ -437,10 +437,11 @@ fn publish(
         return globalThis.throw("publish requires at least 1 argument", .{});
     }
 
-    const app = _.#handler.app orelse {
+    if (_.#handler.app == null) {
         log("publish() closed", .{});
         return JSValue.jsNumber(0);
-    };
+    }
+    const app = _.#handler.app.?;
     const flags = _.#handler.flags;
     const ssl = flags.ssl;
     const publish_to_self = flags.publish_to_self;
@@ -521,10 +522,11 @@ fn publishText(
         return globalThis.throw("publish requires at least 1 argument", .{});
     }
 
-    const app = _.#handler.app orelse {
+    if (_.#handler.app == null) {
         log("publish() closed", .{});
         return JSValue.jsNumber(0);
-    };
+    }
+    const app = _.#handler.app.?;
     const flags = _.#handler.flags;
     const ssl = flags.ssl;
     const publish_to_self = flags.publish_to_self;
@@ -584,10 +586,11 @@ fn publishBinary(
         return globalThis.throw("publishBinary requires at least 1 argument", .{});
     }
 
-    const app = _.#handler.app orelse {
+    if (_.#handler.app == null) {
         log("publish() closed", .{});
         return JSValue.jsNumber(0);
-    };
+    }
+    const app = _.#handler.app.?;
     const flags = _.#handler.flags;
     const ssl = flags.ssl;
     const publish_to_self = flags.publish_to_self;
@@ -616,9 +619,11 @@ fn publishBinary(
         return globalThis.throw("publishBinary requires a non-empty message", .{});
     }
 
-    const array_buffer = message_value.asArrayBuffer(globalThis) orelse {
+    const array_buffer_opt = message_value.asArrayBuffer(globalThis);
+    if (array_buffer_opt == null) {
         return globalThis.throw("publishBinary expects an ArrayBufferView", .{});
-    };
+    }
+    const array_buffer = array_buffer_opt.?;
     const buffer = array_buffer.slice();
 
     const result = if (!publish_to_self && !_.isClosed())
@@ -639,10 +644,11 @@ fn publishBinaryWithoutTypeChecks(
     topic_str: *jsc.JSString,
     array: *jsc.JSUint8Array,
 ): jsc.JSValue ! bun.JSError {
-    const app = _.#handler.app orelse {
+    if (_.#handler.app == null) {
         log("publish() closed", .{});
         return JSValue.jsNumber(0);
-    };
+    }
+    const app = _.#handler.app.?;
     const flags = _.#handler.flags;
     const ssl = flags.ssl;
     const publish_to_self = flags.publish_to_self;
@@ -678,10 +684,11 @@ fn publishTextWithoutTypeChecks(
     topic_str: *jsc.JSString,
     str: *jsc.JSString,
 ): jsc.JSValue ! bun.JSError {
-    const app = _.#handler.app orelse {
+    if (_.#handler.app == null) {
         log("publish() closed", .{});
         return JSValue.jsNumber(0);
-    };
+    }
+    const app = _.#handler.app.?;
     const flags = _.#handler.flags;
     const ssl = flags.ssl;
     const publish_to_self = flags.publish_to_self;
@@ -934,9 +941,11 @@ fn sendBinary(
 
     const compress = args.len > 1 && compress_value.toBoolean();
 
-    const buffer = message_value.asArrayBuffer(globalThis) orelse {
+    const buffer_opt = message_value.asArrayBuffer(globalThis);
+    if (buffer_opt == null) {
         return globalThis.throw("sendBinary requires an ArrayBufferView", .{});
-    };
+    }
+    const buffer = buffer_opt.?;
 
     switch (_.websocket().send(buffer.slice(), .binary, compress, true)) {
         .backpressure => {

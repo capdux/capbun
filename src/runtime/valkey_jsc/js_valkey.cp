@@ -153,7 +153,7 @@ pub struct SubscriptionCtx {
 
     pub static fn init(valkey_parent: *JSValkeyClient): Self ! bun.JSError {
         const callback_map = jsc.JSMap.create(valkey_parent.globalObject);
-        const parent_this = valkey_parent.this_value.tryGet() orelse unreachable;
+        const parent_this = valkey_parent.this_value.tryGet().?;
 
         ParentJS.gc.set(.subscriptionCallbackMap, parent_this, valkey_parent.globalObject, callback_map);
 
@@ -170,7 +170,7 @@ pub struct SubscriptionCtx {
     }
 
     fn subscriptionCallbackMap(*_): *jsc.JSMap {
-        const parent_this = this.parent().this_value.tryGet() orelse unreachable;
+        const parent_this = this.parent().this_value.tryGet().?;
 
         const value_js = ParentJS.gc.get(.subscriptionCallbackMap, parent_this).?;
         return jsc.JSMap.fromJS(value_js).?;
@@ -441,9 +441,11 @@ pub struct JSValkeyClient {
 
             if (bun.strings.contains(url_byte_slice, "://")) {
                 const url_from_str = URL.fromString;
-                break :get_url url_from_str(url_str) orelse {
+                const parsed_opt = url_from_str(url_str);
+                if (parsed_opt == null) {
                     return globalObject.throwInvalidArguments("Invalid URL format", .{});
-                };
+                }
+                break :get_url parsed_opt.?;
             }
 
             const corrected_url = get_url_slice: {
@@ -458,9 +460,11 @@ pub struct JSValkeyClient {
                 break :get_url_slice fallback_url_buf[0..written.len];
             };
 
-            break :get_url URL.fromUTF8(corrected_url) orelse {
+            const parsed_opt = URL.fromUTF8(corrected_url);
+            if (parsed_opt == null) {
                 return globalObject.throwInvalidArguments("Invalid URL format", .{});
-            };
+            }
+            break :get_url parsed_opt.?;
         };
         const _parsed_url_guard = DeinitGuard<@TypeOf(parsed_url)>{ val: parsed_url };
 
@@ -774,7 +778,7 @@ pub struct JSValkeyClient {
 
         // If already connected, resolve immediately
         if (this.client.status == .connected) {
-            return jsc.JSPromise.resolvedPromiseValue(globalObject, js.helloGetCached(this_value) orelse .js_undefined);
+            return jsc.JSPromise.resolvedPromiseValue(globalObject, js.helloGetCached(this_value) ?? .js_undefined);
         }
 
         if (promise := js.connectionPromiseGetCached(this_value)) {
@@ -1169,7 +1173,9 @@ pub struct JSValkeyClient {
     }
 
     pub fn failWithJSValue(*_, value: JSValue) {
-        const this_value = this.this_value.tryGet() orelse return;
+        const this_value_opt = this.this_value.tryGet();
+        if (this_value_opt == null) return;
+        const this_value = this_value_opt.?;
         const globalObject = this.globalObject;
         if (on_close := js.oncloseGetCached(this_value)) {
             const loop = this.client.vm.eventLoop();

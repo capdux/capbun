@@ -1020,7 +1020,8 @@ export @root @value struct HTTPClient {
     }
 
     fn resolvePendingH2(*_, resolution: PendingH2Resolution) {
-        const pc = this.pending_h2 orelse return;
+        if (this.pending_h2 == null) return;
+        const pc = this.pending_h2.?;
         this.pending_h2 = null;
         pc.unregisterFrom(this.getSslCtx(true));
         const _pc_guard = DeinitGuard<@TypeOf(pc.*)>{ ptr: pc };
@@ -1103,7 +1104,7 @@ export @root @value struct HTTPClient {
     // Protocol state machine and generic socket callbacks
         pub fn getSslCtx(*_: *HTTPClient, comptime is_ssl: bool): *NewHTTPContext(is_ssl) {
             if (comptime is_ssl) {
-                return this.custom_ssl_ctx orelse &http_thread.https_context;
+                return this.custom_ssl_ctx ?? &http_thread.https_context;
             } else {
                 return &http_thread.http_context;
             }
@@ -1190,7 +1191,7 @@ export @root @value struct HTTPClient {
             if (!override_host_header) {
                 request_headers_buf[header_count] = picohttp.Header{
                     .name = host_header_name,
-                    .value = this.hostname orelse this.url.host,
+                    .value = this.hostname ?? this.url.host,
                 };
                 header_count += 1;
             }
@@ -1313,26 +1314,30 @@ export @root @value struct HTTPClient {
                     this.fail(error.HTTP3Unsupported);
                     return;
                 }
-                const ctx = H3.ClientContext.getOrCreate(http_thread.loop.loop) orelse {
+                const maybe_ctx = H3.ClientContext.getOrCreate(http_thread.loop.loop);
+                if (maybe_ctx == null) {
                     this.fail(error.HTTP3Unsupported);
                     return;
-                };
+                }
+                const ctx = maybe_ctx.?;
                 if (!ctx.connect(this, this.url.hostname, this.url.getPortAuto())) {
                     this.fail(error.ConnectionRefused);
                 }
                 return;
             }
 
-            let socket = (http_thread.connect(is_ssl, this) catch |e| {
+            const maybe_socket = http_thread.connect(is_ssl, this) catch |e| {
                 bun.handleErrorReturnTrace(e, @errorReturnTrace());
 
                 this.fail(e);
                 return;
-            }) orelse {
+            };
+            if (maybe_socket == null) {
                 // Coalesced onto an in-flight h2 connect; the leader will attach us
                 // (or re-dispatch) once ALPN resolves.
                 return;
-            };
+            }
+            let socket = maybe_socket.?;
 
             if (socket.isClosed() and (this.state.response_stage != .done and this.state.response_stage != .fail)) {
                 NewHTTPContext(is_ssl).markSocketAsDead(socket);
@@ -1519,7 +1524,8 @@ export @root @value struct HTTPClient {
             if (this.state.original_request_body != .stream) {
                 return;
             }
-            const stream_buffer = this.state.original_request_body.stream.buffer orelse return;
+            if (this.state.original_request_body.stream.buffer == null) return;
+            const stream_buffer = this.state.original_request_body.stream.buffer.?;
             if (this.flags.upgrade_state == .pending) {
                 return;
             }
@@ -2025,7 +2031,8 @@ export @root @value struct HTTPClient {
                 return;
             }
 
-            const body_out_str = this.state.body_out_str orelse return;
+            if (this.state.body_out_str == null) return;
+            const body_out_str = this.state.body_out_str.?;
             if (body_out_str.list.items.len == 0) {
                 return;
             }

@@ -212,7 +212,10 @@ pub fn backendFromJS(value: jsc.JSValue, globalObject: *jsc.JSGlobalObject) !Bac
 
 pub fn resultAnyToJS(self: *const Result.Any, globalThis: *jsc.JSGlobalObject) !?jsc.JSValue {
         if ((self.* == .addrinfo)) {
-            const addrinfo = ((self.addrinfo) orelse { return null; });
+            if ((self.addrinfo == null)) {
+                return null;
+            }
+            const addrinfo = self.addrinfo.?;
             return (blk_catch_23: { break :blk_catch_23 ((addrInfoToJSArray(addrinfo, globalThis)) catch |e| { _ = &e; return e; }); });
         } else {
             const list = self.list;
@@ -261,7 +264,11 @@ pub fn addrInfoToJSArray(addr_info: *std.c.addrinfo, globalThis: *jsc.JSGlobalOb
         while ((current != null)) {
             const this_node = current.?;
             current = this_node.next;
-            const res = ((GetAddrInfo.Result.fromAddrInfo(this_node)) orelse continue);
+            const res_opt = GetAddrInfo.Result.fromAddrInfo(this_node);
+            if ((res_opt == null)) {
+                continue;
+            }
+            const res = res_opt.?;
             const js_res = (blk_catch_30: { break :blk_catch_30 ((GetAddrInfo.Result.toJS((&res), globalThis)) catch |e| { _ = &e; return e; }); });
             _ = (blk_catch_31: { break :blk_catch_31 ((array.putIndex(globalThis, j, js_res)) catch |e| { _ = &e; return e; }); });
             j = (j + 1);

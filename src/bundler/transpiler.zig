@@ -344,12 +344,20 @@ const was_production = self.options.production;
                 _ = self.options.setProduction(true);
                 _ = self.resolver.opts.setProduction(true);
             }
-            const dir_info = (((blk_catch_6: { break :blk_catch_6 ((self.resolver.readDirInfo(self.fs.top_level_dir)) catch |__ce_6| { _ = &__ce_6; return; }); })) orelse { return; });
+            const dir_info_opt = (blk_catch_6: { break :blk_catch_6 ((self.resolver.readDirInfo(self.fs.top_level_dir)) catch |__ce_6| { _ = &__ce_6; return; }); });
+            if ((dir_info_opt == null)) {
+                return;
+            }
+            const dir_info = dir_info_opt.?;
             if (dir_info.tsconfig_json) |tsconfig| {
                 _ = &tsconfig;
                 self.options.jsx = tsconfig.mergeJSX(self.options.jsx);
             }
-            const dir = ((dir_info.getEntries(self.resolver.generation)) orelse { return; });
+            const dir_opt = dir_info.getEntries(self.resolver.generation);
+            if ((dir_opt == null)) {
+                return;
+            }
+            const dir = dir_opt.?;
             if ((self.options.isTest() or self.env.isTest())) {
                 _ = try self.env.load(dir, self.options.env.files, .@"test", skip_default_env);
             } else {
@@ -443,7 +451,11 @@ pub fn buildWithResolveResultEager(transpiler: *Transpiler, resolve_result: _res
             if (resolve_result.flags.is_external) {
                 return null;
             }
-            var file_path = (((resolve_result.pathConst()) orelse { return null; })).*;
+            const file_path_opt = resolve_result.pathConst();
+            if ((file_path_opt == null)) {
+                return null;
+            }
+            var file_path = (file_path_opt.?).*;
             _ = &file_path;
             const loader = transpiler.options.loader((if (@typeInfo(@TypeOf(file_path)) == .@"enum" or @typeInfo(@TypeOf(file_path)) == .@"union") @tagName(file_path) else file_path.name).ext);
             if (client_entry_point_) |client_entry_point| {
@@ -456,7 +468,11 @@ pub fn buildWithResolveResultEager(transpiler: *Transpiler, resolve_result: _res
             switch (loader) {
 .jsx, .tsx, .js, .ts, .json, .jsonc, .toml, .yaml, .json5, .text, .md => {
 const parse_opts: _ParseOptions = .{ .allocator = transpiler.allocator, .path = file_path, .loader = loader, .dirname_fd = resolve_result.dirname_fd, .file_descriptor = null, .file_hash = null, .macro_remappings = transpiler.options.macro_remap, .jsx = resolve_result.jsx, .emit_decorator_metadata = resolve_result.flags.emit_decorator_metadata, .experimental_decorators = resolve_result.flags.experimental_decorators };
-            var result = ((transpiler.parse(parse_opts, client_entry_point_)) orelse { return null; });
+            const result_opt = transpiler.parse(parse_opts, client_entry_point_);
+            if ((result_opt == null)) {
+                return null;
+            }
+            var result = result_opt.?;
             _ = &result;
             if ((!transpiler.options.transform_only)) {
                 if ((!transpiler.options.target.isBun())) {
@@ -681,7 +697,11 @@ if (source.isWebAssembly()) {
             }
             opts.features.is_macro_runtime = (target == .bun_macro);
             opts.features.replace_exports = this_parse.replace_exports;
-            return (switch ((((blk_catch_19: { break :blk_catch_19 ((transpiler.resolver.caches.js.parse(allocator, opts, transpiler.options.define, transpiler.log, source)) catch |__ce_19| { _ = &__ce_19; break :blk_catch_19 null; }); })) orelse { return null; })) {
+            const parsed_opt = (blk_catch_19: { break :blk_catch_19 ((transpiler.resolver.caches.js.parse(allocator, opts, transpiler.options.define, transpiler.log, source)) catch |__ce_19| { _ = &__ce_19; break :blk_catch_19 null; }); });
+            if ((parsed_opt == null)) {
+                return null;
+            }
+            return (switch (parsed_opt.?) {
 .ast => |value| .{ .ast = value, .source = source.*, .loader = loader, .input_fd = input_fd, .runtime_transpiler_cache = this_parse.runtime_transpiler_cache },
 .cached => .{ .ast = undefined, .runtime_transpiler_cache = this_parse.runtime_transpiler_cache, .source = source.*, .loader = loader, .input_fd = input_fd },
 .already_bundled => |already_bundled| .{ .ast = undefined, .already_bundled = (switch (already_bundled) {
@@ -907,10 +927,11 @@ pub fn transform(transpiler: *Transpiler, allocator: std.mem.Allocator, log: *lo
 });
                 }
             } else {
-                const output_dir = ((transpiler.options.output_dir_handle) orelse {
-                _ = Output.printError("Invalid or missing output directory.", .{});
-                _ = Global.crash();
-});
+                if ((transpiler.options.output_dir_handle == null)) {
+                    _ = Output.printError("Invalid or missing output directory.", .{});
+                    _ = Global.crash();
+                }
+                const output_dir = transpiler.options.output_dir_handle.?;
                 if ((!did_start)) {
                     _ = try (switch (transpiler.options.import_path_format) {
 .relative => transpiler.processResolveQueue(.relative, false, std.fs.Dir, output_dir),

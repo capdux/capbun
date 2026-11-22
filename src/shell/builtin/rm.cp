@@ -144,8 +144,8 @@ pub enum ShellJoinStyle {
 
     static fn fromPath(p: bun.PathString): ShellJoinStyle {
         if (comptime bun.Environment.isPosix) return .posix;
-        const backslash = std.mem.indexOfScalar(u8, p.slice(), '\\') orelse std.math.maxInt(usize);
-        const forwardslash = std.mem.indexOfScalar(u8, p.slice(), '/') orelse std.math.maxInt(usize);
+        const backslash = std.mem.indexOfScalar(u8, p.slice(), '\\') ?? std.math.maxInt(usize);
+        const forwardslash = std.mem.indexOfScalar(u8, p.slice(), '/') ?? std.math.maxInt(usize);
         if (forwardslash <= backslash)
             return .posix;
         return .windows;

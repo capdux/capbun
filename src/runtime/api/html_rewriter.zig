@@ -1275,14 +1275,16 @@ pub fn next(self: *AttributeIterator, globalObject: *JSGlobalObject, _: *jsc.Cal
             if ((self.iterator == null)) {
                 return JSValue.createObject2(globalObject, done_label, value_label, .true, .js_undefined);
             }
-            var attribute = ((self.iterator.?.next()) orelse {
-            if (self.iterator) |it| {
-                _ = &it;
-                _ = it.deinit();
+            const attribute_opt = self.iterator.?.next();
+            if ((attribute_opt == null)) {
+                if (self.iterator) |it| {
+                    _ = &it;
+                    _ = it.deinit();
+                }
+                self.iterator = null;
+                return JSValue.createObject2(globalObject, done_label, value_label, .true, .js_undefined);
             }
-            self.iterator = null;
-            return JSValue.createObject2(globalObject, done_label, value_label, .true, .js_undefined);
-});
+            var attribute = attribute_opt.?;
             _ = &attribute;
             const value = attribute.@"value"();
             const name = attribute.@"name"();

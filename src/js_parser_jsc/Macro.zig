@@ -407,7 +407,7 @@ self.is_top_level = false;
             {
                 _entry.value_ptr.* = expr;
             }
-            const obj = ((value.getObject()) orelse (unreachable));
+            const obj = (value.getObject()).?;
             const IterType = jsc.JSPropertyIterator(.{ .skip_empty_name = false, .include_value = true });
             var object_iter = try IterType.init(self.global, obj);
             _ = &object_iter;
@@ -491,7 +491,7 @@ pub fn callWrapper(args: CallArgs) Runner.MacroError!Expr {
             RunnerCallData.call_args = args;
             const vm_instance: *jsc.VirtualMachine = jsc.VirtualMachine.get();
             {
-                _ = Bun__startMacro((&call), vm_instance.global);
+                _ = Bun__startMacro(@ptrCast((&call)), vm_instance.global);
             }
             return RunnerCallData.result;
     }
@@ -643,4 +643,4 @@ const js = bun.jsc.C;
 const empty_imports: [0]SImport = undefined;
 const TopLevelMacroError = ((error{ MacroFailed, OutOfMemory } || ToJSError) || bun.JSError);
 
-extern "c" fn Bun__startMacro(function: *const anyopaque, arg1: *anyopaque) callconv(.c) void;
+extern "c" fn Bun__startMacro(function: *const void, arg1: *anyopaque) callconv(.c) void;

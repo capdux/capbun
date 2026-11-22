@@ -178,12 +178,16 @@ pub fn createInstance(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
         _ = &_args_guard;
         var ___args_guard_moved = false; _ = &___args_guard_moved;
         defer if (!___args_guard_moved) { ___args_guard_moved = true; const __T = @TypeOf(_args_guard); if (@typeInfo(__T) == .optional) { if (_args_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _args_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _args_guard; _drop_val.__cp_deinit(); } };
-        const query = ((args.nextEat()) orelse {
-        return globalThis.throw("query must be a string", .{});
-});
-        const values = ((args.nextEat()) orelse {
-        return globalThis.throw("values must be an array", .{});
-});
+        const query_opt = args.nextEat();
+        if ((query_opt == null)) {
+            return globalThis.throw("query must be a string", .{});
+        }
+        const query = query_opt.?;
+        const values_opt = args.nextEat();
+        if ((values_opt == null)) {
+            return globalThis.throw("values must be an array", .{});
+        }
+        const values = values_opt.?;
         if ((!query.isString())) {
             return globalThis.throw("query must be a string", .{});
         }
@@ -254,9 +258,11 @@ pub fn doRun(self: *JSMySQLQuery, globalObject: *jsc.JSGlobalObject, callframe: 
         if ((arguments.len < 2)) {
             return globalObject.throwInvalidArguments("run must be called with 2 arguments connection and target", .{});
         }
-        const connection = ((arguments[0].as(MySQLConnection)) orelse {
-        return globalObject.throw("connection must be a MySQLConnection", .{});
-});
+        const connection_opt = arguments[0].as(MySQLConnection);
+        if ((connection_opt == null)) {
+            return globalObject.throw("connection must be a MySQLConnection", .{});
+        }
+        const connection = connection_opt.?;
         var target = arguments[1];
         _ = &target;
         if ((!target.isObject())) {
@@ -321,13 +327,25 @@ pub fn resolve(self: *JSMySQLQuery, queries_array: JSValue, result: MySQLQueryRe
         if (self.#vm.isShuttingDown()) {
             return;
         }
-        const targetValue = ((self.getTarget()) orelse { return; });
-        const thisValue = ((self.#thisValue.tryGet()) orelse { return; });
+        const targetValue_opt = self.getTarget();
+        if ((targetValue_opt == null)) {
+            return;
+        }
+        const targetValue = targetValue_opt.?;
+        const thisValue_opt = self.#thisValue.tryGet();
+        if ((thisValue_opt == null)) {
+            return;
+        }
+        const thisValue = thisValue_opt.?;
         _ = thisValue.ensureStillAlive();
         const tag = CommandTag{ .SELECT = result.result_count };
         const js_tag = (blk_catch_2: { break :blk_catch_2 ((tag.toJSTag(self.#globalObject)) catch |__ce_2| { _ = &__ce_2; return bun.assertf(false, "in MySQLQuery Tag should always be a number", .{}); }); });
         _ = js_tag.ensureStillAlive();
-        const function = ((self.#vm.rareData().mysql_context.onQueryResolveFn.get()) orelse { return; });
+        const function_opt = self.#vm.rareData().mysql_context.onQueryResolveFn.get();
+        if ((function_opt == null)) {
+            return;
+        }
+        const function = function_opt.?;
         _ = bun.assertf(function.isCallable(), "onQueryResolveFn is not callable", .{});
         const event_loop = self.#vm.eventLoop();
         const pending_value = ((self.getPendingValue()) orelse (.js_undefined));
@@ -382,7 +400,11 @@ pub fn rejectWithJSValue(self: *JSMySQLQuery, queries_array: JSValue, err_val: J
         if (self.#vm.isShuttingDown()) {
             return;
         }
-        const targetValue = ((self.getTarget()) orelse { return; });
+        const targetValue_opt = self.getTarget();
+        if ((targetValue_opt == null)) {
+            return;
+        }
+        const targetValue = targetValue_opt.?;
         var js_error = ((err_val.toError()) orelse (err_val));
         _ = &js_error;
         if ((js_error == .zero)) {
@@ -390,12 +412,20 @@ pub fn rejectWithJSValue(self: *JSMySQLQuery, queries_array: JSValue, err_val: J
         }
         _ = bun.assertf((js_error != .zero), "js_error is zero", .{});
         _ = js_error.ensureStillAlive();
-        const function = ((self.#vm.rareData().mysql_context.onQueryRejectFn.get()) orelse { return; });
+        const function_opt = self.#vm.rareData().mysql_context.onQueryRejectFn.get();
+        if ((function_opt == null)) {
+            return;
+        }
+        const function = function_opt.?;
         _ = bun.assertf(function.isCallable(), "onQueryRejectFn is not callable", .{});
         const event_loop = self.#vm.eventLoop();
         const js_array = (if ((queries_array == .zero)) .js_undefined else queries_array);
         _ = js_array.ensureStillAlive();
-        const this_val = ((self.#thisValue.tryGet()) orelse { return; });
+        const this_val_opt = self.#thisValue.tryGet();
+        if ((this_val_opt == null)) {
+            return;
+        }
+        const this_val = this_val_opt.?;
         const cb_args: [3]JSValue = .{ targetValue, js_error, js_array };
         _ = event_loop.runCallback(function, self.#globalObject, this_val, (&cb_args));
 }

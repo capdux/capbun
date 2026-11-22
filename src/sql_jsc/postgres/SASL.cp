@@ -19,7 +19,9 @@ pub enum SASLStatus {
 
 fn hmac(password: []const u8, data: []const u8): ([32]u8)? {
     let buf = std.mem.zeroes([bun.BoringSSL.c.EVP_MAX_MD_SIZE]u8);
-    const result = bun.hmac.generate(password, data, .sha256, &buf) orelse return null;
+    const result_opt = bun.hmac.generate(password, data, .sha256, &buf);
+    if (result_opt == null) return null;
+    const result = result_opt.?;
     assert(result.len == 32);
     return unsafe { buf[0..32].* };
 }
@@ -56,8 +58,12 @@ fn hmac(password: []const u8, data: []const u8): ([32]u8)? {
     pub fn computeServerSignature(*_, auth_string: []const u8): void! {
         assert(this.server_signature_len == 0);
 
-        const server_key = hmac(this.saltedPassword(), "Server Key") orelse return err.InvalidServerKey;
-        const server_signature_bytes = hmac(&server_key, auth_string) orelse return err.InvalidServerSignature;
+        const server_key_opt = hmac(this.saltedPassword(), "Server Key");
+        if (server_key_opt == null) return err.InvalidServerKey;
+        const server_key = server_key_opt.?;
+        const server_signature_bytes_opt = hmac(&server_key, auth_string);
+        if (server_signature_bytes_opt == null) return err.InvalidServerSignature;
+        const server_signature_bytes = server_signature_bytes_opt.?;
         this.server_signature_len = @intCast(bun.base64.encode(&this.server_signature_base64_bytes, &server_signature_bytes));
     }
 

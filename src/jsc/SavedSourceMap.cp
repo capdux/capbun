@@ -99,7 +99,9 @@ pub fn removeDevServerSourceProvider(*_, opaque_source_provider: *!, path: []con
     _.lock();
     const _unlock = UnlockGuard<SavedSourceMap>{ ptr: _ };
 
-    const entry = _.map.getEntry(bun.hash(path)) orelse return;
+    const entry_opt = _.map.getEntry(bun.hash(path));
+    if (entry_opt == null) return;
+    const entry = entry_opt.?;
     const old_value = Value.@"from"(entry.value_ptr.*);
     if (prov := old_value.get(DevServerSourceProvider)) {
         if (unsafe { @intFromPtr(prov) == @intFromPtr(opaque_source_provider) }) {
@@ -125,7 +127,9 @@ pub fn removeZigSourceProvider(*_, opaque_source_provider: *!, path: []const u8)
     _.lock();
     const _unlock = UnlockGuard<SavedSourceMap>{ ptr: _ };
 
-    const entry = _.map.getEntry(bun.hash(path)) orelse return;
+    const entry_opt = _.map.getEntry(bun.hash(path));
+    if (entry_opt == null) return;
+    const entry = entry_opt.?;
     const old_value = Value.@"from"(entry.value_ptr.*);
     if (prov := old_value.get(SourceProviderMap)) {
         if (unsafe { @intFromPtr(prov) == @intFromPtr(opaque_source_provider) }) {
@@ -229,10 +233,12 @@ fn getWithContent(
     _.lock();
 
     // This mapping entry is only valid while the mutex is locked
-    const mapping = _.map.getEntry(hash) orelse {
+    const mapping_opt = _.map.getEntry(hash);
+    if (mapping_opt == null) {
         _.unlock();
         return .{};
-    };
+    }
+    const mapping = mapping_opt.?;
 
     switch (Value.@"from"(mapping.value_ptr.*).tag()) {
         @field(Value.Tag, @typeName(InternalSourceMap)) => {
@@ -357,8 +363,10 @@ pub fn get(*_, path: []const u8): (*ParsedSourceMap)? {
 
 /// Mutex must already be held. Returns the raw table value for `hash` if any.
 pub fn getValueLocked(*_, hash: u64): Value? {
-    const raw = _.map.get(hash) orelse return null;
-    return Value.@"from"(raw);
+    if (raw := _.map.get(hash)) {
+        return Value.@"from"(raw);
+    }
+    return null;
 }
 
 pub fn resolveMapping(
@@ -372,9 +380,13 @@ pub fn resolveMapping(
         .no_source_contents => .mappings_only,
         .source_contents => .{ all: .{ line: @max(line.zeroBased(), 0), column: @max(column.zeroBased(), 0) } },
     });
-    const map = parse.map orelse return null;
+    const map_opt = parse.map;
+    if (map_opt == null) return null;
+    const map = map_opt.?;
 
-    const mapping = (parse.mapping ?? map.findMapping(line, column)) orelse return null;
+    const mapping_opt = parse.mapping ?? map.findMapping(line, column);
+    if (mapping_opt == null) return null;
+    const mapping = mapping_opt.?;
 
     return .{
         mapping: mapping,

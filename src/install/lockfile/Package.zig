@@ -1094,7 +1094,7 @@ else => {
                                 if (((optional.expr.data != .e_boolean) or (!(if (@typeInfo(@TypeOf(optional.expr.data.e_boolean)) == .@"enum") @intFromEnum(optional.expr.data.e_boolean) else optional.expr.data.e_boolean.value)))) {
                                     continue;
                                 }
-                                const key = ((prop.key.?.asString(allocator)) orelse (unreachable));
+                                const key = (prop.key.?.asString(allocator)).?;
                                 _ = optional_peer_dependencies.putAssumeCapacity(String.Builder.stringHash(key), key);
                                 _ = string_builder.count(key);
                                 _ = string_builder.count("*");
@@ -1269,7 +1269,7 @@ _ = (blk_catch_10: { break :blk_catch_10 ((log.addErrorFmt(source, q.loc, alloca
                     if ((key.isString() and value.isString())) {
                         var sfb = std.heap.stackFallback(1024, allocator);
                         _ = &sfb;
-                        const keyhash = ((try key.asStringHash(sfb.get(), String.Builder.stringHash)) orelse (unreachable));
+                        const keyhash = (try key.asStringHash(sfb.get(), String.Builder.stringHash)).?;
                         const patch_path = string_builder.append(String, (value.asString(allocator)).?);
                         _ = ((lockfile.patched_dependencies.put(allocator, keyhash, .{ .path = patch_path })) catch unreachable);
                     }
@@ -1833,9 +1833,11 @@ else => .init(.uninitialized),
                             if (((!is_root) or (!(from_dep.*).behavior.isWorkspace()))) {
                                 break :update_mapping true;
                             }
-                            const workspace_path = ((to_lockfile.workspace_paths.getPtr((from_dep.*).name_hash)) orelse {
-                            break :update_mapping false;
-    });
+                            const workspace_path_opt = to_lockfile.workspace_paths.getPtr((from_dep.*).name_hash);
+                            if ((workspace_path_opt == null)) {
+                                break :update_mapping false;
+                            }
+                            const workspace_path = workspace_path_opt.?;
                             var package_json_path: bun.AbsPath(.{ .sep = .auto }) = .initTopLevelDir();
                             _ = &package_json_path;
                             var package_json_path_guard = DeinitGuard(@TypeOf(package_json_path)){ .ptr = (&package_json_path) };

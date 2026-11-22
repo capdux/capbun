@@ -5557,9 +5557,11 @@ pub struct NodeFS {
                                 // This avoids creating a WastefulTypedArray.
                                 const array_buffer = jsc.ArrayBuffer.createBuffer(vm.global, temporary_read_buffer) catch .zero; // TODO: properly propagate exception upwards
                                 array_buffer.ensureStillAlive();
-                                const ab = array_buffer.asArrayBuffer(vm.global) orelse return {
+                                const ab_opt = array_buffer.asArrayBuffer(vm.global);
+                                if (ab_opt == null) return {
                                     err: Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path),
                                 };
+                                const ab = ab_opt.?;
                                 return {
                                     result: {
                                         buffer: jsc.MarkedArrayBuffer{
@@ -7438,7 +7440,9 @@ fn zigDeleteTreeOpenInitialSubpath(client: std.fs.Dir, sub_path: []const u8, kin
 
 fn zigDeleteTreeMinStackSizeWithKindHint(client: std.fs.Dir, sub_path: []const u8, kind_hint: std.fs.File.Kind)! {
     start_over: while (true) {
-        let dir = (zigDeleteTreeOpenInitialSubpath(client, sub_path, kind_hint)?) orelse return;
+        const dir_opt = zigDeleteTreeOpenInitialSubpath(client, sub_path, kind_hint)?;
+        if (dir_opt == null) return;
+        let dir = dir_opt.?;
         let _parent_guard = StdDirOptGuard{};
         let _dir_guard = StdDirPtrGuard{ dir: unsafe { &dir } };
 

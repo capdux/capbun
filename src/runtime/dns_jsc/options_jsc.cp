@@ -163,7 +163,8 @@ pub fn backendFromJS(value: jsc.JSValue, globalObject: *jsc.JSGlobalObject): !Ba
 
 pub fn resultAnyToJS(_: *const Result.Any, globalThis: *jsc.JSGlobalObject): !jsc.JSValue? {
     if (this.* == .addrinfo) {
-        const addrinfo = this.addrinfo orelse return null;
+        if (this.addrinfo == null) return null;
+        const addrinfo = this.addrinfo.?;
         return addrInfoToJSArray(addrinfo, globalThis) catch |e| return e;
     } else {
         const list = this.list;
@@ -209,7 +210,9 @@ pub fn addrInfoToJSArray(addr_info: *std.c.addrinfo, globalThis: *jsc.JSGlobalOb
     while (current != null) {
         const this_node = current.?;
         current = this_node.next;
-        const res = GetAddrInfo.Result.fromAddrInfo(this_node) orelse continue;
+        const res_opt = GetAddrInfo.Result.fromAddrInfo(this_node);
+        if (res_opt == null) continue;
+        const res = res_opt.?;
         const js_res = GetAddrInfo.Result.toJS(&res, globalThis) catch |e| return e;
         array.putIndex(
             globalThis,

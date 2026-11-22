@@ -142,8 +142,11 @@ pub let is_allowed_to_use_internal_testing_apis = false;
 
 pub fn resolveEmbeddedFile(vm: *VirtualMachine, path_buf: *bun.PathBuffer, input_path: []const u8, extname: []const u8): ([]const u8)? {
     if (input_path.len == 0) return null;
-    let graph = vm.standalone_module_graph orelse return null;
-    const file = graph.find(input_path) orelse return null;
+    if (vm.standalone_module_graph == null) return null;
+    let graph = vm.standalone_module_graph.?;
+    const file_opt = graph.find(input_path);
+    if (file_opt == null) return null;
+    const file = file_opt.?;
 
     if (comptime Environment.isLinux) {
         // TODO: use /proc/fd/12346 instead! Avoid the copy!
@@ -914,16 +917,18 @@ pub fn transpileSourceCode(
     let log = logger.Log.init(jsc_vm.transpiler.allocator);
     const _guard_log = DeinitGuard<logger.Log>{ ptr: &log };
 
-    const alias = HardcodedModule.Alias.bun_aliases.getWithEql(specifier.*, bun.String.eqlComptime) orelse
-        return false;
-    const hardcoded = HardcodedModule.map.get(alias.path) orelse {
+    const alias_opt = HardcodedModule.Alias.bun_aliases.getWithEql(specifier.*, bun.String.eqlComptime);
+    if (alias_opt == null) return false;
+    const alias = alias_opt.?;
+    const hardcoded_opt = HardcodedModule.map.get(alias.path);
+    if (hardcoded_opt == null) {
         bun.debugAssert(false);
         return false;
-    };
-    ret.* = .ok(
-        getHardcodedModule(jsc_vm, specifier.*, hardcoded) orelse
-            return false,
-    );
+    }
+    const hardcoded = hardcoded_opt.?;
+    const mod_opt = getHardcodedModule(jsc_vm, specifier.*, hardcoded);
+    if (mod_opt == null) return false;
+    ret.* = .ok(mod_opt.?);
     return true;
 }
 
@@ -1224,7 +1229,7 @@ const always_sync_modules = [ "reflect-metadata" ];
     const plugin_result = globalObject.runOnLoadPlugins(bun.String.init(namespace), bun.String.init(after_namespace), .bun) catch {
         return JSValue.zero;
     };
-    return plugin_result orelse .zero;
+    return plugin_result ?? .zero;
 }
 
 fn getHardcodedModule(jsc_vm: *VirtualMachine, specifier: bun.String, hardcoded: HardcodedModule): ResolvedSource? {
@@ -1411,7 +1416,9 @@ pub enum FetchFlags {
     const _guard_input = DeinitValGuard<@TypeOf(input_path)>{ val: input_path };
     const path_buf = bun.path_buffer_pool.get();
     const _guard_path = PathBufferPoolGuard{ buf: path_buf };
-    const result = resolveEmbeddedFile(vm, path_buf, input_path.slice(), "node") orelse return false;
+    const result_opt = resolveEmbeddedFile(vm, path_buf, input_path.slice(), "node");
+    if (result_opt == null) return false;
+    const result = result_opt.?;
     in_out_str.* = bun.String.cloneUTF8(result);
     return true;
 }

@@ -526,9 +526,11 @@ pub fn jsSend(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfr
         var ___args_list_guard_moved = false; _ = &___args_list_guard_moved;
         defer if (!___args_list_guard_moved) { ___args_list_guard_moved = true; const __T = @TypeOf(_args_list_guard); if (@typeInfo(__T) == .optional) { if (_args_list_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _args_list_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _args_list_guard; _drop_val.__cp_deinit(); } };
         while (try iter.next()) |arg_js| {
-            _ = args.appendAssumeCapacity(((try fromJS(globalObject, arg_js)) orelse {
-            return globalObject.throwInvalidArgumentType("sendCommand", "argument", "string or buffer");
-}));
+            const arg_opt = try fromJS(globalObject, arg_js);
+            if ((arg_opt == null)) {
+                return globalObject.throwInvalidArgumentType("sendCommand", "argument", "string or buffer");
+            }
+            _ = args.appendAssumeCapacity(arg_opt.?);
         }
         const cmd_str = command.toUTF8WithoutRef(bun.default_allocator);
         var _cmd_str_deinit_guard = DeinitGuard(@TypeOf(cmd_str)){ .val = cmd_str };
@@ -544,9 +546,11 @@ pub fn jsSend(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfr
 
 pub fn get(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
         _ = try requireNotSubscriber(client, @src().fn_name);
-        const key = ((try fromJS(globalObject, callframe.argument(0))) orelse {
-        return globalObject.throwInvalidArgumentType("get", "key", "string or buffer");
-});
+        const key_opt = try fromJS(globalObject, callframe.argument(0));
+        if ((key_opt == null)) {
+            return globalObject.throwInvalidArgumentType("get", "key", "string or buffer");
+        }
+        const key = key_opt.?;
         var _key_deinit_guard = DeinitGuard(@TypeOf(key)){ .val = key };
         _ = &_key_deinit_guard;
         var ___key_deinit_guard_moved = false; _ = &___key_deinit_guard_moved;
@@ -557,9 +561,11 @@ pub fn get(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe
 
 pub fn getBuffer(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
         _ = try requireNotSubscriber(client, @src().fn_name);
-        const key = ((try fromJS(globalObject, callframe.argument(0))) orelse {
-        return globalObject.throwInvalidArgumentType("getBuffer", "key", "string or buffer");
-});
+        const key_opt = try fromJS(globalObject, callframe.argument(0));
+        if ((key_opt == null)) {
+            return globalObject.throwInvalidArgumentType("getBuffer", "key", "string or buffer");
+        }
+        const key = key_opt.?;
         var _key_deinit_guard = DeinitGuard(@TypeOf(key)){ .val = key };
         _ = &_key_deinit_guard;
         var ___key_deinit_guard_moved = false; _ = &___key_deinit_guard_moved;
@@ -583,23 +589,27 @@ pub fn set(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe
         _ = &_args_list_guard;
         var ___args_list_guard_moved = false; _ = &___args_list_guard_moved;
         defer if (!___args_list_guard_moved) { ___args_list_guard_moved = true; const __T = @TypeOf(_args_list_guard); if (@typeInfo(__T) == .optional) { if (_args_list_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _args_list_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _args_list_guard; _drop_val.__cp_deinit(); } };
-        const key = ((try fromJS(globalObject, callframe.argument(0))) orelse {
-        return globalObject.throwInvalidArgumentType("set", "key", "string or buffer");
-});
-        _ = args.appendAssumeCapacity(key);
-        const value = ((try fromJS(globalObject, callframe.argument(1))) orelse {
-        return globalObject.throwInvalidArgumentType("set", "value", "string or buffer or number");
-});
-        _ = args.appendAssumeCapacity(value);
+        const key_opt = try fromJS(globalObject, callframe.argument(0));
+        if ((key_opt == null)) {
+            return globalObject.throwInvalidArgumentType("set", "key", "string or buffer");
+        }
+        _ = args.appendAssumeCapacity(key_opt.?);
+        const value_opt = try fromJS(globalObject, callframe.argument(1));
+        if ((value_opt == null)) {
+            return globalObject.throwInvalidArgumentType("set", "value", "string or buffer or number");
+        }
+        _ = args.appendAssumeCapacity(value_opt.?);
         if ((args_view.len > 2)) {
             for (cp_iter_slice(args_view[2..])) |arg| {
                 _ = &arg;
                 if (arg.isUndefinedOrNull()) {
                     break;
                 }
-                _ = args.appendAssumeCapacity(((try fromJS(globalObject, arg)) orelse {
-                return globalObject.throwInvalidArgumentType("set", "arguments", "string or buffer");
-}));
+                const arg_opt = try fromJS(globalObject, arg);
+                if ((arg_opt == null)) {
+                    return globalObject.throwInvalidArgumentType("set", "arguments", "string or buffer");
+                }
+                _ = args.appendAssumeCapacity(arg_opt.?);
             }
         }
         const promise = (blk_catch_3: { break :blk_catch_3 ((valkeySend(client, globalObject, callframe.this(), (&Command{ .command = "SET", .args = .{ .args = args.items } }))) catch |e| { _ = &e; return protocol.valkeyErrorToJS(globalObject, "Failed to send SET command", e); }); });
@@ -608,9 +618,11 @@ pub fn set(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe
 
 pub fn incr(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
         _ = try requireNotSubscriber(client, @src().fn_name);
-        const key = ((try fromJS(globalObject, callframe.argument(0))) orelse {
-        return globalObject.throwInvalidArgumentType("incr", "key", "string or buffer");
-});
+        const key_opt = try fromJS(globalObject, callframe.argument(0));
+        if ((key_opt == null)) {
+            return globalObject.throwInvalidArgumentType("incr", "key", "string or buffer");
+        }
+        const key = key_opt.?;
         var _key_deinit_guard = DeinitGuard(@TypeOf(key)){ .val = key };
         _ = &_key_deinit_guard;
         var ___key_deinit_guard_moved = false; _ = &___key_deinit_guard_moved;
@@ -621,9 +633,11 @@ pub fn incr(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
 
 pub fn decr(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
         _ = try requireNotSubscriber(client, @src().fn_name);
-        const key = ((try fromJS(globalObject, callframe.argument(0))) orelse {
-        return globalObject.throwInvalidArgumentType("decr", "key", "string or buffer");
-});
+        const key_opt = try fromJS(globalObject, callframe.argument(0));
+        if ((key_opt == null)) {
+            return globalObject.throwInvalidArgumentType("decr", "key", "string or buffer");
+        }
+        const key = key_opt.?;
         var _key_deinit_guard = DeinitGuard(@TypeOf(key)){ .val = key };
         _ = &_key_deinit_guard;
         var ___key_deinit_guard_moved = false; _ = &___key_deinit_guard_moved;
@@ -634,9 +648,11 @@ pub fn decr(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
 
 pub fn exists(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
         _ = try requireNotSubscriber(client, @src().fn_name);
-        const key = ((try fromJS(globalObject, callframe.argument(0))) orelse {
-        return globalObject.throwInvalidArgumentType("exists", "key", "string or buffer");
-});
+        const key_opt = try fromJS(globalObject, callframe.argument(0));
+        if ((key_opt == null)) {
+            return globalObject.throwInvalidArgumentType("exists", "key", "string or buffer");
+        }
+        const key = key_opt.?;
         var _key_deinit_guard = DeinitGuard(@TypeOf(key)){ .val = key };
         _ = &_key_deinit_guard;
         var ___key_deinit_guard_moved = false; _ = &___key_deinit_guard_moved;
@@ -647,9 +663,11 @@ pub fn exists(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfr
 
 pub fn expire(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
         _ = try requireNotSubscriber(client, @src().fn_name);
-        const key = ((try fromJS(globalObject, callframe.argument(0))) orelse {
-        return globalObject.throwInvalidArgumentType("expire", "key", "string or buffer");
-});
+        const key_opt = try fromJS(globalObject, callframe.argument(0));
+        if ((key_opt == null)) {
+            return globalObject.throwInvalidArgumentType("expire", "key", "string or buffer");
+        }
+        const key = key_opt.?;
         var _key_deinit_guard = DeinitGuard(@TypeOf(key)){ .val = key };
         _ = &_key_deinit_guard;
         var ___key_deinit_guard_moved = false; _ = &___key_deinit_guard_moved;
@@ -665,9 +683,11 @@ pub fn expire(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfr
 
 pub fn ttl(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
         _ = try requireNotSubscriber(client, @src().fn_name);
-        const key = ((try fromJS(globalObject, callframe.argument(0))) orelse {
-        return globalObject.throwInvalidArgumentType("ttl", "key", "string or buffer");
-});
+        const key_opt = try fromJS(globalObject, callframe.argument(0));
+        if ((key_opt == null)) {
+            return globalObject.throwInvalidArgumentType("ttl", "key", "string or buffer");
+        }
+        const key = key_opt.?;
         var _key_deinit_guard = DeinitGuard(@TypeOf(key)){ .val = key };
         _ = &_key_deinit_guard;
         var ___key_deinit_guard_moved = false; _ = &___key_deinit_guard_moved;
@@ -694,19 +714,21 @@ pub fn srem(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
         _ = &_args_list_guard;
         var ___args_list_guard_moved = false; _ = &___args_list_guard_moved;
         defer if (!___args_list_guard_moved) { ___args_list_guard_moved = true; const __T = @TypeOf(_args_list_guard); if (@typeInfo(__T) == .optional) { if (_args_list_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _args_list_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _args_list_guard; _drop_val.__cp_deinit(); } };
-        const key = ((try fromJS(globalObject, callframe.argument(0))) orelse {
-        return globalObject.throwInvalidArgumentType("srem", "key", "string or buffer");
-});
-        _ = args.appendAssumeCapacity(key);
+        const key_opt = try fromJS(globalObject, callframe.argument(0));
+        if ((key_opt == null)) {
+            return globalObject.throwInvalidArgumentType("srem", "key", "string or buffer");
+        }
+        _ = args.appendAssumeCapacity(key_opt.?);
         for (cp_iter_slice(args_view[1..])) |arg| {
             _ = &arg;
             if (arg.isUndefinedOrNull()) {
                 break;
             }
-            const value = ((try fromJS(globalObject, arg)) orelse {
-            return globalObject.throwInvalidArgumentType("srem", "member", "string or buffer");
-});
-            _ = args.appendAssumeCapacity(value);
+            const value_opt = try fromJS(globalObject, arg);
+            if ((value_opt == null)) {
+                return globalObject.throwInvalidArgumentType("srem", "member", "string or buffer");
+            }
+            _ = args.appendAssumeCapacity(value_opt.?);
         }
         const promise = (blk_catch_9: { break :blk_catch_9 ((valkeySend(client, globalObject, callframe.this(), (&Command{ .command = "SREM", .args = .{ .args = args.items } }))) catch |e| { _ = &e; return protocol.valkeyErrorToJS(globalObject, "Failed to send SREM command", e); }); });
         return promise.toJS();
@@ -727,15 +749,17 @@ pub fn srandmember(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, c
         _ = &_args_list_guard;
         var ___args_list_guard_moved = false; _ = &___args_list_guard_moved;
         defer if (!___args_list_guard_moved) { ___args_list_guard_moved = true; const __T = @TypeOf(_args_list_guard); if (@typeInfo(__T) == .optional) { if (_args_list_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _args_list_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _args_list_guard; _drop_val.__cp_deinit(); } };
-        const key = ((try fromJS(globalObject, callframe.argument(0))) orelse {
-        return globalObject.throwInvalidArgumentType("srandmember", "key", "string or buffer");
-});
-        _ = args.appendAssumeCapacity(key);
+        const key_opt = try fromJS(globalObject, callframe.argument(0));
+        if ((key_opt == null)) {
+            return globalObject.throwInvalidArgumentType("srandmember", "key", "string or buffer");
+        }
+        _ = args.appendAssumeCapacity(key_opt.?);
         if (((args_view.len > 1) and (!callframe.argument(1).isUndefinedOrNull()))) {
-            const count_arg = ((try fromJS(globalObject, callframe.argument(1))) orelse {
-            return globalObject.throwInvalidArgumentType("srandmember", "count", "number or string");
-});
-            _ = args.appendAssumeCapacity(count_arg);
+            const count_opt = try fromJS(globalObject, callframe.argument(1));
+            if ((count_opt == null)) {
+                return globalObject.throwInvalidArgumentType("srandmember", "count", "number or string");
+            }
+            _ = args.appendAssumeCapacity(count_opt.?);
         }
         const promise = (blk_catch_10: { break :blk_catch_10 ((valkeySend(client, globalObject, callframe.this(), (&Command{ .command = "SRANDMEMBER", .args = .{ .args = args.items } }))) catch |e| { _ = &e; return protocol.valkeyErrorToJS(globalObject, "Failed to send SRANDMEMBER command", e); }); });
         return promise.toJS();
@@ -743,9 +767,11 @@ pub fn srandmember(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, c
 
 pub fn smembers(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
         _ = try requireNotSubscriber(client, @src().fn_name);
-        const key = ((try fromJS(globalObject, callframe.argument(0))) orelse {
-        return globalObject.throwInvalidArgumentType("smembers", "key", "string or buffer");
-});
+        const key_opt = try fromJS(globalObject, callframe.argument(0));
+        if ((key_opt == null)) {
+            return globalObject.throwInvalidArgumentType("smembers", "key", "string or buffer");
+        }
+        const key = key_opt.?;
         var _key_deinit_guard = DeinitGuard(@TypeOf(key)){ .val = key };
         _ = &_key_deinit_guard;
         var ___key_deinit_guard_moved = false; _ = &___key_deinit_guard_moved;
@@ -769,15 +795,17 @@ pub fn spop(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
         _ = &_args_list_guard;
         var ___args_list_guard_moved = false; _ = &___args_list_guard_moved;
         defer if (!___args_list_guard_moved) { ___args_list_guard_moved = true; const __T = @TypeOf(_args_list_guard); if (@typeInfo(__T) == .optional) { if (_args_list_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _args_list_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _args_list_guard; _drop_val.__cp_deinit(); } };
-        const key = ((try fromJS(globalObject, callframe.argument(0))) orelse {
-        return globalObject.throwInvalidArgumentType("spop", "key", "string or buffer");
-});
-        _ = args.appendAssumeCapacity(key);
+        const key_opt = try fromJS(globalObject, callframe.argument(0));
+        if ((key_opt == null)) {
+            return globalObject.throwInvalidArgumentType("spop", "key", "string or buffer");
+        }
+        _ = args.appendAssumeCapacity(key_opt.?);
         if (((args_view.len > 1) and (!callframe.argument(1).isUndefinedOrNull()))) {
-            const count_arg = ((try fromJS(globalObject, callframe.argument(1))) orelse {
-            return globalObject.throwInvalidArgumentType("spop", "count", "number or string");
-});
-            _ = args.appendAssumeCapacity(count_arg);
+            const count_opt = try fromJS(globalObject, callframe.argument(1));
+            if ((count_opt == null)) {
+                return globalObject.throwInvalidArgumentType("spop", "count", "number or string");
+            }
+            _ = args.appendAssumeCapacity(count_opt.?);
         }
         const promise = (blk_catch_12: { break :blk_catch_12 ((valkeySend(client, globalObject, callframe.this(), (&Command{ .command = "SPOP", .args = .{ .args = args.items } }))) catch |e| { _ = &e; return protocol.valkeyErrorToJS(globalObject, "Failed to send SPOP command", e); }); });
         return promise.toJS();
@@ -801,19 +829,21 @@ pub fn sadd(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
         _ = &_args_list_guard;
         var ___args_list_guard_moved = false; _ = &___args_list_guard_moved;
         defer if (!___args_list_guard_moved) { ___args_list_guard_moved = true; const __T = @TypeOf(_args_list_guard); if (@typeInfo(__T) == .optional) { if (_args_list_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _args_list_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _args_list_guard; _drop_val.__cp_deinit(); } };
-        const key = ((try fromJS(globalObject, callframe.argument(0))) orelse {
-        return globalObject.throwInvalidArgumentType("sadd", "key", "string or buffer");
-});
-        _ = args.appendAssumeCapacity(key);
+        const key_opt = try fromJS(globalObject, callframe.argument(0));
+        if ((key_opt == null)) {
+            return globalObject.throwInvalidArgumentType("sadd", "key", "string or buffer");
+        }
+        _ = args.appendAssumeCapacity(key_opt.?);
         for (cp_iter_slice(args_view[1..])) |arg| {
             _ = &arg;
             if (arg.isUndefinedOrNull()) {
                 break;
             }
-            const value = ((try fromJS(globalObject, arg)) orelse {
-            return globalObject.throwInvalidArgumentType("sadd", "member", "string or buffer");
-});
-            _ = args.appendAssumeCapacity(value);
+            const value_opt = try fromJS(globalObject, arg);
+            if ((value_opt == null)) {
+                return globalObject.throwInvalidArgumentType("sadd", "member", "string or buffer");
+            }
+            _ = args.appendAssumeCapacity(value_opt.?);
         }
         const promise = (blk_catch_13: { break :blk_catch_13 ((valkeySend(client, globalObject, callframe.this(), (&Command{ .command = "SADD", .args = .{ .args = args.items } }))) catch |e| { _ = &e; return protocol.valkeyErrorToJS(globalObject, "Failed to send SADD command", e); }); });
         return promise.toJS();
@@ -821,16 +851,20 @@ pub fn sadd(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
 
 pub fn sismember(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
         _ = try requireNotSubscriber(client, @src().fn_name);
-        const key = ((try fromJS(globalObject, callframe.argument(0))) orelse {
-        return globalObject.throwInvalidArgumentType("sismember", "key", "string or buffer");
-});
+        const key_opt = try fromJS(globalObject, callframe.argument(0));
+        if ((key_opt == null)) {
+            return globalObject.throwInvalidArgumentType("sismember", "key", "string or buffer");
+        }
+        const key = key_opt.?;
         var _key_deinit_guard = DeinitGuard(@TypeOf(key)){ .val = key };
         _ = &_key_deinit_guard;
         var ___key_deinit_guard_moved = false; _ = &___key_deinit_guard_moved;
         defer if (!___key_deinit_guard_moved) { ___key_deinit_guard_moved = true; const __T = @TypeOf(_key_deinit_guard); if (@typeInfo(__T) == .optional) { if (_key_deinit_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _key_deinit_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _key_deinit_guard; _drop_val.__cp_deinit(); } };
-        const value = ((try fromJS(globalObject, callframe.argument(1))) orelse {
-        return globalObject.throwInvalidArgumentType("sismember", "value", "string or buffer");
-});
+        const value_opt = try fromJS(globalObject, callframe.argument(1));
+        if ((value_opt == null)) {
+            return globalObject.throwInvalidArgumentType("sismember", "value", "string or buffer");
+        }
+        const value = value_opt.?;
         var _value_deinit_guard = DeinitGuard(@TypeOf(value)){ .val = value };
         _ = &_value_deinit_guard;
         var ___value_deinit_guard_moved = false; _ = &___value_deinit_guard_moved;
@@ -857,10 +891,11 @@ pub fn hmget(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfra
         _ = &_args_list_guard;
         var ___args_list_guard_moved = false; _ = &___args_list_guard_moved;
         defer if (!___args_list_guard_moved) { ___args_list_guard_moved = true; const __T = @TypeOf(_args_list_guard); if (@typeInfo(__T) == .optional) { if (_args_list_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _args_list_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _args_list_guard; _drop_val.__cp_deinit(); } };
-        const key = ((try fromJS(globalObject, callframe.argument(0))) orelse {
-        return globalObject.throwInvalidArgumentType("hmget", "key", "string or buffer");
-});
-        _ = args.appendAssumeCapacity(key);
+        const key_opt = try fromJS(globalObject, callframe.argument(0));
+        if ((key_opt == null)) {
+            return globalObject.throwInvalidArgumentType("hmget", "key", "string or buffer");
+        }
+        _ = args.appendAssumeCapacity(key_opt.?);
         const second_arg = callframe.argument(1);
         if (second_arg.isArray()) {
             const array_len = try second_arg.getLength(globalObject);
@@ -870,10 +905,11 @@ pub fn hmget(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfra
             var array_iter = try second_arg.arrayIterator(globalObject);
             _ = &array_iter;
             while (try array_iter.next()) |element| {
-                const field = ((try fromJS(globalObject, element)) orelse {
-                return globalObject.throwInvalidArgumentType("hmget", "field", "string or buffer");
-});
-                _ = try args.append(field);
+                const field_opt = try fromJS(globalObject, element);
+                if ((field_opt == null)) {
+                    return globalObject.throwInvalidArgumentType("hmget", "field", "string or buffer");
+                }
+                _ = try args.append(field_opt.?);
             }
         } else {
             for (cp_iter_slice(args_view[1..])) |arg| {
@@ -881,10 +917,11 @@ pub fn hmget(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfra
                 if (arg.isUndefinedOrNull()) {
                     break;
                 }
-                const field = ((try fromJS(globalObject, arg)) orelse {
-                return globalObject.throwInvalidArgumentType("hmget", "field", "string or buffer");
-});
-                _ = try args.append(field);
+                const field_opt = try fromJS(globalObject, arg);
+                if ((field_opt == null)) {
+                    return globalObject.throwInvalidArgumentType("hmget", "field", "string or buffer");
+                }
+                _ = try args.append(field_opt.?);
             }
         }
         const promise = (blk_catch_15: { break :blk_catch_15 ((valkeySend(client, globalObject, callframe.this(), (&Command{ .command = "HMGET", .args = .{ .args = args.items } }))) catch |e| { _ = &e; return protocol.valkeyErrorToJS(globalObject, "Failed to send HMGET command", e); }); });
@@ -983,9 +1020,11 @@ pub fn hsetImpl(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, call
         defer if (!___args_list_guard_moved) { ___args_list_guard_moved = true; const __T = @TypeOf(_args_list_guard); if (@typeInfo(__T) == .optional) { if (_args_list_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _args_list_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _args_list_guard; _drop_val.__cp_deinit(); } };
         _ = try args.append(key.toUTF8(bun.default_allocator));
         if ((second_arg.isObject() and (!second_arg.isArray()))) {
-            const obj = ((second_arg.getObject()) orelse {
-            return globalObject.throwInvalidArgumentType(command, "fields", "object");
-});
+            const obj_opt = second_arg.getObject();
+            if ((obj_opt == null)) {
+                return globalObject.throwInvalidArgumentType(command, "fields", "object");
+            }
+            const obj = obj_opt.?;
             var object_iter = try jsc.JSPropertyIterator(.{ .skip_empty_name = false, .include_value = true }).init(globalObject, obj);
             _ = &object_iter;
             const _object_iter_ptr = (blk: {
@@ -1020,9 +1059,11 @@ pub fn hsetImpl(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, call
                     const field_str = try field_js.toBunString(globalObject);
                     _ = args.appendAssumeCapacity(field_str.toUTF8(bun.default_allocator));
                     _ = field_str.deref();
-                    const value_js = ((try iter.next()) orelse {
-                    return globalObject.throw("Array must have an even number of elements (field-value pairs)", .{});
-});
+                    const value_js_opt = try iter.next();
+                    if ((value_js_opt == null)) {
+                        return globalObject.throw("Array must have an even number of elements (field-value pairs)", .{});
+                    }
+                    const value_js = value_js_opt.?;
                     const value_str = try value_js.toBunString(globalObject);
                     _ = args.appendAssumeCapacity(value_str.toUTF8(bun.default_allocator));
                     _ = value_str.deref();
@@ -1064,23 +1105,29 @@ pub fn hmset(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfra
 
 pub fn hsetnx(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
         _ = try requireNotSubscriber(client, "hsetnx");
-        const key = ((try fromJS(globalObject, callframe.argument(0))) orelse {
-        return globalObject.throwInvalidArgumentType("hsetnx", "key", "string or buffer");
-});
+        const key_opt = try fromJS(globalObject, callframe.argument(0));
+        if ((key_opt == null)) {
+            return globalObject.throwInvalidArgumentType("hsetnx", "key", "string or buffer");
+        }
+        const key = key_opt.?;
         var _key_deinit_guard = DeinitGuard(@TypeOf(key)){ .val = key };
         _ = &_key_deinit_guard;
         var ___key_deinit_guard_moved = false; _ = &___key_deinit_guard_moved;
         defer if (!___key_deinit_guard_moved) { ___key_deinit_guard_moved = true; const __T = @TypeOf(_key_deinit_guard); if (@typeInfo(__T) == .optional) { if (_key_deinit_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _key_deinit_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _key_deinit_guard; _drop_val.__cp_deinit(); } };
-        const field = ((try fromJS(globalObject, callframe.argument(1))) orelse {
-        return globalObject.throwInvalidArgumentType("hsetnx", "field", "string or buffer");
-});
+        const field_opt = try fromJS(globalObject, callframe.argument(1));
+        if ((field_opt == null)) {
+            return globalObject.throwInvalidArgumentType("hsetnx", "field", "string or buffer");
+        }
+        const field = field_opt.?;
         var _field_deinit_guard = DeinitGuard(@TypeOf(field)){ .val = field };
         _ = &_field_deinit_guard;
         var ___field_deinit_guard_moved = false; _ = &___field_deinit_guard_moved;
         defer if (!___field_deinit_guard_moved) { ___field_deinit_guard_moved = true; const __T = @TypeOf(_field_deinit_guard); if (@typeInfo(__T) == .optional) { if (_field_deinit_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _field_deinit_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _field_deinit_guard; _drop_val.__cp_deinit(); } };
-        const value = ((try fromJS(globalObject, callframe.argument(2))) orelse {
-        return globalObject.throwInvalidArgumentType("hsetnx", "value", "string or buffer");
-});
+        const value_opt = try fromJS(globalObject, callframe.argument(2));
+        if ((value_opt == null)) {
+            return globalObject.throwInvalidArgumentType("hsetnx", "value", "string or buffer");
+        }
+        const value = value_opt.?;
         var _value_deinit_guard = DeinitGuard(@TypeOf(value)){ .val = value };
         _ = &_value_deinit_guard;
         var ___value_deinit_guard_moved = false; _ = &___value_deinit_guard_moved;
@@ -1125,10 +1172,11 @@ pub fn ping(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
         var args_slice: []JSArgument = empty_args[0..0];
         _ = &args_slice;
         if ((!callframe.argument(0).isUndefinedOrNull())) {
-            const message = ((try fromJS(globalObject, callframe.argument(0))) orelse {
-            return globalObject.throwInvalidArgumentType("ping", "message", "string or buffer");
-});
-            message_buf[cp_cast_int(usize, 0)] = message;
+            const message_opt = try fromJS(globalObject, callframe.argument(0));
+            if ((message_opt == null)) {
+                return globalObject.throwInvalidArgumentType("ping", "message", "string or buffer");
+            }
+            message_buf[cp_cast_int(usize, 0)] = message_opt.?;
             args_slice = message_buf[0..1];
         }
         var _args_slice_guard = DeinitSliceGuard(@TypeOf(args_slice)){ .slice = args_slice };
@@ -1141,23 +1189,29 @@ pub fn ping(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
 
 pub fn smove(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
         _ = try requireNotSubscriber(client, @src().fn_name);
-        const source = ((try fromJS(globalObject, callframe.argument(0))) orelse {
-        return globalObject.throwInvalidArgumentType("smove", "source", "string or buffer");
-});
+        const source_opt = try fromJS(globalObject, callframe.argument(0));
+        if ((source_opt == null)) {
+            return globalObject.throwInvalidArgumentType("smove", "source", "string or buffer");
+        }
+        const source = source_opt.?;
         var _source_deinit_guard = DeinitGuard(@TypeOf(source)){ .val = source };
         _ = &_source_deinit_guard;
         var ___source_deinit_guard_moved = false; _ = &___source_deinit_guard_moved;
         defer if (!___source_deinit_guard_moved) { ___source_deinit_guard_moved = true; const __T = @TypeOf(_source_deinit_guard); if (@typeInfo(__T) == .optional) { if (_source_deinit_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _source_deinit_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _source_deinit_guard; _drop_val.__cp_deinit(); } };
-        const destination = ((try fromJS(globalObject, callframe.argument(1))) orelse {
-        return globalObject.throwInvalidArgumentType("smove", "destination", "string or buffer");
-});
+        const destination_opt = try fromJS(globalObject, callframe.argument(1));
+        if ((destination_opt == null)) {
+            return globalObject.throwInvalidArgumentType("smove", "destination", "string or buffer");
+        }
+        const destination = destination_opt.?;
         var _destination_deinit_guard = DeinitGuard(@TypeOf(destination)){ .val = destination };
         _ = &_destination_deinit_guard;
         var ___destination_deinit_guard_moved = false; _ = &___destination_deinit_guard_moved;
         defer if (!___destination_deinit_guard_moved) { ___destination_deinit_guard_moved = true; const __T = @TypeOf(_destination_deinit_guard); if (@typeInfo(__T) == .optional) { if (_destination_deinit_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _destination_deinit_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _destination_deinit_guard; _drop_val.__cp_deinit(); } };
-        const member = ((try fromJS(globalObject, callframe.argument(2))) orelse {
-        return globalObject.throwInvalidArgumentType("smove", "member", "string or buffer");
-});
+        const member_opt = try fromJS(globalObject, callframe.argument(2));
+        if ((member_opt == null)) {
+            return globalObject.throwInvalidArgumentType("smove", "member", "string or buffer");
+        }
+        const member = member_opt.?;
         var _member_deinit_guard = DeinitGuard(@TypeOf(member)){ .val = member };
         _ = &_member_deinit_guard;
         var ___member_deinit_guard_moved = false; _ = &___member_deinit_guard_moved;
@@ -1185,13 +1239,13 @@ pub fn publish(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callf
         if ((!arg0.isString())) {
             return globalObject.throwInvalidArgumentType("publish", "channel", "string");
         }
-        const channel = ((try fromJS(globalObject, arg0)) orelse (unreachable));
+        const channel = (try fromJS(globalObject, arg0)).?;
         _ = args.appendAssumeCapacity(channel);
         const arg1 = callframe.argument(1);
         if ((!arg1.isString())) {
             return globalObject.throwInvalidArgumentType("publish", "message", "string");
         }
-        const message = ((try fromJS(globalObject, arg1)) orelse (unreachable));
+        const message = (try fromJS(globalObject, arg1)).?;
         _ = args.appendAssumeCapacity(message);
         const promise = (blk_catch_23: { break :blk_catch_23 ((valkeySend(client, globalObject, callframe.this(), (&Command{ .command = "PUBLISH", .args = .{ .args = args.items } }))) catch |e| { _ = &e; return protocol.valkeyErrorToJS(globalObject, "Failed to send PUBLISH command", e); }); });
         return promise.toJS();
@@ -1224,18 +1278,20 @@ pub fn subscribe(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, cal
             var array_iter = try channel_or_many.arrayIterator(globalObject);
             _ = &array_iter;
             while (try array_iter.next()) |channel_arg| {
-                const channel = ((try fromJS(globalObject, channel_arg)) orelse {
-                return globalObject.throwInvalidArgumentType("subscribe", "channel", "string");
-});
-                _ = redis_channels.appendAssumeCapacity(channel);
+                const channel_opt = try fromJS(globalObject, channel_arg);
+                if ((channel_opt == null)) {
+                    return globalObject.throwInvalidArgumentType("subscribe", "channel", "string");
+                }
+                _ = redis_channels.appendAssumeCapacity(channel_opt.?);
                 _ = try client._subscription_ctx.upsertReceiveHandler(globalObject, channel_arg, handler_callback);
             }
         } else {
             if (channel_or_many.isString()) {
-                const channel = ((try fromJS(globalObject, channel_or_many)) orelse {
-                return globalObject.throwInvalidArgumentType("subscribe", "channel", "string");
-});
-                _ = redis_channels.appendAssumeCapacity(channel);
+                const channel_opt = try fromJS(globalObject, channel_or_many);
+                if ((channel_opt == null)) {
+                    return globalObject.throwInvalidArgumentType("subscribe", "channel", "string");
+                }
+                _ = redis_channels.appendAssumeCapacity(channel_opt.?);
                 _ = try client._subscription_ctx.upsertReceiveHandler(globalObject, channel_or_many, handler_callback);
             } else {
                 return globalObject.throwInvalidArgumentType("subscribe", "channel", "string or array");
@@ -1285,12 +1341,16 @@ pub fn unsubscribe(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, c
             if ((!listener_cb.isCallable())) {
                 return globalObject.throwInvalidArgumentType("unsubscribe", "listener", "function");
             }
-            _ = redis_channels.appendAssumeCapacity(((try fromJS(globalObject, channel)) orelse {
-            return globalObject.throwInvalidArgumentType("unsubscribe", "channel", "string");
-}));
-            const remaining_listeners = (((blk_catch_26: { break :blk_catch_26 ((client._subscription_ctx.removeReceiveHandler(globalObject, channel, listener_cb)) catch |__ce_26| { _ = &__ce_26; return globalObject.throw("Failed to remove handler for channel {f}", .{ channel.asString().getZigString(globalObject) }); }); })) orelse {
-            return jsc.JSPromise.resolvedPromiseValue(globalObject, .js_undefined);
-});
+            const ch_opt = try fromJS(globalObject, channel);
+            if ((ch_opt == null)) {
+                return globalObject.throwInvalidArgumentType("unsubscribe", "channel", "string");
+            }
+            _ = redis_channels.appendAssumeCapacity(ch_opt.?);
+            const remaining_listeners_opt = (blk_catch_26: { break :blk_catch_26 ((client._subscription_ctx.removeReceiveHandler(globalObject, channel, listener_cb)) catch |__ce_26| { _ = &__ce_26; return globalObject.throw("Failed to remove handler for channel {f}", .{ channel.asString().getZigString(globalObject) }); }); });
+            if ((remaining_listeners_opt == null)) {
+                return jsc.JSPromise.resolvedPromiseValue(globalObject, .js_undefined);
+            }
+            const remaining_listeners = remaining_listeners_opt.?;
             if ((remaining_listeners == 0)) {
                 return try sendUnsubscribeRequestAndCleanup(client, callframe.this(), globalObject, redis_channels.items);
             }
@@ -1304,18 +1364,20 @@ pub fn unsubscribe(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, c
             var array_iter = try channel_or_many.arrayIterator(globalObject);
             _ = &array_iter;
             while (try array_iter.next()) |channel_arg| {
-                const channel = ((try fromJS(globalObject, channel_arg)) orelse {
-                return globalObject.throwInvalidArgumentType("unsubscribe", "channel", "string");
-});
-                _ = redis_channels.appendAssumeCapacity(channel);
+                const channel_opt = try fromJS(globalObject, channel_arg);
+                if ((channel_opt == null)) {
+                    return globalObject.throwInvalidArgumentType("unsubscribe", "channel", "string");
+                }
+                _ = redis_channels.appendAssumeCapacity(channel_opt.?);
                 _ = try client._subscription_ctx.clearReceiveHandlers(globalObject, channel_arg);
             }
         } else {
             if (channel_or_many.isString()) {
-                const channel = ((try fromJS(globalObject, channel_or_many)) orelse {
-                return globalObject.throwInvalidArgumentType("unsubscribe", "channel", "string");
-});
-                _ = redis_channels.appendAssumeCapacity(channel);
+                const channel_opt = try fromJS(globalObject, channel_or_many);
+                if ((channel_opt == null)) {
+                    return globalObject.throwInvalidArgumentType("unsubscribe", "channel", "string");
+                }
+                _ = redis_channels.appendAssumeCapacity(channel_opt.?);
                 _ = try client._subscription_ctx.clearReceiveHandlers(globalObject, channel_or_many);
             } else {
                 return globalObject.throwInvalidArgumentType("unsubscribe", "channel", "string or array");

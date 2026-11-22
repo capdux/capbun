@@ -368,9 +368,11 @@ const bom: []const u8 = "\xfe\xff";
 else => {
 var encoding_name = EncodingLabel.getLabel(self.encoding);
         _ = &encoding_name;
-        var codec = ((TextCodec.create(encoding_name)) orelse {
-        return ZigString.init("").toJS(globalThis);
-});
+        const codec_opt = TextCodec.create(encoding_name);
+        if ((codec_opt == null)) {
+            return ZigString.init("").toJS(globalThis);
+        }
+        var codec = codec_opt.?;
         _ = &codec;
         var codec_guard = DeinitGuard(TextCodec){ .ptr = codec };
         _ = &codec_guard;

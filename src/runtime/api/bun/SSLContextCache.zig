@@ -73,7 +73,11 @@ pub fn getOrCreateDigest(self: *SSLContextCache, opts: uws.SocketContext.BunSock
                 }
             }
         }
-        const ctx = ((opts.createSSLContext(e)) orelse { return null; });
+        const ctx_opt = opts.createSSLContext(e);
+        if ((ctx_opt == null)) {
+            return null;
+        }
+        const ctx = ctx_opt.?;
         var _guard = MutexGuard.lock((&self.mutex));
         _ = &_guard;
         var ___guard_moved = false; _ = &___guard_moved;
@@ -154,7 +158,10 @@ pub export fn bun_ssl_ctx_cache_on_free(parent: ?*anyopaque, ptr: ?*anyopaque, a
         _ = &index;
         _ = &argl;
         _ = &argp;
-        const p = ((ptr) orelse { return; });
+        if ((ptr == null)) {
+            return;
+        }
+        const p = ptr.?;
         const entry: *Entry = (blk: {
         break :blk @ptrCast(@alignCast(p));
 

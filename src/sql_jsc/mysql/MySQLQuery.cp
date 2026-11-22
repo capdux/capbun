@@ -247,7 +247,7 @@ fn BindAndExecuteCtx(comptime WriterType: type): type {
                 if (connection.canPrepareQuery()) {
                     debug("prepareRequest", .{});
                     const writer = connection.getWriter();
-                    const query = _query_guard.val orelse this.#query.toUTF8(bun.default_allocator);
+                    const query = _query_guard.val ?? this.#query.toUTF8(bun.default_allocator);
                     MySQLRequest.prepareRequest(query.slice(), MySQLConnection.Writer, writer) catch |e| {
                         return globalObject.throwError(e, "failed to prepare query");
                     };

@@ -175,11 +175,10 @@ switch (bun.copyFile(self.src_path.sliceZ(), self.dest_subpath.sliceZ())) {
 
 },
 .err => |first_err| {
-const entry_dirname = ((bun.Dirname.dirname(u16, entry.path)) orelse {
-                    return .initErr(first_err);
-});
-                    _ = (blk_catch_2: { break :blk_catch_2 ((bun.MakePath.makePath(u16, dest_dir, entry_dirname)) catch |__ce_2| { _ = &__ce_2;  }); });
-                    switch (bun.copyFile(self.src_path.sliceZ(), self.dest_subpath.sliceZ())) {
+if (bun.Dirname.dirname(u16, entry.path)) |entry_dirname| {
+                        _ = &entry_dirname;
+                        _ = (blk_catch_2: { break :blk_catch_2 ((bun.MakePath.makePath(u16, dest_dir, entry_dirname)) catch |__ce_2| { _ = &__ce_2;  }); });
+                        switch (bun.copyFile(self.src_path.sliceZ(), self.dest_subpath.sliceZ())) {
 .result => {
 
 },
@@ -187,6 +186,9 @@ const entry_dirname = ((bun.Dirname.dirname(u16, entry.path)) orelse {
 return .initErr(e);
 },
 }
+                    } else {
+                        return .initErr(first_err);
+                    }
 },
 }
 },

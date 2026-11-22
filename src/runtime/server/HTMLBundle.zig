@@ -265,10 +265,11 @@ pub fn onAnyRequest(self: *Route, req: uws.AnyRequest, resp: HTTPResponse, is_he
             _ = &_route_guard;
             var ___route_guard_moved = false; _ = &___route_guard_moved;
             defer if (!___route_guard_moved) { ___route_guard_moved = true; const __T = @TypeOf(_route_guard); if (@typeInfo(__T) == .optional) { if (_route_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _route_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _route_guard; _drop_val.__cp_deinit(); } };
-            const server: AnyServer = ((self.server) orelse {
-            _ = resp.endWithoutBody(true);
-            return;
-});
+            if ((self.server == null)) {
+                _ = resp.endWithoutBody(true);
+                return;
+            }
+            const server: AnyServer = self.server.?;
             if (server.config().isDevelopment()) {
                 if (server.devServer()) |dev| {
                     _ = &dev;
@@ -306,11 +307,13 @@ if (bun.Environment.enable_logs) {
 if (bun.Environment.enable_logs) {
                     _ = debug("onRequest: {s} - building", .{ req.url() });
                 }
-                const pending = bun.new(RoutePendingResponse, .{ .method = ((bun.http.Method.which(req.method())) orelse {
-                _ = resp.writeStatus("405 Method Not Allowed");
-                _ = resp.endWithoutBody(true);
-                return;
-}), .resp = resp, .server = self.server, .route = self });
+                const method_opt = bun.http.Method.which(req.method());
+                if ((method_opt == null)) {
+                    _ = resp.writeStatus("405 Method Not Allowed");
+                    _ = resp.endWithoutBody(true);
+                    return;
+                }
+                const pending = bun.new(RoutePendingResponse, .{ .method = method_opt.?, .resp = resp, .server = self.server, .route = self });
                 _ = bun.handleOom(self.pending_responses.append(bun.default_allocator, pending));
                 _ = self.ref();
                 _ = resp.onAborted(*RoutePendingResponse, RoutePendingResponse.onAborted, pending);
@@ -482,7 +485,10 @@ const writer = bun.Output.errorWriterBuffered();
 if (bun.Environment.enable_logs) {
                 _ = debug("onComplete: success", .{});
             }
-            const server: AnyServer = ((self.server) orelse { return; });
+            if ((self.server == null)) {
+                return;
+            }
+            const server: AnyServer = self.server.?;
             const globalThis = server.globalThis();
             const output_files = bundle.output_files.items;
             if (server.config().isDevelopment()) {

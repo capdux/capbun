@@ -20,9 +20,11 @@ pub static struct TestingAPIs {
     }
 
     pub fn toVLQ(globalThis: *bun.jsc.JSGlobalObject, callframe: *bun.jsc.CallFrame): bun.jsc.JSValue ! bun.JSError {
-        const ab = callframe.argument(0).asArrayBuffer(globalThis) orelse {
+        const ab_opt = callframe.argument(0).asArrayBuffer(globalThis);
+        if (ab_opt == null) {
             return globalThis.throw("InternalSourceMap.toVLQ: expected Uint8Array", {});
-        };
+        }
+        const ab = ab_opt.?;
         if (!bun.SourceMap.InternalSourceMap.isValidBlob(ab.byteSlice())) return globalThis.throw("InternalSourceMap.toVLQ: invalid blob", {});
         const ism = bun.SourceMap.InternalSourceMap{ data: ab.byteSlice().ptr };
         let out: MutableString = MutableString.initEmpty(bun.default_allocator);
@@ -33,17 +35,21 @@ pub static struct TestingAPIs {
     }
 
     pub fn find(globalThis: *bun.jsc.JSGlobalObject, callframe: *bun.jsc.CallFrame): bun.jsc.JSValue ! bun.JSError {
-        const ab = callframe.argument(0).asArrayBuffer(globalThis) orelse {
+        const ab_opt = callframe.argument(0).asArrayBuffer(globalThis);
+        if (ab_opt == null) {
             return globalThis.throw("InternalSourceMap.find: expected Uint8Array", {});
-        };
+        }
+        const ab = ab_opt.?;
         if (!bun.SourceMap.InternalSourceMap.isValidBlob(ab.byteSlice())) return globalThis.throw("InternalSourceMap.find: invalid blob", {});
         const line = callframe.argument(1).toInt32();
         const col = callframe.argument(2).toInt32();
         if (line < 0 || col < 0) return bun.jsc.JSValue.@"null";
         const ism = bun.SourceMap.InternalSourceMap{ data: ab.byteSlice().ptr };
-        const mapping = ism.find(.fromZeroBased(line), .fromZeroBased(col)) orelse {
+        const mapping_opt = ism.find(.fromZeroBased(line), .fromZeroBased(col));
+        if (mapping_opt == null) {
             return bun.jsc.JSValue.@"null";
-        };
+        }
+        const mapping = mapping_opt.?;
         const obj = bun.jsc.JSValue.createEmptyObject(globalThis, 5);
         obj.put(globalThis, bun.jsc.ZigString.static("generatedLine"), .jsNumber(mapping.generated.lines.zeroBased()));
         obj.put(globalThis, bun.jsc.ZigString.static("generatedColumn"), .jsNumber(mapping.generated.columns.zeroBased()));

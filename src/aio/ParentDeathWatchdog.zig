@@ -308,7 +308,11 @@ pub fn killSubreaperAdoptees(siblings: []const std.c.pid_t) void {
         _ = &rounds;
         while ((rounds > 0)) {
             rounds = (rounds - 1);
-            const n = ((listChildPids(self_pid, (&buf))) orelse { return; });
+            const n_opt = listChildPids(self_pid, (&buf));
+            if ((n_opt == null)) {
+                return;
+            }
+            const n = n_opt.?;
             var killed_any = false;
             _ = &killed_any;
             for (cp_iter_slice(buf[0..n])) |child| {
@@ -403,13 +407,25 @@ pub fn parentPidOf(pid: std.c.pid_t) ?std.c.pid_t {
             const stat_path = (blk_catch_8: { break :blk_catch_8 ((std.fmt.bufPrintZ((&path_buf), "/proc/{d}/stat", .{ pid })) catch |__ce_8| { _ = &__ce_8; return null; }); });
             var read_buf: [512]u8 = undefined;
             _ = &read_buf;
-            const contents = ((readFileOnce(stat_path, (&read_buf))) orelse { return null; });
-            const rparen = ((std.mem.lastIndexOfScalar(u8, contents, 41)) orelse { return null; });
+            const contents_opt = readFileOnce(stat_path, (&read_buf));
+            if ((contents_opt == null)) {
+                return null;
+            }
+            const contents = contents_opt.?;
+            const rparen_opt = std.mem.lastIndexOfScalar(u8, contents, 41);
+            if ((rparen_opt == null)) {
+                return null;
+            }
+            const rparen = rparen_opt.?;
             const rest = std.mem.trimLeft(u8, contents[(rparen + 1)..], " ");
             var it = std.mem.splitScalar(u8, rest, 32);
             _ = &it;
             _ = it.next();
-            const ppid_str = ((it.next()) orelse { return null; });
+            const ppid_str_opt = it.next();
+            if ((ppid_str_opt == null)) {
+                return null;
+            }
+            const ppid_str = ppid_str_opt.?;
             return (blk_catch_9: { break :blk_catch_9 ((std.fmt.parseInt(std.c.pid_t, ppid_str, 10)) catch |__ce_9| { _ = &__ce_9; break :blk_catch_9 null; }); });
         }
         return null;

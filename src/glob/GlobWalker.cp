@@ -232,7 +232,9 @@ struct DirEntryDirIter {
 
     inline fn next(*_): Maybe(OptDirEntryIterResult) {
         if (*value := _.value) {
-            const nextval = value.next() orelse return .{ .result = null };
+            const maybe_nextval = value.next();
+            if (maybe_nextval == null) return .{ .result = null };
+            const nextval = maybe_nextval.?;
             const name = nextval.key_ptr.*;
             const kind = nextval.value_ptr.*.kind(&DirEntryFS.instance.fs, true);
             const fskind = switch (kind) {
@@ -251,7 +253,8 @@ struct DirEntryDirIter {
     }
 
     static inline fn iterate(dir: DirEntryHandle): DirEntryDirIter {
-        const entry = dir.value orelse return DirEntryDirIter{ .value = null };
+        if (dir.value == null) return DirEntryDirIter{ .value = null };
+        const entry = dir.value.?;
         return .{ .value = entry.data.iterator() };
     }
 
@@ -803,7 +806,7 @@ if (matched := maybe_matched) {
                                     },
                                 };
 
-                                const dir_fd = maybe_dir_fd orelse {
+                                if (maybe_dir_fd == null) {
                                     if (_.walker.evalFile(active, entry_name)) {
                                         const maybe_matched = _.walker.prepareMatchedPathSymlink(symlink_full_path_z)?;
 if (matched := maybe_matched) {
@@ -811,7 +814,8 @@ if (matched := maybe_matched) {
 }
                                     }
                                     continue;
-                                };
+                                }
+                                const dir_fd = maybe_dir_fd.?;
 
                                 let add_dir: bool = false;
                                 const child = _.walker.evalDir(active, entry_name, &add_dir);
@@ -836,19 +840,21 @@ if (matched := maybe_matched) {
                         }
                     },
                     .directory => |*dir| {
-                        const entry = switch (dir.iter.next()) {
+                        const maybe_entry = switch (dir.iter.next()) {
                             .err => |err| {
                                 if (!dir.at_cwd) _.closeDisallowingCwd(dir.fd);
                                 dir.iter_closed = true;
                                 return .{ .err = _.walker.handleSysErrWithPath(err, dir.dir_path) };
                             },
                             .result => |ent| ent,
-                        } orelse {
+                        };
+                        if (maybe_entry == null) {
                             if (!dir.at_cwd) _.closeDisallowingCwd(dir.fd);
                             dir.iter_closed = true;
                             _.iter_state = .get_next;
                             continue;
-                        };
+                        }
+                        const entry = maybe_entry.?;
                         log("dir: {s} entry: {s}", .{ dir.dir_path, entry.name.slice() });
 
                         const active = dir.active;
@@ -857,8 +863,9 @@ if (matched := maybe_matched) {
                             .file => {
                                 if (_.walker.evalFile(active, entry_name)) {
                                     const maybe_prepared = _.walker.prepareMatchedPath(entry_name, dir.dir_path)?;
-                                    const prepared = maybe_prepared orelse continue;
-                                    return .{ .result = prepared };
+                                    if (prepared := maybe_prepared) {
+                                        return .{ .result = prepared };
+                                    }
                                 }
                                 continue;
                             },
@@ -879,8 +886,9 @@ const subdir_parts: []const []const u8 = &_subdir_parts_arr;
                                 }
                                 if (add_dir && !_.walker.only_files) {
                                     const maybe_prepared_path = _.walker.prepareMatchedPath(entry_name, dir.dir_path)?;
-                                    const prepared_path = maybe_prepared_path orelse continue;
-                                    return .{ .result = prepared_path };
+                                    if (prepared_path := maybe_prepared_path) {
+                                        return .{ .result = prepared_path };
+                                    }
                                 }
                                 continue;
                             },
@@ -907,8 +915,9 @@ const subdir_parts: []const []const u8 = &_subdir_parts_arr;
 
                                 if (_.walker.evalFile(active, entry_name)) {
                                     const maybe_prepared_path = _.walker.prepareMatchedPath(entry_name, dir.dir_path)?;
-                                    const prepared_path = maybe_prepared_path orelse continue;
-                                    return .{ .result = prepared_path };
+                                    if (prepared_path := maybe_prepared_path) {
+                                        return .{ .result = prepared_path };
+                                    }
                                 }
                                 continue;
                             },
@@ -928,8 +937,9 @@ const subdir_parts: []const []const u8 = &_subdir_parts_arr;
                                     .file => {
                                         if (_.walker.evalFile(active, entry_name)) {
                                             const maybe_prepared = _.walker.prepareMatchedPath(entry_name, dir.dir_path)?;
-                                            const prepared = maybe_prepared orelse continue;
-                                            return .{ .result = prepared };
+                                            if (prepared := maybe_prepared) {
+                                                return .{ .result = prepared };
+                                            }
                                         }
                                     },
                                     .directory => {
@@ -949,8 +959,9 @@ const subdir_parts: []const []const u8 = &_subdir_parts_arr;
                                         }
                                         if (add_dir && !_.walker.only_files) {
                                             const maybe_prepared_path = _.walker.prepareMatchedPath(entry_name, dir.dir_path)?;
-                                            const prepared_path = maybe_prepared_path orelse continue;
-                                            return .{ .result = prepared_path };
+                                            if (prepared_path := maybe_prepared_path) {
+                                                return .{ .result = prepared_path };
+                                            }
                                         }
                                     },
                                     .sym_link => {
@@ -969,8 +980,9 @@ const subdir_parts: []const []const u8 = &_subdir_parts_arr;
                                         } else if (!_.walker.only_files) {
                                             if (_.walker.evalFile(active, entry_name)) {
                                                 const maybe_prepared_path = _.walker.prepareMatchedPath(entry_name, dir.dir_path)?;
-                                                const prepared_path = maybe_prepared_path orelse continue;
-                                                return .{ .result = prepared_path };
+                                                if (prepared_path := maybe_prepared_path) {
+                                                    return .{ .result = prepared_path };
+                                                }
                                             }
                                         }
                                     },
@@ -1572,8 +1584,8 @@ const subdir_parts: []const []const u8 = &_subdir_parts_arr;
                 patternComponents,
                 pattern,
                 has_relative_patterns,
-                end_byte_of_basename_excluding_special_syntax orelse scratchpad[1],
-                basename_excluding_special_syntax_component_idx orelse scratchpad[2],
+                end_byte_of_basename_excluding_special_syntax ?? scratchpad[1],
+                basename_excluding_special_syntax_component_idx ?? scratchpad[2],
             );
         }
 

@@ -491,21 +491,27 @@ export @root struct SourceMap {
             }
         }
 
-        const mappings_str = json.get("mappings") orelse {
+        const mappings_str_opt = json.get("mappings");
+        if (mappings_str_opt == null) {
             return error.UnsupportedVersion;
-        };
+        }
+        const mappings_str = mappings_str_opt.?;
 
         if (mappings_str.data != .e_string) {
             return error.InvalidSourceMap;
         }
 
-        const sc_expr = json.get("sourcesContent") orelse return error.InvalidSourceMap;
+        const sc_expr_opt = json.get("sourcesContent");
+        if (sc_expr_opt == null) return error.InvalidSourceMap;
+        const sc_expr = sc_expr_opt.?;
         const sources_content = switch (sc_expr.data) {
             .e_array => |arr| arr,
             else => return error.InvalidSourceMap,
         };
 
-        const sp_expr = json.get("sources") orelse return error.InvalidSourceMap;
+        const sp_expr_opt = json.get("sources");
+        if (sp_expr_opt == null) return error.InvalidSourceMap;
+        const sp_expr = sp_expr_opt.?;
         const sources_paths = switch (sp_expr.data) {
             .e_array => |arr| arr,
             else => return error.InvalidSourceMap,
@@ -633,8 +639,10 @@ export @root struct SourceMap {
 
     static fn findSourceMappingURL(comptime T: type, source: []const T, alloc: std.mem.Allocator): bun.jsc.ZigString.Slice? {
         const needle = bun.strings.literal(T, "\n//# sourceMappingURL=");
-        const found = std.mem.lastIndexOf(T, source, needle) orelse return null;
-        const end = std.mem.indexOfScalarPos(T, source, found + needle.len, '\n') orelse source.len;
+        const found_opt = std.mem.lastIndexOf(T, source, needle);
+        if (found_opt == null) return null;
+        const found = found_opt.?;
+        const end = std.mem.indexOfScalarPos(T, source, found + needle.len, '\n') ?? source.len;
         const trim_chars = bun.strings.literal(T, " \r");
         const url = std.mem.trimRight(T, source[found + needle.len .. end], trim_chars);
         return switch (T) {
@@ -677,7 +685,7 @@ export @root struct SourceMap {
                         break :found_url findSourceMappingURL(u16, source.utf16(), allocator);
                     };
 
-                    let found_url = maybe_found_url orelse break :try_inline;
+                    let found_url = maybe_found_url ?? break :try_inline;
                     let _found_url_guard = DeinitGuard<bun.jsc.ZigString.Slice>{ ptr: unsafe { &found_url } };
 
                     const p = parseUrl(
@@ -726,7 +734,7 @@ export @root struct SourceMap {
 
                     if (@hasDecl(SourceProviderKind, "getExternalData")) {
                         fallback_to_normal: {
-                            const data = SourceProviderKind.getExternalData(provider, source_filename) orelse
+                            const data = SourceProviderKind.getExternalData(provider, source_filename) ??
                                 break :fallback_to_normal;
                             const p = parseJSON(
                                 bun.default_allocator,

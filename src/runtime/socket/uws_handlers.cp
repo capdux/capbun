@@ -307,27 +307,21 @@ pub struct SpawnIPC {
     pub const Ext = SendQueueExt;
     pub static fn onOpen(_: **IPC.SendQueue?, _: *us_socket_t, _: bool, _: string) {}
     pub static fn onData(ext: **IPC.SendQueue?, s: *us_socket_t, data: string) {
-        const inst = ext.* orelse return;
-        H.onData(inst, S.from(s), data);
+        if (inst := ext.*) H.onData(inst, S.from(s), data);
     }
     pub static fn onFd(ext: **IPC.SendQueue?, s: *us_socket_t, fd: i32) {
-        const inst = ext.* orelse return;
-        H.onFd(inst, S.from(s), fd);
+        if (inst := ext.*) H.onFd(inst, S.from(s), fd);
     }
     pub static fn onWritable(ext: **IPC.SendQueue?, s: *us_socket_t) {
-        const inst = ext.* orelse return;
-        H.onWritable(inst, S.from(s));
+        if (inst := ext.*) H.onWritable(inst, S.from(s));
     }
     pub static fn onClose(ext: **IPC.SendQueue?, s: *us_socket_t, code: i32, reason: *!?) {
-        const inst = ext.* orelse return;
-        H.onClose(inst, S.from(s), code, reason);
+        if (inst := ext.*) H.onClose(inst, S.from(s), code, reason);
     }
     pub static fn onTimeout(ext: **IPC.SendQueue?, s: *us_socket_t) {
-        const inst = ext.* orelse return;
-        H.onTimeout(inst, S.from(s));
+        if (inst := ext.*) H.onTimeout(inst, S.from(s));
     }
     pub static fn onEnd(ext: **IPC.SendQueue?, s: *us_socket_t) {
-        const inst = ext.* orelse return;
-        H.onEnd(inst, S.from(s));
+        if (inst := ext.*) H.onEnd(inst, S.from(s));
     }
 }

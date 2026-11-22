@@ -402,8 +402,9 @@ pub fn connect(self: *FileSink, signal: streams.Signal) void {
 
 pub fn start(self: *FileSink, stream_start: streams.Start) sys.Maybe(void) {
         if ((stream_start == .FileSink)) {
-            const file = stream_start.FileSink;
-            const setup_res = self.setup((&file));
+            var stream_file = stream_start.FileSink;
+            _ = &stream_file;
+            const setup_res = self.setup((&stream_file));
             if ((setup_res == .err)) {
                 return .{ .err = setup_res.err };
             }
@@ -792,7 +793,11 @@ const log = Output.scoped(.FileSink, .visible);
 pub var live_count = std.atomic.Value(i32).init(0);
 
 pub export fn Bun__ForceFileSinkToBeSynchronousForProcessObjectStdio(_: *JSGlobalObject, jsvalue: JSValue) callconv(.c) void {
-        const this_sink: *FileSink = @ptrCast(@alignCast(((FileSink.JSSink.fromJS(jsvalue)) orelse { return; })));
+        const sink_opt = FileSink.JSSink.fromJS(jsvalue);
+        if ((sink_opt == null)) {
+            return;
+        }
+        const this_sink: *FileSink = @ptrCast(@alignCast(sink_opt.?));
         if ((!Environment.isWindows)) {
             this_sink.force_sync = true;
             this_sink.writer.force_sync = true;

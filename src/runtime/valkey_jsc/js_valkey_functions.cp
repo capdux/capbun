@@ -87,9 +87,11 @@ pub fn jsSend(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfr
     const _args_list_guard = DeinitListPtrGuard<@TypeOf(_args_ptr)>{ list: _args_ptr };
 
     while (arg_js := iter.next()?) {
-        args.appendAssumeCapacity((fromJS(globalObject, arg_js)?) orelse {
+        const arg_opt = fromJS(globalObject, arg_js)?;
+        if (arg_opt == null) {
             return globalObject.throwInvalidArgumentType("sendCommand", "argument", "string or buffer");
-        });
+        }
+        args.appendAssumeCapacity(arg_opt.?);
     }
 
     const cmd_str = command.toUTF8WithoutRef(bun.default_allocator);
@@ -114,9 +116,11 @@ pub fn jsSend(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfr
 pub fn get(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
     requireNotSubscriber(client, @src().fn_name)?;
 
-    const key = (fromJS(globalObject, callframe.argument(0))?) orelse {
+    const key_opt = fromJS(globalObject, callframe.argument(0))?;
+    if (key_opt == null) {
         return globalObject.throwInvalidArgumentType("get", "key", "string or buffer");
-    };
+    }
+    const key = key_opt.?;
     const _key_deinit_guard = DeinitGuard<@TypeOf(key)>{ val: key };
 
     // Send GET command
@@ -136,9 +140,11 @@ pub fn get(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe
 pub fn getBuffer(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
     requireNotSubscriber(client, @src().fn_name)?;
 
-    const key = (fromJS(globalObject, callframe.argument(0))?) orelse {
+    const key_opt = fromJS(globalObject, callframe.argument(0))?;
+    if (key_opt == null) {
         return globalObject.throwInvalidArgumentType("getBuffer", "key", "string or buffer");
-    };
+    }
+    const key = key_opt.?;
     const _key_deinit_guard = DeinitGuard<@TypeOf(key)>{ val: key };
 
     const promise = valkeySend(client, 
@@ -163,24 +169,28 @@ pub fn set(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe
     let args = std.array_list.Managed(JSArgument).initCapacity(stack_fallback.get(), args_view.len)?;
     const _args_ptr = unsafe { &args };
     const _args_list_guard = DeinitListPtrGuard<@TypeOf(_args_ptr)>{ list: _args_ptr };
-    const key = (fromJS(globalObject, callframe.argument(0))?) orelse {
+    const key_opt = fromJS(globalObject, callframe.argument(0))?;
+    if (key_opt == null) {
         return globalObject.throwInvalidArgumentType("set", "key", "string or buffer");
-    };
-    args.appendAssumeCapacity(key);
+    }
+    args.appendAssumeCapacity(key_opt.?);
 
-    const value = (fromJS(globalObject, callframe.argument(1))?) orelse {
+    const value_opt = fromJS(globalObject, callframe.argument(1))?;
+    if (value_opt == null) {
         return globalObject.throwInvalidArgumentType("set", "value", "string or buffer or number");
-    };
-    args.appendAssumeCapacity(value);
+    }
+    args.appendAssumeCapacity(value_opt.?);
 
     if (args_view.len > 2) {
         for (arg of args_view[2..]) {
             if (arg.isUndefinedOrNull()) {
                 break;
             }
-            args.appendAssumeCapacity((fromJS(globalObject, arg)?) orelse {
+            const arg_opt = fromJS(globalObject, arg)?;
+            if (arg_opt == null) {
                 return globalObject.throwInvalidArgumentType("set", "arguments", "string or buffer");
-            });
+            }
+            args.appendAssumeCapacity(arg_opt.?);
         }
     }
 
@@ -202,9 +212,11 @@ pub fn set(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe
 pub fn incr(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
     requireNotSubscriber(client, @src().fn_name)?;
 
-    const key = (fromJS(globalObject, callframe.argument(0))?) orelse {
+    const key_opt = fromJS(globalObject, callframe.argument(0))?;
+    if (key_opt == null) {
         return globalObject.throwInvalidArgumentType("incr", "key", "string or buffer");
-    };
+    }
+    const key = key_opt.?;
     const _key_deinit_guard = DeinitGuard<@TypeOf(key)>{ val: key };
 
     // Send INCR command
@@ -224,9 +236,11 @@ pub fn incr(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
 pub fn decr(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
     requireNotSubscriber(client, @src().fn_name)?;
 
-    const key = (fromJS(globalObject, callframe.argument(0))?) orelse {
+    const key_opt = fromJS(globalObject, callframe.argument(0))?;
+    if (key_opt == null) {
         return globalObject.throwInvalidArgumentType("decr", "key", "string or buffer");
-    };
+    }
+    const key = key_opt.?;
     const _key_deinit_guard = DeinitGuard<@TypeOf(key)>{ val: key };
 
     // Send DECR command
@@ -246,9 +260,11 @@ pub fn decr(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
 pub fn exists(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
     requireNotSubscriber(client, @src().fn_name)?;
 
-    const key = (fromJS(globalObject, callframe.argument(0))?) orelse {
+    const key_opt = fromJS(globalObject, callframe.argument(0))?;
+    if (key_opt == null) {
         return globalObject.throwInvalidArgumentType("exists", "key", "string or buffer");
-    };
+    }
+    const key = key_opt.?;
     const _key_deinit_guard = DeinitGuard<@TypeOf(key)>{ val: key };
 
     // Send EXISTS command with special Exists type for boolean conversion
@@ -269,9 +285,11 @@ pub fn exists(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfr
 pub fn expire(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
     requireNotSubscriber(client, @src().fn_name)?;
 
-    const key = (fromJS(globalObject, callframe.argument(0))?) orelse {
+    const key_opt = fromJS(globalObject, callframe.argument(0))?;
+    if (key_opt == null) {
         return globalObject.throwInvalidArgumentType("expire", "key", "string or buffer");
-    };
+    }
+    const key = key_opt.?;
     const _key_deinit_guard = DeinitGuard<@TypeOf(key)>{ val: key };
 
     const seconds = globalObject.validateIntegerRange(callframe.argument(1), i32, 0, .{
@@ -302,9 +320,11 @@ pub fn expire(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfr
 pub fn ttl(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
     requireNotSubscriber(client, @src().fn_name)?;
 
-    const key = (fromJS(globalObject, callframe.argument(0))?) orelse {
+    const key_opt = fromJS(globalObject, callframe.argument(0))?;
+    if (key_opt == null) {
         return globalObject.throwInvalidArgumentType("ttl", "key", "string or buffer");
-    };
+    }
+    const key = key_opt.?;
     const _key_deinit_guard = DeinitGuard<@TypeOf(key)>{ val: key };
 
     // Send TTL command
@@ -335,19 +355,21 @@ pub fn srem(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
     const _args_ptr = unsafe { &args };
     const _args_list_guard = DeinitListPtrGuard<@TypeOf(_args_ptr)>{ list: _args_ptr };
 
-    const key = (fromJS(globalObject, callframe.argument(0))?) orelse {
+    const key_opt = fromJS(globalObject, callframe.argument(0))?;
+    if (key_opt == null) {
         return globalObject.throwInvalidArgumentType("srem", "key", "string or buffer");
-    };
-    args.appendAssumeCapacity(key);
+    }
+    args.appendAssumeCapacity(key_opt.?);
 
     for (arg of args_view[1..]) {
         if (arg.isUndefinedOrNull()) {
             break;
         }
-        const value = (fromJS(globalObject, arg)?) orelse {
+        const value_opt = fromJS(globalObject, arg)?;
+        if (value_opt == null) {
             return globalObject.throwInvalidArgumentType("srem", "member", "string or buffer");
-        };
-        args.appendAssumeCapacity(value);
+        }
+        args.appendAssumeCapacity(value_opt.?);
     }
 
     // Send SREM command
@@ -374,17 +396,19 @@ pub fn srandmember(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, c
     const _args_ptr = unsafe { &args };
     const _args_list_guard = DeinitListPtrGuard<@TypeOf(_args_ptr)>{ list: _args_ptr };
 
-    const key = (fromJS(globalObject, callframe.argument(0))?) orelse {
+    const key_opt = fromJS(globalObject, callframe.argument(0))?;
+    if (key_opt == null) {
         return globalObject.throwInvalidArgumentType("srandmember", "key", "string or buffer");
-    };
-    args.appendAssumeCapacity(key);
+    }
+    args.appendAssumeCapacity(key_opt.?);
 
     // Optional count argument
     if (args_view.len > 1 && !callframe.argument(1).isUndefinedOrNull()) {
-        const count_arg = (fromJS(globalObject, callframe.argument(1))?) orelse {
+        const count_opt = fromJS(globalObject, callframe.argument(1))?;
+        if (count_opt == null) {
             return globalObject.throwInvalidArgumentType("srandmember", "count", "number or string");
-        };
-        args.appendAssumeCapacity(count_arg);
+        }
+        args.appendAssumeCapacity(count_opt.?);
     }
 
     // Send SRANDMEMBER command
@@ -405,9 +429,11 @@ pub fn srandmember(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, c
 pub fn smembers(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
     requireNotSubscriber(client, @src().fn_name)?;
 
-    const key = (fromJS(globalObject, callframe.argument(0))?) orelse {
+    const key_opt = fromJS(globalObject, callframe.argument(0))?;
+    if (key_opt == null) {
         return globalObject.throwInvalidArgumentType("smembers", "key", "string or buffer");
-    };
+    }
+    const key = key_opt.?;
     const _key_deinit_guard = DeinitGuard<@TypeOf(key)>{ val: key };
 
     // Send SMEMBERS command
@@ -434,17 +460,19 @@ pub fn spop(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
     const _args_ptr = unsafe { &args };
     const _args_list_guard = DeinitListPtrGuard<@TypeOf(_args_ptr)>{ list: _args_ptr };
 
-    const key = (fromJS(globalObject, callframe.argument(0))?) orelse {
+    const key_opt = fromJS(globalObject, callframe.argument(0))?;
+    if (key_opt == null) {
         return globalObject.throwInvalidArgumentType("spop", "key", "string or buffer");
-    };
-    args.appendAssumeCapacity(key);
+    }
+    args.appendAssumeCapacity(key_opt.?);
 
     // Optional count argument
     if (args_view.len > 1 && !callframe.argument(1).isUndefinedOrNull()) {
-        const count_arg = (fromJS(globalObject, callframe.argument(1))?) orelse {
+        const count_opt = fromJS(globalObject, callframe.argument(1))?;
+        if (count_opt == null) {
             return globalObject.throwInvalidArgumentType("spop", "count", "number or string");
-        };
-        args.appendAssumeCapacity(count_arg);
+        }
+        args.appendAssumeCapacity(count_opt.?);
     }
 
     // Send SPOP command
@@ -475,19 +503,21 @@ pub fn sadd(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
     const _args_ptr = unsafe { &args };
     const _args_list_guard = DeinitListPtrGuard<@TypeOf(_args_ptr)>{ list: _args_ptr };
 
-    const key = (fromJS(globalObject, callframe.argument(0))?) orelse {
+    const key_opt = fromJS(globalObject, callframe.argument(0))?;
+    if (key_opt == null) {
         return globalObject.throwInvalidArgumentType("sadd", "key", "string or buffer");
-    };
-    args.appendAssumeCapacity(key);
+    }
+    args.appendAssumeCapacity(key_opt.?);
 
     for (arg of args_view[1..]) {
         if (arg.isUndefinedOrNull()) {
             break;
         }
-        const value = (fromJS(globalObject, arg)?) orelse {
+        const value_opt = fromJS(globalObject, arg)?;
+        if (value_opt == null) {
             return globalObject.throwInvalidArgumentType("sadd", "member", "string or buffer");
-        };
-        args.appendAssumeCapacity(value);
+        }
+        args.appendAssumeCapacity(value_opt.?);
     }
 
     // Send SADD command
@@ -508,13 +538,17 @@ pub fn sadd(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
 pub fn sismember(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
     requireNotSubscriber(client, @src().fn_name)?;
 
-    const key = (fromJS(globalObject, callframe.argument(0))?) orelse {
+    const key_opt = fromJS(globalObject, callframe.argument(0))?;
+    if (key_opt == null) {
         return globalObject.throwInvalidArgumentType("sismember", "key", "string or buffer");
-    };
+    }
+    const key = key_opt.?;
     const _key_deinit_guard = DeinitGuard<@TypeOf(key)>{ val: key };
-    const value = (fromJS(globalObject, callframe.argument(1))?) orelse {
+    const value_opt = fromJS(globalObject, callframe.argument(1))?;
+    if (value_opt == null) {
         return globalObject.throwInvalidArgumentType("sismember", "value", "string or buffer");
-    };
+    }
+    const value = value_opt.?;
     const _value_deinit_guard = DeinitGuard<@TypeOf(value)>{ val: value };
 
     // Send SISMEMBER command
@@ -546,10 +580,11 @@ pub fn hmget(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfra
     const _args_ptr = unsafe { &args };
     const _args_list_guard = DeinitListPtrGuard<@TypeOf(_args_ptr)>{ list: _args_ptr };
 
-    const key = (fromJS(globalObject, callframe.argument(0))?) orelse {
+    const key_opt = fromJS(globalObject, callframe.argument(0))?;
+    if (key_opt == null) {
         return globalObject.throwInvalidArgumentType("hmget", "key", "string or buffer");
-    };
-    args.appendAssumeCapacity(key);
+    }
+    args.appendAssumeCapacity(key_opt.?);
 
     const second_arg = callframe.argument(1);
     if (second_arg.isArray()) {
@@ -560,20 +595,22 @@ pub fn hmget(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfra
 
         let array_iter = second_arg.arrayIterator(globalObject)?;
         while (element := array_iter.next()?) {
-            const field = (fromJS(globalObject, element)?) orelse {
+            const field_opt = fromJS(globalObject, element)?;
+            if (field_opt == null) {
                 return globalObject.throwInvalidArgumentType("hmget", "field", "string or buffer");
-            };
-            args.append(field)?;
+            }
+            args.append(field_opt.?)?;
         }
     } else {
         for (arg of args_view[1..]) {
             if (arg.isUndefinedOrNull()) {
                 break;
             }
-            const field = (fromJS(globalObject, arg)?) orelse {
+            const field_opt = fromJS(globalObject, arg)?;
+            if (field_opt == null) {
                 return globalObject.throwInvalidArgumentType("hmget", "field", "string or buffer");
-            };
-            args.append(field)?;
+            }
+            args.append(field_opt.?)?;
         }
     }
 
@@ -671,9 +708,11 @@ fn hsetImpl(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
 
     if (second_arg.isObject() && !second_arg.isArray()) {
         // Pattern 1: Object/Record - hset(key, {field: value, ...})
-        const obj = second_arg.getObject() orelse {
+        const obj_opt = second_arg.getObject();
+        if (obj_opt == null) {
             return globalObject.throwInvalidArgumentType(command, "fields", "object");
-        };
+        }
+        const obj = obj_opt.?;
 
         let object_iter = jsc.JSPropertyIterator(.{
             .skip_empty_name = false,
@@ -708,9 +747,11 @@ fn hsetImpl(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
             args.appendAssumeCapacity(field_str.toUTF8(bun.default_allocator));
             field_str.deref();
 
-            const value_js = (iter.next()?) orelse {
+            const value_js_opt = iter.next()?;
+            if (value_js_opt == null) {
                 return globalObject.throw("Array must have an even number of elements (field-value pairs)", .{});
-            };
+            }
+            const value_js = value_js_opt.?;
             const value_str = value_js.toBunString(globalObject)?;
             args.appendAssumeCapacity(value_str.toUTF8(bun.default_allocator));
             value_str.deref();
@@ -783,17 +824,23 @@ pub const httl = compile.@"(...strings: string[])"("httl", "HTTL", .not_subscrib
 pub fn hsetnx(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
     requireNotSubscriber(client, "hsetnx")?;
 
-    const key = (fromJS(globalObject, callframe.argument(0))?) orelse {
+    const key_opt = fromJS(globalObject, callframe.argument(0))?;
+    if (key_opt == null) {
         return globalObject.throwInvalidArgumentType("hsetnx", "key", "string or buffer");
-    };
+    }
+    const key = key_opt.?;
     const _key_deinit_guard = DeinitGuard<@TypeOf(key)>{ val: key };
-    const field = (fromJS(globalObject, callframe.argument(1))?) orelse {
+    const field_opt = fromJS(globalObject, callframe.argument(1))?;
+    if (field_opt == null) {
         return globalObject.throwInvalidArgumentType("hsetnx", "field", "string or buffer");
-    };
+    }
+    const field = field_opt.?;
     const _field_deinit_guard = DeinitGuard<@TypeOf(field)>{ val: field };
-    const value = (fromJS(globalObject, callframe.argument(2))?) orelse {
+    const value_opt = fromJS(globalObject, callframe.argument(2))?;
+    if (value_opt == null) {
         return globalObject.throwInvalidArgumentType("hsetnx", "value", "string or buffer");
-    };
+    }
+    const value = value_opt.?;
     const _value_deinit_guard = DeinitGuard<@TypeOf(value)>{ val: value };
 
     const promise = valkeySend(client, 
@@ -846,10 +893,11 @@ pub fn ping(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
 
     if (!callframe.argument(0).isUndefinedOrNull()) {
         // Only use the first argument if provided, ignore any additional arguments
-        const message = (fromJS(globalObject, callframe.argument(0))?) orelse {
+        const message_opt = fromJS(globalObject, callframe.argument(0))?;
+        if (message_opt == null) {
             return globalObject.throwInvalidArgumentType("ping", "message", "string or buffer");
-        };
-        message_buf[0] = message;
+        }
+        message_buf[0] = message_opt.?;
         args_slice = message_buf[0..1];
     }
     const _args_slice_guard = DeinitSliceGuard<@TypeOf(args_slice)>{ slice: args_slice };
@@ -971,17 +1019,23 @@ pub const spublish = compile.@"(key: RedisKey, value: RedisValue)"("spublish", "
 pub fn smove(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
     requireNotSubscriber(client, @src().fn_name)?;
 
-    const source = (fromJS(globalObject, callframe.argument(0))?) orelse {
+    const source_opt = fromJS(globalObject, callframe.argument(0))?;
+    if (source_opt == null) {
         return globalObject.throwInvalidArgumentType("smove", "source", "string or buffer");
-    };
+    }
+    const source = source_opt.?;
     const _source_deinit_guard = DeinitGuard<@TypeOf(source)>{ val: source };
-    const destination = (fromJS(globalObject, callframe.argument(1))?) orelse {
+    const destination_opt = fromJS(globalObject, callframe.argument(1))?;
+    if (destination_opt == null) {
         return globalObject.throwInvalidArgumentType("smove", "destination", "string or buffer");
-    };
+    }
+    const destination = destination_opt.?;
     const _destination_deinit_guard = DeinitGuard<@TypeOf(destination)>{ val: destination };
-    const member = (fromJS(globalObject, callframe.argument(2))?) orelse {
+    const member_opt = fromJS(globalObject, callframe.argument(2))?;
+    if (member_opt == null) {
         return globalObject.throwInvalidArgumentType("smove", "member", "string or buffer");
-    };
+    }
+    const member = member_opt.?;
     const _member_deinit_guard = DeinitGuard<@TypeOf(member)>{ val: member };
 
     const promise = valkeySend(client, 
@@ -1032,7 +1086,7 @@ pub fn publish(
     if (!arg0.isString()) {
         return globalObject.throwInvalidArgumentType("publish", "channel", "string");
     }
-    const channel = (fromJS(globalObject, arg0)?) orelse unreachable;
+    const channel = (fromJS(globalObject, arg0)?).?;
 
     args.appendAssumeCapacity(channel);
 
@@ -1040,7 +1094,7 @@ pub fn publish(
     if (!arg1.isString()) {
         return globalObject.throwInvalidArgumentType("publish", "message", "string");
     }
-    const message = (fromJS(globalObject, arg1)?) orelse unreachable;
+    const message = (fromJS(globalObject, arg1)?).?;
     args.appendAssumeCapacity(message);
 
     const promise = valkeySend(client, 
@@ -1083,10 +1137,11 @@ pub fn subscribe(
 
         let array_iter = channel_or_many.arrayIterator(globalObject)?;
         while (channel_arg := array_iter.next()?) {
-            const channel = (fromJS(globalObject, channel_arg)?) orelse {
+            const channel_opt = fromJS(globalObject, channel_arg)?;
+            if (channel_opt == null) {
                 return globalObject.throwInvalidArgumentType("subscribe", "channel", "string");
-            };
-            redis_channels.appendAssumeCapacity(channel);
+            }
+            redis_channels.appendAssumeCapacity(channel_opt.?);
 
             // What we do here is add our receive handler. Notice that this doesn't really do anything until the
             // "SUBSCRIBE" command is sent to redis && we get a response.
@@ -1098,10 +1153,11 @@ pub fn subscribe(
         }
     } else if (channel_or_many.isString()) {
         // It is a single string channel
-        const channel = (fromJS(globalObject, channel_or_many)?) orelse {
+        const channel_opt = fromJS(globalObject, channel_or_many)?;
+        if (channel_opt == null) {
             return globalObject.throwInvalidArgumentType("subscribe", "channel", "string");
-        };
-        redis_channels.appendAssumeCapacity(channel);
+        }
+        redis_channels.appendAssumeCapacity(channel_opt.?);
 
         client._subscription_ctx.upsertReceiveHandler(globalObject, channel_or_many, handler_callback)?;
     } else {
@@ -1209,11 +1265,13 @@ pub fn unsubscribe(
         // unsubscribe from. This s important since this list is used to send
         // the UNSUBSCRIBE command to redis. Without client, we would end up
         // unsubscribing from all channels.
-        redis_channels.appendAssumeCapacity((fromJS(globalObject, channel)?) orelse {
+        const ch_opt = fromJS(globalObject, channel)?;
+        if (ch_opt == null) {
             return globalObject.throwInvalidArgumentType("unsubscribe", "channel", "string");
-        });
+        }
+        redis_channels.appendAssumeCapacity(ch_opt.?);
 
-        const remaining_listeners = client._subscription_ctx.removeReceiveHandler(
+        const remaining_listeners_opt = client._subscription_ctx.removeReceiveHandler(
             globalObject,
             channel,
             listener_cb,
@@ -1222,11 +1280,13 @@ pub fn unsubscribe(
                 "Failed to remove handler for channel {f}",
                 .{channel.asString().getZigString(globalObject)},
             );
-        } orelse {
+        };
+        if (remaining_listeners_opt == null) {
             // Listeners weren't present in the first place, so we can return a
             // resolved promise.
             return jsc.JSPromise.resolvedPromiseValue(globalObject, .js_undefined);
-        };
+        }
+        const remaining_listeners = remaining_listeners_opt.?;
 
         // In this case, we only want to send the unsubscribe command to redis if there are no more listeners for this
         // channel.
@@ -1250,19 +1310,21 @@ pub fn unsubscribe(
         // It is an array, so let's iterate over it
         let array_iter = channel_or_many.arrayIterator(globalObject)?;
         while (channel_arg := array_iter.next()?) {
-            const channel = (fromJS(globalObject, channel_arg)?) orelse {
+            const channel_opt = fromJS(globalObject, channel_arg)?;
+            if (channel_opt == null) {
                 return globalObject.throwInvalidArgumentType("unsubscribe", "channel", "string");
-            };
-            redis_channels.appendAssumeCapacity(channel);
+            }
+            redis_channels.appendAssumeCapacity(channel_opt.?);
             // Clear the handlers for this channel
             client._subscription_ctx.clearReceiveHandlers(globalObject, channel_arg)?;
         }
     } else if (channel_or_many.isString()) {
         // It is a single string channel
-        const channel = (fromJS(globalObject, channel_or_many)?) orelse {
+        const channel_opt = fromJS(globalObject, channel_or_many)?;
+        if (channel_opt == null) {
             return globalObject.throwInvalidArgumentType("unsubscribe", "channel", "string");
-        };
-        redis_channels.appendAssumeCapacity(channel);
+        }
+        redis_channels.appendAssumeCapacity(channel_opt.?);
         // Clear the handlers for this channel
         client._subscription_ctx.clearReceiveHandlers(globalObject, channel_or_many)?;
     } else {

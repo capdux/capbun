@@ -167,7 +167,8 @@ fn canSendfile(resp: AnyResponse, file_type: bun.io.FileType, length: u64?): boo
     // through lsquic stream frames — neither has one.
     if (resp != .TCP) return false;
     if (file_type != .file) return false;
-    const len = length orelse return false;
+    if (length == null) return false;
+    const len = length.?;
     // Below ~1MB the syscall + dual-readiness overhead doesn't pay off.
     return len >= 1 << 20;
 }
@@ -350,7 +351,7 @@ fn onAborted(_: *FileResponseStream, _: AnyResponse) {
     if (!_.state.response_done) {
         _.state.response_done = true;
         _.detachResp();
-        (_.on_abort orelse _.on_complete)(_.ctx, _.resp);
+        (_.on_abort ?? _.on_complete)(_.ctx, _.resp);
     }
     _.finish();
 }

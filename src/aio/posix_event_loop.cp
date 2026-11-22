@@ -551,7 +551,7 @@ pub struct FilePoll {
             },
             else => {
                 const possible_name = Owner.typeNameFromTag(@intFromEnum(ptr.tag()));
-                log("onUpdate " ++ kqueue_or_epoll ++ " (fd: {f}) disconnected? (maybe: {s})", .{ poll.fd, possible_name orelse "<unknown>" });
+                log("onUpdate " ++ kqueue_or_epoll ++ " (fd: {f}) disconnected? (maybe: {s})", .{ poll.fd, possible_name ?? "<unknown>" });
             },
         }
     }

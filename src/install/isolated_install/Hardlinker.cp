@@ -154,15 +154,15 @@ struct PathBufGuard<T> {
                                             ],
                                         );
                                     }
-                                    const dest_parent = _.dest.dirname() orelse {
+                                    if (dest_parent := _.dest.dirname()) {
+                                        FD.cwd().makePath(u16, dest_parent) catch {};
+
+                                        switch (sys.link(u16, _.src.sliceZ(), destfile_path)) {
+                                            .result => {},
+                                            .err link_err2 => return .initErr(link_err2),
+                                        }
+                                    } else {
                                         return .initErr(link_err1);
-                                    };
-
-                                    FD.cwd().makePath(u16, dest_parent) catch {};
-
-                                    switch (sys.link(u16, _.src.sliceZ(), destfile_path)) {
-                                        .result => {},
-                                        .err link_err2 => return .initErr(link_err2),
                                     }
                                 },
                                 else => return .initErr(link_err1),
@@ -202,14 +202,14 @@ struct PathBufGuard<T> {
                                     }
                                 },
                                 .NOENT => {
-                                    const dest_parent = _.dest.dirname() orelse {
+                                    if (dest_parent := _.dest.dirname()) {
+                                        FD.cwd().makePath(u8, dest_parent) catch {};
+                                        switch (sys.linkatZ(entry.dir, entry.basename, FD.cwd(), _.dest.sliceZ())) {
+                                            .result => {},
+                                            .err link_err2 => return .initErr(link_err2),
+                                        }
+                                    } else {
                                         return .initErr(link_err1);
-                                    };
-
-                                    FD.cwd().makePath(u8, dest_parent) catch {};
-                                    switch (sys.linkatZ(entry.dir, entry.basename, FD.cwd(), _.dest.sliceZ())) {
-                                        .result => {},
-                                        .err link_err2 => return .initErr(link_err2),
                                     }
                                 },
                                 else => return .initErr(link_err1),

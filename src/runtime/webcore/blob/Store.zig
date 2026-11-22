@@ -382,7 +382,10 @@ pub fn fromArrayList(list: ArrayListUnmanaged(u8), allocator: Allocator) !*Store
     }
 
 pub fn toInternalBlob(self: *StoreBytes) Blob.Internal {
-            var ptr = ((self.ptr) orelse { return Blob.Internal{ .bytes = .{ .items = (&.{}), .capacity = 0, .allocator = self.allocator } }; });
+            if ((self.ptr == null)) {
+                return Blob.Internal{ .bytes = .{ .items = (&.{}), .capacity = 0, .allocator = self.allocator } };
+            }
+            var ptr = self.ptr.?;
             _ = &ptr;
             var result: Blob.Internal = .{ .bytes = .{ .items = (blk: {
             break :blk ptr[0..self.len];

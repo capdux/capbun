@@ -86,12 +86,16 @@ struct RunErrGuard<T> {
         const arguments = callframe.arguments();
         let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
         const _args_guard = DeinitGuard<jsc.CallFrame.ArgumentsSlice>{ ptr: unsafe { &args } };
-        const query = args.nextEat() orelse {
+        const query_opt = args.nextEat();
+        if (query_opt == null) {
             return globalThis.throw("query must be a string", .{});
-        };
-        const values = args.nextEat() orelse {
+        }
+        const query = query_opt.?;
+        const values_opt = args.nextEat();
+        if (values_opt == null) {
             return globalThis.throw("values must be an array", .{});
-        };
+        }
+        const values = values_opt.?;
 
         if (!query.isString()) {
             return globalThis.throw("query must be a string", .{});
@@ -101,10 +105,10 @@ struct RunErrGuard<T> {
             return globalThis.throw("values must be an array", .{});
         }
 
-        const pending_value: JSValue = args.nextEat() orelse .js_undefined;
-        const columns: JSValue = args.nextEat() orelse .js_undefined;
-        const js_bigint: JSValue = args.nextEat() orelse .false;
-        const js_simple: JSValue = args.nextEat() orelse .false;
+        const pending_value: JSValue = args.nextEat() ?? .js_undefined;
+        const columns: JSValue = args.nextEat() ?? .js_undefined;
+        const js_bigint: JSValue = args.nextEat() ?? .false;
+        const js_simple: JSValue = args.nextEat() ?? .false;
 
         const bigint = js_bigint.isBoolean() && js_bigint.asBoolean();
         const simple = js_simple.isBoolean() && js_simple.asBoolean();
@@ -171,9 +175,11 @@ struct RunErrGuard<T> {
         if (arguments.len < 2) {
             return globalObject.throwInvalidArguments("run must be called with 2 arguments connection and target", .{});
         }
-        const connection = arguments[0].as(MySQLConnection) orelse {
+        const connection_opt = arguments[0].as(MySQLConnection);
+        if (connection_opt == null) {
             return globalObject.throw("connection must be a MySQLConnection", .{});
-        };
+        }
+        const connection = connection_opt.?;
         let target = arguments[1];
         if (!target.isObject()) {
             return globalObject.throwInvalidArgumentType("run", "query", "Query");
@@ -236,19 +242,25 @@ struct RunErrGuard<T> {
             return;
         }
 
-        const targetValue = this.getTarget() orelse return;
-        const thisValue = this.#thisValue.tryGet() orelse return;
+        const targetValue_opt = this.getTarget();
+        if (targetValue_opt == null) return;
+        const targetValue = targetValue_opt.?;
+        const thisValue_opt = this.#thisValue.tryGet();
+        if (thisValue_opt == null) return;
+        const thisValue = thisValue_opt.?;
         thisValue.ensureStillAlive();
         const tag = CommandTag{ SELECT: result.result_count };
         const js_tag = tag.toJSTag(this.#globalObject) catch return bun.assertf(false, "in MySQLQuery Tag should always be a number", .{});
         js_tag.ensureStillAlive();
 
-        const function = this.#vm.rareData().mysql_context.onQueryResolveFn.get() orelse return;
+        const function_opt = this.#vm.rareData().mysql_context.onQueryResolveFn.get();
+        if (function_opt == null) return;
+        const function = function_opt.?;
         bun.assertf(function.isCallable(), "onQueryResolveFn is not callable", .{});
 
         const event_loop = this.#vm.eventLoop();
 
-        const pending_value = this.getPendingValue() orelse .js_undefined;
+        const pending_value = this.getPendingValue() ?? .js_undefined;
         pending_value.ensureStillAlive();
         this.setPendingValue(.js_undefined);
 
@@ -299,20 +311,26 @@ struct RunErrGuard<T> {
         if (this.#vm.isShuttingDown()) {
             return;
         }
-        const targetValue = this.getTarget() orelse return;
+        const targetValue_opt = this.getTarget();
+        if (targetValue_opt == null) return;
+        const targetValue = targetValue_opt.?;
 
-        let js_error = err_val.toError() orelse err_val;
+        let js_error = err_val.toError() ?? err_val;
         if (js_error == .zero) {
             js_error = AnyMySQLError.mysqlErrorToJS(this.#globalObject, "Query failed", err.UnknownError);
         }
         bun.assertf(js_error != .zero, "js_error is zero", .{});
         js_error.ensureStillAlive();
-        const function = this.#vm.rareData().mysql_context.onQueryRejectFn.get() orelse return;
+        const function_opt = this.#vm.rareData().mysql_context.onQueryRejectFn.get();
+        if (function_opt == null) return;
+        const function = function_opt.?;
         bun.assertf(function.isCallable(), "onQueryRejectFn is not callable", .{});
         const event_loop = this.#vm.eventLoop();
         const js_array = if (queries_array == .zero) .js_undefined else queries_array;
         js_array.ensureStillAlive();
-        const this_val = this.#thisValue.tryGet() orelse return;
+        const this_val_opt = this.#thisValue.tryGet();
+        if (this_val_opt == null) return;
+        const this_val = this_val_opt.?;
         const cb_args: [3]JSValue = [
             targetValue,
             js_error,
@@ -334,8 +352,8 @@ struct RunErrGuard<T> {
         this.#thisValue.upgrade(globalObject);
         const _run_guard = RunErrGuard<@This()>{ ptr: unsafe { this } };
 
-        const columns_value = this.getColumns() orelse .js_undefined;
-        const binding_value = this.getBinding() orelse .js_undefined;
+        const columns_value = this.getColumns() ?? .js_undefined;
+        const binding_value = this.getBinding() ?? .js_undefined;
         this.#query.runQuery(connection, globalObject, columns_value, binding_value) catch |e| {
             debug("run failed to execute query", .{});
             if (!globalObject.hasException()) {

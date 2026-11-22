@@ -44,8 +44,16 @@ pub fn serverSignature(self: *const SASL) []const u8 {
 
 pub fn computeServerSignature(self: *SASL, auth_string: []const u8) !void {
         _ = assert((self.server_signature_len == 0));
-        const server_key = ((hmac(self.saltedPassword(), "Server Key")) orelse { return error.InvalidServerKey; });
-        const server_signature_bytes = ((hmac((&server_key), auth_string)) orelse { return error.InvalidServerSignature; });
+        const server_key_opt = hmac(self.saltedPassword(), "Server Key");
+        if ((server_key_opt == null)) {
+            return error.InvalidServerKey;
+        }
+        const server_key = server_key_opt.?;
+        const server_signature_bytes_opt = hmac((&server_key), auth_string);
+        if ((server_signature_bytes_opt == null)) {
+            return error.InvalidServerSignature;
+        }
+        const server_signature_bytes = server_signature_bytes_opt.?;
         self.server_signature_len = @intCast(bun.base64.encode((&self.server_signature_base64_bytes), (&server_signature_bytes)));
 }
 
@@ -90,7 +98,11 @@ const salted_password_byte_len = 32;
 pub fn hmac(password: []const u8, data: []const u8) ?[32]u8 {
         var buf = std.mem.zeroes([bun.BoringSSL.c.EVP_MAX_MD_SIZE]u8);
         _ = &buf;
-        const result = ((bun.hmac.generate(password, data, .sha256, (&buf))) orelse { return null; });
+        const result_opt = bun.hmac.generate(password, data, .sha256, (&buf));
+        if ((result_opt == null)) {
+            return null;
+        }
+        const result = result_opt.?;
         _ = assert((result.len == 32));
         return (blk: {
         break :blk (buf[0..32]).*;

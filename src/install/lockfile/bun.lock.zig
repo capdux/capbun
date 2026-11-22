@@ -943,25 +943,31 @@ pub fn findResolution(self: @This(), pkg_path: []const u8, dep: *const Dependenc
                 if ((offset == 0)) {
                     return error.Unresolvable;
                 }
-                const slash = ((strings.lastIndexOfChar(path_buf[0..(offset - 1)], 47)) orelse {
-                offset = 0;
-                continue;
-});
-                const at = ((strings.lastIndexOfChar(path_buf[0..(offset - 1)], 64)) orelse {
-                offset = (slash + 1);
-                continue;
-});
+                const slash_opt = strings.lastIndexOfChar(path_buf[0..(offset - 1)], 47);
+                if ((slash_opt == null)) {
+                    offset = 0;
+                    continue;
+                }
+                const slash = slash_opt.?;
+                const at_opt = strings.lastIndexOfChar(path_buf[0..(offset - 1)], 64);
+                if ((at_opt == null)) {
+                    offset = (slash + 1);
+                    continue;
+                }
+                const at = at_opt.?;
                 if ((at > slash)) {
                     valid = false;
                     continue;
                 }
-                const next_slash = ((strings.lastIndexOfChar(path_buf[0..slash], 47)) orelse {
-                if ((at != 0)) {
-                    return error.InvalidPackageKey;
+                const next_slash_opt = strings.lastIndexOfChar(path_buf[0..slash], 47);
+                if ((next_slash_opt == null)) {
+                    if ((at != 0)) {
+                        return error.InvalidPackageKey;
+                    }
+                    offset = 0;
+                    continue;
                 }
-                offset = 0;
-                continue;
-});
+                const next_slash = next_slash_opt.?;
                 if ((next_slash > at)) {
                     offset = (slash + 1);
                     continue;
@@ -984,10 +990,12 @@ pub fn findResolution(self: @This(), pkg_path: []const u8, dep: *const Dependenc
 
 pub fn parseIntoBinaryLockfile(lockfile: *BinaryLockfile, allocator: std.mem.Allocator, root: JSON.Expr, source: *const logger.Source, log: *logger.Log, manager: ?*PackageManager) !void {
         _ = lockfile.initEmpty(allocator);
-        const lockfile_version_expr = ((root.get("lockfileVersion")) orelse {
-        _ = try log.addError(source, root.loc, "Missing lockfile version");
-        return error.InvalidLockfileVersion;
-});
+        const lockfile_version_expr_opt = root.get("lockfileVersion");
+        if ((lockfile_version_expr_opt == null)) {
+            _ = try log.addError(source, root.loc, "Missing lockfile version");
+            return error.InvalidLockfileVersion;
+        }
+        const lockfile_version_expr = lockfile_version_expr_opt.?;
         const lockfile_version_num: u32 = lockfile_version: {
         _ = e: {
         break :e (switch (lockfile_version_expr.data) {
@@ -1090,10 +1098,12 @@ else => {
                 const version_hash = String.Builder.stringHash(version_str);
                 const version = try string_buf.appendWithHash(version_str, version_hash);
                 const version_sliced = version.sliced(string_buf.bytes.items);
-                const dep: Dependency = .{ .name = name, .name_hash = name_hash, .version = ((Dependency.parse(allocator, name, name_hash, version_sliced.slice, (&version_sliced), log, manager)) orelse {
-                _ = try log.addError(source, value.loc, "Invalid override version");
-                return error.InvalidOverridesObject;
-}) };
+                const parsed_dep_version = Dependency.parse(allocator, name, name_hash, version_sliced.slice, (&version_sliced), log, manager);
+                if ((parsed_dep_version == null)) {
+                    _ = try log.addError(source, value.loc, "Invalid override version");
+                    return error.InvalidOverridesObject;
+                }
+                const dep: Dependency = .{ .name = name, .name_hash = name_hash, .version = parsed_dep_version.? };
                 _ = try lockfile.overrides.map.put(allocator, name_hash, dep);
             }
         }
@@ -1122,10 +1132,12 @@ else => {
                 const version_hash = String.Builder.stringHash(version_str);
                 const version = try string_buf.appendWithHash(version_str, version_hash);
                 const version_sliced = version.sliced(string_buf.bytes.items);
-                const dep: Dependency = .{ .name = dep_name, .name_hash = dep_name_hash, .version = ((Dependency.parse(allocator, dep_name, dep_name_hash, version_sliced.slice, (&version_sliced), log, manager)) orelse {
-                _ = try log.addError(source, value.loc, "Invalid catalog version");
-                return error.InvalidCatalogObject;
-}) };
+                const parsed_dep_version = Dependency.parse(allocator, dep_name, dep_name_hash, version_sliced.slice, (&version_sliced), log, manager);
+                if ((parsed_dep_version == null)) {
+                    _ = try log.addError(source, value.loc, "Invalid catalog version");
+                    return error.InvalidCatalogObject;
+                }
+                const dep: Dependency = .{ .name = dep_name, .name_hash = dep_name_hash, .version = parsed_dep_version.? };
                 const entry = try lockfile.catalogs.default.getOrPutContext(allocator, dep_name, String.arrayHashContext(lockfile, null));
                 if (entry.found_existing) {
                     _ = try log.addError(source, key.loc, "Duplicate catalog entry");
@@ -1174,10 +1186,12 @@ else => {
                     const version_hash = String.Builder.stringHash(version_str);
                     const version = try string_buf.appendWithHash(version_str, version_hash);
                     const version_sliced = version.sliced(string_buf.bytes.items);
-                    const dep: Dependency = .{ .name = dep_name, .name_hash = dep_name_hash, .version = ((Dependency.parse(allocator, dep_name, dep_name_hash, version_sliced.slice, (&version_sliced), log, manager)) orelse {
-                    _ = try log.addError(source, value.loc, "Invalid catalog version");
-                    return error.InvalidCatalogsObject;
-}) };
+                    const parsed_dep_version = Dependency.parse(allocator, dep_name, dep_name_hash, version_sliced.slice, (&version_sliced), log, manager);
+                    if ((parsed_dep_version == null)) {
+                        _ = try log.addError(source, value.loc, "Invalid catalog version");
+                        return error.InvalidCatalogsObject;
+                    }
+                    const dep: Dependency = .{ .name = dep_name, .name_hash = dep_name_hash, .version = parsed_dep_version.? };
                     const entry = try group.getOrPutContext(allocator, dep_name, String.arrayHashContext(lockfile, null));
                     if (entry.found_existing) {
                         _ = try log.addError(source, key.loc, "Duplicate catalog entry");
@@ -1187,10 +1201,12 @@ else => {
                 }
             }
         }
-        const workspaces_obj = ((root.getObject("workspaces")) orelse {
-        _ = try log.addError(source, root.loc, "Missing a workspaces object property");
-        return error.InvalidWorkspaceObject;
-});
+        const workspaces_obj_opt = root.getObject("workspaces");
+        if ((workspaces_obj_opt == null)) {
+            _ = try log.addError(source, root.loc, "Missing a workspaces object property");
+            return error.InvalidWorkspaceObject;
+        }
+        const workspaces_obj = workspaces_obj_opt.?;
         var maybe_root_pkg: ?Expr = null;
         _ = &maybe_root_pkg;
         for (cp_iter_slice(workspaces_obj.data.e_object.properties.slice())) |prop| {
@@ -1214,10 +1230,12 @@ else => {
                 maybe_root_pkg = value;
                 continue;
             }
-            const name_expr: Expr = ((value.get("name")) orelse {
-            _ = try log.addError(source, value.loc, "Expected a string name property");
-            return error.InvalidWorkspaceObject;
-});
+            const name_expr_opt = value.get("name");
+            if ((name_expr_opt == null)) {
+                _ = try log.addError(source, value.loc, "Expected a string name property");
+                return error.InvalidWorkspaceObject;
+            }
+            const name_expr: Expr = name_expr_opt.?;
             const name_hash_opt = try name_expr.asStringHash(allocator, String.Builder.stringHash);
             if ((name_hash_opt == null)) {
                 _ = try log.addError(source, name_expr.loc, "Expected a string name property");
@@ -1258,10 +1276,11 @@ else => {
         _ = &_guard_bundled_pkgs;
         var ___guard_bundled_pkgs_moved = false; _ = &___guard_bundled_pkgs_moved;
         defer if (!___guard_bundled_pkgs_moved) { ___guard_bundled_pkgs_moved = true; const __T = @TypeOf(_guard_bundled_pkgs); if (@typeInfo(__T) == .optional) { if (_guard_bundled_pkgs) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_bundled_pkgs.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_bundled_pkgs; _drop_val.__cp_deinit(); } };
-        const root_pkg_exr = ((maybe_root_pkg) orelse {
-        _ = try log.addError(source, workspaces_obj.loc, "Expected root package");
-        return error.InvalidWorkspaceObject;
-});
+        if ((maybe_root_pkg == null)) {
+            _ = try log.addError(source, workspaces_obj.loc, "Expected root package");
+            return error.InvalidWorkspaceObject;
+        }
+        const root_pkg_exr = maybe_root_pkg.?;
         {
             var maybe_name: ?[]const u8 = null;
             _ = &maybe_name;
@@ -1348,12 +1367,14 @@ else => {
                 }
             }
         }
-        const pkgs_expr = ((root.get("packages")) orelse {
-        if ((workspace_pkgs_len == 0)) {
-            _ = lockfile.initEmpty(allocator);
+        const pkgs_expr_opt = root.get("packages");
+        if ((pkgs_expr_opt == null)) {
+            if ((workspace_pkgs_len == 0)) {
+                _ = lockfile.initEmpty(allocator);
+            }
+            return;
         }
-        return;
-});
+        const pkgs_expr = pkgs_expr_opt.?;
         {
             if ((!pkgs_expr.isObject())) {
                 _ = try log.addError(source, pkgs_expr.loc, "Expected an object");
@@ -1363,10 +1384,12 @@ else => {
                 _ = &prop;
                 const key = prop.key.?;
                 const value = (if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?;
-                const pkg_path = ((key.asString(allocator)) orelse {
-                _ = try log.addError(source, key.loc, "Expected a string");
-                return error.InvalidPackageKey;
-});
+                const pkg_path_opt = key.asString(allocator);
+                if ((pkg_path_opt == null)) {
+                    _ = try log.addError(source, key.loc, "Expected a string");
+                    return error.InvalidPackageKey;
+                }
+                const pkg_path = pkg_path_opt.?;
                 if ((!value.isArray())) {
                     _ = try log.addError(source, value.loc, "Expected an array");
                     return error.InvalidPackageInfo;
@@ -1387,10 +1410,12 @@ else => {
                 _ = &prop;
                 const key = prop.key.?;
                 const value = (if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?;
-                const pkg_path = ((key.asString(allocator)) orelse {
-                _ = try log.addError(source, key.loc, "Expected a string");
-                return error.InvalidPackageKey;
-});
+                const pkg_path_opt = key.asString(allocator);
+                if ((pkg_path_opt == null)) {
+                    _ = try log.addError(source, key.loc, "Expected a string");
+                    return error.InvalidPackageKey;
+                }
+                const pkg_path = pkg_path_opt.?;
                 if ((!value.isArray())) {
                     _ = try log.addError(source, value.loc, "Expected an array");
                     return error.InvalidPackageInfo;
@@ -1404,10 +1429,12 @@ else => {
                 }
                 const res_info = pkg_info.at(i);
                 i = (i + 1);
-                const res_info_str = ((res_info.asString(allocator)) orelse {
-                _ = try log.addError(source, res_info.loc, "Expected a string");
-                return error.InvalidPackageResolution;
-});
+                const res_info_str_opt = res_info.asString(allocator);
+                if ((res_info_str_opt == null)) {
+                    _ = try log.addError(source, res_info.loc, "Expected a string");
+                    return error.InvalidPackageResolution;
+                }
+                const res_info_str = res_info_str_opt.?;
                 const name_and_res_pair = name_and_res: {
                 if (strings.hasPrefixComptime(res_info_str, "@root:")) {
                     break :name_and_res .{ "", res_info_str[1..] };
@@ -1435,10 +1462,12 @@ else => {
                     }
                     const registry_expr = pkg_info.at(i);
                     i = (i + 1);
-                    const registry_str = ((registry_expr.asString(allocator)) orelse {
-                    _ = try log.addError(source, registry_expr.loc, "Expected a string");
-                    return error.InvalidPackageInfo;
-});
+                    const registry_str_opt = registry_expr.asString(allocator);
+                    if ((registry_str_opt == null)) {
+                        _ = try log.addError(source, registry_expr.loc, "Expected a string");
+                        return error.InvalidPackageInfo;
+                    }
+                    const registry_str = registry_str_opt.?;
                     if ((registry_str.len == 0)) {
                         var registry_url: []const u8 = Npm.Registry.default_url;
                         _ = &registry_url;
@@ -1563,10 +1592,12 @@ if ((i >= pkg_info.len)) {
                 }
                 const integrity_expr = pkg_info.at(i);
                 i = (i + 1);
-                const integrity_str = ((integrity_expr.asString(allocator)) orelse {
-                _ = try log.addError(source, integrity_expr.loc, "Expected a string");
-                return error.InvalidPackageInfo;
-});
+                const integrity_str_opt = integrity_expr.asString(allocator);
+                if ((integrity_str_opt == null)) {
+                    _ = try log.addError(source, integrity_expr.loc, "Expected a string");
+                    return error.InvalidPackageInfo;
+                }
+                const integrity_str = integrity_str_opt.?;
                 pkg.@"meta".integrity = Integrity.parse(integrity_str);
 },
 .local_tarball, .remote_tarball => {
@@ -1586,10 +1617,12 @@ if ((i >= pkg_info.len)) {
                 }
                 const bun_tag = pkg_info.at(i);
                 i = (i + 1);
-                const bun_tag_str = ((bun_tag.asString(allocator)) orelse {
-                _ = try log.addError(source, bun_tag.loc, "Expected a string");
-                return error.InvalidPackageInfo;
-});
+                const bun_tag_str_opt = bun_tag.asString(allocator);
+                if ((bun_tag_str_opt == null)) {
+                    _ = try log.addError(source, bun_tag.loc, "Expected a string");
+                    return error.InvalidPackageInfo;
+                }
+                const bun_tag_str = bun_tag_str_opt.?;
                 @field((if (@typeInfo(@TypeOf(res)) == .@"enum") @intFromEnum(res) else res.value), @tagName(tag)).resolved = try string_buf.append(bun_tag_str);
                 if ((i < pkg_info.len)) {
                     const integrity_expr = pkg_info.at(i);
@@ -1643,13 +1676,15 @@ else => {
                 while ((_dep_id < _dep_end)) : (_dep_id = (_dep_id + 1)) {
                     const dep_id: DependencyID = @intCast(_dep_id);
                     const dep = (&lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))]);
-                    const res_id = ((pkg_map.get((if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(lockfile.buffers.string_bytes.items))) orelse {
-                    if (dep.behavior.optional) {
-                        continue;
+                    const res_id_opt = pkg_map.get((if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(lockfile.buffers.string_bytes.items));
+                    if ((res_id_opt == null)) {
+                        if (dep.behavior.optional) {
+                            continue;
+                        }
+                        _ = try dependencyResolutionFailure(dep, null, allocator, lockfile.buffers.string_bytes.items, source, log, root_pkg_exr.loc);
+                        return error.InvalidPackageInfo;
                     }
-                    _ = try dependencyResolutionFailure(dep, null, allocator, lockfile.buffers.string_bytes.items, source, log, root_pkg_exr.loc);
-                    return error.InvalidPackageInfo;
-});
+                    const res_id = res_id_opt.?;
                     const seen_gop = try seen_deps.getOrPut(allocator, (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(lockfile.buffers.string_bytes.items));
                     if (((!dep.behavior.isWorkspace()) and seen_gop.found_existing)) {
                         lockfile.buffers.resolutions.items[cp_cast_int(usize, dep_id)] = res_id;
@@ -1679,13 +1714,15 @@ else => {
                             const dep_name = (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(lockfile.buffers.string_bytes.items);
                             const workspace_node_modules = (blk_catch_6: { break :blk_catch_6 ((std.fmt.bufPrint((&path_buf), "{s}/{s}", .{ workspace_name, dep_name })) catch |__ce_6| { _ = &__ce_6; _ = try log.addErrorFmt(source, root_pkg_exr.loc, allocator, "Workspace and dependency name too long: '{s}/{s}'", .{ workspace_name, dep_name });
                             return error.InvalidPackageInfo; }); });
-                            const res_id = ((pkg_map.get(workspace_node_modules)) orelse (((pkg_map.get(dep_name)) orelse {
-                            if (dep.behavior.optional) {
-                                continue;
+                            const res_id_opt = ((pkg_map.get(workspace_node_modules)) orelse (pkg_map.get(dep_name)));
+                            if ((res_id_opt == null)) {
+                                if (dep.behavior.optional) {
+                                    continue;
+                                }
+                                _ = try dependencyResolutionFailure(dep, workspace_name, allocator, lockfile.buffers.string_bytes.items, source, log, root_pkg_exr.loc);
+                                return error.InvalidPackageInfo;
                             }
-                            _ = try dependencyResolutionFailure(dep, workspace_name, allocator, lockfile.buffers.string_bytes.items, source, log, root_pkg_exr.loc);
-                            return error.InvalidPackageInfo;
-})));
+                            const res_id = res_id_opt.?;
                             const seen_gop2 = try seen_deps.getOrPut(allocator, dep_name);
                             if (seen_gop2.found_existing) {
                                 lockfile.buffers.resolutions.items[cp_cast_int(usize, dep_id)] = res_id;
@@ -1700,9 +1737,11 @@ else => {
                 _ = &prop;
                 const key = prop.key.?;
                 const pkg_path = (key.asString(allocator)).?;
-                const pkg_id = ((pkg_map.get(pkg_path)) orelse {
-                return error.InvalidPackagesObject;
-});
+                const pkg_id_opt = pkg_map.get(pkg_path);
+                if ((pkg_id_opt == null)) {
+                    return error.InvalidPackagesObject;
+                }
+                const pkg_id = pkg_id_opt.?;
                 const res = pkg_resolutions[@as(usize, @intCast(pkg_id))];
                 if ((res.tag == .workspace)) {
                     continue;
@@ -1772,10 +1811,11 @@ pub fn parseAppendDependencies(lockfile: *BinaryLockfile, allocator: std.mem.All
             for (cp_iter_slice(optional_peers.data.e_array.items.slice())) |item| {
                 _ = &item;
                 const name_hash_opt = try item.asStringHash(allocator, String.Builder.stringHash);
-                const name_hash = ((name_hash_opt) orelse {
-                _ = try log.addError(source, item.loc, "Expected a string");
-                return error.InvalidPackageInfo;
-});
+                if ((name_hash_opt == null)) {
+                    _ = try log.addError(source, item.loc, "Expected a string");
+                    return error.InvalidPackageInfo;
+                }
+                const name_hash = name_hash_opt.?;
                 _ = try optional_peers_buf.put(allocator, name_hash, undefined);
             }
         }
@@ -1795,22 +1835,28 @@ pub fn parseAppendDependencies(lockfile: *BinaryLockfile, allocator: std.mem.All
                     _ = &prop;
                     const key = prop.key.?;
                     const value = (if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?;
-                    const name_str = ((key.asString(allocator)) orelse {
-                    _ = try log.addError(source, key.loc, "Expected a string");
-                    return error.InvalidDependencyName;
-});
+                    const name_str_opt = key.asString(allocator);
+                    if ((name_str_opt == null)) {
+                        _ = try log.addError(source, key.loc, "Expected a string");
+                        return error.InvalidDependencyName;
+                    }
+                    const name_str = name_str_opt.?;
                     const name_hash = String.Builder.stringHash(name_str);
                     const name = try buf.appendExternalWithHash(name_str, name_hash);
-                    const version_str = ((value.asString(allocator)) orelse {
-                    _ = try log.addError(source, value.loc, "Expected a string");
-                    return error.InvalidDependencyVersion;
-});
+                    const version_str_opt = value.asString(allocator);
+                    if ((version_str_opt == null)) {
+                        _ = try log.addError(source, value.loc, "Expected a string");
+                        return error.InvalidDependencyVersion;
+                    }
+                    const version_str = version_str_opt.?;
                     const version = try buf.append(version_str);
                     const version_sliced = version.sliced(buf.bytes.items);
-                    var dep: Dependency = .{ .name = (if (@typeInfo(@TypeOf(name)) == .@"enum") @intFromEnum(name) else name.value), .name_hash = name.hash, .behavior = (if ((group_behavior.peer and optional_peers_buf.contains(name.hash))) group_behavior.add(.optional) else group_behavior), .version = ((Dependency.parse(allocator, (if (@typeInfo(@TypeOf(name)) == .@"enum") @intFromEnum(name) else name.value), name.hash, version_sliced.slice, (&version_sliced), log, null)) orelse {
-                    _ = try log.addError(source, value.loc, "Invalid dependency version");
-                    return error.InvalidDependencyVersion;
-}) };
+                    const parsed_dep_version = Dependency.parse(allocator, (if (@typeInfo(@TypeOf(name)) == .@"enum") @intFromEnum(name) else name.value), name.hash, version_sliced.slice, (&version_sliced), log, null);
+                    if ((parsed_dep_version == null)) {
+                        _ = try log.addError(source, value.loc, "Invalid dependency version");
+                        return error.InvalidDependencyVersion;
+                    }
+                    var dep: Dependency = .{ .name = (if (@typeInfo(@TypeOf(name)) == .@"enum") @intFromEnum(name) else name.value), .name_hash = name.hash, .behavior = (if ((group_behavior.peer and optional_peers_buf.contains(name.hash))) group_behavior.add(.optional) else group_behavior), .version = parsed_dep_version.? };
                     _ = &dep;
                     if (comptime check_for_bundled) {
                         _ = @memcpy(path_buf[0..pkg_path.len], pkg_path);

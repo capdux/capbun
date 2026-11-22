@@ -507,3 +507,8 @@
 - 完成 `temp/wave58_try_todo.txt` 全部 20 组共 212 个 `.cp` 模块的前缀 `try` -> 后缀 `?` 纯化，全量通过 `scripts/cpc_brief.py -n 4` 四项门禁。
 - 修复 `bun.cp`、`css/values/{image,syntax}.cp`、`jsc/VirtualMachine.cp`、`test_runner/expect*.cp`、`zlib/zlib.cp`、`install/PackageManager/{security_scanner,PackageManagerDirectories}.cp`、`cli/pack_command.cp`、`runtime/webcore/Request.cp` 语义细节后，`bun run zig:check` 5/5 通过，`bun bd test test/regression/issue/29181.test.ts test/js/bun/util/bun-file.test.ts` 8/8 通过（460 expect）。
 - 推导下一阶段 Wave #59：`orelse` -> `??`（`temp/wave59_orelse_todo.txt`，132 个文件），启动 2 路并行子智能体推进。
+
+## [2026-11-23] Wave #59：`orelse` -> `??` 纯化完成与验收
+- 完成 `temp/wave59_orelse_todo.txt` 全部 12 组共 132 个 `.cp` 模块的 `orelse` -> `??` / `== null` + `.?` / `if (v := opt)` 纯化（`return struct/union/enum` 原生 Zig 泛型工厂透传块内部按规范保留），全量通过 `cpc --lib` + `zig ast-check` 与静态零违例门禁。
+- 修复 `src/js_parser_jsc/Macro.cp`（`Bun__startMacro` 参数改为 `*const void` + `@ptrCast(&call)`）与 `src/runtime/webcore/FileSink.cp`（`let stream_file` 规避 `&file` 被误生成为 `*const file`）后，`bun run zig:check` 5/5 通过（21s），`bun bd test test/regression/issue/29181.test.ts test/js/bun/util/bun-file.test.ts` 8/8 通过（460 expect）。
+- 推导下一阶段 Wave #60：`and`/`or` -> `&&`/`||`（`temp/wave60_and_or_todo.txt`，281 个非注释代码文件），启动 2 路并行子智能体推进。

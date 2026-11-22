@@ -84,8 +84,12 @@ pub enum QueryStatus: u8 {
     pub const deref = RefCount.deref;
 
     pub fn getTarget(*_, globalObject: *jsc.JSGlobalObject, clean_target: bool): jsc.JSValue? {
-        const thisValue = this.thisValue.tryGet() orelse return null;
-        const target = js.targetGetCached(thisValue) orelse return null;
+        const thisValue_opt = this.thisValue.tryGet();
+        if (thisValue_opt == null) return null;
+        const thisValue = thisValue_opt.?;
+        const target_opt = js.targetGetCached(thisValue);
+        if (target_opt == null) return null;
+        const target = target_opt.?;
         if (clean_target) {
             js.targetSetCached(thisValue, globalObject, .zero);
         }
@@ -112,10 +116,14 @@ pub enum QueryStatus: u8 {
         const _deref_guard = DerefGuard<PostgresSQLQuery>{ ptr: this };
         * = _deref_guard;
         this.status = .fail;
-        const thisValue = this.thisValue.tryGet() orelse return;
+        const thisValue_opt = this.thisValue.tryGet();
+        if (thisValue_opt == null) return;
+        const thisValue = thisValue_opt.?;
         const _dg_guard = DowngradeGuard<JSRef>{ ptr: &this.thisValue };
         * = _dg_guard;
-        const targetValue = this.getTarget(globalObject, true) orelse return;
+        const targetValue_opt = this.getTarget(globalObject, true);
+        if (targetValue_opt == null) return;
+        const targetValue = targetValue_opt.?;
 
         const vm = jsc.VirtualMachine.get();
         const function = vm.rareData().postgresql_context.onQueryRejectFn.get().?;
@@ -123,7 +131,7 @@ pub enum QueryStatus: u8 {
         const js_err = postgresErrorToJS(globalObject, null, pg_err);
         const cb_args: [3]JSValue = [
             targetValue,
-            js_err.toError() orelse js_err,
+            js_err.toError() ?? js_err,
             queries_array,
         ];
         event_loop.runCallback(function, globalObject, thisValue, &cb_args);
@@ -134,17 +142,21 @@ pub enum QueryStatus: u8 {
         const _deref_guard = DerefGuard<PostgresSQLQuery>{ ptr: this };
         * = _deref_guard;
         this.status = .fail;
-        const thisValue = this.thisValue.tryGet() orelse return;
+        const thisValue_opt = this.thisValue.tryGet();
+        if (thisValue_opt == null) return;
+        const thisValue = thisValue_opt.?;
         const _dg_guard = DowngradeGuard<JSRef>{ ptr: &this.thisValue };
         * = _dg_guard;
-        const targetValue = this.getTarget(globalObject, true) orelse return;
+        const targetValue_opt = this.getTarget(globalObject, true);
+        if (targetValue_opt == null) return;
+        const targetValue = targetValue_opt.?;
 
         let vm = jsc.VirtualMachine.get();
         const function = vm.rareData().postgresql_context.onQueryRejectFn.get().?;
         const event_loop = vm.eventLoop();
         const cb_args: [2]JSValue = [
             targetValue,
-            err_val.toError() orelse err_val,
+            err_val.toError() ?? err_val,
         ];
         event_loop.runCallback(function, globalObject, thisValue, &cb_args);
     }
@@ -166,7 +178,9 @@ pub enum QueryStatus: u8 {
     }
 
     static fn consumePendingValue(thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject): JSValue? {
-        const pending_value = js.pendingValueGetCached(thisValue) orelse return null;
+        const pending_value_opt = js.pendingValueGetCached(thisValue);
+        if (pending_value_opt == null) return null;
+        const pending_value = pending_value_opt.?;
         js.pendingValueSetCached(thisValue, globalObject, .zero);
         return pending_value;
     }
@@ -184,14 +198,18 @@ pub enum QueryStatus: u8 {
         const js_tag = tag.toJSTag(globalObject) catch |e| return this.onJSError(globalObject.takeException(e), globalObject);
         js_tag.ensureStillAlive();
 
-        const thisValue = this.thisValue.tryGet() orelse return;
+        const thisValue_opt = this.thisValue.tryGet();
+        if (thisValue_opt == null) return;
+        const thisValue = thisValue_opt.?;
         defer {
             if (is_last) {
                 allowGC(thisValue, globalObject);
                 this.thisValue.downgrade();
             }
         }
-        const targetValue = this.getTarget(globalObject, is_last) orelse return;
+        const targetValue_opt = this.getTarget(globalObject, is_last);
+        if (targetValue_opt == null) return;
+        const targetValue = targetValue_opt.?;
 
         const vm = jsc.VirtualMachine.get();
         const function = vm.rareData().postgresql_context.onQueryResolveFn.get().?;
@@ -199,10 +217,10 @@ pub enum QueryStatus: u8 {
 
         const cb_args: [6]JSValue = [
             targetValue,
-            consumePendingValue(thisValue, globalObject) orelse .js_undefined,
+            consumePendingValue(thisValue, globalObject) ?? .js_undefined,
             js_tag,
             tag.toJSNumber(),
-            if (connection == .zero) .js_undefined else PostgresSQLConnection.js.queriesGetCached(connection) orelse .js_undefined,
+            if (connection == .zero) .js_undefined else (PostgresSQLConnection.js.queriesGetCached(connection) ?? .js_undefined),
             JSValue.jsBoolean(is_last),
         ];
         event_loop.runCallback(function, globalObject, thisValue, &cb_args);
@@ -223,12 +241,16 @@ pub enum QueryStatus: u8 {
         let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
         const _args_guard = DeinitGuard<jsc.CallFrame.ArgumentsSlice>{ ptr: &args };
         * = _args_guard;
-        const query = args.nextEat() orelse {
+        const query_opt = args.nextEat();
+        if (query_opt == null) {
             return globalThis.throw("query must be a string", .{});
-        };
-        const values = args.nextEat() orelse {
+        }
+        const query = query_opt.?;
+        const values_opt = args.nextEat();
+        if (values_opt == null) {
             return globalThis.throw("values must be an array", .{});
-        };
+        }
+        const values = values_opt.?;
 
         if (!query.isString()) {
             return globalThis.throw("query must be a string", .{});
@@ -237,10 +259,10 @@ pub enum QueryStatus: u8 {
             return globalThis.throw("values must be an array", .{});
         }
 
-        const pending_value: JSValue = args.nextEat() orelse .js_undefined;
-        const columns: JSValue = args.nextEat() orelse .js_undefined;
-        const js_bigint: JSValue = args.nextEat() orelse .false;
-        const js_simple: JSValue = args.nextEat() orelse .false;
+        const pending_value: JSValue = args.nextEat() ?? .js_undefined;
+        const columns: JSValue = args.nextEat() ?? .js_undefined;
+        const js_bigint: JSValue = args.nextEat() ?? .false;
+        const js_simple: JSValue = args.nextEat() ?? .false;
 
         const bigint = js_bigint.isBoolean() && js_bigint.asBoolean();
         const simple = js_simple.isBoolean() && js_simple.asBoolean();
@@ -311,9 +333,11 @@ pub enum QueryStatus: u8 {
 
     pub fn doRun(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
         let arguments = callframe.arguments();
-        let connection = arguments[0].as(PostgresSQLConnection) orelse {
+        const connection_opt = arguments[0].as(PostgresSQLConnection);
+        if (connection_opt == null) {
             return globalObject.throw("connection must be a PostgresSQLConnection", .{});
-        };
+        }
+        let connection = connection_opt.?;
 
         connection.poll_ref.ref(globalObject.bunVM());
         let query = arguments[1];
@@ -323,7 +347,7 @@ pub enum QueryStatus: u8 {
         }
 
         const this_value = callframe.this();
-        const binding_value = js.bindingGetCached(this_value) orelse .zero;
+        const binding_value = js.bindingGetCached(this_value) ?? .zero;
         let query_str = this.query.toUTF8(bun.default_allocator);
         const _qs_guard = DeinitGuard<@TypeOf(query_str)>{ ptr: &query_str };
         * = _qs_guard;
@@ -380,7 +404,7 @@ pub enum QueryStatus: u8 {
             return JSValue.js_undefined;
         }
 
-        const columns_value: JSValue = js.columnsGetCached(this_value) orelse .js_undefined;
+        const columns_value: JSValue = js.columnsGetCached(this_value) ?? .js_undefined;
 
         let signature = Signature.generate(globalObject, query_str.slice(), binding_value, columns_value, connection.prepared_statement_id, connection.flags.use_unnamed_prepared_statements) catch |e| {
             this.deref();

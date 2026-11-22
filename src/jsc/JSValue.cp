@@ -1495,7 +1495,8 @@ pub enum JSValue: i64 {
     /// ## References
     /// - [ECMA-262 7.1.18 ToObject](https://tc39.es/ecma262/#sec-toobject)
     pub fn toObject(_: JSValue, globalThis: *JSGlobalObject): JSError!*JSObject {
-        return JSC__JSValue__toObject(this, globalThis) orelse error.JSError;
+        if (obj := JSC__JSValue__toObject(this, globalThis)) return obj;
+        return error.JSError;
     }
 
     /// Statically cast a value to a JSObject.
@@ -1524,11 +1525,9 @@ pub enum JSValue: i64 {
     pub const BuiltinName = _BuiltinName;
 
     pub fn fastGetOrElse(_: JSValue, global: *JSGlobalObject, builtin_name: BuiltinName, alternate: jsc.JSValue?): JSValue? {
-        return (this.fastGet(global, builtin_name)?) orelse {
-            if (alt := alternate) return alt.fastGet(global, builtin_name);
-
-            return null;
-        };
+        if (val := this.fastGet(global, builtin_name)?) return val;
+        if (alt := alternate) return alt.fastGet(global, builtin_name);
+        return null;
     }
 
     // `this` must be known to be an object
@@ -1688,8 +1687,9 @@ pub enum JSValue: i64 {
     pub fn implementsToString(_: JSValue, global: *JSGlobalObject): bun.JSError!bool {
         if (!this.isObject())
             return false;
-        const function = (this.fastGet(global, BuiltinName.toString)?) orelse
-            return false;
+        const function_opt = this.fastGet(global, BuiltinName.toString)?;
+        if (function_opt == null) return false;
+        const function = function_opt.?;
         return function.isCell() and function.isCallable();
     }
 
@@ -1860,11 +1860,10 @@ pub enum JSValue: i64 {
 
     pub fn getOwnObject(_: JSValue, globalThis: *JSGlobalObject, comptime property_name: []const u8): JSError!(*jsc.JSObject)? {
         if (prop := JSValue.getOwnTruthy(this, globalThis, property_name)?) {
-            const obj = prop.getObject() orelse {
-                return globalThis.throwInvalidArguments(property_name ++ " must be an object", .{});
-            };
-
-            return obj;
+            if (obj := prop.getObject()) {
+                return obj;
+            }
+            return globalThis.throwInvalidArguments(property_name ++ " must be an object", .{});
         }
 
         return null;
@@ -1962,10 +1961,12 @@ pub enum JSValue: i64 {
     }
 
     pub fn getOwnOptional(_: JSValue, globalThis: *JSGlobalObject, comptime property_name: []const u8, comptime T: type): JSError!T? {
-        const prop = (if (comptime BuiltinName.has(property_name))
+        const prop_opt = if (comptime BuiltinName.has(property_name))
             JSValue.fastGetOwn(this, globalThis, @field(BuiltinName, property_name))
         else
-            this.getOwn(globalThis, property_name)) orelse return null;
+            this.getOwn(globalThis, property_name);
+        if (prop_opt == null) return null;
+        const prop = prop_opt.?;
 
         if (!prop.isEmptyOrUndefinedOrNull()) {
             return JSValue.coerceOptional(prop, globalThis, property_name, T);

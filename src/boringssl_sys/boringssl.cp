@@ -20893,7 +20893,7 @@ let empty_u8: [0]u8 = undefined;
     }
 
     static fn init(): !*struct_bio_st {
-        return BIO_new(BIO_s_mem()) orelse error.OutOfMemory;
+        return BIO_new(BIO_s_mem()) ?? error.OutOfMemory;
     }
 
     /// Create a read-only `BIO` using an existing buffer. `buffer` is not
@@ -21300,7 +21300,9 @@ pub extern fn SSL_CTX_set_custom_verify(ctx: (*SSL_CTX)?, mode: c_int, callback:
 
 @opaque pub struct SSL_CTX {
     static fn init(): (*SSL_CTX)? {
-        let ctx = SSL_CTX_new(TLS_with_buffers_method()) orelse return null;
+        const ctx_opt = SSL_CTX_new(TLS_with_buffers_method());
+        if (ctx_opt == null) return null;
+        let ctx = ctx_opt.?;
         ctx.setCustomVerify(noop_custom_verify);
         ctx.setup();
         return ctx;

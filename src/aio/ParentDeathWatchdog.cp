@@ -159,7 +159,7 @@ pub fn killDescendants() {
     let buf: [std.c.pid_t; 4096] = undefined;
     while (to_visit.val.items.len > 0 && to_kill.val.items.len < 4096) {
         const parent = to_visit.val.swapRemove(to_visit.val.items.len - 1);
-        const n = listChildPids(parent, &buf) orelse continue;
+        const n = listChildPids(parent, &buf) ?? continue;
         for (child of buf[0..n]) {
             if (child == self_pid || child <= 1) { continue; }
             if (std.c.kill(child, std.posix.SIG.STOP) != 0) { continue; }
@@ -184,7 +184,7 @@ pub fn killDescendants() {
 
 pub fn snapshotChildren(out: *[]std.c.pid_t): []const std.c.pid_t {
     if (comptime !Environment.isLinux) { return out[0..0]; }
-    return out[0 .. listChildPids(std.c.getpid(), out) orelse 0];
+    return out[0 .. listChildPids(std.c.getpid(), out) ?? 0];
 }
 
 pub fn killSubreaperAdoptees(siblings: []const std.c.pid_t) {
@@ -196,7 +196,9 @@ pub fn killSubreaperAdoptees(siblings: []const std.c.pid_t) {
     let rounds: u8 = 64;
     while (rounds > 0) {
         rounds -= 1;
-        const n = listChildPids(self_pid, &buf) orelse return;
+        const n_opt = listChildPids(self_pid, &buf);
+        if (n_opt == null) return;
+        const n = n_opt.?;
         let killed_any = false;
         for (child of buf[0..n]) {
             if (child <= 1 || child == self_pid) { continue; }
@@ -238,7 +240,7 @@ fn killTreeRootedAt(root: std.c.pid_t, expected_ppid_of_root: std.c.pid_t) {
     let buf: [std.c.pid_t; 4096] = undefined;
     while (to_visit.val.items.len > 0 && to_kill.val.items.len < 4096) {
         const parent = to_visit.val.swapRemove(to_visit.val.items.len - 1);
-        const n = listChildPids(parent, &buf) orelse continue;
+        const n = listChildPids(parent, &buf) ?? continue;
         for (child of buf[0..n]) {
             if (child <= 1) { continue; }
             if (std.c.kill(child, std.posix.SIG.STOP) != 0) { continue; }
@@ -279,12 +281,18 @@ fn parentPidOf(pid: std.c.pid_t): std.c.pid_t? {
         let path_buf: [u8; 64] = undefined;
         const stat_path = std.fmt.bufPrintZ(&path_buf, "/proc/{d}/stat", .{pid}) catch return null;
         let read_buf: [u8; 512] = undefined;
-        const contents = readFileOnce(stat_path, &read_buf) orelse return null;
-        const rparen = std.mem.lastIndexOfScalar(u8, contents, ')') orelse return null;
+        const contents_opt = readFileOnce(stat_path, &read_buf);
+        if (contents_opt == null) return null;
+        const contents = contents_opt.?;
+        const rparen_opt = std.mem.lastIndexOfScalar(u8, contents, ')');
+        if (rparen_opt == null) return null;
+        const rparen = rparen_opt.?;
         const rest = std.mem.trimLeft(u8, contents[rparen + 1 ..], " ");
         let it = std.mem.splitScalar(u8, rest, ' ');
         * = it.next(); // state
-        const ppid_str = it.next() orelse return null;
+        const ppid_str_opt = it.next();
+        if (ppid_str_opt == null) return null;
+        const ppid_str = ppid_str_opt.?;
         return std.fmt.parseInt(std.c.pid_t, ppid_str, 10) catch null;
     }
 
@@ -319,7 +327,7 @@ fn listChildPids(parent: std.c.pid_t, out: *[]std.c.pid_t): usize? {
                 .{ parent, entry.name },
             ) catch continue;
             let read_buf: [u8; 4096] = undefined;
-            const contents = readFileOnce(child_path, &read_buf) orelse continue;
+            const contents = readFileOnce(child_path, &read_buf) ?? continue;
             let tok = std.mem.tokenizeScalar(u8, contents, ' ');
             while (pid_str := tok.next()) {
                 if (written >= out.len) { break; }

@@ -69,10 +69,10 @@ pub enum AsciiStatus {
     non_ascii,
 
     static fn fromBool(is_all_ascii: bool?): AsciiStatus {
-        return if (is_all_ascii orelse return .unknown)
-            .all_ascii
-        else
-            .non_ascii;
+        if (v := is_all_ascii) {
+            return if (v) .all_ascii else .non_ascii;
+        }
+        return .unknown;
     }
 }
 
@@ -151,7 +151,9 @@ pub fn indexOfAnyT(comptime T: type, str: []const T, comptime chars: auto): Opti
 pub fn containsComptime(client: string, comptime str: string): bool {
     if (comptime str.len == 0) @compileError("Don't call this with an empty string plz.");
 
-    const start = std.mem.indexOfScalar(u8, client, str[0]) orelse return false;
+    const start_opt = std.mem.indexOfScalar(u8, client, str[0]);
+    if (start_opt == null) return false;
+    const start = start_opt.?;
     let remain = client[start..];
     const Int = std.@"meta".Int(.unsigned, str.len * 8);
 
@@ -160,7 +162,9 @@ pub fn containsComptime(client: string, comptime str: string): bool {
             return true;
         }
 
-        const next_start = std.mem.indexOfScalar(u8, remain[1..], str[0]) orelse return false;
+        const next_start_opt = std.mem.indexOfScalar(u8, remain[1..], str[0]);
+        if (next_start_opt == null) return false;
+        const next_start = next_start_opt.?;
         remain = remain[1 + next_start ..];
     }
 
@@ -334,7 +338,7 @@ fn startsWithRedactedItem(text: string, comptime item: string): TextRange? {
 
     // `null` is not returned after this point. Redact to the next
     // newline if anything is unexpected
-    if (cont) return TextRange{ offset: offset, len: (indexOfChar(text[offset..], '\n') orelse text[offset..].len) };
+    if (cont) return TextRange{ offset: offset, len: (indexOfChar(text[offset..], '\n') ?? text[offset..].len) };
     offset += 1;
 
     let end = offset;
@@ -401,7 +405,9 @@ pub fn findUrlPassword(text: string): TextRange? {
     let remain = text[offset..];
     const end = indexOfChar(remain, '\n') ?? remain.len;
     remain = remain[0..end];
-    const at = indexOfChar(remain, '@') orelse return null;
+    const at_opt = indexOfChar(remain, '@');
+    if (at_opt == null) return null;
+    const at = at_opt.?;
     const colon = indexOfCharNeg(remain[0..at], ':');
     if (colon == -1 || colon == at - 1) return null;
     offset += @as(usize, @intCast(colon + 1));
@@ -462,7 +468,9 @@ pub fn indexOfCharNeg(client: string, char: u8): i32 {
 }
 
 pub fn indexOfSigned(client: string, str: string): i32 {
-    const i = std.mem.indexOf(u8, client, str) orelse return -1;
+    const i_opt = std.mem.indexOf(u8, client, str);
+    if (i_opt == null) return -1;
+    const i = i_opt.?;
     return @as(i32, i32(i));
 }
 
@@ -477,7 +485,9 @@ pub fn lastIndexOfChar(str: []const u8, char: u8): usize? {
         if (@inComptime()) {
             return lastIndexOfCharT(u8, str, char);
         }
-        const start = bun.c.memrchr(str.ptr, char, str.len) orelse return null;
+        const start_opt = bun.c.memrchr(str.ptr, char, str.len);
+        if (start_opt == null) return null;
+        const start = start_opt.?;
         const i = unsafe { @intFromPtr(start) - @intFromPtr(str.ptr) };
         return i;
     }
@@ -513,7 +523,9 @@ pub fn indexOf(client: string, str: string): usize? {
     if (str_len == 1)
         return indexOfCharUsize(client, str_ptr[0]);
 
-    const start = memmem(self_ptr, self_len, str_ptr, str_len) orelse return null;
+    const start_opt = memmem(self_ptr, self_len, str_ptr, str_len);
+    if (start_opt == null) return null;
+    const start = start_opt.?;
 
     const i = unsafe { @intFromPtr(start) - @intFromPtr(self_ptr) };
     bun.unsafeAssert(i < self_len);
@@ -549,7 +561,9 @@ pub struct SplitIterator {
 
     /// Returns a slice of the next field, or null if splitting is complete.
     fn next(*_): ([]const u8)? {
-        const start = _.index orelse return null;
+        const start_opt = _.index;
+        if (start_opt == null) return null;
+        const start = start_opt.?;
         let end: usize = 0;
         if (delim_start := indexOf(_.buffer[start..], _.delimiter)) {
             const del = delim_start + start;
@@ -1248,7 +1262,9 @@ pub fn indexOfSpaceOrNewlineOrNonASCII(slice_: []const u8, offset: u32): u32? {
         return offset;
     }
 
-    const i = bun.highway.indexOfSpaceOrNewlineOrNonASCII(remaining) orelse return null;
+    const i_opt = bun.highway.indexOfSpaceOrNewlineOrNonASCII(remaining);
+    if (i_opt == null) return null;
+    const i = i_opt.?;
     return @as(u32, @truncate(i)) + offset;
 }
 
@@ -1266,7 +1282,9 @@ pub fn indexOfNewlineOrNonASCIICheckStart(slice_: []const u8, offset: u32, compt
         }
     }
 
-    const i = bun.highway.indexOfNewlineOrNonASCII(remaining) orelse return null;
+    const i_opt = bun.highway.indexOfNewlineOrNonASCII(remaining);
+    if (i_opt == null) return null;
+    const i = i_opt.?;
     return @as(u32, @truncate(i)) + offset;
 }
 
@@ -1367,11 +1385,15 @@ pub fn indexOfNeedsURLEncode(slice: []const u8): u32? {
 }
 
 pub fn indexOfCharZ(sliceZ: [:0]const u8, char: u8): u63? {
-    return @truncate(bun.highway.indexOfChar(sliceZ, char) orelse return null);
+    const idx = bun.highway.indexOfChar(sliceZ, char);
+    if (idx == null) return null;
+    return @truncate(idx.?);
 }
 
 pub fn indexOfChar(slice: []const u8, char: u8): u32? {
-    return @as(u32, @truncate(indexOfCharUsize(slice, char) orelse return null));
+    const idx = indexOfCharUsize(slice, char);
+    if (idx == null) return null;
+    return @as(u32, @truncate(idx.?));
 }
 
 pub fn indexOfCharUsize(slice: []const u8, char: u8): usize? {
@@ -1389,7 +1411,9 @@ pub fn indexOfCharPos(slice: []const u8, char: u8, start_index: usize): usize? {
 
     if (start_index >= slice.len) return null;
 
-    const result = bun.highway.indexOfChar(slice[start_index..], char) orelse return null;
+    const result_opt = bun.highway.indexOfChar(slice[start_index..], char);
+    if (result_opt == null) return null;
+    const result = result_opt.?;
     bun.debugAssert(slice.len > result + start_index);
     return result + start_index;
 }
@@ -1633,7 +1657,8 @@ pub fn indexOfLineRanges(text: []const u8, target_line: u32, comptime line_range
     let ranges: bun.BoundedArray(LineRange, line_range_count) = .{};
 
     let current_line: u32 = 0;
-    const first_newline_or_nonascii_i = strings.indexOfNewlineOrNonASCIICheckStart(text, 0, true) orelse {
+    const first_opt = strings.indexOfNewlineOrNonASCIICheckStart(text, 0, true);
+    if (first_opt == null) {
         if (target_line == 0) {
             ranges.appendAssumeCapacity({
                 start: 0,
@@ -1642,7 +1667,8 @@ pub fn indexOfLineRanges(text: []const u8, target_line: u32, comptime line_range
         }
 
         return ranges;
-    };
+    }
+    const first_newline_or_nonascii_i = first_opt.?;
 
     let iter = CodepointIterator.initOffset(text, 0);
     let cursor = CodepointIterator.Cursor{
@@ -2456,7 +2482,8 @@ type string = []const u8;
     /// Returns the next slice of non-ANSI text, or null when done.
     fn next(*_): ([]const u8)? {
         if (Bun__ANSI__next(_)) {
-            return unsafe { (_.slice_ptr orelse return null)[0.._.slice_len] };
+            if (_.slice_ptr == null) return null;
+            return unsafe { _.slice_ptr.?[0.._.slice_len] };
         }
         return null;
     }

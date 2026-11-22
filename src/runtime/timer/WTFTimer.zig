@@ -138,7 +138,14 @@ pub export fn WTFTimer__deinit(timer: *WTFTimer) callconv(.c) void {
 }
 
 pub export fn WTFTimer__isActive(timer: *const WTFTimer) callconv(.c) bool {
-        return ((timer.event_loop_timer.state == .ACTIVE) or (((timer.imminent.load(.seq_cst)) orelse { return false; }) == timer));
+        if ((timer.event_loop_timer.state == .ACTIVE)) {
+            return true;
+        }
+        const imminent_opt = timer.imminent.load(.seq_cst);
+        if ((imminent_opt == null)) {
+            return false;
+        }
+        return (imminent_opt.? == timer);
 }
 
 pub export fn WTFTimer__cancel(timer: *WTFTimer) callconv(.c) void {

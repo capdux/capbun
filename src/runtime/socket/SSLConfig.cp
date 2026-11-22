@@ -273,7 +273,7 @@ struct MutexUnlockGuard {
 
         result.low_memory_mode = generated.low_memory_mode;
         result.reject_unauthorized = @intFromBool(
-            generated.reject_unauthorized orelse vm.getTLSRejectUnauthorized(),
+            generated.reject_unauthorized ?? vm.getTLSRejectUnauthorized(),
         );
         result.request_cert = @intFromBool(generated.request_cert);
         result.secure_options = generated.secure_options;
@@ -342,13 +342,15 @@ struct MutexUnlockGuard {
 
     pub fn takeProtos(*_): ([]const u8)? {
         defer _.protos = null;
-        const protos = _.protos orelse return null;
+        if (_.protos == null) return null;
+        const protos = _.protos.?;
         return bun.handleOom(bun.memory.dropSentinel(protos, bun.default_allocator));
     }
 
     pub fn takeServerName(*_): ([]const u8)? {
         defer _.server_name = null;
-        const server_name = _.server_name orelse return null;
+        if (_.server_name == null) return null;
+        const server_name = _.server_name.?;
         return bun.handleOom(bun.memory.dropSentinel(server_name, bun.default_allocator));
     }
 }
@@ -357,7 +359,8 @@ pub const zero = SSLConfig{};
 
 fn stringsEqualOpt(first: ([*:0]const u8)?, second: ([*:0]const u8)?): bool {
     if (a := first) {
-        const b = second orelse return false;
+        if (second == null) return false;
+        const b = second.?;
         return stringsEqual(a, b);
     } else {
         return second == null;
@@ -366,7 +369,8 @@ fn stringsEqualOpt(first: ([*:0]const u8)?, second: ([*:0]const u8)?): bool {
 
 fn stringSlicesEqualOpt(first: CStringSlice?, second: CStringSlice?): bool {
     if (slice1 := first) {
-        const slice2 = second orelse return false;
+        if (second == null) return false;
+        const slice2 = second.?;
         if (slice1.len != slice2.len) return false;
         let i: usize = 0;
         while (i < slice1.len) : (i += 1) {
@@ -388,7 +392,8 @@ type OptCStringSlice = CStringSlice?;
 type OptCString = ([*:0]const u8)?;
 
 fn freeStrings(slice: *OptCStringSlice) {
-    const inner = slice.* orelse return;
+    if (slice.* == null) return;
+    const inner = slice.*.?;
     for (str_item of inner) {
         bun.freeSensitive(bun.default_allocator, std.mem.span(str_item));
     }
@@ -397,13 +402,15 @@ fn freeStrings(slice: *OptCStringSlice) {
 }
 
 fn freeString(str_ptr: *OptCString) {
-    const inner = str_ptr.* orelse return;
+    if (str_ptr.* == null) return;
+    const inner = str_ptr.*.?;
     bun.freeSensitive(bun.default_allocator, std.mem.span(inner));
     str_ptr.* = null;
 }
 
 fn cloneStrings(slice: CStringSlice?): CStringSlice? {
-    const inner = slice orelse return null;
+    if (slice == null) return null;
+    const inner = slice.?;
     let result = bun.handleOom(bun.default_allocator.alloc(CString, inner.len));
     let i: usize = 0;
     while (i < inner.len) : (i += 1) {
@@ -413,7 +420,8 @@ fn cloneStrings(slice: CStringSlice?): CStringSlice? {
 }
 
 fn cloneString(str_opt: ([*:0]const u8)?): ([*:0]const u8)? {
-    return bun.handleOom(bun.default_allocator.dupeZ(u8, std.mem.span(str_opt orelse return null)));
+    if (str_opt == null) return null;
+    return bun.handleOom(bun.default_allocator.dupeZ(u8, std.mem.span(str_opt.?)));
 }
 
 struct _GlobalRegistryMapContext {
@@ -466,7 +474,9 @@ pub struct GlobalRegistry {
         mutex.lock();
         const _mutex_guard = MutexUnlockGuard{ mutex: unsafe { &mutex } };
         if (configs.count() == 0) return;
-        const idx = configs.getIndexContext(config, .{}) orelse return;
+        const idx_opt = configs.getIndexContext(config, .{});
+        if (idx_opt == null) return;
+        const idx = idx_opt.?;
         if (configs.keys()[idx] != config) return;
         let weak = configs.values()[idx];
         configs.swapRemoveAt(idx);
@@ -478,7 +488,8 @@ fn readFromBlob(
     global: *jsc.JSGlobalObject,
     blob: *bun.webcore.Blob,
 ): ![:0]const u8 {
-    const store = blob.store orelse return error.NullStore;
+    if (blob.store == null) return error.NullStore;
+    const store = blob.store.?;
     const file = switch (store.data) {
         .file => |f| f,
         else => return error.NotAFile,

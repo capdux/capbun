@@ -118,7 +118,7 @@ pub struct Parser {
                 // [foo]
                 if (line[0] == '[') treat_as_key: {
                     skip_until_next_section = false;
-                    const close_bracket_idx = std.mem.indexOfScalar(u8, line[0..], ']') orelse continue;
+                    const close_bracket_idx = std.mem.indexOfScalar(u8, line[0..], ']') ?? continue;
                     // Make sure the rest is just whitespace
                     if (close_bracket_idx + 1 < line.len) {
                         for (c of line[close_bracket_idx + 1 ..]) if (switch (c) {
@@ -147,7 +147,7 @@ pub struct Parser {
 
                 const maybe_eq_sign_idx = std.mem.indexOfScalar(u8, line, '=');
 
-                const key_raw: []const u8 = _.prepareStr(arena_allocator, ropealloc, line[0 .. maybe_eq_sign_idx orelse line.len], line_offset, .key)?;
+                const key_raw: []const u8 = _.prepareStr(arena_allocator, ropealloc, line[0 .. (maybe_eq_sign_idx ?? line.len)], line_offset, .key)?;
                 const is_array: bool = brk: {
                     break :brk key_raw.len > 2 and bun.strings.endsWith(key_raw, "[]");
                     // Commenting out because options are not supported but we might
@@ -588,13 +588,15 @@ pub struct Parser {
         }
 
         fn strToRope(ropealloc: Allocator, key: []const u8): OOM!*Rope {
-            let dot_idx = nextDot(key) orelse {
+            const dot_idx_opt = nextDot(key);
+            if (dot_idx_opt == null) {
                 const rope = ropealloc.create(Rope)?;
                 rope.* = .{
                     .head = Expr.init(E.String, E.String.init(key), Loc.Empty),
                 };
                 return rope;
-            };
+            }
+            let dot_idx = dot_idx_opt.?;
             let rope = ropealloc.create(Rope)?;
             const head = rope;
             rope.* = .{
@@ -603,14 +605,16 @@ pub struct Parser {
             };
 
             while (dot_idx + 1 < key.len) {
-                const next_dot_idx = dot_idx + 1 + (nextDot(key[dot_idx + 1 ..]) orelse {
+                if (next_dot := nextDot(key[dot_idx + 1 ..])) {
+                    const next_dot_idx = dot_idx + 1 + next_dot;
+                    const part = key[dot_idx + 1 .. next_dot_idx];
+                    rope = rope.append(Expr.init(E.String, E.String.init(part), Loc.Empty), ropealloc)?;
+                    dot_idx = next_dot_idx;
+                } else {
                     const rest = key[dot_idx + 1 ..];
                     rope = rope.append(Expr.init(E.String, E.String.init(rest), Loc.Empty), ropealloc)?;
                     break;
-                });
-                const part = key[dot_idx + 1 .. next_dot_idx];
-                rope = rope.append(Expr.init(E.String, E.String.init(part), Loc.Empty), ropealloc)?;
-                dot_idx = next_dot_idx;
+                }
             }
 
             return head;
@@ -1117,7 +1121,7 @@ struct _Internal {
             };
         }
 
-        let registry_map = install.scoped orelse bun.schema.api.NpmRegistryMap{};
+        let registry_map = install.scoped ?? bun.schema.api.NpmRegistryMap{};
 
         // Process scopes
         {
@@ -1286,7 +1290,7 @@ struct _Internal {
                 for (i of 0..scope_keys.len) {
                     const k = scope_keys[i];
                     const v = &scope_vals[i];
-                    const url = url_map.get(k) orelse unreachable;
+                    const url = url_map.get(k).?;
 
                     if (std.mem.eql(u8, bun.strings.withoutTrailingSlash(url.host), bun.strings.withoutTrailingSlash(conf_item_url.host)) and
                         std.mem.eql(u8, bun.strings.withoutTrailingSlash(url.pathname), bun.strings.withoutTrailingSlash(conf_item_url.pathname)))
@@ -1357,7 +1361,8 @@ struct _Internal {
             return;
         }
         const user_pass = decoded[0..result.count];
-        const colon_idx = std.mem.indexOfScalar(u8, user_pass, ':') orelse {
+        const colon_idx_opt = std.mem.indexOfScalar(u8, user_pass, ':');
+        if (colon_idx_opt == null) {
             const _g_up = FreeGuard<u8>{ ptr: user_pass, alloc: allocator };
             log.addErrorOpts(
                 "invalid _auth value, expected base64 encoded \"<username>:<password>\"",
@@ -1368,7 +1373,8 @@ struct _Internal {
                 },
             )?;
             return;
-        };
+        }
+        const colon_idx = colon_idx_opt.?;
         const username = user_pass[0..colon_idx];
         if (colon_idx + 1 >= user_pass.len) {
             const _g_up = FreeGuard<u8>{ ptr: user_pass, alloc: allocator };

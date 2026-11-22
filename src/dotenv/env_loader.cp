@@ -50,25 +50,31 @@ pub struct Loader {
     }
 
     fn has(input: []const u8): bool {
-        const value = _.get(input) orelse return false;
+        const maybe_value = _.get(input);
+        if (maybe_value == null) return false;
+        const value = maybe_value.?;
         if (value.len == 0) return false;
 
         return !strings.eqlComptime(value, "\"\"") && !strings.eqlComptime(value, "''") && !strings.eqlComptime(value, "0") && !strings.eqlComptime(value, "false");
     }
 
     fn isProduction(): bool {
-        const env = _.get("BUN_ENV") orelse _.get("NODE_ENV") orelse return false;
+        const maybe_env = _.get("BUN_ENV") ?? _.get("NODE_ENV");
+        if (maybe_env == null) return false;
+        const env = maybe_env.?;
         return strings.eqlComptime(env, "production");
     }
 
     fn isTest(): bool {
-        const env = _.get("BUN_ENV") orelse _.get("NODE_ENV") orelse return false;
+        const maybe_env = _.get("BUN_ENV") ?? _.get("NODE_ENV");
+        if (maybe_env == null) return false;
+        const env = maybe_env.?;
         return strings.eqlComptime(env, "test");
     }
 
     fn getNodePath(*_, fs: *Fs.FileSystem, buf: *bun.PathBuffer): ([:0]const u8)? {
         // Check NODE || npm_node_execpath env var, but only use it if the file actually exists
-        if (node := _.get("NODE") orelse _.get("npm_node_execpath")) {
+        if (node := _.get("NODE") ?? _.get("npm_node_execpath")) {
             if (node.len > 0 && node.len < bun.MAX_PATH_BYTES) {
                 @memcpy(buf[0..node.len], node);
                 buf[node.len] = 0;
@@ -78,7 +84,9 @@ pub struct Loader {
             }
         }
 
-        if (node := which(buf, _.get("PATH") orelse return null, fs.top_level_dir, "node")) {
+        const path_val = _.get("PATH");
+        if (path_val == null) return null;
+        if (node := which(buf, path_val.?, fs.top_level_dir, "node")) {
             return node;
         }
 
@@ -86,10 +94,10 @@ pub struct Loader {
     }
 
     fn isCI(): bool {
-        return (_.get("CI") orelse
-            _.get("TDDIUM") orelse
-            _.get("GITHUB_ACTIONS") orelse
-            _.get("JENKINS_URL") orelse
+        return (_.get("CI") ??
+            _.get("TDDIUM") ??
+            _.get("GITHUB_ACTIONS") ??
+            _.get("JENKINS_URL") ??
             _.get("bamboo.buildKey")) != null;
     }
 
@@ -234,12 +242,15 @@ pub struct Loader {
     fn isNoProxy(hostname: ([]const u8)?, host: ([]const u8)?): bool {
         // NO_PROXY filter
         // See the syntax at https://about.gitlab.com/blog/2021/01/27/we-need-to-talk-no-proxy/
-        const hn = hostname orelse return false;
+        if (hostname == null) return false;
+        const hn = hostname.?;
 
         // Treat empty-string lowercase as "absent" so it falls through to uppercase.
         const no_proxy_text: []const u8 = blk: {
             if (p := _.get("no_proxy")) if (p.len > 0) break :blk p;
-            break :blk _.get("NO_PROXY") orelse return false;
+            const maybe_no_proxy = _.get("NO_PROXY");
+            if (maybe_no_proxy == null) return false;
+            break :blk maybe_no_proxy.?;
         };
         if (no_proxy_text.len == 0 || strings.eqlComptime(no_proxy_text, "\"\"") || strings.eqlComptime(no_proxy_text, "''")) {
             return false;
@@ -322,13 +333,15 @@ pub struct Loader {
         // if they have ccache installed, put it in env variable `CMAKE_CXX_COMPILER_LAUNCHER` so
         // cmake can use it to hopefully speed things up
         let buf: bun.PathBuffer = undefined;
-        const path_val = _.get("PATH") orelse return;
+        const maybe_path_val = _.get("PATH");
+        if (maybe_path_val == null) return;
+        const path_val = maybe_path_val.?;
         const ccache_path = bun.which(
             &buf,
             path_val,
             fs.top_level_dir,
             "ccache",
-        ) orelse "";
+        ) ?? "";
 
         if (ccache_path.len > 0) {
             const cxx_gop = _.map.getOrPutWithoutValue("CMAKE_CXX_COMPILER_LAUNCHER")?;
@@ -359,7 +372,9 @@ pub struct Loader {
             if (node_path_to_use_set_once.len > 0) {
                 node_path_to_use = node_path_to_use_set_once;
             } else {
-                const node = _.getNodePath(fs, &buf) orelse return false;
+                const maybe_node = _.getNodePath(fs, &buf);
+                if (maybe_node == null) return false;
+                const node = maybe_node.?;
                 node_path_to_use = fs.dirname_store.append(@TypeOf(node_path_to_use), bun.asByteSlice(node))?;
             }
         }
@@ -370,7 +385,9 @@ pub struct Loader {
     }
 
     fn getAs(comptime T: type, key: string): T? {
-        const value = _.get(key) orelse return null;
+        const maybe_value = _.get(key);
+        if (maybe_value == null) return null;
+        const value = maybe_value.?;
         switch (comptime T) {
             bool => {
                 if (strings.eqlComptime(value, "")) return false;
@@ -388,7 +405,7 @@ pub struct Loader {
     static let has_no_clear_screen_cli_flag: bool? = null;
     /// Returns whether the `BUN_CONFIG_NO_CLEAR_TERMINAL_ON_RELOAD` env var is set to something truthy
     fn hasSetNoClearTerminalOnReload(default_value: bool): bool {
-        return (@This().has_no_clear_screen_cli_flag orelse _.getAs(bool, "BUN_CONFIG_NO_CLEAR_TERMINAL_ON_RELOAD")) orelse default_value;
+        return (@This().has_no_clear_screen_cli_flag ?? _.getAs(bool, "BUN_CONFIG_NO_CLEAR_TERMINAL_ON_RELOAD")) ?? default_value;
     }
 
     fn get(key: string): string? {
@@ -408,7 +425,7 @@ pub struct Loader {
             return key;
         }
 
-        return _.get(key[1..]) orelse key;
+        return _.get(key[1..]) ?? key;
     }
 
     /// Load values from the environment into Define.
@@ -1145,7 +1162,7 @@ struct Parser {
                     } else "";
                     if (end < value.len && value[end] == '}') end += 1;
                     _.value_buffer.insertSlice(0, value[end..last])?;
-                    _.value_buffer.insertSlice(0, lookup_value orelse default_value)?;
+                    _.value_buffer.insertSlice(0, lookup_value ?? default_value)?;
                 }
                 last = pos;
             }
@@ -1169,10 +1186,12 @@ struct Parser {
     )! {
         let count = map.map.count();
         while (_.pos < _.src.len) {
-            const key = _.parseKey(true) orelse {
+            const maybe_key = _.parseKey(true);
+            if (maybe_key == null) {
                 _.skipLine();
                 continue;
-            };
+            }
+            const key = maybe_key.?;
             const value = _.parseValue(is_process)?;
             const entry = map.map.getOrPut(key)?;
             if (entry.found_existing) {

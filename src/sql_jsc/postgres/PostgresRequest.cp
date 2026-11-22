@@ -105,7 +105,7 @@ pub fn writeBind(
             continue;
         }
         if (comptime bun.Environment.enable_logs) {
-            debug("  -> {s}", .{tag.tagName() orelse "(unknown)"});
+            debug("  -> {s}", .{tag.tagName() ?? "(unknown)"});
         }
 
         switch (if (tag.isBinaryFormatSupported() && value.isString()) .text else tag) {

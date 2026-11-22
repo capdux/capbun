@@ -38,7 +38,7 @@ const JavaScript = bun.jsc;
 const jsc = bun.jsc;
 const js = bun.jsc.C;
 
-extern fn Bun__startMacro(function: const *!, arg1: *!) ;
+extern fn Bun__startMacro(function: *const void, arg1: *!) ;
 
 struct DeinitGuard<T> {
     ptr: *T!? = null,
@@ -282,7 +282,7 @@ export struct RunnerRun {
             .String => this.coerce(value, .String),
             .Promise => this.coerce(value, .Promise),
             else => brk: {
-                const name = value.getClassInfoName() orelse "unknown";
+                const name = value.getClassInfoName() ?? "unknown";
 
                 this.log.addErrorFmt(
                     this.source,
@@ -403,7 +403,7 @@ export struct RunnerRun {
                     _entry.value_ptr.* = expr;
                 }
 
-                const obj = value.getObject() orelse unreachable;
+                const obj = value.getObject().?;
                 const IterType = jsc.JSPropertyIterator({
                     skip_empty_name: false,
                     include_value: true,
@@ -459,7 +459,7 @@ export struct RunnerRun {
                     return cached;
                 }
 
-                const promise = value.asAnyPromise() orelse @panic("Unexpected promise type");
+                const promise = value.asAnyPromise() ?? @panic("Unexpected promise type");
 
                 this.@"macro".vm.waitForPromise(promise);
 
@@ -506,7 +506,7 @@ struct RunnerCallData {
         RunnerCallData.call_args = args;
         const vm_instance: *jsc.VirtualMachine = jsc.VirtualMachine.get();
         unsafe {
-            Bun__startMacro(&call, vm_instance.global);
+            Bun__startMacro(@ptrCast(&call), vm_instance.global);
         }
         return RunnerCallData.result;
     }

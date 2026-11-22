@@ -396,8 +396,15 @@ pub const Expect = struct {
     custom_label: bun.String = bun.String.empty,
 
 pub fn incrementExpectCallCounter(self: *Expect) void {
-            const parent = ((self.parent) orelse { return; });
-            var buntest_strong = DeinitGuard(bun.jsc.Jest.bun_test.BunTestPtr){ .val = ((parent.bunTest()) orelse { return; }) };
+            if ((self.parent == null)) {
+                return;
+            }
+            const parent = self.parent.?;
+            const buntest_opt = parent.bunTest();
+            if ((buntest_opt == null)) {
+                return;
+            }
+            var buntest_strong = DeinitGuard(bun.jsc.Jest.bun_test.BunTestPtr){ .val = buntest_opt.? };
             _ = &buntest_strong;
             var __buntest_strong_moved = false; _ = &__buntest_strong_moved;
             defer if (!__buntest_strong_moved) { __buntest_strong_moved = true; const __T = @TypeOf(buntest_strong); if (@typeInfo(__T) == .optional) { if (buntest_strong) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { buntest_strong.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = buntest_strong; _drop_val.__cp_deinit(); } };
@@ -414,7 +421,11 @@ pub fn incrementExpectCallCounter(self: *Expect) void {
     }
 
 pub fn bunTest(self: *Expect) ?bun.jsc.Jest.bun_test.BunTestPtr {
-            const parent = ((self.parent) orelse { return null; });
+            const parent_opt = self.parent;
+            if ((parent_opt == null)) {
+                return null;
+            }
+            const parent = parent_opt.?;
             return parent.bunTest();
     }
 
@@ -649,13 +660,25 @@ pub fn readFlagsAndProcessPromise(instanceValue: JSValue, globalThis: *JSGlobalO
     }
 
 pub fn getSnapshotName(self: *Expect, allocator: std.mem.Allocator, hint: []const u8) ![]const u8 {
-            const parent = ((self.parent) orelse { return error.NoTest; });
-            var buntest_strong = DeinitGuard(bun.jsc.Jest.bun_test.BunTestPtr){ .val = ((parent.bunTest()) orelse { return error.TestNotActive; }) };
+            const parent_opt = self.parent;
+            if ((parent_opt == null)) {
+                return error.NoTest;
+            }
+            const parent = parent_opt.?;
+            const buntest_opt = parent.bunTest();
+            if ((buntest_opt == null)) {
+                return error.TestNotActive;
+            }
+            var buntest_strong = DeinitGuard(bun.jsc.Jest.bun_test.BunTestPtr){ .val = buntest_opt.? };
             _ = &buntest_strong;
             var __buntest_strong_moved = false; _ = &__buntest_strong_moved;
             defer if (!__buntest_strong_moved) { __buntest_strong_moved = true; const __T = @TypeOf(buntest_strong); if (@typeInfo(__T) == .optional) { if (buntest_strong) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { buntest_strong.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = buntest_strong; _drop_val.__cp_deinit(); } };
             const buntest = buntest_strong.val.get();
-            const execution_entry = ((parent.phase.entry(buntest)) orelse { return error.SnapshotInConcurrentGroup; });
+            const execution_entry_opt = parent.phase.entry(buntest);
+            if ((execution_entry_opt == null)) {
+                return error.SnapshotInConcurrentGroup;
+            }
+            const execution_entry = execution_entry_opt.?;
             const test_name = (((if (@typeInfo(@TypeOf(execution_entry.base)) == .@"enum" or @typeInfo(@TypeOf(execution_entry.base)) == .@"union") @tagName(execution_entry.base) else execution_entry.base.name)) orelse ("(unnamed)"));
             var length: usize = 0;
             _ = &length;
@@ -924,7 +947,10 @@ pub fn fnToErrStringOrUndefined(self: *Expect, globalThis: *JSGlobalObject, valu
             const err_pair = try self.getValueAsToThrow(globalThis, value);
             const err_value = err_pair[0];
             _ = err_pair[1];
-            var err_value_res = ((err_value) orelse { return null; });
+            if ((err_value == null)) {
+                return null;
+            }
+            var err_value_res = err_value.?;
             _ = &err_value_res;
             if (err_value_res.isAnyError()) {
                 const message: JSValue = ((try err_value_res.getTruthyComptime(globalThis, "message")) orelse (.js_undefined));
@@ -942,7 +968,11 @@ pub fn trimLeadingWhitespaceForInlineSnapshot(str_in: []const u8, trimmed_buf: [
             var dst = trimmed_buf[0..];
             _ = &dst;
             const give_up_1: TrimResult = .{ .trimmed = str_in, .start_indent = null, .end_indent = null };
-            const first_newline = ((std.mem.indexOf(u8, src, "\n")) orelse { return give_up_1; });
+            const first_newline_opt = std.mem.indexOf(u8, src, "\n");
+            if ((first_newline_opt == null)) {
+                return give_up_1;
+            }
+            const first_newline = first_newline_opt.?;
             for (cp_iter_slice(src[0..first_newline])) |char| {
                 _ = &char;
                 if (((char != 32) and (char != 9))) {
@@ -970,7 +1000,11 @@ pub fn trimLeadingWhitespaceForInlineSnapshot(str_in: []const u8, trimmed_buf: [
             dst[cp_cast_int(usize, 0)] = 10;
             dst = dst[1..];
             src = src[indent_len..];
-            const second_newline = (((std.mem.indexOf(u8, src, "\n")) orelse { return give_up_2; }) + 1);
+            const second_newline_opt = std.mem.indexOf(u8, src, "\n");
+            if ((second_newline_opt == null)) {
+                return give_up_2;
+            }
+            const second_newline = (second_newline_opt.? + 1);
             _ = @memcpy(dst[0..second_newline], src[0..second_newline]);
             src = src[second_newline..];
             dst = dst[second_newline..];
@@ -1020,7 +1054,11 @@ pub fn trimLeadingWhitespaceForInlineSnapshot(str_in: []const u8, trimmed_buf: [
                     dst = dst[line_newline..];
                 }
             }
-            const last_nl = ((std.mem.lastIndexOfScalar(u8, str_in, 10)) orelse { return give_up_2; });
+            const last_nl_opt = std.mem.lastIndexOfScalar(u8, str_in, 10);
+            if ((last_nl_opt == null)) {
+                return give_up_2;
+            }
+            const last_nl = last_nl_opt.?;
             const end_indent = (last_nl + 1);
             for (cp_iter_slice(str_in[end_indent..])) |c| {
                 _ = &c;
@@ -2016,11 +2054,19 @@ pub fn maybeClear(comptime dontThrow: bool, globalThis: *JSGlobalObject, e: bun.
 pub fn customPrint(self: *ExpectCustomAsymmetricMatcher, thisValue: JSValue, globalThis: *JSGlobalObject, writer: anytype, comptime dontThrow: bool) !bool {
             const self_ref = self;
             _ = &self_ref;
-            const matcher_fn: JSValue = ((js.matcherFnGetCached(thisValue)) orelse { return false; });
+            const matcher_fn_opt = js.matcherFnGetCached(thisValue);
+            if ((matcher_fn_opt == null)) {
+                return false;
+            }
+            const matcher_fn: JSValue = matcher_fn_opt.?;
             if ((blk_catch_10: { break :blk_catch_10 ((matcher_fn.get(globalThis, "toAsymmetricMatcher")) catch |e| { _ = &e; return ExpectCustomAsymmetricMatcher.maybeClear(dontThrow, globalThis, e); }); })) |fn_value| {
                 _ = &fn_value;
                 if (fn_value.jsType().isFunction()) {
-                    const captured_args: JSValue = ((js.capturedArgsGetCached(thisValue)) orelse { return false; });
+                    const captured_args_opt = js.capturedArgsGetCached(thisValue);
+                    if ((captured_args_opt == null)) {
+                        return false;
+                    }
+                    const captured_args: JSValue = captured_args_opt.?;
                     var stack_fallback = std.heap.stackFallback(256, globalThis.allocator());
                     _ = &stack_fallback;
                     const args_len = (blk_catch_11: { break :blk_catch_11 ((captured_args.getLength(globalThis)) catch |e| { _ = &e; return ExpectCustomAsymmetricMatcher.maybeClear(dontThrow, globalThis, e); }); });

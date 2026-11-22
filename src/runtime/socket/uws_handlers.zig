@@ -59,33 +59,45 @@ pub fn onOpen(_: *?*IPC.SendQueue, _: *us_socket_t, _: bool, _: []const u8) void
     }
 
 pub fn onData(ext: *?*IPC.SendQueue, s: *us_socket_t, data: []const u8) void {
-            const inst = ((ext.*) orelse { return; });
-            _ = H.onData(inst, S.from(s), data);
+            if (ext.*) |inst| {
+                _ = &inst;
+                _ = H.onData(inst, S.from(s), data);
+            }
     }
 
 pub fn onFd(ext: *?*IPC.SendQueue, s: *us_socket_t, fd: i32) void {
-            const inst = ((ext.*) orelse { return; });
-            _ = H.onFd(inst, S.from(s), fd);
+            if (ext.*) |inst| {
+                _ = &inst;
+                _ = H.onFd(inst, S.from(s), fd);
+            }
     }
 
 pub fn onWritable(ext: *?*IPC.SendQueue, s: *us_socket_t) void {
-            const inst = ((ext.*) orelse { return; });
-            _ = H.onWritable(inst, S.from(s));
+            if (ext.*) |inst| {
+                _ = &inst;
+                _ = H.onWritable(inst, S.from(s));
+            }
     }
 
 pub fn onClose(ext: *?*IPC.SendQueue, s: *us_socket_t, code: i32, reason: ?*anyopaque) void {
-            const inst = ((ext.*) orelse { return; });
-            _ = H.onClose(inst, S.from(s), code, reason);
+            if (ext.*) |inst| {
+                _ = &inst;
+                _ = H.onClose(inst, S.from(s), code, reason);
+            }
     }
 
 pub fn onTimeout(ext: *?*IPC.SendQueue, s: *us_socket_t) void {
-            const inst = ((ext.*) orelse { return; });
-            _ = H.onTimeout(inst, S.from(s));
+            if (ext.*) |inst| {
+                _ = &inst;
+                _ = H.onTimeout(inst, S.from(s));
+            }
     }
 
 pub fn onEnd(ext: *?*IPC.SendQueue, s: *us_socket_t) void {
-            const inst = ((ext.*) orelse { return; });
-            _ = H.onEnd(inst, S.from(s));
+            if (ext.*) |inst| {
+                _ = &inst;
+                _ = H.onEnd(inst, S.from(s));
+            }
     }
     const H = IPC.IPCHandlers.PosixSocket;
     const S = uws.NewSocketHandler(false);

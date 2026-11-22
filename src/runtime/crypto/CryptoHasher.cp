@@ -48,9 +48,11 @@ pub struct CryptoHasherExtern {
             });
         }
 
-        const algorithm = EVP.Algorithm.map.get(name) orelse {
+        const algorithm_opt = EVP.Algorithm.map.get(name);
+        if (algorithm_opt == null) {
             return null;
-        };
+        }
+        const algorithm = algorithm_opt.?;
 
         switch (algorithm) {
             .ripemd160,
@@ -216,12 +218,14 @@ pub union(enum) CryptoHasher {
             return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
         }
 
-        const len = evp.hash(globalThis.bunVM().rareData().boringEngine(), input.slice(), &output_digest_buf) orelse {
+        const len_opt = evp.hash(globalThis.bunVM().rareData().boringEngine(), input.slice(), &output_digest_buf);
+        if (len_opt == null) {
             const e = getSSLErr();
             const instance = createCryptoError(globalThis, e);
             clearSSLErr();
             return globalThis.throwValue(instance);
-        };
+        }
+        const len = len_opt.?;
         let enc = encoding;
         return enc.encodeWithMaxSize(globalThis, BoringSSL.EVP_MAX_MD_SIZE, output_digest_buf[0..len]);
     }
@@ -240,23 +244,27 @@ pub union(enum) CryptoHasher {
             if (bytes.len < size) {
                 return globalThis.throwInvalidArguments("TypedArray must be at least {d} bytes", .{size});
             }
-            const len = evp.hash(globalThis.bunVM().rareData().boringEngine(), input.slice(), bytes[0..size]) orelse {
+            const len_opt = evp.hash(globalThis.bunVM().rareData().boringEngine(), input.slice(), bytes[0..size]);
+            if (len_opt == null) {
                 const e = getSSLErr();
                 const instance = createCryptoError(globalThis, e);
                 clearSSLErr();
                 return globalThis.throwValue(instance);
-            };
+            }
+            const len = len_opt.?;
             * = len;
             return output_buf.value;
         } else {
             let output_digest_buf: Digest = undefined;
             @memset(&output_digest_buf, 0);
-            const len = evp.hash(globalThis.bunVM().rareData().boringEngine(), input.slice(), &output_digest_buf) orelse {
+            const len_opt = evp.hash(globalThis.bunVM().rareData().boringEngine(), input.slice(), &output_digest_buf);
+            if (len_opt == null) {
                 const e = getSSLErr();
                 const instance = createCryptoError(globalThis, e);
                 clearSSLErr();
                 return globalThis.throwValue(instance);
-            };
+            }
+            const len = len_opt.?;
             return jsc.ArrayBuffer.createBuffer(globalThis, output_digest_buf[0..len]);
         }
     }
@@ -267,10 +275,12 @@ pub union(enum) CryptoHasher {
         input: jsc.Node.BlobOrStringOrBuffer,
         output: jsc.Node.StringOrBuffer?,
     ): bun.JSError!jsc.JSValue {
-        let evp = EVP.byName(algorithm, globalThis) orelse {
+        const evp_opt = EVP.byName(algorithm, globalThis);
+        if (evp_opt == null) {
             const res = CryptoHasherZig.hashByName(globalThis, algorithm, input, output)?;
-            return res orelse globalThis.throwInvalidArguments("Unsupported algorithm \"{f}\"", .{algorithm});
-        };
+            return res ?? globalThis.throwInvalidArguments("Unsupported algorithm \"{f}\"", .{algorithm});
+        }
+        let evp = evp_opt.?;
         const evp_guard = DeinitGuard<EVP>{ ptr: unsafe { &evp } };
 
         if (string_or_buffer := output) {
@@ -281,9 +291,11 @@ pub union(enum) CryptoHasher {
                 else => {
                     let sob = string_or_buffer;
                     const sob_guard = DeinitGuard<jsc.Node.StringOrBuffer>{ ptr: unsafe { &sob } };
-                    const encoding = jsc.Node.Encoding.from(string_or_buffer.slice()) orelse {
+                    const encoding_opt = jsc.Node.Encoding.from(string_or_buffer.slice());
+                    if (encoding_opt == null) {
                         return globalThis.ERR(.INVALID_ARG_VALUE, "Unknown encoding: {s}", .{string_or_buffer.slice()}).throw();
-                    };
+                    }
+                    const encoding = encoding_opt.?;
 
                     return hashToEncoding(globalThis, &evp, input, encoding);
                 },
@@ -326,28 +338,34 @@ pub union(enum) CryptoHasher {
             if (key := hmac_key) {
                 const chosen_algorithm = algorithm_name.toEnumFromMap(globalThis, "algorithm", EVP.Algorithm, EVP.Algorithm.map)?;
 
-                break :brk .{
-                    .hmac = HMAC.init(chosen_algorithm, key.slice()) orelse {
-                        if (!globalThis.hasException()) {
-                            const e = getSSLErr();
-                            if (e != 0) {
-                                const instance = createCryptoError(globalThis, e);
-                                clearSSLErr();
-                                return globalThis.throwValue(instance);
-                            } else {
-                                return globalThis.throwTODO("HMAC is not supported for this algorithm yet");
-                            }
+                const hmac_opt = HMAC.init(chosen_algorithm, key.slice());
+                if (hmac_opt == null) {
+                    if (!globalThis.hasException()) {
+                        const e = getSSLErr();
+                        if (e != 0) {
+                            const instance = createCryptoError(globalThis, e);
+                            clearSSLErr();
+                            return globalThis.throwValue(instance);
+                        } else {
+                            return globalThis.throwTODO("HMAC is not supported for this algorithm yet");
                         }
-                        return error.JSError;
-                    },
+                    }
+                    return error.JSError;
+                }
+                break :brk .{
+                    .hmac = hmac_opt.?,
                 };
             }
 
-            break :brk .{
-                .evp = EVP.byName(algorithm, globalThis) orelse return CryptoHasherZig.constructor(algorithm) orelse {
-                    return globalThis.throwInvalidArguments("Unsupported algorithm {f}", .{algorithm});
-                },
-            };
+            if (evp_val := EVP.byName(algorithm, globalThis)) {
+                break :brk .{
+                    .evp = evp_val,
+                };
+            }
+            if (zh := CryptoHasherZig.constructor(algorithm)) {
+                return zh;
+            }
+            return globalThis.throwInvalidArguments("Unsupported algorithm {f}", .{algorithm});
         });
     }
 
@@ -446,9 +464,11 @@ pub union(enum) CryptoHasher {
                 else => {
                     let sob = string_or_buffer;
                     const sob_guard = DeinitGuard<jsc.Node.StringOrBuffer>{ ptr: unsafe { &sob } };
-                    const encoding = jsc.Node.Encoding.from(string_or_buffer.slice()) orelse {
+                    const encoding_opt = jsc.Node.Encoding.from(string_or_buffer.slice());
+                    if (encoding_opt == null) {
                         return globalThis.ERR(.INVALID_ARG_VALUE, "Unknown encoding: {s}", .{string_or_buffer.slice()}).throw();
-                    };
+                    }
+                    const encoding = encoding_opt.?;
 
                     return _.digestToEncoding(globalThis, encoding);
                 },
@@ -567,9 +587,11 @@ struct CryptoHasherZig {
                 else => {
                     let sob = string_or_buffer;
                     const sob_guard = DeinitGuard<jsc.Node.StringOrBuffer>{ ptr: unsafe { &sob } };
-                    const encoding = jsc.Node.Encoding.from(string_or_buffer.slice()) orelse {
+                    const encoding_opt = jsc.Node.Encoding.from(string_or_buffer.slice());
+                    if (encoding_opt == null) {
                         return globalThis.ERR(.INVALID_ARG_VALUE, "Unknown encoding: {s}", .{string_or_buffer.slice()}).throw();
-                    };
+                    }
+                    const encoding = encoding_opt.?;
 
                     if (encoding == .buffer) {
                         return hashByNameInnerToBytes(globalThis, Algorithm, input, null);

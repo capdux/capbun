@@ -102,7 +102,11 @@ pub const SQLDataCellArray = extern struct {
     cap: u32,
 
 pub fn slice(self: *SQLDataCellArray) []SQLDataCell {
-            const ptr = ((self.ptr) orelse { return empty_cells[0..0]; });
+            const ptr_opt = self.ptr;
+            if ((ptr_opt == null)) {
+                return empty_cells[0..0];
+            }
+            const ptr = ptr_opt.?;
             return (blk: {
             break :blk ptr[0..self.len];
 
@@ -110,7 +114,11 @@ pub fn slice(self: *SQLDataCellArray) []SQLDataCell {
     }
 
 pub fn allocatedSlice(self: *SQLDataCellArray) []SQLDataCell {
-            const ptr = ((self.ptr) orelse { return empty_cells[0..0]; });
+            const ptr_opt = self.ptr;
+            if ((ptr_opt == null)) {
+                return empty_cells[0..0];
+            }
+            const ptr = ptr_opt.?;
             return (blk: {
             break :blk ptr[0..self.cap];
 
@@ -139,7 +147,11 @@ pub const SQLDataCellTypedArray = extern struct {
     type: JSValue.JSType,
 
 pub fn slice(self: *SQLDataCellTypedArray) []u8 {
-            const ptr = ((self.ptr) orelse { return empty_u8[0..0]; });
+            const ptr_opt = self.ptr;
+            if ((ptr_opt == null)) {
+                return empty_u8[0..0];
+            }
+            const ptr = ptr_opt.?;
             return (blk: {
             break :blk ptr[0..self.len];
 
@@ -147,7 +159,11 @@ pub fn slice(self: *SQLDataCellTypedArray) []u8 {
     }
 
 pub fn byteSlice(self: *SQLDataCellTypedArray) []u8 {
-            const ptr = ((self.head_ptr) orelse { return empty_u8[0..0]; });
+            const ptr_opt = self.head_ptr;
+            if ((ptr_opt == null)) {
+                return empty_u8[0..0];
+            }
+            const ptr = ptr_opt.?;
             return (blk: {
             break :blk ptr[0..self.len];
 

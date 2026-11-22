@@ -279,11 +279,13 @@ pub fn on(self: *FileRoute, req: uws.AnyRequest, resp: AnyResponse, method: bun.
             _ = server.onPendingRequest();
             _ = resp.timeout(server.config().idleTimeout);
         }
-        const path = ((self.blob.store.?.getPath()) orelse {
-        _ = req.setYield(true);
-        _ = self.onResponseComplete(resp);
-        return;
-});
+        const path_opt = self.blob.store.?.getPath();
+        if ((path_opt == null)) {
+            _ = req.setYield(true);
+            _ = self.onResponseComplete(resp);
+            return;
+        }
+        const path = path_opt.?;
         const open_flags = ((bun.O.RDONLY | bun.O.CLOEXEC) | bun.O.NONBLOCK);
         const fd_result = brk: {
         if (bun.Environment.isWindows) {

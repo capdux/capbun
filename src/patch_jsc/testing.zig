@@ -162,18 +162,22 @@ pub fn makeDiff(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.
             const arguments_ = callframe.arguments_old(2);
             var arguments = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments_.slice());
             _ = &arguments;
-            const old_folder_jsval = ((arguments.nextEat()) orelse {
-            return globalThis.throw("expected 2 strings", .{});
-});
+            const old_folder_jsval_opt = arguments.nextEat();
+            if ((old_folder_jsval_opt == null)) {
+                return globalThis.throw("expected 2 strings", .{});
+            }
+            const old_folder_jsval = old_folder_jsval_opt.?;
             var old_folder_bunstr = try old_folder_jsval.toBunString(globalThis);
             _ = &old_folder_bunstr;
             var _g_old_bunstr = DerefGuard(@TypeOf(old_folder_bunstr)){ .ptr = (&old_folder_bunstr) };
             _ = &_g_old_bunstr;
             var ___g_old_bunstr_moved = false; _ = &___g_old_bunstr_moved;
             defer if (!___g_old_bunstr_moved) { ___g_old_bunstr_moved = true; const __T = @TypeOf(_g_old_bunstr); if (@typeInfo(__T) == .optional) { if (_g_old_bunstr) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _g_old_bunstr.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _g_old_bunstr; _drop_val.__cp_deinit(); } };
-            const new_folder_jsval = ((arguments.nextEat()) orelse {
-            return globalThis.throw("expected 2 strings", .{});
-});
+            const new_folder_jsval_opt = arguments.nextEat();
+            if ((new_folder_jsval_opt == null)) {
+                return globalThis.throw("expected 2 strings", .{});
+            }
+            const new_folder_jsval = new_folder_jsval_opt.?;
             var new_folder_bunstr = try new_folder_jsval.toBunString(globalThis);
             _ = &new_folder_bunstr;
             var _g_new_bunstr = DerefGuard(@TypeOf(new_folder_bunstr)){ .ptr = (&new_folder_bunstr) };
@@ -241,9 +245,11 @@ pub fn parse(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSE
             const arguments_ = callframe.arguments_old(2);
             var arguments = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments_.slice());
             _ = &arguments;
-            const patchfile_src_js = ((arguments.nextEat()) orelse {
-            return globalThis.throw("TestingAPIs.parse: expected at least 1 argument, got 0", .{});
-});
+            const patchfile_src_js_opt = arguments.nextEat();
+            if ((patchfile_src_js_opt == null)) {
+                return globalThis.throw("TestingAPIs.parse: expected at least 1 argument, got 0", .{});
+            }
+            const patchfile_src_js = patchfile_src_js_opt.?;
             const patchfile_src_bunstr = try patchfile_src_js.toBunString(globalThis);
             const patchfile_src = patchfile_src_bunstr.toUTF8(bun.default_allocator);
             var patchfile = (blk_catch_1: { break :blk_catch_1 ((parsePatchFile(patchfile_src.slice())) catch |e| { _ = &e; if ((e == error.hunk_header_integrity_check_failed)) {

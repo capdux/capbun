@@ -209,11 +209,10 @@ return .initErr(link_err2);
 if (bun.install.PackageManager.verbose_install) {
                     _ = bun.Output.prettyErrorln("Hardlinking {f} to a path that doesn't exist: {f}", .{ bun.fmt.fmtOSPath(self.src.slice(), .{ .path_sep = .auto }), bun.fmt.fmtOSPath(destfile_path, .{ .path_sep = .auto }) });
                 }
-                const dest_parent = ((self.dest.dirname()) orelse {
-                return .initErr(link_err1);
-});
-                _ = (blk_catch_4: { break :blk_catch_4 ((FD.cwd().makePath(u16, dest_parent)) catch |__ce_4| { _ = &__ce_4;  }); });
-                switch (sys.link(u16, self.src.sliceZ(), destfile_path)) {
+                if (self.dest.dirname()) |dest_parent| {
+                    _ = &dest_parent;
+                    _ = (blk_catch_4: { break :blk_catch_4 ((FD.cwd().makePath(u16, dest_parent)) catch |__ce_4| { _ = &__ce_4;  }); });
+                    switch (sys.link(u16, self.src.sliceZ(), destfile_path)) {
 .result => {
 
 },
@@ -221,6 +220,9 @@ if (bun.install.PackageManager.verbose_install) {
 return .initErr(link_err2);
 },
 }
+                } else {
+                    return .initErr(link_err1);
+                }
 },
 else => {
 return .initErr(link_err1);
@@ -271,11 +273,10 @@ return .initErr(link_err2);
 }
 },
 .NOENT => {
-const dest_parent = ((self.dest.dirname()) orelse {
-            return .initErr(link_err1);
-});
-            _ = (blk_catch_7: { break :blk_catch_7 ((FD.cwd().makePath(u8, dest_parent)) catch |__ce_7| { _ = &__ce_7;  }); });
-            switch (sys.linkatZ(entry.dir, entry.basename, FD.cwd(), self.dest.sliceZ())) {
+if (self.dest.dirname()) |dest_parent| {
+                _ = &dest_parent;
+                _ = (blk_catch_7: { break :blk_catch_7 ((FD.cwd().makePath(u8, dest_parent)) catch |__ce_7| { _ = &__ce_7;  }); });
+                switch (sys.linkatZ(entry.dir, entry.basename, FD.cwd(), self.dest.sliceZ())) {
 .result => {
 
 },
@@ -283,6 +284,9 @@ const dest_parent = ((self.dest.dirname()) orelse {
 return .initErr(link_err2);
 },
 }
+            } else {
+                return .initErr(link_err1);
+            }
 },
 else => {
 return .initErr(link_err1);

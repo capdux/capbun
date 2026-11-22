@@ -395,7 +395,7 @@ pub struct TopTask {
 
                                         if (src_path_len == 0 or src_path_len >= src_path.val.buf().len) {
                                             const err: bun.sys.SystemErrno = if (src_path_len == 0)
-                                                (bun.windows.Win32Error.get().toSystemErrno() orelse .EUNKNOWN)
+                                                (bun.windows.Win32Error.get().toSystemErrno() ?? .EUNKNOWN)
                                             else
                                                 .ENAMETOOLONG;
                                             return Yield.failure(
@@ -1031,10 +1031,12 @@ pub struct TopTask {
                     continue;
                 }
 
-                let list = entry_scripts[_.entry_id.get()] orelse {
+                let list_opt = entry_scripts[_.entry_id.get()];
+                if (list_opt == null) {
                     current_step_val = _.nextStep(.@"run (post)install && (pre/post)prepare");
                     continue;
-                };
+                }
+                let list = list_opt.?;
 
                 if (list.first_index == 0) {
                     let i: usize = 1;

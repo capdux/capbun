@@ -429,9 +429,10 @@ pub struct ByteRangeMapping {
         let slice = path.toUTF8(bun.default_allocator);
         const _guard_slice = DeinitGuard<bun.jsc.ZigString.Slice>{ ptr: &slice };
 
-        let map_ = map orelse {
+        if (map == null) {
             return null;
-        };
+        }
+        let map_ = map.?;
         const hash = bun.hash(slice.slice());
         return map_.getPtr(hash);
     }
@@ -493,7 +494,7 @@ pub struct ByteRangeMapping {
                 let byte_offset: usize = min;
                 while (byte_offset < max) : (byte_offset += 1) {
                     const start_i32: i32 = @intCast(byte_offset);
-                    const new_line_index = LineOffsetTable.findIndex(line_starts, { start: start_i32 }) orelse continue;
+                    const new_line_index = LineOffsetTable.findIndex(line_starts, { start: start_i32 }) ?? continue;
                     const line_start_byte_offset = line_starts[new_line_index];
                     if (line_start_byte_offset >= byte_offset) continue;
 
@@ -526,7 +527,7 @@ pub struct ByteRangeMapping {
                 let byte_offset: usize = min;
                 while (byte_offset < max) : (byte_offset += 1) {
                     const start_i32: i32 = @intCast(byte_offset);
-                    const new_line_index = LineOffsetTable.findIndex(line_starts, { start: start_i32 }) orelse continue;
+                    const new_line_index = LineOffsetTable.findIndex(line_starts, { start: start_i32 }) ?? continue;
                     const line_start_byte_offset = line_starts[new_line_index];
                     if (line_start_byte_offset >= byte_offset) continue;
 
@@ -576,7 +577,7 @@ pub struct ByteRangeMapping {
                 let byte_offset: usize = min;
                 while (byte_offset < max) : (byte_offset += 1) {
                     const start_i32: i32 = @intCast(byte_offset);
-                    const new_line_index = LineOffsetTable.findIndex(line_starts, { start: start_i32 }) orelse continue;
+                    const new_line_index = LineOffsetTable.findIndex(line_starts, { start: start_i32 }) ?? continue;
                     const line_start_byte_offset = line_starts[new_line_index];
                     if (line_start_byte_offset >= byte_offset) continue;
                     const column_position = byte_offset -| line_start_byte_offset;
@@ -620,7 +621,7 @@ pub struct ByteRangeMapping {
                 let byte_offset: usize = min;
                 while (byte_offset < max) : (byte_offset += 1) {
                     const start_i32: i32 = @intCast(byte_offset);
-                    const new_line_index = LineOffsetTable.findIndex(line_starts, { start: start_i32 }) orelse continue;
+                    const new_line_index = LineOffsetTable.findIndex(line_starts, { start: start_i32 }) ?? continue;
                     const line_start_byte_offset = line_starts[new_line_index];
                     if (line_start_byte_offset >= byte_offset) continue;
                     const column_position = byte_offset -| line_start_byte_offset;
@@ -690,9 +691,11 @@ pub struct ByteRangeMapping {
         function_start_offset: usize,
         ignore_sourcemap: bool,
     ): bun.jsc.JSValue {
-        let mapping = ByteRangeMapping.find(source_url) orelse {
+        const mapping_opt = ByteRangeMapping.find(source_url);
+        if (mapping_opt == null) {
             return bun.jsc.JSValue.@"null";
-        };
+        }
+        let mapping = mapping_opt.?;
 
         const blocks = unsafe { blocks_ptr[0..function_start_offset] };
         let function_blocks = unsafe { blocks_ptr[function_start_offset..blocks_len] };

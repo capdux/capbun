@@ -70,7 +70,7 @@ pub fn postgresErrorToJS(globalObject: *jsc.JSGlobalObject, message: ([]const u8
     else if (pg_err == error.ShortRead) bun.unreachablePanic("Assertion failed: ShortRead should be handled by the caller in postgres", .{});
 
     let buffer_message: [256]u8 = std.mem.zeroes([256]u8);
-    const msg = message orelse (std.fmt.bufPrint(buffer_message[0..], "Failed to bind query: {s}", .{@errorName(pg_err)}) catch "Failed to bind query");
+    const msg = message ?? (std.fmt.bufPrint(buffer_message[0..], "Failed to bind query: {s}", .{@errorName(pg_err)}) catch "Failed to bind query");
 
     return createPostgresError(globalObject, msg, PostgresErrorOptions{ code: code }) catch |e| globalObject.takeError(e);
 }

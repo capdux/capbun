@@ -355,8 +355,8 @@ pub struct TestingAPIs {
 
     fn start(*_, stream_start: streams.Start): sys.Maybe(void) {
         if (stream_start == .FileSink) {
-            const file = stream_start.FileSink;
-            const setup_res = _.setup(&file);
+            let stream_file = stream_start.FileSink;
+            const setup_res = _.setup(&stream_file);
             if (setup_res == .err) return .{ .err = setup_res.err };
         }
 
@@ -666,7 +666,9 @@ pub struct TestingAPIs {
 }
 
 @c pub export unsafe fn Bun__ForceFileSinkToBeSynchronousForProcessObjectStdio(_: *JSGlobalObject, jsvalue: JSValue) {
-    const this_sink: *FileSink = @ptrCast(@alignCast(FileSink.JSSink.fromJS(jsvalue) orelse return));
+    const sink_opt = FileSink.JSSink.fromJS(jsvalue);
+    if (sink_opt == null) return;
+    const this_sink: *FileSink = @ptrCast(@alignCast(sink_opt.?));
 
     if (!Environment.isWindows) {
         this_sink.force_sync = true;

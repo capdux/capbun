@@ -110,8 +110,12 @@ fn onDrain(socket: *uws.udp.Socket) {
     jsc.markBinding(@src());
 
     let this_socket: *UDPSocket = bun.cast(*UDPSocket, socket.user().?);
-    const thisValue = this_socket.this_value.tryGet() orelse return;
-    const callback = UDPSocket.js.gc.on_drain.get(thisValue) orelse return;
+    const thisValue_opt = this_socket.this_value.tryGet();
+    if (thisValue_opt == null) return;
+    const thisValue = thisValue_opt.?;
+    const callback_opt = UDPSocket.js.gc.on_drain.get(thisValue);
+    if (callback_opt == null) return;
+    const callback = callback_opt.?;
     if (callback.isEmptyOrUndefinedOrNull()) return;
 
     const vm = jsc.VirtualMachine.get();
@@ -129,8 +133,12 @@ fn onData(socket: *uws.udp.Socket, buf: *uws.udp.PacketBuffer, packets: c_int) {
     jsc.markBinding(@src());
 
     const udpSocket: *UDPSocket = bun.cast(*UDPSocket, socket.user().?);
-    const thisValue = udpSocket.this_value.tryGet() orelse return;
-    const callback = UDPSocket.js.gc.on_data.get(thisValue) orelse return;
+    const thisValue_opt = udpSocket.this_value.tryGet();
+    if (thisValue_opt == null) return;
+    const thisValue = thisValue_opt.?;
+    const callback_opt = UDPSocket.js.gc.on_data.get(thisValue);
+    if (callback_opt == null) return;
+    const callback = callback_opt.?;
     if (callback.isEmptyOrUndefinedOrNull()) return;
 
     const globalThis = udpSocket.globalThis;

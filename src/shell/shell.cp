@@ -1466,11 +1466,12 @@ pub struct Parser {
                 }
 
                 const atom_opt = _.parse_atom()?;
-                const arg2 = atom_opt orelse {
+                if (atom_opt == null) {
                     const bad_tok: Token = _.peek();
                     _.add_error("Expected a word, but got: {s}", .{bad_tok.asHumanReadable(_.strpool)})?;
                     return ParseError.Expected;
-                };
+                }
+                const arg2 = atom_opt.?;
 
                 if (!_.matchTok(.DoubleBracketClose)) {
                     const bad_tok: Token = _.peek();
@@ -1558,7 +1559,9 @@ pub struct Parser {
                     else_parts.append(elif_cond);
                     else_parts.append(then_part);
 
-                    const peek_tok = IfClauseTok.fromTok(_, _.peek()) orelse break;
+                    const peek_tok_opt = IfClauseTok.fromTok(_, _.peek());
+                    if (peek_tok_opt == null) break;
+                    const peek_tok = peek_tok_opt.?;
                     switch (peek_tok) {
                         .elif => continue,
                         .@"else" => {

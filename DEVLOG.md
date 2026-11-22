@@ -1661,3 +1661,8 @@
 - `&expr?` 取地址传参需先绑定局部常量 `const tmp = expr?;` 再传 `&tmp`（如 `std.posix.toPosixPath`）。
 - `return struct/union/enum { ... }` 透传泛型工厂块内部仍保持原生 Zig 语法（`try`/`orelse`/`?T`/`|capture|`/`self`）。
 - `export const` 在 CP 中会生成 `pub export const`，跨模块 Zig 导出常量统一使用 `pub const`。
+
+### [2026-11-23] Wave #59 技术要点（`orelse` -> `??`）
+- 表达式级 `orelse`（含 `orelse continue`、`orelse break :blk val`、`orelse unreachable`）可直接使用 `??` 或 `.?`；多语句 `orelse { ... }` 或 `orelse return ...` 改写为 `if (opt == null) ...` + `opt.?` 或 `if (v := opt)`。
+- `extern fn` 接收 C 函数指针时避免使用 `const *!`（`cpc` 会生成 `*const *anyopaque`），改用 `*const void` 配合 `@ptrCast(&fn_sym)`。
+- 局部不可变 `const file` 在部分上下文取 `&file` 时若被 `cpc` 误判为类型 `*const file`，可改为 `let stream_file = ...; &stream_file` 规避。

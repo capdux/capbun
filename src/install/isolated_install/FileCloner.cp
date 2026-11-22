@@ -31,11 +31,12 @@ const sys = bun.sys;
                     },
 
                     .NOENT => {
-                        const parent_dest_dir = _.dest_subpath.dirname() orelse {
+                        if (parent_dest_dir := _.dest_subpath.dirname()) {
+                            FD.cwd().makePath(u8, parent_dest_dir) catch {};
+                            return _.clonefileat();
+                        } else {
                             return .initErr(e);
-                        };
-                        FD.cwd().makePath(u8, parent_dest_dir) catch {};
-                        return _.clonefileat();
+                        }
                     },
                     else => {
                         return .initErr(e);

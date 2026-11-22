@@ -265,7 +265,7 @@ pub struct MutableStringBufferedWriter {
         }
 
         if (!needs_gap) {
-            return JSLexerTables.StrictModeReservedWordsRemap.get(str) orelse str;
+            return JSLexerTables.StrictModeReservedWordsRemap.get(str) ?? str;
         }
 
         if (needs_gap) {

@@ -171,7 +171,7 @@ struct NamedPipeCtxErrGuard {
     fn getData(*_, globalObject: *jsc.JSGlobalObject): JSValue {
         * = globalObject;
         log("getData()", .{});
-        return _.strong_data.get() orelse .js_undefined;
+        return _.strong_data.get() ?? .js_undefined;
     }
 
     fn setData(*_, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) {
@@ -191,9 +191,11 @@ struct NamedPipeCtxErrGuard {
             return globalObject.throwValue(globalObject.toInvalidArguments("Expected options object", .{}));
         }
 
-        const socket_obj = (opts.get(globalObject, "socket")?) orelse {
+        const socket_obj_opt = opts.get(globalObject, "socket")?;
+        if (socket_obj_opt == null) {
             return globalObject.throw("Expected \"socket\" object", .{});
-        };
+        }
+        const socket_obj = socket_obj_opt.?;
 
         const handlers = Handlers.fromJS(globalObject, socket_obj, _.handlers.mode == .server)?;
         const active_connections = _.handlers.active_connections;
@@ -614,7 +616,7 @@ pub fn listen(globalObject: *jsc.JSGlobalObject, opts: JSValue): bun.JSError!JSV
             return globalObject.throwValue(err.toErrorInstance(globalObject));
         },
     }
-    const listen_socket: *uws.ListenSocket = maybe_ls orelse {
+    if (maybe_ls == null) {
         const err = globalObject.createErrorInstance("Failed to listen at {s}", .{hostname});
         log("Failed to listen {d}", .{errno});
         if (errno != 0) {
@@ -627,7 +629,8 @@ pub fn listen(globalObject: *jsc.JSGlobalObject, opts: JSValue): bun.JSError!JSV
             }
         }
         return globalObject.throwValue(err);
-    };
+    }
+    const listen_socket: *uws.ListenSocket = maybe_ls.?;
 
     this_ptr.connection = connection;
     this_ptr.listener = .{ .uws = listen_socket };
@@ -636,7 +639,7 @@ pub fn listen(globalObject: *jsc.JSGlobalObject, opts: JSValue): bun.JSError!JSV
     }
 
     if (ssl_config := ssl) {
-        const secure = this_ptr.secure_ctx orelse unreachable;
+        const secure = this_ptr.secure_ctx.?;
         if (server_name := ssl_config.server_name) {
             if (std.mem.span(server_name).len > 0) {
                 * = listen_socket.addServerName(server_name, secure, null);

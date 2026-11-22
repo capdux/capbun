@@ -1067,7 +1067,10 @@ pub fn getAbortError(self: *FetchTasklet) ?Body.Value.ValueError {
     }
 
 pub fn clearAbortSignal(self: *FetchTasklet) void {
-            const signal = ((self.signal) orelse { return; });
+            if ((self.signal == null)) {
+                return;
+            }
+            const signal = self.signal.?;
             self.signal = null;
             var _guard_signal = SignalUnrefGuard(@TypeOf(signal)){ .signal = signal };
             _ = &_guard_signal;
@@ -1371,7 +1374,10 @@ pub fn writeRequestData(self: *FetchTasklet, data: []const u8) ResumableSinkBack
                     return .done;
                 }
             }
-            const thread_safe_stream_buffer = ((self.request_body_streaming_buffer) orelse { return .done; });
+            if ((self.request_body_streaming_buffer == null)) {
+                return .done;
+            }
+            const thread_safe_stream_buffer = self.request_body_streaming_buffer.?;
             const stream_buffer = thread_safe_stream_buffer.acquire();
             var _guard_release = ReleaseGuard(@TypeOf(thread_safe_stream_buffer)){ .ptr = thread_safe_stream_buffer };
             _ = &_guard_release;
@@ -1424,7 +1430,10 @@ pub fn writeEndRequest(self: *FetchTasklet, err: ?jsc.JSValue) void {
                 _ = self.abortTask();
             } else {
                 if ((!self.skipChunkedFraming())) {
-                    const thread_safe_stream_buffer = ((self.request_body_streaming_buffer) orelse { return; });
+                    if ((self.request_body_streaming_buffer == null)) {
+                        return;
+                    }
+                    const thread_safe_stream_buffer = self.request_body_streaming_buffer.?;
                     const stream_buffer = thread_safe_stream_buffer.acquire();
                     var _guard_release = ReleaseGuard(@TypeOf(thread_safe_stream_buffer)){ .ptr = thread_safe_stream_buffer };
                     _ = &_guard_release;

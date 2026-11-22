@@ -292,9 +292,11 @@ pub fn fmtCount(self: *StringBuilder, comptime str: []const u8, args: anytype) v
 }
 
 pub fn allocatedSlice(self: *StringBuilder) []u8 {
-        var empty_buf: [0]u8 = std.mem.zeroes([0]u8);
-        _ = &empty_buf;
-        var ptr = ((self.ptr) orelse { return (&empty_buf); });
+        const ptr_opt = self.ptr;
+        if ((ptr_opt == null)) {
+            return empty_buf[0..0];
+        }
+        var ptr = ptr_opt.?;
         _ = &ptr;
         if (comptime Environment.allow_assert) {
             _ = assert((self.cap > 0));
@@ -306,9 +308,11 @@ pub fn allocatedSlice(self: *StringBuilder) []u8 {
 }
 
 pub fn writable(self: *StringBuilder) []u8 {
-        var empty_buf: [0]u8 = std.mem.zeroes([0]u8);
-        _ = &empty_buf;
-        var ptr = ((self.ptr) orelse { return (&empty_buf); });
+        const ptr_opt = self.ptr;
+        if ((ptr_opt == null)) {
+            return empty_buf[0..0];
+        }
+        var ptr = ptr_opt.?;
         _ = &ptr;
         if (comptime Environment.allow_assert) {
             _ = assert((self.cap > 0));
@@ -329,3 +333,4 @@ const U8Slice = []u8;
 const Allocator = std.mem.Allocator;
 const Environment = bun.Environment;
 const assert = bun.assert;
+var empty_buf: [0]u8 = undefined;

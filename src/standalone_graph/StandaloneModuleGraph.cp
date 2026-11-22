@@ -187,7 +187,9 @@ struct PE {
             const len = Bun__getStandaloneModuleGraphPELength();
             if (len == 0) return null;
 
-            const data_ptr = Bun__getStandaloneModuleGraphPEData() orelse return null;
+            const data_ptr_opt = Bun__getStandaloneModuleGraphPEData();
+            if (data_ptr_opt == null) return null;
+            const data_ptr = data_ptr_opt.?;
             return data_ptr[0..len];
         }
     }
@@ -196,7 +198,9 @@ struct PE {
 struct ELF {
     pub static fn getData(): ([]const u8)? {
         unsafe {
-            const vaddr_ptr = Bun__getStandaloneModuleGraphELFVaddr() orelse return null;
+            const vaddr_ptr_opt = Bun__getStandaloneModuleGraphELFVaddr();
+            if (vaddr_ptr_opt == null) return null;
+            const vaddr_ptr = vaddr_ptr_opt.?;
             const vaddr = std.mem.bytesToValue(u64, vaddr_ptr[0..8]);
             if (vaddr == 0) return null;
             const target: [*]const u8! = @ptrFromInt(vaddr);
@@ -287,10 +291,12 @@ pub enum StandaloneLazySourceMap {
             .none => return null,
             .parsed map => return map,
             .serialized serialized => {
-                const blob = serialized.mappingBlob() orelse {
+                const blob_opt = serialized.mappingBlob();
+                if (blob_opt == null) {
                     this.* = .none;
                     return null;
-                };
+                }
+                const blob = blob_opt.?;
                 if (!SourceMap.InternalSourceMap.isValidBlob(blob)) {
                     this.* = .none;
                     return null;
@@ -525,7 +531,9 @@ pub struct StandaloneModuleGraph {
     }
 
     pub fn stat(name: []const u8): bun.Stat? {
-        const file = this.find(name) orelse return null;
+        const file_opt = this.find(name);
+        if (file_opt == null) return null;
+        const file = file_opt.?;
         return file.stat();
     }
 
@@ -760,7 +768,7 @@ pub struct StandaloneModuleGraph {
                 bytecode: bytecode,
                 module_info: module_info,
                 bytecode_origin_path: bytecode_origin_path,
-                side: switch (output_file.side orelse .server) {
+                side: switch (output_file.side ?? .server) {
                     .server => .server,
                     .client => .client,
                 },
@@ -1377,7 +1385,9 @@ pub struct StandaloneModuleGraph {
 
     pub static fn fromExecutable(allocator: std.mem.Allocator): (*StandaloneModuleGraph)?! {
         if (comptime Environment.isMac) {
-            const macho_bytes = Macho.getData() orelse return null;
+            const macho_bytes_opt = Macho.getData();
+            if (macho_bytes_opt == null) return null;
+            const macho_bytes = macho_bytes_opt.?;
             if (macho_bytes.len < @sizeOf(StandaloneOffsets) + trailer.len) {
                 Output.debugWarn("bun standalone module graph is too small to be valid", []);
                 return null;
@@ -1397,7 +1407,9 @@ pub struct StandaloneModuleGraph {
         }
 
         if (comptime Environment.isWindows) {
-            const pe_bytes = PE.getData() orelse return null;
+            const pe_bytes_opt = PE.getData();
+            if (pe_bytes_opt == null) return null;
+            const pe_bytes = pe_bytes_opt.?;
             if (pe_bytes.len < @sizeOf(StandaloneOffsets) + trailer.len) {
                 Output.debugWarn("bun standalone module graph is too small to be valid", []);
                 return null;
@@ -1417,7 +1429,9 @@ pub struct StandaloneModuleGraph {
         }
 
         if (comptime Environment.isLinux || Environment.isFreeBSD) {
-            const elf_bytes = ELF.getData() orelse return null;
+            const elf_bytes_opt = ELF.getData();
+            if (elf_bytes_opt == null) return null;
+            const elf_bytes = elf_bytes_opt.?;
             if (elf_bytes.len < @sizeOf(StandaloneOffsets) + trailer.len) {
                 Output.debugWarn("bun standalone module graph is too small to be valid", []);
                 return null;
@@ -1448,7 +1462,8 @@ pub struct StandaloneModuleGraph {
         } else if (comptime Environment.isLinux) {
             opt_bytes = ELF.getData();
         }
-        const bytes = opt_bytes orelse return;
+        if (opt_bytes == null) return;
+        const bytes = opt_bytes.?;
 
         if (bytes.len == 0) return;
 
@@ -1492,16 +1507,21 @@ pub struct StandaloneModuleGraph {
         let json = bun.json.parse(&json_src, &log, arena_alloc, false) catch
             return error.InvalidSourceMap;
 
-        const mappings_str = json.get("mappings") orelse
-            return error.InvalidSourceMap;
+        const mappings_str_opt = json.get("mappings");
+        if (mappings_str_opt == null) return error.InvalidSourceMap;
+        const mappings_str = mappings_str_opt.?;
         if (mappings_str.data != .e_string)
             return error.InvalidSourceMap;
-        const sc_expr = json.get("sourcesContent") orelse return error.InvalidSourceMap;
+        const sc_expr_opt = json.get("sourcesContent");
+        if (sc_expr_opt == null) return error.InvalidSourceMap;
+        const sc_expr = sc_expr_opt.?;
         const sources_content = switch (sc_expr.data) {
             .e_array arr => arr,
             else => return error.InvalidSourceMap,
         };
-        const sp_expr = json.get("sources") orelse return error.InvalidSourceMap;
+        const sp_expr_opt = json.get("sources");
+        if (sp_expr_opt == null) return error.InvalidSourceMap;
+        const sp_expr = sp_expr_opt.?;
         const sources_paths = switch (sp_expr.data) {
             .e_array arr => arr,
             else => return error.InvalidSourceMap,

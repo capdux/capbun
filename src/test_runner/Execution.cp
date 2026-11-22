@@ -301,14 +301,18 @@ pub fn init(_: std.mem.Allocator): Execution {
             groupLog.log("runOneCompleted: the data is for a different group", .{});
             return null;
         }
-        const group = data_mut.group(_.bunTest()) orelse {
+        const group_opt = data_mut.group(_.bunTest());
+        if (group_opt == null) {
             groupLog.log("runOneCompleted: the data did not know the group", .{});
             return null;
-        };
-        const sequence = data_mut.sequence(_.bunTest()) orelse {
+        }
+        const group = group_opt.?;
+        const sequence_opt = data_mut.sequence(_.bunTest());
+        if (sequence_opt == null) {
             groupLog.log("runOneCompleted: the data did not know the sequence", .{});
             return null;
-        };
+        }
+        const sequence = sequence_opt.?;
         if (sequence.remaining_repeat_count != data.execution.entry_data.?.remaining_repeat_count) {
             groupLog.log("runOneCompleted: the data is for a previous repeat count (outdated)", .{});
             return null;

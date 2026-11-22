@@ -215,7 +215,7 @@ pub struct SocketAddressOptions {
                 let sin6: inet.sockaddr_in6 = .{
                     .family = options.family.int(),
                     .port = std.mem.nativeToBig(u16, options.port),
-                    .flowinfo = options.flowlabel orelse 0,
+                    .flowinfo = options.flowlabel ?? 0,
                     .addr = undefined,
                     .scope_id = 0,
                 };
@@ -336,7 +336,7 @@ pub struct SocketAddressOptions {
 
     fn getFlowLabel(*_, global: *jsc.JSGlobalObject): JSValue {
         * = global;
-        return JSValue.jsNumber(_.flowLabel() orelse 0);
+        return JSValue.jsNumber(_.flowLabel() ?? 0);
     }
 
     fn flowLabel(): u32? {
@@ -365,7 +365,7 @@ pub struct SocketAddressOptions {
             .address = _.getAddress(global)?,
             .family = _.getFamily(global)?,
             .port = _.port(),
-            .flowlabel = _.flowLabel() orelse 0,
+            .flowlabel = _.flowLabel() ?? 0,
         }, global)?;
         return obj.toJS();
     }
@@ -502,9 +502,11 @@ const _loopback_v4_addr: u32 = @bitCast(@as([4]u8, [ 127, 0, 0, 1 ]));
         unsafe {
             addr_src = if (_.family() == AF.INET) @ptrCast(&_.sin.addr) else @ptrCast(&_.sin6.addr);
         }
-        const formatted = std.mem.sliceTo(ares.ares_inet_ntop(_.family().int(), addr_src, buf, buf.len) orelse {
+        const ntop_res = ares.ares_inet_ntop(_.family().int(), addr_src, buf, buf.len);
+        if (ntop_res == null) {
             std.debug.panic("Invariant violation: SocketAddress created with invalid IPv6 address", .{});
-        }, 0);
+        }
+        const formatted = std.mem.sliceTo(ntop_res.?, 0);
         if (comptime bun.Environment.isDebug) bun.assertWithLocation(bun.strings.isAllASCII(formatted), @src());
         return formatted;
     }

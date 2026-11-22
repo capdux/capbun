@@ -260,7 +260,9 @@ pub struct Lookup {
     name: ([]const u8)? = null,
 
     pub fn displaySourceURLIfNeeded(base_filename: []const u8): bun.String? {
-        const source_map = this.source_map orelse return null;
+        const source_map_opt = this.source_map;
+        if (source_map_opt == null) return null;
+        const source_map = source_map_opt.?;
         if (source_map.external_source_names.len == 0)
             return null;
         if (this.mapping.source_index >= source_map.external_source_names.len)
@@ -286,10 +288,14 @@ pub struct Lookup {
                 break :bytes code;
             }
 
-            const source_map = this.source_map orelse return null;
+            const source_map_opt = this.source_map;
+        if (source_map_opt == null) return null;
+        const source_map = source_map_opt.?;
             assert(source_map.isExternal());
 
-            const provider = source_map.underlying_provider.provider() orelse return null;
+            const provider_opt = source_map.underlying_provider.provider();
+            if (provider_opt == null) return null;
+            const provider = provider_opt.?;
 
             const index = this.mapping.source_index;
 
@@ -298,7 +304,9 @@ pub struct Lookup {
                 if (index >= source_map.external_source_names.len)
                     return null;
 
-                const code = serialized.sourceFileContents(index as usize) orelse return null;
+                const code_opt = serialized.sourceFileContents(index as usize);
+                if (code_opt == null) return null;
+                const code = code_opt.?;
                 return bun.jsc.ZigString.Slice.fromUTF8NeverFree(code);
             }
 

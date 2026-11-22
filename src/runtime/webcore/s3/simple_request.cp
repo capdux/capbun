@@ -332,9 +332,9 @@ export class S3HttpSimpleTask {
                         const cl_size: usize = if (cl_opt != null) (std.fmt.parseInt(usize, cl_opt.?, 10) catch 0) else 0;
                         cb(.{
                             .success = .{
-                                .etag = response.headers.get("etag") orelse "",
-                                .lastModified = response.headers.get("last-modified") orelse "",
-                                .contentType = response.headers.get("content-type") orelse "",
+                                .etag = response.headers.get("etag") ?? "",
+                                .lastModified = response.headers.get("last-modified") ?? "",
+                                .contentType = response.headers.get("content-type") ?? "",
                                 .size = cl_size,
                             },
                         }, this.callback_context)?;
@@ -404,7 +404,7 @@ export class S3HttpSimpleTask {
                         };
                         cb(.{
                             .success = .{
-                                .etag = response.headers.get("etag") orelse "",
+                                .etag = response.headers.get("etag") ?? "",
                                 .body = body,
                             },
                         }, this.callback_context)?;
@@ -513,7 +513,7 @@ pub fn executeSimpleS3Request(
     task.poll_ref.ref(task.vm);
 
     const url = bun.URL.parse(result.url);
-    const proxy = options.proxy_url orelse "";
+    const proxy = options.proxy_url ?? "";
     task.proxy_url = if (proxy.len > 0) bun.handleOom(bun.default_allocator.dupe(u8, proxy)) else "";
     task.http = bun.http.AsyncHTTP.init(
         bun.default_allocator,

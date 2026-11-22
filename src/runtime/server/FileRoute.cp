@@ -226,11 +226,13 @@ pub struct FileRouteInitOptions {
             server.onPendingRequest();
             resp.timeout(server.config().idleTimeout);
         }
-        const path = _.blob.store.?.getPath() orelse {
+        const path_opt = _.blob.store.?.getPath();
+        if (path_opt == null) {
             req.setYield(true);
             _.onResponseComplete(resp);
             return;
-        };
+        }
+        const path = path_opt.?;
 
         const open_flags = bun.O.RDONLY | bun.O.CLOEXEC | bun.O.NONBLOCK;
 

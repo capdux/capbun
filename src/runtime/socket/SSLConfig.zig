@@ -450,7 +450,10 @@ pub fn takeProtos(self: *SSLConfig) ?[]const u8 {
         defer {
         self.protos = null;
         }
-        const protos = ((self.protos) orelse { return null; });
+        if ((self.protos == null)) {
+            return null;
+        }
+        const protos = self.protos.?;
         return bun.handleOom(bun.memory.dropSentinel(protos, bun.default_allocator));
 }
 
@@ -458,7 +461,10 @@ pub fn takeServerName(self: *SSLConfig) ?[]const u8 {
         defer {
         self.server_name = null;
         }
-        const server_name = ((self.server_name) orelse { return null; });
+        if ((self.server_name == null)) {
+            return null;
+        }
+        const server_name = self.server_name.?;
         return bun.handleOom(bun.memory.dropSentinel(server_name, bun.default_allocator));
 }
 pub const SharedPtr = bun.ptr.shared.WithOptions(*SSLConfig, .{ .atomic = true, .allow_weak = true });
@@ -540,7 +546,11 @@ pub fn remove(config: *SSLConfig) void {
             if ((configs.count() == 0)) {
                 return;
             }
-            const idx = ((configs.getIndexContext(config, .{})) orelse { return; });
+            const idx_opt = configs.getIndexContext(config, .{});
+            if ((idx_opt == null)) {
+                return;
+            }
+            const idx = idx_opt.?;
             if ((configs.keys()[@as(usize, @intCast(idx))] != config)) {
                 return;
             }
@@ -573,7 +583,10 @@ pub const zero = SSLConfig{  };
 pub fn stringsEqualOpt(first: ?[*:0]const u8, second: ?[*:0]const u8) bool {
         if (first) |a| {
             _ = &a;
-            const b = ((second) orelse { return false; });
+            if ((second == null)) {
+                return false;
+            }
+            const b = second.?;
             return stringsEqual(a, b);
         } else {
             return (second == null);
@@ -583,7 +596,10 @@ pub fn stringsEqualOpt(first: ?[*:0]const u8, second: ?[*:0]const u8) bool {
 pub fn stringSlicesEqualOpt(first: ?CStringSlice, second: ?CStringSlice) bool {
         if (first) |slice1| {
             _ = &slice1;
-            const slice2 = ((second) orelse { return false; });
+            if ((second == null)) {
+                return false;
+            }
+            const slice2 = second.?;
             if ((slice1.len != slice2.len)) {
                 return false;
             }
@@ -607,7 +623,10 @@ pub fn stringsEqual(a: [*:0]const u8, b: [*:0]const u8) bool {
 }
 
 pub fn freeStrings(slice: *OptCStringSlice) void {
-        const inner = ((slice.*) orelse { return; });
+        if ((slice.* == null)) {
+            return;
+        }
+        const inner = slice.*.?;
         for (cp_iter_slice(inner)) |str_item| {
             _ = &str_item;
             _ = bun.freeSensitive(bun.default_allocator, std.mem.span(str_item));
@@ -617,13 +636,19 @@ pub fn freeStrings(slice: *OptCStringSlice) void {
 }
 
 pub fn freeString(str_ptr: *OptCString) void {
-        const inner = ((str_ptr.*) orelse { return; });
+        if ((str_ptr.* == null)) {
+            return;
+        }
+        const inner = str_ptr.*.?;
         _ = bun.freeSensitive(bun.default_allocator, std.mem.span(inner));
         str_ptr.* = null;
 }
 
 pub fn cloneStrings(slice: ?CStringSlice) ?CStringSlice {
-        const inner = ((slice) orelse { return null; });
+        if ((slice == null)) {
+            return null;
+        }
+        const inner = slice.?;
         var result = bun.handleOom(bun.default_allocator.alloc(CString, inner.len));
         _ = &result;
         var i: usize = 0;
@@ -635,11 +660,17 @@ pub fn cloneStrings(slice: ?CStringSlice) ?CStringSlice {
 }
 
 pub fn cloneString(str_opt: ?[*:0]const u8) ?[*:0]const u8 {
-        return bun.handleOom(bun.default_allocator.dupeZ(u8, std.mem.span(((str_opt) orelse { return null; }))));
+        if ((str_opt == null)) {
+            return null;
+        }
+        return bun.handleOom(bun.default_allocator.dupeZ(u8, std.mem.span(str_opt.?)));
 }
 
 pub fn readFromBlob(global: *jsc.JSGlobalObject, blob: *bun.webcore.Blob) ![:0]const u8 {
-        const store = ((blob.store) orelse { return error.NullStore; });
+        if ((blob.store == null)) {
+            return error.NullStore;
+        }
+        const store = blob.store.?;
         const file = (switch (store.data) {
 .file => |f| f,
 else => {

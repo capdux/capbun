@@ -130,15 +130,16 @@ pub struct FileCopier {
                                 // continuing here would let a staged
                                 // global-store entry be renamed into place
                                 // with files missing.
-                                const entry_dirname = bun.Dirname.dirname(u16, entry.path) orelse {
+                                if (entry_dirname := bun.Dirname.dirname(u16, entry.path)) {
+                                    bun.MakePath.makePath(u16, dest_dir, entry_dirname) catch {};
+                                    switch (bun.copyFile(_.src_path.sliceZ(), _.dest_subpath.sliceZ())) {
+                                        .result => {},
+                                        .err e => {
+                                            return .initErr(e);
+                                        },
+                                    }
+                                } else {
                                     return .initErr(first_err);
-                                };
-                                bun.MakePath.makePath(u16, dest_dir, entry_dirname) catch {};
-                                switch (bun.copyFile(_.src_path.sliceZ(), _.dest_subpath.sliceZ())) {
-                                    .result => {},
-                                    .err e => {
-                                        return .initErr(e);
-                                    },
                                 }
                             },
                         }

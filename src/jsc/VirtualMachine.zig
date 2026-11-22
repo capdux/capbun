@@ -1555,7 +1555,11 @@ pub fn onExit(client: *VirtualMachine) void {
         }
         _ = client.exit_handler.dispatchOnExit();
         client.is_shutting_down = true;
-        const rare_data = ((client.rare_data) orelse { return; });
+        const rare_data_opt = client.rare_data;
+        if ((rare_data_opt == null)) {
+            return;
+        }
+        const rare_data = rare_data_opt.?;
         var _hooks_clear_guard = ClearCleanupHooksGuard{ .rare_data = rare_data };
         _ = &_hooks_clear_guard;
         var ___hooks_clear_guard_moved = false; _ = &___hooks_clear_guard_moved;
@@ -1599,7 +1603,10 @@ pub fn globalExit(client: *VirtualMachine) noreturn {
 }
 
 pub fn nextAsyncTaskID(client: *VirtualMachine) u64 {
-        var debugger: *jsc.Debugger = (&((client.debugger) orelse { return 0; }));
+        if ((client.debugger == null)) {
+            return 0;
+        }
+        var debugger: *jsc.Debugger = (&client.debugger.?);
         _ = &debugger;
         debugger.next_debugger_id = (debugger.next_debugger_id +% 1);
         return debugger.next_debugger_id;
@@ -2134,7 +2141,11 @@ if ((!retry_on_not_found)) {
         }
         ret.result = result;
         ret.query_string = query_string;
-        const result_path = ((result.pathConst()) orelse { return error.ModuleNotFound; });
+        const result_path_opt = result.pathConst();
+        if ((result_path_opt == null)) {
+            return error.ModuleNotFound;
+        }
+        const result_path = result_path_opt.?;
         jsc_vm.resolved_count = (jsc_vm.resolved_count + 1);
         ret.path = result_path.text;
 }
@@ -2497,13 +2508,23 @@ pub fn reloadEntryPoint(client: *VirtualMachine, entry_path: []const u8) !*JSInt
                     return resolved;
                 }
             }
-            const promise = (if ((!client.main_is_html_entrypoint)) ((JSModuleLoader.loadAndEvaluateModule(client.global, (&String.init(main_file_name)))) orelse { return error.JSError; }) else try jsc.fromJSHostCallGeneric(client.global, @src(), Bun__loadHTMLEntryPoint, .{ client.global }));
+            const promise = (if ((!client.main_is_html_entrypoint)) blk: {
+            const p = JSModuleLoader.loadAndEvaluateModule(client.global, (&String.init(main_file_name)));
+            if ((p == null)) {
+                return error.JSError;
+            }
+            break :blk p.?;
+} else try jsc.fromJSHostCallGeneric(client.global, @src(), Bun__loadHTMLEntryPoint, .{ client.global }));
             client.pending_internal_promise = promise;
             client.pending_internal_promise_is_protected = false;
             _ = JSValue.fromCell(promise).ensureStillAlive();
             return promise;
         } else {
-            const promise = ((JSModuleLoader.loadAndEvaluateModule(client.global, (&String.fromBytes(client.main)))) orelse { return error.JSError; });
+            const promise_opt = JSModuleLoader.loadAndEvaluateModule(client.global, (&String.fromBytes(client.main)));
+            if ((promise_opt == null)) {
+                return error.JSError;
+            }
+            const promise = promise_opt.?;
             client.pending_internal_promise = promise;
             client.pending_internal_promise_is_protected = false;
             _ = JSValue.fromCell(promise).ensureStillAlive();
@@ -2553,7 +2574,11 @@ pub fn reloadEntryPointForTestRunner(client: *VirtualMachine, entry_path: []cons
                 return promise;
             }
         }
-        const promise = ((JSModuleLoader.loadAndEvaluateModule(client.global, (&String.fromBytes(client.main)))) orelse { return error.JSError; });
+        const promise_opt = JSModuleLoader.loadAndEvaluateModule(client.global, (&String.fromBytes(client.main)));
+        if ((promise_opt == null)) {
+            return error.JSError;
+        }
+        const promise = promise_opt.?;
         client.pending_internal_promise = promise;
         client.pending_internal_promise_is_protected = false;
         _ = JSValue.fromCell(promise).ensureStillAlive();
@@ -2750,7 +2775,11 @@ pub fn loadMacroEntryPoint(client: *VirtualMachine, entry_path: []const u8, func
         var loader = MacroEntryPointLoader{ .path = entry_point.source.path.text };
         _ = &loader;
         _ = client.runWithAPILock(MacroEntryPointLoader, (&loader), MacroEntryPointLoader.load);
-        return ((loader.promise) orelse { return error.JSError; });
+        if (loader.promise) |p| {
+            _ = &p;
+            return p;
+        }
+        return error.JSError;
 }
 
 pub fn runWithAPILock(client: *VirtualMachine, comptime Context: type, ctx: *Context, comptime function: *const fn (*Context) void) void {
@@ -2758,7 +2787,11 @@ pub fn runWithAPILock(client: *VirtualMachine, comptime Context: type, ctx: *Con
 }
 
 pub inline fn _loadMacroEntryPoint(client: *VirtualMachine, entry_path: []const u8) ?*JSInternalPromise {
-        const promise = ((JSModuleLoader.loadAndEvaluateModule(client.global, (&String.init(entry_path)))) orelse { return null; });
+        const promise_opt = JSModuleLoader.loadAndEvaluateModule(client.global, (&String.init(entry_path)));
+        if ((promise_opt == null)) {
+            return null;
+        }
+        const promise = promise_opt.?;
         _ = client.waitForPromise(jsc.AnyPromise{ .internal = promise });
         return promise;
 }
@@ -3750,11 +3783,23 @@ pub fn resolveSourceMapping(client: *VirtualMachine, path: []const u8, line: Ord
         }
         if (client.standalone_module_graph) |graph| {
             _ = &graph;
-            const file = ((graph.find(path)) orelse { return null; });
-            const map = ((file.sourcemap.load()) orelse { return null; });
+            const file_opt = graph.find(path);
+            if ((file_opt == null)) {
+                return null;
+            }
+            const file = file_opt.?;
+            const map_opt = file.sourcemap.load();
+            if ((map_opt == null)) {
+                return null;
+            }
+            const map = map_opt.?;
             _ = map.ref();
             _ = (blk_catch_83: { break :blk_catch_83 ((client.source_mappings.putValue(path, SavedSourceMap.Value.init(map))) catch |__ce_83| { _ = &__ce_83; break :blk_catch_83 bun.outOfMemory(); }); });
-            const mapping = ((map.findMapping(line, column)) orelse { return null; });
+            const mapping_opt = map.findMapping(line, column);
+            if ((mapping_opt == null)) {
+                return null;
+            }
+            const mapping = mapping_opt.?;
             return .{ .mapping = mapping, .source_map = map, .prefetched_source_code = null };
         }
         return null;
@@ -3788,12 +3833,14 @@ else => instance: {
         _ = &instance;
         client.ipc = .{ .initialized = instance };
         instance.data = .init(opts.mode, .{ .virtual_machine = instance }, .uninitialized);
-        const socket = ((IPC.Socket.fromFd(group, .spawn_ipc, opts.fd, IPC.SendQueue, (&instance.data), null, true)) orelse {
-        _ = instance.deinit();
-        client.ipc = null;
-        _ = Output.warn("Unable to start IPC socket", .{});
-        return null;
-});
+        const socket_opt = IPC.Socket.fromFd(group, .spawn_ipc, opts.fd, IPC.SendQueue, (&instance.data), null, true);
+        if ((socket_opt == null)) {
+            _ = instance.deinit();
+            client.ipc = null;
+            _ = Output.warn("Unable to start IPC socket", .{});
+            return null;
+        }
+        const socket = socket_opt.?;
         _ = socket.setTimeout(0);
         instance.data.socket = .{ .open = socket };
         break :instance instance;

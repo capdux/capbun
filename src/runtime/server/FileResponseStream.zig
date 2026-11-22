@@ -234,7 +234,10 @@ pub fn canSendfile(resp: AnyResponse, file_type: bun.io.FileType, length: ?u64) 
         if ((file_type != .file)) {
             return false;
         }
-        const len = ((length) orelse { return false; });
+        if ((length == null)) {
+            return false;
+        }
+        const len = length.?;
         return (len >= cp_shl(1, 20));
 }
 

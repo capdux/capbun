@@ -169,8 +169,16 @@ ref_count: RefCount = RefCount.init(),
 flags: QueryFlags = .{},
 
 pub fn getTarget(self: *PostgresSQLQuery, globalObject: *jsc.JSGlobalObject, clean_target: bool) ?jsc.JSValue {
-        const thisValue = ((self.thisValue.tryGet()) orelse { return null; });
-        const target = ((js.targetGetCached(thisValue)) orelse { return null; });
+        const thisValue_opt = self.thisValue.tryGet();
+        if ((thisValue_opt == null)) {
+            return null;
+        }
+        const thisValue = thisValue_opt.?;
+        const target_opt = js.targetGetCached(thisValue);
+        if ((target_opt == null)) {
+            return null;
+        }
+        const target = target_opt.?;
         if (clean_target) {
             _ = js.targetSetCached(thisValue, globalObject, .zero);
         }
@@ -201,13 +209,21 @@ pub fn onWriteFail(self: *PostgresSQLQuery, pg_err: AnyPostgresError, globalObje
         defer if (!___deref_guard_moved) { ___deref_guard_moved = true; const __T = @TypeOf(_deref_guard); if (@typeInfo(__T) == .optional) { if (_deref_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _deref_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _deref_guard; _drop_val.__cp_deinit(); } };
         _ = &_deref_guard;
         self.status = .fail;
-        const thisValue = ((self.thisValue.tryGet()) orelse { return; });
+        const thisValue_opt = self.thisValue.tryGet();
+        if ((thisValue_opt == null)) {
+            return;
+        }
+        const thisValue = thisValue_opt.?;
         var _dg_guard = DowngradeGuard(JSRef){ .ptr = (&self.thisValue) };
         _ = &_dg_guard;
         var ___dg_guard_moved = false; _ = &___dg_guard_moved;
         defer if (!___dg_guard_moved) { ___dg_guard_moved = true; const __T = @TypeOf(_dg_guard); if (@typeInfo(__T) == .optional) { if (_dg_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _dg_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _dg_guard; _drop_val.__cp_deinit(); } };
         _ = &_dg_guard;
-        const targetValue = ((self.getTarget(globalObject, true)) orelse { return; });
+        const targetValue_opt = self.getTarget(globalObject, true);
+        if ((targetValue_opt == null)) {
+            return;
+        }
+        const targetValue = targetValue_opt.?;
         const vm = jsc.VirtualMachine.get();
         const function = (vm.rareData().postgresql_context.onQueryRejectFn.get()).?;
         const event_loop = vm.eventLoop();
@@ -224,13 +240,21 @@ pub fn onJSError(self: *PostgresSQLQuery, err_val: JSValue, globalObject: *jsc.J
         defer if (!___deref_guard_moved) { ___deref_guard_moved = true; const __T = @TypeOf(_deref_guard); if (@typeInfo(__T) == .optional) { if (_deref_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _deref_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _deref_guard; _drop_val.__cp_deinit(); } };
         _ = &_deref_guard;
         self.status = .fail;
-        const thisValue = ((self.thisValue.tryGet()) orelse { return; });
+        const thisValue_opt = self.thisValue.tryGet();
+        if ((thisValue_opt == null)) {
+            return;
+        }
+        const thisValue = thisValue_opt.?;
         var _dg_guard = DowngradeGuard(JSRef){ .ptr = (&self.thisValue) };
         _ = &_dg_guard;
         var ___dg_guard_moved = false; _ = &___dg_guard_moved;
         defer if (!___dg_guard_moved) { ___dg_guard_moved = true; const __T = @TypeOf(_dg_guard); if (@typeInfo(__T) == .optional) { if (_dg_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _dg_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _dg_guard; _drop_val.__cp_deinit(); } };
         _ = &_dg_guard;
-        const targetValue = ((self.getTarget(globalObject, true)) orelse { return; });
+        const targetValue_opt = self.getTarget(globalObject, true);
+        if ((targetValue_opt == null)) {
+            return;
+        }
+        const targetValue = targetValue_opt.?;
         var vm = jsc.VirtualMachine.get();
         _ = &vm;
         const function = (vm.rareData().postgresql_context.onQueryRejectFn.get()).?;
@@ -257,7 +281,11 @@ pub fn allowGC(thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject) void {
 }
 
 pub fn consumePendingValue(thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject) ?JSValue {
-        const pending_value = ((js.pendingValueGetCached(thisValue)) orelse { return null; });
+        const pending_value_opt = js.pendingValueGetCached(thisValue);
+        if ((pending_value_opt == null)) {
+            return null;
+        }
+        const pending_value = pending_value_opt.?;
         _ = js.pendingValueSetCached(thisValue, globalObject, .zero);
         return pending_value;
 }
@@ -277,7 +305,11 @@ pub fn onResult(self: *PostgresSQLQuery, command_tag_str: []const u8, globalObje
         const tag = CommandTag.init(command_tag_str);
         const js_tag = (blk_catch_1: { break :blk_catch_1 ((tag.toJSTag(globalObject)) catch |e| { _ = &e; return self.onJSError(globalObject.takeException(e), globalObject); }); });
         _ = js_tag.ensureStillAlive();
-        const thisValue = ((self.thisValue.tryGet()) orelse { return; });
+        const thisValue_opt = self.thisValue.tryGet();
+        if ((thisValue_opt == null)) {
+            return;
+        }
+        const thisValue = thisValue_opt.?;
         defer {
         {
             if (is_last) {
@@ -286,7 +318,11 @@ pub fn onResult(self: *PostgresSQLQuery, command_tag_str: []const u8, globalObje
             }
         }
         }
-        const targetValue = ((self.getTarget(globalObject, is_last)) orelse { return; });
+        const targetValue_opt = self.getTarget(globalObject, is_last);
+        if ((targetValue_opt == null)) {
+            return;
+        }
+        const targetValue = targetValue_opt.?;
         const vm = jsc.VirtualMachine.get();
         const function = (vm.rareData().postgresql_context.onQueryResolveFn.get()).?;
         const event_loop = vm.eventLoop();
@@ -314,12 +350,16 @@ pub fn call(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSEr
         var ___args_guard_moved = false; _ = &___args_guard_moved;
         defer if (!___args_guard_moved) { ___args_guard_moved = true; const __T = @TypeOf(_args_guard); if (@typeInfo(__T) == .optional) { if (_args_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _args_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _args_guard; _drop_val.__cp_deinit(); } };
         _ = &_args_guard;
-        const query = ((args.nextEat()) orelse {
-        return globalThis.throw("query must be a string", .{});
-});
-        const values = ((args.nextEat()) orelse {
-        return globalThis.throw("values must be an array", .{});
-});
+        const query_opt = args.nextEat();
+        if ((query_opt == null)) {
+            return globalThis.throw("query must be a string", .{});
+        }
+        const query = query_opt.?;
+        const values_opt = args.nextEat();
+        if ((values_opt == null)) {
+            return globalThis.throw("values must be an array", .{});
+        }
+        const values = values_opt.?;
         if ((!query.isString())) {
             return globalThis.throw("query must be a string", .{});
         }
@@ -387,9 +427,11 @@ pub fn setModeFromJS(self: *PostgresSQLQuery, globalObject: *jsc.JSGlobalObject,
 pub fn doRun(self: *PostgresSQLQuery, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
         var arguments = callframe.arguments();
         _ = &arguments;
-        var connection = ((arguments[0].as(PostgresSQLConnection)) orelse {
-        return globalObject.throw("connection must be a PostgresSQLConnection", .{});
-});
+        const connection_opt = arguments[0].as(PostgresSQLConnection);
+        if ((connection_opt == null)) {
+            return globalObject.throw("connection must be a PostgresSQLConnection", .{});
+        }
+        var connection = connection_opt.?;
         _ = &connection;
         _ = connection.poll_ref.ref(globalObject.bunVM());
         var query = arguments[1];

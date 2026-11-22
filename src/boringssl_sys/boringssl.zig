@@ -1252,7 +1252,11 @@ pub fn writeAll(self: *SSL, buf: []const u8) Err![]const u8 {
 pub const SSL_CTX = opaque {
 
 pub fn init() ?*SSL_CTX {
-            var ctx = ((SSL_CTX_new(TLS_with_buffers_method())) orelse { return null; });
+            const ctx_opt = SSL_CTX_new(TLS_with_buffers_method());
+            if ((ctx_opt == null)) {
+                return null;
+            }
+            var ctx = ctx_opt.?;
             _ = &ctx;
             _ = ctx.setCustomVerify(noop_custom_verify);
             _ = ctx.setup();

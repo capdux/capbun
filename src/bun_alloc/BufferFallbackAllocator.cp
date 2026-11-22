@@ -36,7 +36,7 @@ export @root struct BufferFallbackAllocator {
             len,
             alignment,
             ra,
-        ) orelse self.fallback_allocator.rawAlloc(len, alignment, ra);
+        ) ?? self.fallback_allocator.rawAlloc(len, alignment, ra);
     }
 
     static fn resize(ctx: *!, buf: []u8, alignment: std.mem.Alignment, new_len: usize, ra: usize): bool {

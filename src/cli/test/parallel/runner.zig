@@ -562,7 +562,10 @@ pub fn workerFlushAggregates(reporter: *CommandLineReporter, vm: *jsc.VirtualMac
 }
 
 pub fn workerEmitTestDone(file_idx: u32, formatted_line: []const u8) void {
-        const cmds = ((worker_cmds) orelse { return; });
+        if ((worker_cmds == null)) {
+            return;
+        }
+        const cmds = worker_cmds.?;
         _ = worker_frame.begin(.test_done);
         _ = worker_frame.u32_(file_idx);
         _ = worker_frame.str(formatted_line);

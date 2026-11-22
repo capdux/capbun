@@ -1538,11 +1538,12 @@ else => {
                         return ParseError.Unsupported;
                     }
                     const atom_opt = try self.parse_atom();
-                    const arg2 = ((atom_opt) orelse {
-                    const bad_tok: Token = self.peek();
-                    _ = try self.add_error("Expected a word, but got: {s}", .{ bad_tok.asHumanReadable(self.strpool) });
-                    return ParseError.Expected;
-});
+                    if ((atom_opt == null)) {
+                        const bad_tok: Token = self.peek();
+                        _ = try self.add_error("Expected a word, but got: {s}", .{ bad_tok.asHumanReadable(self.strpool) });
+                        return ParseError.Expected;
+                    }
+                    const arg2 = atom_opt.?;
                     if ((!self.matchTok(.DoubleBracketClose))) {
                         const bad_tok: Token = self.peek();
                         _ = try self.add_error("Expected \"]]\" but got: {s}", .{ bad_tok.asHumanReadable(self.strpool) });
@@ -1609,7 +1610,11 @@ while (true) {
                 const then_part = try self.parse_if_body((&.{ .elif, .@"else", .fi }));
                 _ = else_parts.append(elif_cond);
                 _ = else_parts.append(then_part);
-                const peek_tok = ((IfClauseTok.fromTok(self, self.peek())) orelse break);
+                const peek_tok_opt = IfClauseTok.fromTok(self, self.peek());
+                if ((peek_tok_opt == null)) {
+                    break;
+                }
+                const peek_tok = peek_tok_opt.?;
                 switch (peek_tok) {
 .elif => {
 _ = continue;

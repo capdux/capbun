@@ -148,7 +148,11 @@ pub fn removeDevServerSourceProvider(self: *SavedSourceMap, opaque_source_provid
         _ = &_unlock;
         var ___unlock_moved = false; _ = &___unlock_moved;
         defer if (!___unlock_moved) { ___unlock_moved = true; const __T = @TypeOf(_unlock); if (@typeInfo(__T) == .optional) { if (_unlock) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _unlock.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _unlock; _drop_val.__cp_deinit(); } };
-        const entry = ((self.map.getEntry(bun.hash(path))) orelse { return; });
+        const entry_opt = self.map.getEntry(bun.hash(path));
+        if ((entry_opt == null)) {
+            return;
+        }
+        const entry = entry_opt.?;
         const old_value = Value.@"from"(entry.value_ptr.*);
         if (old_value.get(DevServerSourceProvider)) |prov| {
             _ = &prov;
@@ -189,7 +193,11 @@ pub fn removeZigSourceProvider(self: *SavedSourceMap, opaque_source_provider: *a
         _ = &_unlock;
         var ___unlock_moved = false; _ = &___unlock_moved;
         defer if (!___unlock_moved) { ___unlock_moved = true; const __T = @TypeOf(_unlock); if (@typeInfo(__T) == .optional) { if (_unlock) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _unlock.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _unlock; _drop_val.__cp_deinit(); } };
-        const entry = ((self.map.getEntry(bun.hash(path))) orelse { return; });
+        const entry_opt = self.map.getEntry(bun.hash(path));
+        if ((entry_opt == null)) {
+            return;
+        }
+        const entry = entry_opt.?;
         const old_value = Value.@"from"(entry.value_ptr.*);
         if (old_value.get(SourceProviderMap)) |prov| {
             _ = &prov;
@@ -323,10 +331,12 @@ pub fn putValue(self: *SavedSourceMap, path: []const u8, value: Value) !void {
 pub fn getWithContent(self: *SavedSourceMap, path: []const u8, hint: SourceMap.ParseUrlResultHint) SourceMap.ParseUrl {
         const hash = bun.hash(path);
         _ = self.lock();
-        const mapping = ((self.map.getEntry(hash)) orelse {
-        _ = self.unlock();
-        return .{};
-});
+        const mapping_opt = self.map.getEntry(hash);
+        if ((mapping_opt == null)) {
+            _ = self.unlock();
+            return .{};
+        }
+        const mapping = mapping_opt.?;
         switch (Value.@"from"(mapping.value_ptr.*).tag()) {
 @field(Value.Tag, @typeName(InternalSourceMap)) => {
 var _unlock = UnlockGuard(SavedSourceMap){ .ptr = self };
@@ -438,8 +448,11 @@ pub fn get(self: *SavedSourceMap, path: []const u8) ?*ParsedSourceMap {
 }
 
 pub fn getValueLocked(self: *SavedSourceMap, hash: u64) ?Value {
-        const raw = ((self.map.get(hash)) orelse { return null; });
-        return Value.@"from"(raw);
+        if (self.map.get(hash)) |raw| {
+            _ = &raw;
+            return Value.@"from"(raw);
+        }
+        return null;
 }
 
 pub fn resolveMapping(self: *SavedSourceMap, path: []const u8, line: bun.Ordinal, column: bun.Ordinal, source_handling: SourceMap.SourceContentHandling) ?SourceMap.Mapping.Lookup {
@@ -447,8 +460,16 @@ pub fn resolveMapping(self: *SavedSourceMap, path: []const u8, line: bun.Ordinal
 .no_source_contents => .mappings_only,
 .source_contents => .{ .all = .{ .line = @max(line.zeroBased(), 0), .column = @max(column.zeroBased(), 0) } },
 }));
-        const map = ((parse.map) orelse { return null; });
-        const mapping = ((((parse.mapping) orelse (map.findMapping(line, column)))) orelse { return null; });
+        const map_opt = parse.map;
+        if ((map_opt == null)) {
+            return null;
+        }
+        const map = map_opt.?;
+        const mapping_opt = ((parse.mapping) orelse (map.findMapping(line, column)));
+        if ((mapping_opt == null)) {
+            return null;
+        }
+        const mapping = mapping_opt.?;
         return .{ .mapping = mapping, .source_map = map, .prefetched_source_code = parse.source_contents };
 }
 pub const HashTable = std.HashMap(u64, ?*void, bun.IdentityContext(u64), 80);

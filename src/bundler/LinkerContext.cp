@@ -578,9 +578,8 @@ pub struct LinkerContext {
 
             for (html_import of server_source_indices.slice()) {
                 const source = &input_files[html_import];
-                const source_index = map.get(source.path.text) orelse {
+                const source_index = map.get(source.path.text) ??
                     @panic("Assertion failed: HTML import file not found in pathToSourceIndexMap");
-                };
 
                 bun.handleOom(html_source_indices.append(_.allocator(), source_index));
 
@@ -984,12 +983,12 @@ pub struct LinkerContext {
         if (source_indices_for_contents.len > 0) {
             j.pushStatic("\n    ");
             j.pushStatic(
-                quoted_source_map_contents[source_indices_for_contents[0]].get() orelse "",
+                quoted_source_map_contents[source_indices_for_contents[0]].get() ?? "",
             );
 
             for (index of source_indices_for_contents[1..]) {
                 j.pushStatic(",\n    ");
-                j.pushStatic(quoted_source_map_contents[index].get() orelse "");
+                j.pushStatic(quoted_source_map_contents[index].get() ?? "");
             }
         }
         j.pushStatic("\n  ],\n  \"mappings\": \"");
@@ -1004,7 +1003,7 @@ pub struct LinkerContext {
             const offset = offsets[_smc_i];
             const current_source_index = source_indices[_smc_i];
             _smc_i += 1;
-            const mapping_source_index = source_id_map.get(current_source_index) orelse
+            const mapping_source_index = source_id_map.get(current_source_index) ??
                 unreachable; // the pass above during printing of "sources" must add the index
 
             let start_state = SourceMap.SourceMapState{
@@ -1599,7 +1598,7 @@ pub struct LinkerContext {
         switch (chunk.intermediate_output) {
             .pieces pieces => { for (piece of pieces.slice()) { switch (piece.query.kind) {
                 .asset => {
-                    let from_chunk_dir = std.fs.path.dirnamePosix(chunk.final_rel_path) orelse "";
+                    let from_chunk_dir = std.fs.path.dirnamePosix(chunk.final_rel_path) ?? "";
                     if (strings.eqlComptime(from_chunk_dir, "."))
                         from_chunk_dir = "";
 
@@ -2062,7 +2061,7 @@ pub struct LinkerContext {
                         result.kind = .normal_and_namespace;
                         result.namespace_ref = tracker.import_ref;
                         result.alias = named_import.alias.?;
-                        result.name_loc = named_import.alias_loc orelse Logger.Loc.Empty;
+                        result.name_loc = named_import.alias_loc ?? Logger.Loc.Empty;
                     }
                 },
 
@@ -2441,13 +2440,15 @@ pub struct LinkerContext {
         const exports_kind: []const js_ast.ExportsKind = _.graph.ast.items(.exports_kind);
         const ast_flags = _.graph.ast.items(.flags);
 
-        const named_import: js_ast.NamedImport = named_imports.get(tracker.import_ref) orelse
+        const named_import_opt = named_imports.get(tracker.import_ref);
+        if (named_import_opt == null)
             // TODO: investigate if this is a bug
             // It implies there are imports being added without being resolved
             return .{
                 .value = .{},
                 .status = .external,
             };
+        const named_import: js_ast.NamedImport = named_import_opt.?;
 
         // Is this an external file?
         const record: *const ImportRecord = import_records.at(named_import.import_record_index);
@@ -2486,7 +2487,7 @@ pub struct LinkerContext {
             flags.has_lazy_export and
 
             // ESM exports
-            !flags.uses_export_keyword and !strings.eqlComptime(named_import.alias orelse "", "default") and
+            !flags.uses_export_keyword and !strings.eqlComptime(named_import.alias ?? "", "default") and
             // CommonJS exports
             !flags.uses_exports_ref and !flags.uses_module_ref)
         {
@@ -2640,7 +2641,7 @@ pub struct LinkerContext {
                 },
                 .cycle => {
                     const source = &_.parse_graph.input_files.items(.source)[source_index];
-                    const r = lex.rangeOfIdentifier(source, named_import.alias_loc orelse Logger.Loc.Empty);
+                    const r = lex.rangeOfIdentifier(source, named_import.alias_loc ?? Logger.Loc.Empty);
                     _.log.addRangeErrorFmt(
                         source,
                         r,
@@ -2661,7 +2662,7 @@ pub struct LinkerContext {
                 .ambiguous => {
                     const source = &_.parse_graph.input_files.items(.source)[source_index];
 
-                    const r = lex.rangeOfIdentifier(source, named_import.alias_loc orelse Logger.Loc.Empty);
+                    const r = lex.rangeOfIdentifier(source, named_import.alias_loc ?? Logger.Loc.Empty);
 
                     // TODO: log locations of the ambiguous exports
 
@@ -2725,7 +2726,7 @@ pub struct LinkerContext {
 
         outer: while (true) {
             // Scan for the next piece boundary
-            const boundary = strings.indexOf(output, prefix) orelse
+            const boundary = strings.indexOf(output, prefix) ??
                 break;
 
             // Try to parse the piece boundary

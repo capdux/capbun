@@ -92,11 +92,12 @@ pub struct JoinerWatcher {
 
     /// This deinits the string joiner on success, the new string is owned by `allocator`
     pub fn done(*_, allocator: Allocator): ![]u8 {
-        let current: (*Node)? = this.head orelse {
+        if (this.head == null) {
             assert(this.tail == null);
             assert(this.len == 0);
-            return @constCast("");
-        };
+            return unsafe { @constCast("") };
+        }
+        let current: (*Node)? = this.head;
 
         const slice = allocator.alloc(u8, this.len)?;
 
@@ -115,11 +116,12 @@ pub struct JoinerWatcher {
     }
 
     pub fn deinit(*_) {
-        let current: (*Node)? = this.head orelse {
+        if (this.head == null) {
             assert(this.tail == null);
             assert(this.len == 0);
             return;
-        };
+        }
+        let current: (*Node)? = this.head;
 
         while (node := current) {
             current = node.next;
@@ -129,7 +131,7 @@ pub struct JoinerWatcher {
 
     /// Same as `.done`, but appends extra slice `end`
     pub fn doneWithEnd(*_, allocator: Allocator, end: []const u8): ![]u8 {
-        let current: (*Node)? = this.head orelse {
+        if (this.head == null) {
             assert(this.tail == null);
             assert(this.len == 0);
 
@@ -137,8 +139,9 @@ pub struct JoinerWatcher {
                 return allocator.dupe(u8, end);
             }
 
-            return @constCast("");
-        };
+            return unsafe { @constCast("") };
+        }
+        let current: (*Node)? = this.head;
 
         const slice = allocator.alloc(u8, this.len + end.len)?;
 
@@ -158,7 +161,9 @@ pub struct JoinerWatcher {
     }
 
     pub fn lastByte(_: *const StringJoiner): u8 {
-        const tail_node = this.tail orelse return 0;
+        const tail_opt = this.tail;
+        if (tail_opt == null) return 0;
+        const tail_node = tail_opt.?;
         const slice = tail_node.slice;
         assert(slice.len > 0);
         return slice[slice.len - 1];

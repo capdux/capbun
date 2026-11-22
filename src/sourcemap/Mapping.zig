@@ -338,7 +338,11 @@ pub const Lookup = struct {
     name: ?[]const u8 = null,
 
 pub fn displaySourceURLIfNeeded(self: Lookup, base_filename: []const u8) ?bun.String {
-            const source_map = ((self.source_map) orelse { return null; });
+            const source_map_opt = self.source_map;
+            if ((source_map_opt == null)) {
+                return null;
+            }
+            const source_map = source_map_opt.?;
             if ((source_map.external_source_names.len == 0)) {
                 return null;
             }
@@ -362,16 +366,28 @@ pub fn getSourceCode(self: Lookup, base_filename: []const u8) ?bun.jsc.ZigString
                 _ = &code;
                 break :bytes code;
             }
-            const source_map = ((self.source_map) orelse { return null; });
+            const source_map_opt = self.source_map;
+            if ((source_map_opt == null)) {
+                return null;
+            }
+            const source_map = source_map_opt.?;
             _ = assert(source_map.isExternal());
-            const provider = ((source_map.underlying_provider.provider()) orelse { return null; });
+            const provider_opt = source_map.underlying_provider.provider();
+            if ((provider_opt == null)) {
+                return null;
+            }
+            const provider = provider_opt.?;
             const index = self.mapping.source_index;
             if (source_map.is_standalone_module_graph) {
                 const serialized = source_map.standaloneModuleGraphData();
                 if ((index >= source_map.external_source_names.len)) {
                     return null;
                 }
-                const code = ((serialized.sourceFileContents((if (comptime @typeInfo(@TypeOf(index)) == .@"enum") cp_cast_int(usize, @intFromEnum(index)) else cp_cast_int(usize, index)))) orelse { return null; });
+                const code_opt = serialized.sourceFileContents((if (comptime @typeInfo(@TypeOf(index)) == .@"enum") cp_cast_int(usize, @intFromEnum(index)) else cp_cast_int(usize, index)));
+                if ((code_opt == null)) {
+                    return null;
+                }
+                const code = code_opt.?;
                 return bun.jsc.ZigString.Slice.fromUTF8NeverFree(code);
             }
             if (provider.getSourceMap(base_filename, source_map.underlying_provider.load_hint, .{ .source_only = (if (comptime @typeInfo(@TypeOf(index)) == .@"enum") cp_cast_int(u32, @intFromEnum(index)) else cp_cast_int(u32, index)) })) |parsed| {

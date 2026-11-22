@@ -629,7 +629,7 @@ pub fn run(ctx: Command.Context): !noreturn {
         let packages = std.array_list.Managed(FilteredPackage).init(ctx.allocator);
 
         while (package_json_path := package_json_iter.next()?) {
-            const dirpath = ctx.allocator.dupe(u8, std.fs.path.dirname(package_json_path) orelse Global.crash())?;
+            const dirpath = ctx.allocator.dupe(u8, std.fs.path.dirname(package_json_path) ?? Global.crash())?;
             const path = bun.strings.withoutTrailingSlash(dirpath);
 
             // When using --workspaces, skip the root package to prevent recursion

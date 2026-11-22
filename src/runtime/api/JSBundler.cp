@@ -331,7 +331,7 @@ struct IndentGuard {
                         .windows_description = OwnedString.initEmpty(allocator),
                         .windows_copyright = OwnedString.initEmpty(allocator),
                         .outfile = OwnedString.initEmpty(allocator),
-                        .compile_target = compile_target orelse .{},
+                        .compile_target = compile_target ?? .{},
                     },
                 };
 

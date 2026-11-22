@@ -147,9 +147,12 @@ pub union(enum) Authentication {
                 if (s == null) debug("Missing s", .{});
                 if (i == null) debug("Missing i", .{});
 
-                const r_val = r orelse return err.InvalidMessage;
-                const s_val = s orelse return err.InvalidMessage;
-                const i_val = i orelse return err.InvalidMessage;
+                if (r == null) return err.InvalidMessage;
+                if (s == null) return err.InvalidMessage;
+                if (i == null) return err.InvalidMessage;
+                const r_val = r.?;
+                const s_val = s.?;
+                const i_val = i.?;
 
                 unsafe {
                     _.* = {

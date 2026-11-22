@@ -2283,9 +2283,11 @@ pub fn doWrite(self: *Blob, globalThis: *JSGlobalObject, callframe: *CallFrame) 
         var ___guard_args_moved = false; _ = &___guard_args_moved;
         defer if (!___guard_args_moved) { ___guard_args_moved = true; const __T = @TypeOf(_guard_args); if (@typeInfo(__T) == .optional) { if (_guard_args) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_args.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_args; _drop_val.__cp_deinit(); } };
         _ = try validateWritableBlob(globalThis, self);
-        const data = ((args.nextEat()) orelse {
-        return globalThis.throwInvalidArguments("blob.write(pathOrFdOrBlob, blob) expects a Blob-y thing to write", .{});
-});
+        const data_opt = args.nextEat();
+        if ((data_opt == null)) {
+            return globalThis.throwInvalidArguments("blob.write(pathOrFdOrBlob, blob) expects a Blob-y thing to write", .{});
+        }
+        const data = data_opt.?;
         if (data.isEmptyOrUndefinedOrNull()) {
             return globalThis.throwInvalidArguments("blob.write(pathOrFdOrBlob, blob) expects a Blob-y thing to write", .{});
         }
@@ -3957,8 +3959,11 @@ pub export fn Blob__deref(blob: *Blob) callconv(.c) void {
 }
 
 pub export fn Blob__dupeFromJS(value: JSValue) callconv(.c) ?*Blob {
-        const b = ((Blob.fromJS(value)) orelse { return null; });
-        return Blob.new(b.dupeWithContentType(true));
+        const b_opt = Blob.fromJS(value);
+        if ((b_opt == null)) {
+            return null;
+        }
+        return Blob.new(b_opt.?.dupeWithContentType(true));
 }
 
 pub export fn Blob__setAsFile(blob: *Blob, path_str: *String) callconv(.c) void {
@@ -3987,8 +3992,11 @@ pub export fn Blob__getFileNameString(blob: *Blob) callconv(.c) String {
 }
 
 pub export fn Blob__getDataPtr(value: JSValue) callconv(.c) ?*anyopaque {
-        const blob = ((Blob.fromJS(value)) orelse { return null; });
-        const data = blob.sharedView();
+        const blob_opt = Blob.fromJS(value);
+        if ((blob_opt == null)) {
+            return null;
+        }
+        const data = blob_opt.?.sharedView();
         if ((data.len == 0)) {
             return null;
         }
@@ -3999,8 +4007,11 @@ pub export fn Blob__getDataPtr(value: JSValue) callconv(.c) ?*anyopaque {
 }
 
 pub export fn Blob__getSize(value: JSValue) callconv(.c) usize {
-        const blob = ((Blob.fromJS(value)) orelse { return 0; });
-        const data = blob.sharedView();
+        const blob_opt = Blob.fromJS(value);
+        if ((blob_opt == null)) {
+            return 0;
+        }
+        const data = blob_opt.?.sharedView();
         return data.len;
 }
 
@@ -4139,6 +4150,9 @@ pub export fn JSDOMFile__construct(globalThis: *JSGlobalObject, callframe: *Call
 
 pub export fn JSDOMFile__hasInstance(_: JSValue, _: *JSGlobalObject, value: JSValue) callconv(jsc.conv) bool {
         _ = jsc.markBinding(@src());
-        const blob = ((value.as(Blob)) orelse { return false; });
-        return blob.is_jsdom_file;
+        const blob_opt = value.as(Blob);
+        if ((blob_opt == null)) {
+            return false;
+        }
+        return blob_opt.?.is_jsdom_file;
 }

@@ -51,8 +51,12 @@ pub struct BarrelExportResolution {
 /// named_exports[alias].ref through named_imports.
 /// Also returns the original alias from the source module for BFS propagation.
 fn resolveBarrelExport(alias: []const u8, named_exports: JSAst.NamedExports, named_imports: JSAst.NamedImports): BarrelExportResolution? {
-    const export_entry = named_exports.get(alias) orelse return null;
-    const import_entry = named_imports.get(export_entry.ref) orelse return null;
+    const export_entry_opt = named_exports.get(alias);
+    if (export_entry_opt == null) return null;
+    const export_entry = export_entry_opt.?;
+    const import_entry_opt = named_imports.get(export_entry.ref);
+    if (import_entry_opt == null) return null;
+    const import_entry = import_entry_opt.?;
     return BarrelExportResolution{
         import_record_index: import_entry.import_record_index,
         original_alias: import_entry.alias,

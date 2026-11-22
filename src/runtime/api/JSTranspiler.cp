@@ -222,9 +222,11 @@ pub struct Config {
                     break :define;
                 }
 
-                const define_obj = define.getObject() orelse {
+                const define_obj_opt = define.getObject();
+                if (define_obj_opt == null) {
                     return globalThis.throwInvalidArguments("define must be an object", .{});
-                };
+                }
+                const define_obj = define_obj_opt.?;
 
                 let define_iter = jsc.JSPropertyIterator(.{
                     skip_empty_name: true,
@@ -385,13 +387,15 @@ pub struct Config {
                 if (out.isEmpty()) break :macros;
                 _.macros_buf = bun.handleOom(out.toOwnedSlice(allocator));
                 const source = &logger.Source.initPathString("macros.json", _.macros_buf);
-                const json = (jsc.VirtualMachine.get().transpiler.resolver.caches.json.parseJSON(
+                const json_opt = jsc.VirtualMachine.get().transpiler.resolver.caches.json.parseJSON(
                     &_.log,
                     source,
                     allocator,
                     .json,
                     false,
-                ) catch null) orelse { break :macros; };
+                ) catch null;
+                if (json_opt == null) { break :macros; }
+                const json = json_opt.?;
                 _.macro_map = PackageJSON.parseMacrosJSON(allocator, json, &_.log, source);
                 break :macros;
             }
@@ -523,9 +527,11 @@ pub struct Config {
             }
 
             if (replace := exports.getTruthy(globalThis, "replace")?) {
-                const replace_obj = replace.getObject() orelse {
+                const replace_obj_opt = replace.getObject();
+                if (replace_obj_opt == null) {
                     return globalThis.throwInvalidArguments("replace must be an object", .{});
-                };
+                }
+                const replace_obj = replace_obj_opt.?;
 
                 let iter = jsc.JSPropertyIterator(.{
                     skip_empty_name: true,
@@ -686,10 +692,12 @@ pub struct TransformTask {
             emit_decorator_metadata: if (_.tsconfig != null) _.tsconfig.?.emit_decorator_metadata else false,
         };
 
-        const parse_result = _.transpiler.parse(parse_options, null) orelse {
+        const parse_result_opt = _.transpiler.parse(parse_options, null);
+        if (parse_result_opt == null) {
             _.e = error.ParseError;
             return;
-        };
+        }
+        const parse_result = parse_result_opt.?;
 
         if (parse_result.empty) {
             _.output_code = bun.String.empty;
@@ -1065,13 +1073,17 @@ pub fn scan(client: *JSTranspiler, globalThis: *jsc.JSGlobalObject, callframe: *
     const arguments = callframe.arguments_old(3);
     let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments.slice());
     const args_guard = DeinitPtrGuard<@TypeOf(args)>{ ptr: &args };
-    const code_arg = args.next() orelse {
+    const code_arg_opt = args.next();
+    if (code_arg_opt == null) {
         return globalThis.throwInvalidArgumentType("scan", "code", "string or Uint8Array");
-    };
+    }
+    const code_arg = code_arg_opt.?;
 
-    let code_holder = (jsc.Node.StringOrBuffer.fromJS(globalThis, args.@"arena".allocator(), code_arg)?) orelse {
+    const code_holder_opt = jsc.Node.StringOrBuffer.fromJS(globalThis, args.@"arena".allocator(), code_arg)?;
+    if (code_holder_opt == null) {
         return globalThis.throwInvalidArgumentType("scan", "code", "string or Uint8Array");
-    };
+    }
+    let code_holder = code_holder_opt.?;
     const code_holder_guard = DeinitPtrGuard<@TypeOf(code_holder)>{ ptr: &code_holder };
     const code = code_holder.slice();
     args.eat();
@@ -1106,13 +1118,15 @@ pub fn scan(client: *JSTranspiler, globalThis: *jsc.JSGlobalObject, callframe: *
     let ast_scope = ast_memory_allocator.enter(allocator);
     const ast_scope_guard = ExitPtrGuard<@TypeOf(ast_scope)>{ ptr: &ast_scope };
 
-    let parse_result = getParseResult(client, allocator, code, loader, Transpiler.MacroJSCtx.zero) orelse {
+    const parse_result_opt = getParseResult(client, allocator, code, loader, Transpiler.MacroJSCtx.zero);
+    if (parse_result_opt == null) {
         if (client.transpiler.log.warnings + client.transpiler.log.errors > 0) {
             return globalThis.throwValue(client.transpiler.log.toJS(globalThis, globalThis.allocator(), "Parse error")?);
         }
 
         return globalThis.throw("Failed to parse", .{});
-    };
+    }
+    let parse_result = parse_result_opt.?;
 
     if (client.transpiler.log.warnings + client.transpiler.log.errors > 0) {
         return globalThis.throwValue(client.transpiler.log.toJS(globalThis, globalThis.allocator(), "Parse error")?);
@@ -1139,14 +1153,18 @@ pub fn transform(client: *JSTranspiler, globalThis: *jsc.JSGlobalObject, callfra
     const arguments = callframe.arguments_old(3);
     let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments.slice());
     const args_arena_guard = DeinitPtrGuard<bun.ArenaAllocator>{ ptr: &args.@"arena" };
-    const code_arg = args.next() orelse {
+    const code_arg_opt = args.next();
+    if (code_arg_opt == null) {
         return globalThis.throwInvalidArgumentType("transform", "code", "string or Uint8Array");
-    };
+    }
+    const code_arg = code_arg_opt.?;
 
     const allow_string_object = true;
-    let code = (jsc.Node.StringOrBuffer.fromJSWithEncodingMaybeAsync(globalThis, bun.default_allocator, code_arg, .utf8, true, allow_string_object)?) orelse {
+    const code_opt = jsc.Node.StringOrBuffer.fromJSWithEncodingMaybeAsync(globalThis, bun.default_allocator, code_arg, .utf8, true, allow_string_object)?;
+    if (code_opt == null) {
         return globalThis.throwInvalidArgumentType("transform", "code", "string or Uint8Array");
-    };
+    }
+    let code = code_opt.?;
     let code_guard = ErrDeinitAndUnprotectPtrGuard{ ptr: &code };
 
     args.eat();
@@ -1181,15 +1199,19 @@ pub fn transformSync(
 
     let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments.slice());
     const args_arena_guard = DeinitPtrGuard<bun.ArenaAllocator>{ ptr: &args.@"arena" };
-    const code_arg = args.next() orelse {
+    const code_arg_opt = args.next();
+    if (code_arg_opt == null) {
         return globalThis.throwInvalidArgumentType("transformSync", "code", "string or Uint8Array");
-    };
+    }
+    const code_arg = code_arg_opt.?;
 
     let arena_ = MimallocArena.init();
     const arena_guard = DeinitPtrGuard<MimallocArena>{ ptr: &arena_ };
-    let code_holder = (jsc.Node.StringOrBuffer.fromJS(globalThis, arena_.allocator(), code_arg)?) orelse {
+    const code_holder_opt = jsc.Node.StringOrBuffer.fromJS(globalThis, arena_.allocator(), code_arg)?;
+    if (code_holder_opt == null) {
         return globalThis.throwInvalidArgumentType("transformSync", "code", "string or Uint8Array");
-    };
+    }
+    let code_holder = code_holder_opt.?;
     const code_holder_guard = DeinitPtrGuard<@TypeOf(code_holder)>{ ptr: &code_holder };
     const code = code_holder.slice();
     let arg0 = unsafe { arguments.ptr[0] };
@@ -1241,31 +1263,36 @@ pub fn transformSync(
     _.transpiler.setLog(unsafe { &log });
 
     const restore_transpiler_guard = RestoreTranspilerGuard{ target: &_.transpiler, prev: prev_bundler };
-    const parse_result = getParseResult(
+    const parse_result_opt = getParseResult(
         _,
         allocator,
         code,
         loader,
         js_ctx_value,
-    ) orelse {
+    );
+    if (parse_result_opt == null) {
         if (_.transpiler.log.warnings + _.transpiler.log.errors > 0) {
             return globalThis.throwValue(_.transpiler.log.toJS(globalThis, globalThis.allocator(), "Parse error")?);
         }
 
         return globalThis.throw("Failed to parse code", .{});
-    };
+    }
+    const parse_result = parse_result_opt.?;
 
     if (_.transpiler.log.warnings + _.transpiler.log.errors > 0) {
         return globalThis.throwValue(_.transpiler.log.toJS(globalThis, globalThis.allocator(), "Parse error")?);
     }
 
-    let buffer_writer = _.buffer_writer orelse brk: {
+    let buffer_writer: JSPrinter.BufferWriter = undefined;
+    if (bw := _.buffer_writer) {
+        buffer_writer = bw;
+    } else {
         let writer = JSPrinter.BufferWriter.init(arena_.backingAllocator());
 
         writer.buffer.growIfNeeded(code.len) catch unreachable;
         writer.buffer.list.expandToCapacity();
-        break :brk writer;
-    };
+        buffer_writer = writer;
+    }
 
     const restore_writer_guard = RestoreBufferWriterGuard{ target: &_.buffer_writer, writer_ptr: &buffer_writer };
 
@@ -1289,16 +1316,20 @@ pub fn scanImports(client: *JSTranspiler, globalThis: *jsc.JSGlobalObject, callf
     let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments.slice());
     const args_guard = DeinitPtrGuard<@TypeOf(args)>{ ptr: &args };
 
-    const code_arg = args.next() orelse {
+    const code_arg_opt = args.next();
+    if (code_arg_opt == null) {
         return globalThis.throwInvalidArgumentType("scanImports", "code", "string or Uint8Array");
-    };
+    }
+    const code_arg = code_arg_opt.?;
 
-    let code_holder = (jsc.Node.StringOrBuffer.fromJS(globalThis, args.@"arena".allocator(), code_arg)?) orelse {
+    const code_holder_opt = jsc.Node.StringOrBuffer.fromJS(globalThis, args.@"arena".allocator(), code_arg)?;
+    if (code_holder_opt == null) {
         if (!globalThis.hasException()) {
             return globalThis.throwInvalidArgumentType("scanImports", "code", "string or Uint8Array");
         }
         return jsc.JSValue.zero;
-    };
+    }
+    let code_holder = code_holder_opt.?;
     args.eat();
     const code_holder_guard = DeinitPtrGuard<@TypeOf(code_holder)>{ ptr: &code_holder };
     const code = code_holder.slice();

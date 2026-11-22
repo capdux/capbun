@@ -529,7 +529,11 @@ pub fn JSSocketType(comptime ssl: bool) type {
 }
 
 pub fn selectALPNCallback(ssl: ?*BoringSSL.SSL, out: [*c][*c]const u8, outlen: [*c]u8, in_buf: [*c]const u8, inlen: c_uint, _: ?*anyopaque) callconv(.c) c_int {
-        const this_ptr = bun.cast(*TLSSocket, ((BoringSSL.SSL_get_ex_data(ssl, 0)) orelse { return BoringSSL.SSL_TLSEXT_ERR_NOACK; }));
+        const ex_data = BoringSSL.SSL_get_ex_data(ssl, 0);
+        if ((ex_data == null)) {
+            return BoringSSL.SSL_TLSEXT_ERR_NOACK;
+        }
+        const this_ptr = bun.cast(*TLSSocket, ex_data.?);
         if (this_ptr.protos) |protos| {
             _ = &protos;
             if ((protos.len == 0)) {
@@ -2164,9 +2168,11 @@ pub fn jsUpgradeDuplexToTLS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
             }
         }
         if ((sc_js != .zero)) {
-            const sc = ((SecureContext.fromJS(sc_js)) orelse {
-            return globalObject.throwInvalidArgumentTypeValue("secureContext", "SecureContext", sc_js);
-});
+            const sc_opt = SecureContext.fromJS(sc_js);
+            if ((sc_opt == null)) {
+                return globalObject.throwInvalidArgumentTypeValue("secureContext", "SecureContext", sc_js);
+            }
+            const sc = sc_opt.?;
             _ctx_guard.ctx = sc.borrow();
         }
         var _ssl_opts_guard = OptValDeinitGuard(jsc.API.ServerConfig.SSLConfig){  };
@@ -2321,9 +2327,11 @@ pub fn jsSetSocketOptions(global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
         if ((arguments.len < 3)) {
             return global.throwNotEnoughArguments("setSocketOptions", 3, arguments.len);
         }
-        const socket = ((arguments.ptr[0].as(TCPSocket)) orelse {
-        return global.throw("Expected a SocketTCP instance", .{});
-});
+        const socket_opt = arguments.ptr[0].as(TCPSocket);
+        if ((socket_opt == null)) {
+            return global.throw("Expected a SocketTCP instance", .{});
+        }
+        const socket = socket_opt.?;
         const is_for_send_buffer = (arguments.ptr[1].toInt32() == 1);
         const is_for_recv_buffer = (arguments.ptr[1].toInt32() == 2);
         const buffer_size = arguments.ptr[2].toInt32();

@@ -153,7 +153,7 @@ export class S3Client {
 
     pub fn writeFormat(*_, comptime Formatter: type, formatter: *Formatter, writer: anytype, comptime enable_ansi_colors: bool): !void {
         writer.writeAll(Output.prettyFmt("<r>S3Client<r>", enable_ansi_colors))?;
-        const bucket_name = if (_.credentials.virtual_hosted_style and _.credentials.endpoint.len > 0) S3Credentials.guessBucket(_.credentials.endpoint) orelse _.credentials.bucket else _.credentials.bucket;
+        const bucket_name = if (_.credentials.virtual_hosted_style and _.credentials.endpoint.len > 0) (S3Credentials.guessBucket(_.credentials.endpoint) ?? _.credentials.bucket) else _.credentials.bucket;
         if (bucket_name.len > 0) {
             writer.print(
                 Output.prettyFmt(" (<green>\"{s}\"<r>)<r> {{", enable_ansi_colors),
@@ -173,12 +173,14 @@ export class S3Client {
         const arguments = callframe.arguments_old(2).slice();
         let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
         const _guard_args = DeinitGuard<@TypeOf(args)>{ target: unsafe { &args } };
-        let path = (jsc.Node.PathLike.fromJS(globalThis, &args)?) orelse {
+        const path_opt = jsc.Node.PathLike.fromJS(globalThis, &args)?;
+        if (path_opt == null) {
             if (args.len() == 0) {
                 return globalThis.ERR(.MISSING_ARGS, "Expected a path ", .{}).throw();
             }
             return globalThis.throwInvalidArguments("Expected a path", .{});
-        };
+        }
+        let path = path_opt.?;
         let _guard_path = ErrDeinitGuard<@TypeOf(path)>{ target: unsafe { &path } };
         const options = args.nextEat();
         let blob = Blob.new(S3File.constructS3FileWithS3CredentialsAndOptions(globalThis, path, options, _.credentials, _.options, _.acl, _.storage_class, _.request_payer)?);
@@ -190,12 +192,14 @@ export class S3Client {
         const arguments = callframe.arguments_old(2).slice();
         let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
         const _guard_args = DeinitGuard<@TypeOf(args)>{ target: unsafe { &args } };
-        let path = (jsc.Node.PathLike.fromJS(globalThis, &args)?) orelse {
+        const path_opt = jsc.Node.PathLike.fromJS(globalThis, &args)?;
+        if (path_opt == null) {
             if (args.len() == 0) {
                 return globalThis.ERR(.MISSING_ARGS, "Expected a path to presign", .{}).throw();
             }
             return globalThis.throwInvalidArguments("Expected a path to presign", .{});
-        };
+        }
+        let path = path_opt.?;
         let _guard_path = ErrDeinitGuard<@TypeOf(path)>{ target: unsafe { &path } };
 
         const options = args.nextEat();
@@ -209,12 +213,14 @@ export class S3Client {
         const arguments = callframe.arguments_old(2).slice();
         let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
         const _guard_args = DeinitGuard<@TypeOf(args)>{ target: unsafe { &args } };
-        let path = (jsc.Node.PathLike.fromJS(globalThis, &args)?) orelse {
+        const path_opt = jsc.Node.PathLike.fromJS(globalThis, &args)?;
+        if (path_opt == null) {
             if (args.len() == 0) {
                 return globalThis.ERR(.MISSING_ARGS, "Expected a path to check if it exists", .{}).throw();
             }
             return globalThis.throwInvalidArguments("Expected a path to check if it exists", .{});
-        };
+        }
+        let path = path_opt.?;
         let _guard_path = ErrDeinitGuard<@TypeOf(path)>{ target: unsafe { &path } };
         const options = args.nextEat();
         let blob = S3File.constructS3FileWithS3CredentialsAndOptions(globalThis, path, options, _.credentials, _.options, _.acl, _.storage_class, _.request_payer)?;
@@ -227,12 +233,14 @@ export class S3Client {
         const arguments = callframe.arguments_old(2).slice();
         let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
         const _guard_args = DeinitGuard<@TypeOf(args)>{ target: unsafe { &args } };
-        let path = (jsc.Node.PathLike.fromJS(globalThis, &args)?) orelse {
+        const path_opt = jsc.Node.PathLike.fromJS(globalThis, &args)?;
+        if (path_opt == null) {
             if (args.len() == 0) {
                 return globalThis.ERR(.MISSING_ARGS, "Expected a path to check the size of", .{}).throw();
             }
             return globalThis.throwInvalidArguments("Expected a path to check the size of", .{});
-        };
+        }
+        let path = path_opt.?;
         let _guard_path = ErrDeinitGuard<@TypeOf(path)>{ target: unsafe { &path } };
         const options = args.nextEat();
         let blob = S3File.constructS3FileWithS3CredentialsAndOptions(globalThis, path, options, _.credentials, _.options, _.acl, _.storage_class, _.request_payer)?;
@@ -245,12 +253,14 @@ export class S3Client {
         const arguments = callframe.arguments_old(2).slice();
         let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
         const _guard_args = DeinitGuard<@TypeOf(args)>{ target: unsafe { &args } };
-        let path = (jsc.Node.PathLike.fromJS(globalThis, &args)?) orelse {
+        const path_opt = jsc.Node.PathLike.fromJS(globalThis, &args)?;
+        if (path_opt == null) {
             if (args.len() == 0) {
                 return globalThis.ERR(.MISSING_ARGS, "Expected a path to check the stat of", .{}).throw();
             }
             return globalThis.throwInvalidArguments("Expected a path to check the stat of", .{});
-        };
+        }
+        let path = path_opt.?;
         let _guard_path = ErrDeinitGuard<@TypeOf(path)>{ target: unsafe { &path } };
         const options = args.nextEat();
         let blob = S3File.constructS3FileWithS3CredentialsAndOptions(globalThis, path, options, _.credentials, _.options, _.acl, _.storage_class, _.request_payer)?;
@@ -263,13 +273,17 @@ export class S3Client {
         const arguments = callframe.arguments_old(3).slice();
         let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
         const _guard_args = DeinitGuard<@TypeOf(args)>{ target: unsafe { &args } };
-        let path = (jsc.Node.PathLike.fromJS(globalThis, &args)?) orelse {
+        const path_opt = jsc.Node.PathLike.fromJS(globalThis, &args)?;
+        if (path_opt == null) {
             return globalThis.ERR(.MISSING_ARGS, "Expected a path to write to", .{}).throw();
-        };
+        }
+        let path = path_opt.?;
         let _guard_path = ErrDeinitGuard<@TypeOf(path)>{ target: unsafe { &path } };
-        const data = args.nextEat() orelse {
+        const data_opt = args.nextEat();
+        if (data_opt == null) {
             return globalThis.ERR(.MISSING_ARGS, "Expected a Blob-y thing to write", .{}).throw();
-        };
+        }
+        const data = data_opt.?;
 
         const options = args.nextEat();
         let blob = S3File.constructS3FileWithS3CredentialsAndOptions(globalThis, path, options, _.credentials, _.options, _.acl, _.storage_class, _.request_payer)?;
@@ -297,9 +311,11 @@ export class S3Client {
         const arguments = callframe.arguments_old(2).slice();
         let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
         const _guard_args = DeinitGuard<@TypeOf(args)>{ target: unsafe { &args } };
-        let path = (jsc.Node.PathLike.fromJS(globalThis, &args)?) orelse {
+        const path_opt = jsc.Node.PathLike.fromJS(globalThis, &args)?;
+        if (path_opt == null) {
             return globalThis.ERR(.MISSING_ARGS, "Expected a path to unlink", .{}).throw();
-        };
+        }
+        let path = path_opt.?;
         let _guard_path = ErrDeinitGuard<@TypeOf(path)>{ target: unsafe { &path } };
         const options = args.nextEat();
         let blob = S3File.constructS3FileWithS3CredentialsAndOptions(globalThis, path, options, _.credentials, _.options, _.acl, _.storage_class, _.request_payer)?;
@@ -343,9 +359,11 @@ export class S3Client {
         let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
         const _guard_args = DeinitGuard<@TypeOf(args)>{ target: unsafe { &args } };
 
-        const path = (jsc.Node.PathLike.fromJS(globalThis, &args)?) orelse {
+        const path_opt = jsc.Node.PathLike.fromJS(globalThis, &args)?;
+        if (path_opt == null) {
             return globalThis.throwInvalidArguments("Expected file path string", .{});
-        };
+        }
+        const path = path_opt.?;
 
         return S3File.constructInternalJS(globalThis, path, args.nextEat())?;
     }

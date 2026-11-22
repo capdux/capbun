@@ -273,7 +273,7 @@ pub const SubscriptionCtx = struct {
 
 pub fn init(valkey_parent: *JSValkeyClient) bun.JSError!Self {
             const callback_map = jsc.JSMap.create(valkey_parent.globalObject);
-            const parent_this = ((valkey_parent.this_value.tryGet()) orelse (unreachable));
+            const parent_this = (valkey_parent.this_value.tryGet()).?;
             _ = ParentJS.gc.set(.subscriptionCallbackMap, parent_this, valkey_parent.globalObject, callback_map);
             const self = Self{ .original_enable_offline_queue = valkey_parent.client.flags.enable_offline_queue, .original_enable_auto_pipelining = valkey_parent.client.flags.enable_auto_pipelining, .is_subscriber = false };
             return self;
@@ -287,7 +287,7 @@ pub fn parent(self: *SubscriptionCtx) *JSValkeyClient {
     }
 
 pub fn subscriptionCallbackMap(self: *SubscriptionCtx) *jsc.JSMap {
-            const parent_this = ((self.parent().this_value.tryGet()) orelse (unreachable));
+            const parent_this = (self.parent().this_value.tryGet()).?;
             const value_js = (ParentJS.gc.get(.subscriptionCallbackMap, parent_this)).?;
             return (jsc.JSMap.fromJS(value_js)).?;
     }
@@ -480,17 +480,21 @@ pub fn createNoJsNoPubsub(globalObject: *jsc.JSGlobalObject, arguments: []const 
             }
             if (bun.strings.contains(url_byte_slice, "://")) {
                 const url_from_str = URL.fromString;
-                break :get_url ((url_from_str(url_str)) orelse {
-                return globalObject.throwInvalidArguments("Invalid URL format", .{});
-});
+                const parsed_opt = url_from_str(url_str);
+                if ((parsed_opt == null)) {
+                    return globalObject.throwInvalidArguments("Invalid URL format", .{});
+                }
+                break :get_url parsed_opt.?;
             }
             const corrected_url = get_url_slice: {
             const written = (blk_catch_1: { break :blk_catch_1 ((std.fmt.bufPrintZ((&fallback_url_buf), "valkey://{s}", .{ url_byte_slice })) catch |__ce_1| { _ = &__ce_1; return globalObject.throwInvalidArguments("URL is too long.", .{}); }); });
             break :get_url_slice fallback_url_buf[0..written.len];
 };
-            break :get_url ((URL.fromUTF8(corrected_url)) orelse {
-            return globalObject.throwInvalidArguments("Invalid URL format", .{});
-});
+            const parsed_opt = URL.fromUTF8(corrected_url);
+            if ((parsed_opt == null)) {
+                return globalObject.throwInvalidArguments("Invalid URL format", .{});
+            }
+            break :get_url parsed_opt.?;
 };
             var _parsed_url_guard = DeinitGuard(@TypeOf(parsed_url)){ .val = parsed_url };
             _ = &_parsed_url_guard;
@@ -1050,7 +1054,11 @@ pub fn clientFail(self: *JSValkeyClient, message: []const u8, err: protocol.Redi
     }
 
 pub fn failWithJSValue(self: *JSValkeyClient, value: JSValue) void {
-            const this_value = ((self.this_value.tryGet()) orelse { return; });
+            const this_value_opt = self.this_value.tryGet();
+            if ((this_value_opt == null)) {
+                return;
+            }
+            const this_value = this_value_opt.?;
             const globalObject = self.globalObject;
             if (js.oncloseGetCached(this_value)) |on_close| {
                 _ = &on_close;

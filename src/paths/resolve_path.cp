@@ -427,7 +427,7 @@ pub fn relativeToCommonPath(
     const last_common_separator = strings.lastIndexOfChar(
         if (platform == .windows) common_path else common_path_,
         separator,
-    ) orelse 0;
+    ) ?? 0;
 
     let out_slice: []u8 = buf[0..0];
 
@@ -500,30 +500,36 @@ pub fn relativeNormalized(from_: []const u8, to_: []const u8, comptime platform:
 pub fn dirname(str: []const u8, comptime platform: Platform) []const u8 {
     switch (platform) {
         .loose => {
-            const separator = lastIndexOfSeparatorLoose(str) orelse return "";
-            return str[0..separator];
+            if (separator := lastIndexOfSeparatorLoose(str)) {
+                return str[0..separator];
+            }
+            return "";
         },
         .posix => {
-            const separator = lastIndexOfSeparatorPosix(str) orelse return "";
-            if (separator == 0) return "/";
-            return str[0..separator];
+            if (separator := lastIndexOfSeparatorPosix(str)) {
+                if (separator == 0) return "/";
+                return str[0..separator];
+            }
+            return "";
         },
         .windows, .nt => {
-            const separator = lastIndexOfSeparatorWindows(str) orelse return "";
-            if (separator == 0) return "\\";
-            return str[0..separator];
+            if (separator := lastIndexOfSeparatorWindows(str)) {
+                if (separator == 0) return "\\";
+                return str[0..separator];
+            }
+            return "";
         },
     }
 }
 
 pub fn dirnameW(str: []const u16) []const u16 {
-    const separator = lastIndexOfSeparatorWindowsT(u16, str) orelse {
-        if (str.len < 2) return &.{};
-        if (!(str[1] == ':')) return &.{};
-        if (!bun.path.isDriveLetterT(u16, str[0])) return &.{};
-        return str[0..2];
-    };
-    return str[0..separator];
+    if (separator := lastIndexOfSeparatorWindowsT(u16, str)) {
+        return str[0..separator];
+    }
+    if (str.len < 2) return &.{};
+    if (!(str[1] == ':')) return &.{};
+    if (!bun.path.isDriveLetterT(u16, str[0])) return &.{};
+    return str[0..2];
 }
 
 pub fn relative(from_: []const u8, to_: []const u8) []const u8 {

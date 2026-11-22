@@ -395,7 +395,7 @@ pub struct PackageManagerCommand {
                 printNodeModulesFolderStructure(&first_directory, null, 0, &directories_guard.val, lockfile, more_packages)?;
             } else {
                 let tree_iter = Lockfile.Tree.Iterator(.node_modules).init(lockfile);
-                const first_directory = tree_iter.next(null) orelse Global.exit(0);
+                const first_directory = tree_iter.next(null) ?? Global.exit(0);
 
                 let cwd_buf: bun.PathBuffer = undefined;
                 const path = bun.getcwd(&cwd_buf) catch {

@@ -511,7 +511,11 @@ pub const AddrInfo = extern struct {
     name_: ?[*:0]u8 = null,
 
 pub inline fn name(self: *const AddrInfo) []const u8 {
-            const name_ = ((self.name_) orelse { return ""; });
+            const name_opt = self.name_;
+            if ((name_opt == null)) {
+                return "";
+            }
+            const name_ = name_opt.?;
             return bun.span(name_);
     }
 

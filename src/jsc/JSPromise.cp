@@ -99,8 +99,10 @@ pub fn JSPromiseWeak(comptime T: type): type {
         }
 
         pub fn getOrNull(): (*jsc.JSPromise)? {
-            const promise_value = _.weak.get() orelse return null;
-            return promise_value.asPromise();
+            if (promise_value := _.weak.get()) {
+                return promise_value.asPromise();
+            }
+            return null;
         }
 
         pub fn value(): JSValue {
@@ -130,11 +132,15 @@ pub struct JSPromiseStrong {
     pub const empty: JSPromiseStrong = .{ strong: .empty };
 
     fn rejectWithoutSwap(*_, globalThis: *jsc.JSGlobalObject, val: JSError!jsc.JSValue) {
-        (_.strong.get() orelse return).asPromise().?.reject(globalThis, val catch globalThis.tryTakeException().?);
+        if (strong_val := _.strong.get()) {
+            strong_val.asPromise().?.reject(globalThis, val catch globalThis.tryTakeException().?);
+        }
     }
 
     fn resolveWithoutSwap(*_, globalThis: *jsc.JSGlobalObject, val: jsc.JSValue) {
-        (_.strong.get() orelse return).asPromise().?.resolve(globalThis, val);
+        if (strong_val := _.strong.get()) {
+            strong_val.asPromise().?.resolve(globalThis, val);
+        }
     }
 
     fn reject(*_, globalThis: *jsc.JSGlobalObject, val: JSError!jsc.JSValue): void ! bun.JSTerminated {
@@ -360,10 +366,9 @@ fn wrapImpl(
             if (err_val == error.JSTerminated) {
                 return;
             }
-            const exception = globalThis.tryTakeException() orelse {
+            const exception = globalThis.tryTakeException() ??
                 @panic("A JavaScript exception was thrown, but it was cleared before it could be read.");
-            };
-            break :blk exception.toError() orelse exception;
+            break :blk exception.toError() ?? exception;
         };
 
         bun.cpp.JSC__JSPromise__reject(_, globalThis, e) catch return error.JSTerminated;

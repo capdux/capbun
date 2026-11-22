@@ -8,7 +8,7 @@ const jsc = bun.jsc;
 const JSValue = jsc.JSValue;
 
 pub fn mysqlErrorToJS(globalObject: *jsc.JSGlobalObject, message: ([]const u8)?, e: Error): JSValue {
-    const msg = message orelse @errorName(e);
+    const msg = message ?? @errorName(e);
     const code = switch (e) {
         error.ConnectionClosed => "ERR_MYSQL_CONNECTION_CLOSED",
         error.Overflow => "ERR_MYSQL_OVERFLOW",

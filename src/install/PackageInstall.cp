@@ -653,10 +653,12 @@ struct UninstallTask {
         }
 
         const _guard_task = DeinitGuard<@TypeOf(unintall_task)>{ ptr: unintall_task };
-        const dirname = std.fs.path.dirname(unintall_task.absolute_path) orelse {
+        const dirname_opt = std.fs.path.dirname(unintall_task.absolute_path);
+        if (dirname_opt == null) {
             Output.debugWarn("Unexpectedly failed to get dirname of {s}", .{unintall_task.absolute_path});
             return;
-        };
+        }
+        const dirname = dirname_opt.?;
         const basename = std.fs.path.basename(unintall_task.absolute_path);
 
         let dir = bun.openDirA(std.fs.cwd(), dirname) catch |e| {
@@ -863,7 +865,10 @@ pub struct PackageInstall {
         // Don't keep it open while we're parsing the JSON.
         // The longer the file stays open, the more likely it causes issues for
         // other processes on Windows.
-        const source = &(_.getInstalledPackageJsonSource(root_node_modules_dir, &mutable, resolution_tag) orelse return false);
+        const source_val = _.getInstalledPackageJsonSource(root_node_modules_dir, &mutable, resolution_tag);
+        if (source_val == null) return false;
+        const source_unwrapped = source_val.?;
+        const source = &source_unwrapped;
 
         let log = logger.Log.init(_.allocator);
         const _guard_log = DeinitGuard<@TypeOf(&log)>{ ptr: &log };
@@ -885,8 +890,8 @@ pub struct PackageInstall {
 
         // exclude build tags from comparsion
         // https://github.com/oven-sh/bun/issues/13563
-        const found_version_end = strings.lastIndexOfChar(found_version, '+') orelse found_version.len;
-        const expected_version_end = strings.lastIndexOfChar(_.package_version, '+') orelse _.package_version.len;
+        const found_version_end = strings.lastIndexOfChar(found_version, '+') ?? found_version.len;
+        const expected_version_end = strings.lastIndexOfChar(_.package_version, '+') ?? _.package_version.len;
         // Check if the version matches
         if (!strings.eql(found_version[0..found_version_end], _.package_version[0..expected_version_end])) {
             const offset = brk: {
@@ -1268,7 +1273,9 @@ pub struct PackageInstall {
             const fd = bun.sys.openatWindows(node_mod_fd, path, bun.O.RDONLY).unwrap() catch return true;
             const _guard_fd = CloseValGuard<@TypeOf(fd)>{ val: fd };
             const size = fd.stdFile().readAll(temp_buffer) catch return true;
-            const decoded = WinBinLinkingShim.looseDecode(temp_buffer[0..size]) orelse return true;
+            const decoded_opt = WinBinLinkingShim.looseDecode(temp_buffer[0..size]);
+            if (decoded_opt == null) return true;
+            const decoded = decoded_opt.?;
             bun.assert(decoded.flags.isValid()); // looseDecode ensures valid flags
             break :bin_path decoded.bin_path;
         };
@@ -1409,7 +1416,8 @@ pub struct PackageInstall {
                     if (exists) manager.setPreinstallState(package_id, manager.lockfile, .done);
                     break :brk !exists;
                 }
-                const cache_dir_subpath_without_patch_hash = _.cache_dir_subpath[0 .. std.mem.lastIndexOf(u8, _.cache_dir_subpath, "_patch_hash=") orelse @panic("Patched dependency cache dir subpath does not have the \"_patch_hash=HASH\" suffix. This is a bug, please file a GitHub issue.")];
+                const patch_hash_idx = std.mem.lastIndexOf(u8, _.cache_dir_subpath, "_patch_hash=") ?? @panic("Patched dependency cache dir subpath does not have the \"_patch_hash=HASH\" suffix. This is a bug, please file a GitHub issue.");
+                const cache_dir_subpath_without_patch_hash = _.cache_dir_subpath[0..patch_hash_idx];
                 @memcpy(bun.path.join_buf[0..cache_dir_subpath_without_patch_hash.len], cache_dir_subpath_without_patch_hash);
                 bun.path.join_buf[cache_dir_subpath_without_patch_hash.len] = 0;
                 const exists = Syscall.directoryExistsAt(.fromStdDir(_.cache_dir), bun.path.join_buf[0..cache_dir_subpath_without_patch_hash.len :0]).unwrap() catch false;

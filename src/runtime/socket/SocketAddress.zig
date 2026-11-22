@@ -569,9 +569,11 @@ pub fn fmt(self: *const sockaddr, buf: *AddrBuf) [:0]const u8 {
             {
                 addr_src = (if ((self.family() == AF.INET)) @ptrCast((&self.sin.addr)) else @ptrCast((&self.sin6.addr)));
             }
-            const formatted = std.mem.sliceTo(((ares.ares_inet_ntop(self.family().int(), addr_src, buf, buf.len)) orelse {
-            _ = std.debug.panic("Invariant violation: SocketAddress created with invalid IPv6 address", .{});
-}), 0);
+            const ntop_res = ares.ares_inet_ntop(self.family().int(), addr_src, buf, buf.len);
+            if ((ntop_res == null)) {
+                _ = std.debug.panic("Invariant violation: SocketAddress created with invalid IPv6 address", .{});
+            }
+            const formatted = std.mem.sliceTo(ntop_res.?, 0);
             if (comptime bun.Environment.isDebug) {
                 _ = bun.assertWithLocation(bun.strings.isAllASCII(formatted), @src());
             }

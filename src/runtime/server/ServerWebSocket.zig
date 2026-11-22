@@ -456,10 +456,11 @@ pub fn publish(self: *ServerWebSocket, globalThis: *jsc.JSGlobalObject, callfram
             _ = log("publish()", .{});
             return globalThis.throw("publish requires at least 1 argument", .{});
         }
-        const app = ((self.#handler.app) orelse {
-        _ = log("publish() closed", .{});
-        return JSValue.jsNumber(0);
-});
+        if ((self.#handler.app == null)) {
+            _ = log("publish() closed", .{});
+            return JSValue.jsNumber(0);
+        }
+        const app = self.#handler.app.?;
         const flags = self.#handler.flags;
         const ssl = flags.ssl;
         const publish_to_self = flags.publish_to_self;
@@ -524,10 +525,11 @@ pub fn publishText(self: *ServerWebSocket, globalThis: *jsc.JSGlobalObject, call
             _ = log("publish()", .{});
             return globalThis.throw("publish requires at least 1 argument", .{});
         }
-        const app = ((self.#handler.app) orelse {
-        _ = log("publish() closed", .{});
-        return JSValue.jsNumber(0);
-});
+        if ((self.#handler.app == null)) {
+            _ = log("publish() closed", .{});
+            return JSValue.jsNumber(0);
+        }
+        const app = self.#handler.app.?;
         const flags = self.#handler.flags;
         const ssl = flags.ssl;
         const publish_to_self = flags.publish_to_self;
@@ -581,10 +583,11 @@ pub fn publishBinary(self: *ServerWebSocket, globalThis: *jsc.JSGlobalObject, ca
             _ = log("publishBinary()", .{});
             return globalThis.throw("publishBinary requires at least 1 argument", .{});
         }
-        const app = ((self.#handler.app) orelse {
-        _ = log("publish() closed", .{});
-        return JSValue.jsNumber(0);
-});
+        if ((self.#handler.app == null)) {
+            _ = log("publish() closed", .{});
+            return JSValue.jsNumber(0);
+        }
+        const app = self.#handler.app.?;
         const flags = self.#handler.flags;
         const ssl = flags.ssl;
         const publish_to_self = flags.publish_to_self;
@@ -614,19 +617,22 @@ pub fn publishBinary(self: *ServerWebSocket, globalThis: *jsc.JSGlobalObject, ca
         if (message_value.isEmptyOrUndefinedOrNull()) {
             return globalThis.throw("publishBinary requires a non-empty message", .{});
         }
-        const array_buffer = ((message_value.asArrayBuffer(globalThis)) orelse {
-        return globalThis.throw("publishBinary expects an ArrayBufferView", .{});
-});
+        const array_buffer_opt = message_value.asArrayBuffer(globalThis);
+        if ((array_buffer_opt == null)) {
+            return globalThis.throw("publishBinary expects an ArrayBufferView", .{});
+        }
+        const array_buffer = array_buffer_opt.?;
         const buffer = array_buffer.slice();
         const result = (if (((!publish_to_self) and (!self.isClosed()))) self.websocket().publish(topic_slice.slice(), buffer, .binary, compress) else uws.AnyWebSocket.publishWithOptions(ssl, app, topic_slice.slice(), buffer, .binary, compress));
         return JSValue.jsNumber((if (result) (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(@as(u31, @truncate(buffer.len)))) == .@"enum") cp_cast_int(i32, @intFromEnum(@as(u31, @truncate(buffer.len)))) else cp_cast_int(i32, @as(u31, @truncate(buffer.len)))))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(@as(u31, @truncate(buffer.len)))) == .@"enum") cp_cast_int(i32, @intFromEnum(@as(u31, @truncate(buffer.len)))) else cp_cast_int(i32, @as(u31, @truncate(buffer.len)))))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(@as(u31, @truncate(buffer.len)))) == .@"enum") cp_cast_int(i32, @intFromEnum(@as(u31, @truncate(buffer.len)))) else cp_cast_int(i32, @as(u31, @truncate(buffer.len)))))) else (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(i32, @intFromEnum(0)) else cp_cast_int(i32, 0))));
 }
 
 pub fn publishBinaryWithoutTypeChecks(self: *ServerWebSocket, globalThis: *jsc.JSGlobalObject, topic_str: *jsc.JSString, array: *jsc.JSUint8Array) bun.JSError!jsc.JSValue {
-        const app = ((self.#handler.app) orelse {
-        _ = log("publish() closed", .{});
-        return JSValue.jsNumber(0);
-});
+        if ((self.#handler.app == null)) {
+            _ = log("publish() closed", .{});
+            return JSValue.jsNumber(0);
+        }
+        const app = self.#handler.app.?;
         const flags = self.#handler.flags;
         const ssl = flags.ssl;
         const publish_to_self = flags.publish_to_self;
@@ -652,10 +658,11 @@ pub fn publishBinaryWithoutTypeChecks(self: *ServerWebSocket, globalThis: *jsc.J
 }
 
 pub fn publishTextWithoutTypeChecks(self: *ServerWebSocket, globalThis: *jsc.JSGlobalObject, topic_str: *jsc.JSString, str: *jsc.JSString) bun.JSError!jsc.JSValue {
-        const app = ((self.#handler.app) orelse {
-        _ = log("publish() closed", .{});
-        return JSValue.jsNumber(0);
-});
+        if ((self.#handler.app == null)) {
+            _ = log("publish() closed", .{});
+            return JSValue.jsNumber(0);
+        }
+        const app = self.#handler.app.?;
         const flags = self.#handler.flags;
         const ssl = flags.ssl;
         const publish_to_self = flags.publish_to_self;
@@ -881,9 +888,11 @@ pub fn sendBinary(self: *ServerWebSocket, globalThis: *jsc.JSGlobalObject, callf
             return globalThis.throw("sendBinary expects compress to be a boolean", .{});
         }
         const compress = ((args.len > 1) and compress_value.toBoolean());
-        const buffer = ((message_value.asArrayBuffer(globalThis)) orelse {
-        return globalThis.throw("sendBinary requires an ArrayBufferView", .{});
-});
+        const buffer_opt = message_value.asArrayBuffer(globalThis);
+        if ((buffer_opt == null)) {
+            return globalThis.throw("sendBinary requires an ArrayBufferView", .{});
+        }
+        const buffer = buffer_opt.?;
         switch (self.websocket().send(buffer.slice(), .binary, compress, true)) {
 .backpressure => {
 _ = log("sendBinary() backpressure ({d} bytes)", .{ buffer.len });

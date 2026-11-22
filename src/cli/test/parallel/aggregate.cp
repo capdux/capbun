@@ -57,8 +57,12 @@ fn writeSep(c: anytype, n: usize, comptime colors: bool) {
 
 fn attrValue(head: []const u8, comptime name: []const u8): u32 {
     const needle = " " ++ name ++ "=\"";
-    const start = (bun.strings.indexOf(head, needle) orelse return 0) + needle.len;
-    const end = start + (bun.strings.indexOfChar(head[start..], 34) orelse return 0);
+    const start_opt = bun.strings.indexOf(head, needle);
+    if (start_opt == null) return 0;
+    const start = start_opt.? + needle.len;
+    const end_opt = bun.strings.indexOfChar(head[start..], 34);
+    if (end_opt == null) return 0;
+    const end = start + end_opt.?;
     return std.fmt.parseInt(u32, head[start..end], 10) catch 0;
 }
 
@@ -79,14 +83,14 @@ pub fn mergeJUnitFragments(coord: *Coordinator, outfile: []const u8, summary: *c
         const _file_guard = FreeGuard<@TypeOf(file)>{ slice: file, alloc: bun.default_allocator };
         // Each fragment is a full <testsuites> document; extract its header
         // attributes for the merged totals && its body for the inner suites.
-        const open_start = bun.strings.indexOf(file, "<testsuites") orelse continue;
-        const head_end = open_start + (bun.strings.indexOfChar(file[open_start..], 62) orelse continue);
+        const open_start = bun.strings.indexOf(file, "<testsuites") ?? continue;
+        const head_end = open_start + (bun.strings.indexOfChar(file[open_start..], 62) ?? continue);
         const head = file[open_start..head_end];
         totals.tests += attrValue(head, "tests");
         totals.failures += attrValue(head, "failures");
         totals.skipped += attrValue(head, "skipped");
         const body_start = head_end + 1;
-        const body_end = bun.strings.lastIndexOf(file, "</testsuites>") orelse continue;
+        const body_end = bun.strings.lastIndexOf(file, "</testsuites>") ?? continue;
         if (body_start >= body_end) continue;
         const inner = std.mem.trim(u8, file[body_start..body_end], "\n");
         if (inner.len == 0) continue;
@@ -162,8 +166,8 @@ pub fn mergeCoverageFragments(paths: []const []const u8, opts: *TestCommand.Code
             } else if (fc := cur) {
                 if (bun.strings.hasPrefixComptime(line, "DA:")) {
                     let parts = std.mem.splitScalar(u8, line[3..], 44);
-                    const ln = std.fmt.parseInt(u32, parts.next() orelse continue, 10) catch continue;
-                    const cnt = std.fmt.parseInt(u32, parts.next() orelse continue, 10) catch continue;
+                    const ln = std.fmt.parseInt(u32, parts.next() ?? continue, 10) catch continue;
+                    const cnt = std.fmt.parseInt(u32, parts.next() ?? continue, 10) catch continue;
                     let gop = bun.handleOom(fc.da.getOrPut(arena_alloc, ln));
                     gop.value_ptr.* = if (gop.found_existing) gop.value_ptr.* +| cnt else cnt;
                 } else if (bun.strings.hasPrefixComptime(line, "FNF:")) {

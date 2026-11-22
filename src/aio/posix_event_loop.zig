@@ -779,9 +779,7 @@ else => unreachable,
                     flags = (flags | linux.EPOLL.IN);
                 }
                 const EpollEvent = linux.epoll_event;
-                _ = &EpollEvent;
                 const EpollData = linux.epoll_data;
-                _ = &EpollData;
                 var event = EpollEvent{ .events = flags, .data = EpollData{ .u64 = (blk: {
                 break :blk @intFromPtr(Pollable.init(self).ptr());
 

@@ -38,7 +38,7 @@ export struct HPACK {
     pub const DecodeResult = _DecodeResult;
 
     static fn init(max_capacity: u32): *HPACK {
-        return lshpack_wrapper_init(bun.mimalloc.mi_malloc, bun.mimalloc.mi_free, max_capacity) orelse bun.outOfMemory();
+        return lshpack_wrapper_init(bun.mimalloc.mi_malloc, bun.mimalloc.mi_free, max_capacity) ?? bun.outOfMemory();
     }
 
     fn decode(*_, src: string): !DecodeResult {

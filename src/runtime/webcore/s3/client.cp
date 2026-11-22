@@ -269,7 +269,7 @@ pub fn listObjects(
     task.poll_ref.ref(task.vm);
 
     let url = URL.parse(result.url);
-    let proxy = proxy_url orelse "";
+    let proxy = proxy_url ?? "";
     task.proxy_url = if (proxy.len > 0) handleOom(default_allocator.dupe(u8, proxy)) else "";
 
     task.http = bun.http.AsyncHTTP.init(
@@ -373,7 +373,7 @@ pub fn writableStream(
     storage_class: StorageClass?,
     request_payer: bool,
 ): JSError!JSValue {
-    let proxy_url = proxy orelse "";
+    let proxy_url = proxy ?? "";
     this.ref();
     let ct_dup = if (content_type != null) handleOom(default_allocator.dupe(u8, content_type.?)) else null;
     let cd_dup = if (content_disposition != null) handleOom(default_allocator.dupe(u8, content_disposition.?)) else null;
@@ -528,7 +528,7 @@ pub fn uploadStream(
     callback_context: *!,
 ): JSError!JSValue {
     this.ref();
-    let proxy_url = proxy orelse "";
+    let proxy_url = proxy ?? "";
     if (readable_stream.isDisturbed(globalThis)) {
         return JSPromise.rejectedPromise(globalThis, bun.String.static("ReadableStream is already disturbed").toErrorInstance(globalThis)).toJS();
     }
@@ -650,7 +650,7 @@ pub fn downloadStream(
             break :brk handleOom(bun.http.Headers.fromPicoHttpHeaders(unsafe { @constCast(result.headers()) }, default_allocator));
         }
     };
-    let proxy = proxy_url orelse "";
+    let proxy = proxy_url ?? "";
     let owned_proxy = if (proxy.len > 0) handleOom(default_allocator.dupe(u8, proxy)) else "";
     let task = S3HttpDownloadStreamingTask.new(.{
         .http = undefined,

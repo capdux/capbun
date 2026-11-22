@@ -316,7 +316,7 @@ pub struct Cursor {
                 this.state = p;
                 this.peek = null;
             }
-            const nxt = this.advanceOne() orelse break;
+            const nxt = this.advanceOne() ?? break;
             if (nxt.lessOrEqual(target_line, target_col)) {
                 this.state = nxt;
             } else {
@@ -338,7 +338,7 @@ pub struct Cursor {
             this.map.seedWindow(this.sync_idx, *seed, *this.reader);
             return seed;
         }
-        let nxt: State = this.peek orelse this.state;
+        let nxt: State = this.peek ?? this.state;
         this.reader.next(*nxt);
         return nxt;
     }
@@ -628,7 +628,9 @@ export @root struct InternalSourceMap {
         const target_line = line.zeroBased();
         const target_col = column.zeroBased();
 
-        const sync_idx = this.locateWindow(target_line, target_col) orelse return null;
+        const sync_idx_opt = this.locateWindow(target_line, target_col);
+        if (sync_idx_opt == null) return null;
+        const sync_idx = sync_idx_opt.?;
         const cache = set.slotFor(this.data, sync_idx);
 
         if (cache.data != this.data || cache.sync_idx != sync_idx || cache.decoded_count == 0) {
@@ -668,7 +670,9 @@ export @root struct InternalSourceMap {
         const target_line = line.zeroBased();
         const target_col = column.zeroBased();
 
-        const sync_idx = this.locateWindow(target_line, target_col) orelse return null;
+        const sync_idx_opt = this.locateWindow(target_line, target_col);
+        if (sync_idx_opt == null) return null;
+        const sync_idx = sync_idx_opt.?;
 
         let state: State = {};
         let reader: WindowReader = undefined;

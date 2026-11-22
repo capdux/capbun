@@ -118,11 +118,17 @@ pub const JSPromiseStrong = struct {
     strong: jsc.Strong.Optional = .empty,
 
 pub fn rejectWithoutSwap(self: *JSPromiseStrong, globalThis: *jsc.JSGlobalObject, val: JSError!jsc.JSValue) void {
-            _ = (((self.strong.get()) orelse { return; }).asPromise()).?.reject(globalThis, (blk_catch_0: { break :blk_catch_0 ((val) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 @as(jsc.JSValue, (globalThis.tryTakeException()).?); }); }));
+            if (self.strong.get()) |strong_val| {
+                _ = &strong_val;
+                _ = (strong_val.asPromise()).?.reject(globalThis, (blk_catch_0: { break :blk_catch_0 ((val) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 @as(jsc.JSValue, (globalThis.tryTakeException()).?); }); }));
+            }
     }
 
 pub fn resolveWithoutSwap(self: *JSPromiseStrong, globalThis: *jsc.JSGlobalObject, val: jsc.JSValue) void {
-            _ = (((self.strong.get()) orelse { return; }).asPromise()).?.resolve(globalThis, val);
+            if (self.strong.get()) |strong_val| {
+                _ = &strong_val;
+                _ = (strong_val.asPromise()).?.resolve(globalThis, val);
+            }
     }
 
 pub fn reject(self: *JSPromiseStrong, globalThis: *jsc.JSGlobalObject, val: JSError!jsc.JSValue) bun.JSTerminated!void {
@@ -287,9 +293,7 @@ pub fn reject(self: *JSPromise, globalThis: *JSGlobalObject, value: JSError!JSVa
             if ((err_val == error.JSTerminated)) {
                 return;
             }
-            const exception = ((globalThis.tryTakeException()) orelse {
-            _ = @panic("A JavaScript exception was thrown, but it was cleared before it could be read.");
-});
+            const exception = ((globalThis.tryTakeException()) orelse (@panic("A JavaScript exception was thrown, but it was cleared before it could be read.")));
             break :blk ((exception.toError()) orelse (exception));
 }); }); });
             _ = (blk_catch_5: { break :blk_catch_5 ((bun.cpp.JSC__JSPromise__reject(self, globalThis, e)) catch |__ce_5| { _ = &__ce_5; return error.JSTerminated; }); });
@@ -396,8 +400,11 @@ pub fn get(self: *const @This()) *jsc.JSPromise {
     }
 
 pub fn getOrNull(self: *const @This()) ?*jsc.JSPromise {
-            const promise_value = ((self.weak.get()) orelse { return null; });
-            return promise_value.asPromise();
+            if (self.weak.get()) |promise_value| {
+                _ = &promise_value;
+                return promise_value.asPromise();
+            }
+            return null;
     }
 
 pub fn value(self: @This()) JSValue {

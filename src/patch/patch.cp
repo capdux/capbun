@@ -165,9 +165,10 @@ pub struct PatchFile {
                     };
                     const newfile_fd_guard = CloseGuard<bun.FD>{ val: newfile_fd };
 
-                    const hunk = part.file_creation.hunk orelse {
+                    if (part.file_creation.hunk == null) {
                         continue;
-                    };
+                    }
+                    const hunk = part.file_creation.hunk.?;
 
                     const last_line = hunk.parts.items[0].lines.items.len -| 1;
 
@@ -646,9 +647,15 @@ fn patchFileSecondPass(files: []FileDeets): PatchFile ! ParseErr {
                 destination_file_path = file.rename_to;
             },
             .file_deletion => {
-                const path = file.diff_line_from_path orelse file.from_path orelse {
+                const path_opt = file.diff_line_from_path ?? file.from_path;
+                if (path_opt == null) {
                     return ParseErr.no_path_given_for_file_deletion;
-                };
+                }
+                const path = path_opt.?;
+                const deleted_mode = parseFileMode(file.deleted_file_mode.?);
+                if (deleted_mode == null) {
+                    return ParseErr.bad_file_mode;
+                }
                 result.parts.append(bun.default_allocator, {
                     file_deletion: bun.new(FileDeletion, FileDeletion{
                         hunk: if (file.hunks.items.len > 0) brk: {
@@ -659,17 +666,21 @@ fn patchFileSecondPass(files: []FileDeets): PatchFile ! ParseErr {
                             break :brk bun.new(Hunk, value);
                         } else null,
                         path: path,
-                        mode: parseFileMode(file.deleted_file_mode.?) orelse {
-                            return ParseErr.bad_file_mode;
-                        },
+                        mode: deleted_mode.?,
                         hash: file.before_hash,
                     }),
                 }) catch unreachable;
             },
             .file_creation => {
-                const path = file.diff_line_to_path orelse file.to_path orelse {
+                const path_opt = file.diff_line_to_path ?? file.to_path;
+                if (path_opt == null) {
                     return ParseErr.no_path_given_for_file_creation;
-                };
+                }
+                const path = path_opt.?;
+                const new_mode = parseFileMode(file.new_file_mode.?);
+                if (new_mode == null) {
+                    return ParseErr.bad_file_mode;
+                }
                 result.parts.append(bun.default_allocator, {
                     file_creation: bun.new(FileCreation, FileCreation{
                         hunk: if (file.hunks.items.len > 0) brk: {
@@ -680,28 +691,30 @@ fn patchFileSecondPass(files: []FileDeets): PatchFile ! ParseErr {
                             break :brk bun.new(Hunk, value);
                         } else null,
                         path: path,
-                        mode: parseFileMode(file.new_file_mode.?) orelse {
-                            return ParseErr.bad_file_mode;
-                        },
+                        mode: new_mode.?,
                         hash: file.after_hash,
                     }),
                 }) catch unreachable;
             },
             .file_patch, .file_mode_change => {
-                destination_file_path = file.to_path orelse file.diff_line_to_path;
+                destination_file_path = file.to_path ?? file.diff_line_to_path;
             },
         }
 
         if (destination_file_path != null && file.old_mode != null && file.new_mode != null && !std.mem.eql(u8, file.old_mode.?, file.new_mode.?)) {
+            const old_mode = parseFileMode(file.old_mode.?);
+            if (old_mode == null) {
+                return ParseErr.bad_file_mode;
+            }
+            const new_mode = parseFileMode(file.new_mode.?);
+            if (new_mode == null) {
+                return ParseErr.bad_file_mode;
+            }
             result.parts.append(bun.default_allocator, {
                 file_mode_change: bun.new(FileModeChange, FileModeChange{
                     path: destination_file_path.?,
-                    old_mode: parseFileMode(file.old_mode.?) orelse {
-                        return ParseErr.bad_file_mode;
-                    },
-                    new_mode: parseFileMode(file.new_mode.?) orelse {
-                        return ParseErr.bad_file_mode;
-                    },
+                    old_mode: old_mode.?,
+                    new_mode: new_mode.?,
                 }),
             }) catch unreachable;
         }
@@ -827,9 +840,11 @@ struct PatchLinesParser {
                         if (this.current_file_patch.diff_line_from_path != null) {
                             this.commitFilePatch();
                         }
-                        const matched = parseDiffLinePaths(line) orelse {
+                        const matched_opt = parseDiffLinePaths(line);
+                        if (matched_opt == null) {
                             return ParseErr.bad_diff_line;
-                        };
+                        }
+                        const matched = matched_opt.?;
                         this.current_file_patch.diff_line_from_path = matched[0];
                         this.current_file_patch.diff_line_to_path = matched[1];
                     } else if (bun.strings.hasPrefix(line, "old mode ")) {
@@ -845,7 +860,9 @@ struct PatchLinesParser {
                     } else if (bun.strings.hasPrefix(line, "rename to ")) {
                         this.current_file_patch.rename_to = std.mem.trim(u8, line["rename to ".len..], WHITESPACE);
                     } else if (bun.strings.hasPrefix(line, "index ")) {
-                        const hashes = parseDiffHashes(line["index ".len..]) orelse continue;
+                        const hashes_opt = parseDiffHashes(line["index ".len..]);
+                        if (hashes_opt == null) continue;
+                        const hashes = hashes_opt.?;
                         this.current_file_patch.before_hash = hashes[0];
                         this.current_file_patch.after_hash = hashes[1];
                     } else if (bun.strings.hasPrefix(line, "--- ")) {
@@ -874,12 +891,14 @@ struct PatchLinesParser {
                             '\r' => .context,
                             else => null,
                         };
-                        break :brk opt_type orelse {
+                        if (opt_type_val := opt_type) {
+                            break :brk opt_type_val;
+                        } else {
                             this.state = .parsing_header;
                             this.commitFilePatch();
                             lines.back();
                             continue;
-                        };
+                        }
                     };
 
                     switch (hunk_line_type) {
@@ -1035,7 +1054,9 @@ struct PatchLinesParser {
     static fn parseDiffHashes(line: []const u8): ([2][]const u8)? {
         bun.debugAssert(!bun.strings.hasPrefix(line, "index "));
 
-        const delimiter_start = std.mem.indexOf(u8, line, "..") orelse return null;
+        const delimiter_start_opt = std.mem.indexOf(u8, line, "..");
+        if (delimiter_start_opt == null) return null;
+        const delimiter_start = delimiter_start_opt.?;
 
         const VALID_CHARS: bun.bit_set.IntegerBitSet(256) = @{
             let bitset = bun.bit_set.IntegerBitSet(256).initEmpty();
@@ -1078,7 +1099,9 @@ struct PatchLinesParser {
 
         let i: usize = 0;
         while (true) {
-            const start_of_b_part = std.mem.indexOfScalar(u8, rest[i..], 'b') orelse return null;
+            const start_of_b_part_opt = std.mem.indexOfScalar(u8, rest[i..], 'b');
+            if (start_of_b_part_opt == null) return null;
+            const start_of_b_part = start_of_b_part_opt.?;
             i += start_of_b_part;
             if (i > 0 && rest[i - 1] == ' ' && i + 1 < rest.len && rest[i + 1] == '/') {
                 a_path_end_index = i - 1;

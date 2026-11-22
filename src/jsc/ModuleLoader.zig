@@ -315,9 +315,16 @@ pub fn resolveEmbeddedFile(vm: *VirtualMachine, path_buf: *bun.PathBuffer, input
         if ((input_path.len == 0)) {
             return null;
         }
-        var graph = ((vm.standalone_module_graph) orelse { return null; });
+        if ((vm.standalone_module_graph == null)) {
+            return null;
+        }
+        var graph = vm.standalone_module_graph.?;
         _ = &graph;
-        const file = ((graph.find(input_path)) orelse { return null; });
+        const file_opt = graph.find(input_path);
+        if ((file_opt == null)) {
+            return null;
+        }
+        const file = file_opt.?;
         if (comptime Environment.isLinux) {
         }
         const tmpname_buf = bun.path_buffer_pool.get();
@@ -761,12 +768,22 @@ pub export fn Bun__resolveAndFetchBuiltinModule(jsc_vm: *VirtualMachine, specifi
         _ = &_guard_log;
         var ___guard_log_moved = false; _ = &___guard_log_moved;
         defer if (!___guard_log_moved) { ___guard_log_moved = true; const __T = @TypeOf(_guard_log); if (@typeInfo(__T) == .optional) { if (_guard_log) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_log.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_log; _drop_val.__cp_deinit(); } };
-        const alias = ((HardcodedModule.Alias.bun_aliases.getWithEql(specifier.*, bun.String.eqlComptime)) orelse { return false; });
-        const hardcoded = ((HardcodedModule.map.get(alias.path)) orelse {
-        _ = bun.debugAssert(false);
-        return false;
-});
-        ret.* = .ok(((getHardcodedModule(jsc_vm, specifier.*, hardcoded)) orelse { return false; }));
+        const alias_opt = HardcodedModule.Alias.bun_aliases.getWithEql(specifier.*, bun.String.eqlComptime);
+        if ((alias_opt == null)) {
+            return false;
+        }
+        const alias = alias_opt.?;
+        const hardcoded_opt = HardcodedModule.map.get(alias.path);
+        if ((hardcoded_opt == null)) {
+            _ = bun.debugAssert(false);
+            return false;
+        }
+        const hardcoded = hardcoded_opt.?;
+        const mod_opt = getHardcodedModule(jsc_vm, specifier.*, hardcoded);
+        if ((mod_opt == null)) {
+            return false;
+        }
+        ret.* = .ok(mod_opt.?);
         return true;
 }
 
@@ -1113,7 +1130,11 @@ pub export fn Bun__resolveEmbeddedNodeFile(vm: *VirtualMachine, in_out_str: *bun
         _ = &_guard_path;
         var ___guard_path_moved = false; _ = &___guard_path_moved;
         defer if (!___guard_path_moved) { ___guard_path_moved = true; const __T = @TypeOf(_guard_path); if (@typeInfo(__T) == .optional) { if (_guard_path) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_path.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_path; _drop_val.__cp_deinit(); } };
-        const result = ((resolveEmbeddedFile(vm, path_buf, input_path.slice(), "node")) orelse { return false; });
+        const result_opt = resolveEmbeddedFile(vm, path_buf, input_path.slice(), "node");
+        if ((result_opt == null)) {
+            return false;
+        }
+        const result = result_opt.?;
         in_out_str.* = bun.String.cloneUTF8(result);
         return true;
 }

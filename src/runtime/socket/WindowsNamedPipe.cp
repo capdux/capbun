@@ -203,9 +203,11 @@ export class WindowsNamedPipe {
     }
 
     pub fn resumeStream(*_): bool {
-        const stream = _.writer.getStream() orelse {
+        const stream_opt = _.writer.getStream();
+        if (stream_opt == null) {
             return false;
-        };
+        }
+        const stream = stream_opt.?;
         const readStartResult = stream.readStart(_, onReadAlloc, onReadError, onRead);
         if (readStartResult == .err) {
             return false;
@@ -214,10 +216,11 @@ export class WindowsNamedPipe {
     }
 
     pub fn pauseStream(*_): bool {
-        const pipe = _.pipe orelse {
+        const pipe_opt = _.pipe;
+        if (pipe_opt == null) {
             return false;
-        };
-        pipe.readStop();
+        }
+        pipe_opt.?.readStop();
         return true;
     }
 
@@ -445,10 +448,12 @@ export class WindowsNamedPipe {
             _.onError(startPipeResult.err);
             return false;
         }
-        const stream = _.writer.getStream() orelse {
+        const stream_opt = _.writer.getStream();
+        if (stream_opt == null) {
             _.onError(bun.sys.Error.fromCode(bun.sys.E.PIPE, .read));
             return false;
-        };
+        }
+        const stream = stream_opt.?;
 
         const readStartResult = stream.readStart(_, onReadAlloc, onReadError, onRead);
         if (readStartResult == .err) {

@@ -782,7 +782,11 @@ pub fn fromNamedPipe(pipe: *bun.uws.WindowsNamedPipe) Self {
 
 pub fn fromFd(g: *SocketGroup, k: SocketKind, handle: bun.FD, comptime This: type, this_ptr: *This, comptime socket_field_name: ?[]const u8, is_ipc: bool) ?Self {
                 const ThisPtr = ?@TypeOf(this_ptr);
-                const raw = ((g.fromFd(k, null, @sizeOf(ThisPtr), handle, is_ipc)) orelse { return null; });
+                const raw_opt = g.fromFd(k, null, @sizeOf(ThisPtr), handle, is_ipc);
+                if ((raw_opt == null)) {
+                    return null;
+                }
+                const raw = raw_opt.?;
                 const socket_ = Self{ .socket = InternalSocket{ .connected = raw } };
                 (raw.ext(ThisPtr)).* = this_ptr;
                 if ((socket_field_name != null)) {
@@ -824,13 +828,21 @@ pub fn connectUnixGroup(g: *SocketGroup, kind: SocketKind, ssl_ctx: ?*bun.uws.Ss
                 const Owner = @typeInfo(@TypeOf(owner)).pointer.child;
                 const OwnerPtr = ?*Owner;
                 const opts: c_int = (if (allow_half_open) bun.uws.LIBUS_SOCKET_ALLOW_HALF_OPEN else 0);
-                const s = ((g.connectUnix(kind, ssl_ctx, path, opts, @sizeOf(OwnerPtr))) orelse { return error.FailedToOpenSocket; });
+                const s_opt = g.connectUnix(kind, ssl_ctx, path, opts, @sizeOf(OwnerPtr));
+                if ((s_opt == null)) {
+                    return error.FailedToOpenSocket;
+                }
+                const s = s_opt.?;
                 (s.ext(OwnerPtr)).* = owner;
                 return Self{ .socket = InternalSocket{ .connected = s } };
         }
 
 pub fn adoptGroup(tcp: *us_socket_t, g: *SocketGroup, kind: SocketKind, comptime Owner: type, comptime field: []const u8, owner: *Owner) bool {
-                const new_s = ((tcp.adopt(g, kind, @sizeOf(AnyPtr), @sizeOf(AnyPtr))) orelse { return false; });
+                const new_s_opt = tcp.adopt(g, kind, @sizeOf(AnyPtr), @sizeOf(AnyPtr));
+                if ((new_s_opt == null)) {
+                    return false;
+                }
+                const new_s = new_s_opt.?;
                 (new_s.ext(AnyPtr)).* = owner;
                 @field(owner, field) = Self{ .socket = InternalSocket{ .connected = new_s } };
                 return true;

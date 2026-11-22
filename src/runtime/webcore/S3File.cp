@@ -41,7 +41,7 @@ pub fn writeFormat(
     writer.writeAll(@comptime(Output.prettyFmt("<r>S3Ref<r>", enable_ansi_colors)))?;
     const credentials = s3.getCredentials();
     const bucket_name = if (credentials.virtual_hosted_style and credentials.endpoint.len > 0)
-        S3.S3Credentials.guessBucket(credentials.endpoint) orelse credentials.bucket
+        S3.S3Credentials.guessBucket(credentials.endpoint) ?? credentials.bucket
     else
         credentials.bucket;
 
@@ -158,9 +158,11 @@ pub fn write(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSValu
         return globalThis.throwInvalidArguments("Expected a S3 or path to upload", .{});
     }
 
-    const data = args.nextEat() orelse {
+    const data_opt = args.nextEat();
+    if (data_opt == null) {
         return globalThis.ERR(.MISSING_ARGS, "Expected a Blob-y thing to upload", .{}).throw();
-    };
+    }
+    const data = data_opt.?;
 
     match (path_or_blob) {
         .path => |path| {
@@ -645,9 +647,11 @@ pub fn constructInternal(
     let args = CallFrame.ArgumentsSlice.init(vm, arguments);
     const _guard_args = DeinitGuard<CallFrame.ArgumentsSlice>{ ptr: &args };
 
-    const path = (jsc.Node.PathLike.fromJS(globalObject, &args)?) orelse {
+    const path_opt = jsc.Node.PathLike.fromJS(globalObject, &args)?;
+    if (path_opt == null) {
         return globalObject.throwInvalidArguments("Expected file path string", .{});
-    };
+    }
+    const path = path_opt.?;
     return constructS3FileInternal(globalObject, path, args.nextEat());
 }
 
@@ -662,7 +666,9 @@ pub fn constructInternal(
 
 @c fn hasInstance(_: JSValue, _: *JSGlobalObject, value: JSValue): bool {
     jsc.markBinding(@src());
-    const blob = value.as(Blob) orelse return false;
+    const blob_opt = value.as(Blob);
+    if (blob_opt == null) return false;
+    const blob = blob_opt.?;
     return blob.isS3();
 }
 

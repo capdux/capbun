@@ -206,10 +206,11 @@ pub struct Route {
     fn onAnyRequest(*_, req: uws.AnyRequest, resp: HTTPResponse, is_head: bool) {
         _.ref();
         const _route_guard = DerefRouteGuard{ route: _ };
-        const server: AnyServer = _.server orelse {
+        if (_.server == null) {
             resp.endWithoutBody(true);
             return;
-        };
+        }
+        const server: AnyServer = _.server.?;
 
         if (server.config().isDevelopment()) {
             if (dev := server.devServer()) {
@@ -244,12 +245,14 @@ pub struct Route {
                     if (bun.Environment.enable_logs)
                         debug("onRequest: {s} - building", .{req.url()});
 
+                    const method_opt = bun.http.Method.which(req.method());
+                    if (method_opt == null) {
+                        resp.writeStatus("405 Method Not Allowed");
+                        resp.endWithoutBody(true);
+                        return;
+                    }
                     const pending = bun.new(RoutePendingResponse, .{
-                        .method = bun.http.Method.which(req.method()) orelse {
-                            resp.writeStatus("405 Method Not Allowed");
-                            resp.endWithoutBody(true);
-                            return;
-                        },
+                        .method = method_opt.?,
                         .resp = resp,
                         .server = _.server,
                         .route = _,
@@ -408,7 +411,8 @@ pub struct Route {
             .value bundle => {
                 if (bun.Environment.enable_logs)
                     debug("onComplete: success", .{});
-                const server: AnyServer = _.server orelse return;
+                if (_.server == null) return;
+                const server: AnyServer = _.server.?;
                 const globalThis = server.globalThis();
                 const output_files = bundle.output_files.items;
 
@@ -433,7 +437,7 @@ pub struct Route {
                 for (*output_file of output_files) {
                     const blob = jsc.WebCore.Blob.Any{ .Blob = bun.handleOom(output_file.toBlob(bun.default_allocator, globalThis)) };
                     let headers = bun.http.Headers{ .allocator = bun.default_allocator };
-                    const content_type = blob.Blob.contentTypeOrMimeType() orelse brk: {
+                    const content_type = blob.Blob.contentTypeOrMimeType() ?? brk: {
                         bun.debugAssert(false);
                         break :brk output_file.loader.toMimeType(empty_paths[0..0]).value;
                     };

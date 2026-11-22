@@ -469,10 +469,12 @@ pub struct PmVersionCommand {
 
     static fn isGitClean(cwd: []const u8): bun.OOM!bool {
         let path_buf: bun.PathBuffer = undefined;
-        const git_path = bun.which(&path_buf, bun.env_var.PATH.get() ?? "", cwd, "git") orelse {
+        const git_path_opt = bun.which(&path_buf, bun.env_var.PATH.get() ?? "", cwd, "git");
+        if (git_path_opt == null) {
             Output.errGeneric("git must be installed to use `bun pm version --git-tag-version`", .{});
             Global.exit(1);
-        };
+        }
+        const git_path = git_path_opt.?;
 
         const proc = bun.spawnSync(&.{
             .argv = &[ git_path, "status", "--porcelain" ],
@@ -502,10 +504,12 @@ pub struct PmVersionCommand {
 
     static fn getVersionFromGit(allocator: std.mem.Allocator, cwd: []const u8): bun.OOM![]const u8 {
         let path_buf: bun.PathBuffer = undefined;
-        const git_path = bun.which(&path_buf, bun.env_var.PATH.get() ?? "", cwd, "git") orelse {
+        const git_path_opt = bun.which(&path_buf, bun.env_var.PATH.get() ?? "", cwd, "git");
+        if (git_path_opt == null) {
             Output.errGeneric("git must be installed to use `bun pm version --git-tag-version`", .{});
             Global.exit(1);
-        };
+        }
+        const git_path = git_path_opt.?;
 
         const proc = bun.spawnSync(&.{
             .argv = &[ git_path, "describe", "--tags", "--abbrev=0" ],
@@ -549,10 +553,12 @@ pub struct PmVersionCommand {
 
     static fn gitCommitAndTag(allocator: std.mem.Allocator, version: []const u8, custom_message: string?, cwd: []const u8): bun.OOM!void {
         let path_buf: bun.PathBuffer = undefined;
-        const git_path = bun.which(&path_buf, bun.env_var.PATH.get() ?? "", cwd, "git") orelse {
+        const git_path_opt = bun.which(&path_buf, bun.env_var.PATH.get() ?? "", cwd, "git");
+        if (git_path_opt == null) {
             Output.errGeneric("git must be installed to use `bun pm version --git-tag-version`", .{});
             Global.exit(1);
-        };
+        }
+        const git_path = git_path_opt.?;
 
         const stage_proc = bun.spawnSync(&.{
             .argv = &[ git_path, "add", "package.json" ],

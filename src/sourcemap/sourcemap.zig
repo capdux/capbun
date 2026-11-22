@@ -577,20 +577,30 @@ pub fn parseJSON(alloc: std.mem.Allocator, arena_alloc: std.mem.Allocator, sourc
                 return error.UnsupportedVersion;
             }
         }
-        const mappings_str = ((json.get("mappings")) orelse {
-        return error.UnsupportedVersion;
-});
+        const mappings_str_opt = json.get("mappings");
+        if ((mappings_str_opt == null)) {
+            return error.UnsupportedVersion;
+        }
+        const mappings_str = mappings_str_opt.?;
         if ((mappings_str.data != .e_string)) {
             return error.InvalidSourceMap;
         }
-        const sc_expr = ((json.get("sourcesContent")) orelse { return error.InvalidSourceMap; });
+        const sc_expr_opt = json.get("sourcesContent");
+        if ((sc_expr_opt == null)) {
+            return error.InvalidSourceMap;
+        }
+        const sc_expr = sc_expr_opt.?;
         const sources_content = (switch (sc_expr.data) {
 .e_array => |arr| arr,
 else => {
 return error.InvalidSourceMap;
 },
 });
-        const sp_expr = ((json.get("sources")) orelse { return error.InvalidSourceMap; });
+        const sp_expr_opt = json.get("sources");
+        if ((sp_expr_opt == null)) {
+            return error.InvalidSourceMap;
+        }
+        const sp_expr = sp_expr_opt.?;
         const sources_paths = (switch (sp_expr.data) {
 .e_array => |arr| arr,
 else => {
@@ -718,7 +728,11 @@ if (map.?.findMapping(bun.Ordinal.fromZeroBased(loc.line), bun.Ordinal.fromZeroB
 
 pub fn findSourceMappingURL(comptime T: type, source: []const T, alloc: std.mem.Allocator) ?bun.jsc.ZigString.Slice {
         const needle = bun.strings.literal(T, "\n//# sourceMappingURL=");
-        const found = ((std.mem.lastIndexOf(T, source, needle)) orelse { return null; });
+        const found_opt = std.mem.lastIndexOf(T, source, needle);
+        if ((found_opt == null)) {
+            return null;
+        }
+        const found = found_opt.?;
         const end = ((std.mem.indexOfScalarPos(T, source, (found + needle.len), 10)) orelse (source.len));
         const trim_chars = bun.strings.literal(T, " \r");
         const url = std.mem.trimRight(T, source[(found + needle.len)..end], trim_chars);

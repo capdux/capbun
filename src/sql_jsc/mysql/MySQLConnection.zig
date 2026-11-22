@@ -768,10 +768,12 @@ _ = debug("Unexpected auth packet: 0x{x:0>2}", .{ first_byte });
 }
 
 pub fn handleCommand(self: *MySQLConnection, comptime Context: type, reader: NewReader(Context), header_length: u24) anyerror!void {
-        const request = ((self.queue.current()) orelse {
-        _ = debug("Received unexpected command response", .{});
-        return error.UnexpectedPacket;
-});
+        const request_opt = self.queue.current();
+        if ((request_opt == null)) {
+            _ = debug("Received unexpected command response", .{});
+            return error.UnexpectedPacket;
+        }
+        const request = request_opt.?;
         _ = request.ref();
         var _guard_request = DerefGuard(JSMySQLQuery){ .ptr = request };
         _ = &_guard_request;
@@ -905,20 +907,24 @@ pub fn handlePreparedStatement(self: *MySQLConnection, comptime Context: type, r
         _ = debug("handlePreparedStatement", .{});
         const first_byte = try reader.int(u8);
         _ = reader.skip(-1);
-        var request = ((self.queue.current()) orelse {
-        _ = debug("Unexpected prepared statement packet missing request", .{});
-        return error.UnexpectedPacket;
-});
+        const request_opt = self.queue.current();
+        if ((request_opt == null)) {
+            _ = debug("Unexpected prepared statement packet missing request", .{});
+            return error.UnexpectedPacket;
+        }
+        var request = request_opt.?;
         _ = &request;
         _ = request.ref();
         var _guard_request = DerefGuard(JSMySQLQuery){ .ptr = request };
         _ = &_guard_request;
         var ___guard_request_moved = false; _ = &___guard_request_moved;
         defer if (!___guard_request_moved) { ___guard_request_moved = true; const __T = @TypeOf(_guard_request); if (@typeInfo(__T) == .optional) { if (_guard_request) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_request.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_request; _drop_val.__cp_deinit(); } };
-        var statement = ((request.getStatement()) orelse {
-        _ = debug("Unexpected prepared statement packet missing statement", .{});
-        return error.UnexpectedPacket;
-});
+        const statement_opt = request.getStatement();
+        if ((statement_opt == null)) {
+            _ = debug("Unexpected prepared statement packet missing statement", .{});
+            return error.UnexpectedPacket;
+        }
+        var statement = statement_opt.?;
         _ = &statement;
         _ = statement.ref();
         var _guard_statement = DerefGuard(MySQLStatement){ .ptr = statement };
@@ -1032,10 +1038,12 @@ pub fn handleResultSet(self: *MySQLConnection, comptime Context: type, reader: N
         const first_byte = try reader.int(u8);
         _ = debug("handleResultSet: {x:0>2}", .{ first_byte });
         _ = reader.skip(-1);
-        var request = ((self.queue.current()) orelse {
-        _ = debug("Unexpected result set packet", .{});
-        return error.UnexpectedPacket;
-});
+        const request_opt = self.queue.current();
+        if ((request_opt == null)) {
+            _ = debug("Unexpected result set packet", .{});
+            return error.UnexpectedPacket;
+        }
+        var request = request_opt.?;
         _ = &request;
         _ = request.ref();
         var _guard_request = DerefGuard(JSMySQLQuery){ .ptr = request };
@@ -1069,10 +1077,12 @@ var err_pkt = ErrorPacket{  };
         _ = self.getJSConnection().onErrorPacket(request, err_pkt);
 },
 else => {
-var statement = ((request.getStatement()) orelse {
-        _ = debug("Unexpected result set packet", .{});
-        return error.UnexpectedPacket;
-});
+const statement_opt = request.getStatement();
+        if ((statement_opt == null)) {
+            _ = debug("Unexpected result set packet", .{});
+            return error.UnexpectedPacket;
+        }
+        var statement = statement_opt.?;
         _ = &statement;
         _ = statement.ref();
         var _guard_statement = DerefGuard(MySQLStatement){ .ptr = statement };

@@ -200,8 +200,16 @@ pub fn writeSep(c: anytype, n: usize, comptime colors: bool) void {
 
 pub fn attrValue(head: []const u8, comptime name: []const u8) u32 {
         const needle = ((" " ++ name) ++ "=\"");
-        const start = (((bun.strings.indexOf(head, needle)) orelse { return 0; }) + needle.len);
-        const end = (start + ((bun.strings.indexOfChar(head[start..], 34)) orelse { return 0; }));
+        const start_opt = bun.strings.indexOf(head, needle);
+        if ((start_opt == null)) {
+            return 0;
+        }
+        const start = (start_opt.? + needle.len);
+        const end_opt = bun.strings.indexOfChar(head[start..], 34);
+        if ((end_opt == null)) {
+            return 0;
+        }
+        const end = (start + end_opt.?);
         return (blk_catch_3: { break :blk_catch_3 ((std.fmt.parseInt(u32, head[start..end], 10)) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 0; }); });
 }
 

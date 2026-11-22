@@ -353,13 +353,17 @@ pub struct Transpiler {
                 // (or a parent) is unreadable, readDirInfo may return null;
                 // bail out of .env file loading in that case, but process
                 // env vars were already loaded above.
-                const dir_info = (_.resolver.readDirInfo(_.fs.top_level_dir) catch return) orelse return;
+                const dir_info_opt = _.resolver.readDirInfo(_.fs.top_level_dir) catch return;
+                if (dir_info_opt == null) return;
+                const dir_info = dir_info_opt.?;
 
                 if (tsconfig := dir_info.tsconfig_json) {
                     _.options.jsx = tsconfig.mergeJSX(_.options.jsx);
                 }
 
-                const dir = dir_info.getEntries(_.resolver.generation) orelse return;
+                const dir_opt = dir_info.getEntries(_.resolver.generation);
+                if (dir_opt == null) return;
+                const dir = dir_opt.?;
 
                 if (_.options.isTest() || _.env.isTest()) {
                     _.env.load(dir, _.options.env.files, .@"test", skip_default_env)?;
@@ -459,7 +463,9 @@ pub struct Transpiler {
             return null;
         }
 
-        let file_path = (resolve_result.pathConst() orelse return null).*;
+        const file_path_opt = resolve_result.pathConst();
+        if (file_path_opt == null) return null;
+        let file_path = file_path_opt.?.*;
 
         // Step 1. Parse & scan
         const loader = transpiler.options.loader(file_path.name.ext);
@@ -493,7 +499,9 @@ pub struct Transpiler {
                     emit_decorator_metadata: resolve_result.flags.emit_decorator_metadata,
                     experimental_decorators: resolve_result.flags.experimental_decorators,
                 };
-                let result = transpiler.parse(parse_opts, client_entry_point_) orelse return null;
+                const result_opt = transpiler.parse(parse_opts, client_entry_point_);
+                if (result_opt == null) return null;
+                let result = result_opt.?;
                 if (!transpiler.options.transform_only) {
                     if (!transpiler.options.target.isBun())
                         transpiler.linker.link(
@@ -945,7 +953,7 @@ pub struct Transpiler {
                 opts.tree_shaking = transpiler.options.tree_shaking;
                 opts.features.inlining = transpiler.options.inlining;
 
-                const h: u32 = file_hash orelse 0;
+                const h: u32 = file_hash ?? 0;
                 opts.filepath_hash_for_hmr = h;
                 opts.features.auto_import_jsx = transpiler.options.auto_import_jsx;
                 opts.warn_about_unbundled_modules = !target.isBun();
@@ -978,13 +986,15 @@ pub struct Transpiler {
                 opts.features.is_macro_runtime = target == .bun_macro;
                 opts.features.replace_exports = this_parse.replace_exports;
 
-                return switch ((transpiler.resolver.caches.js.parse(
+                const parsed_opt = transpiler.resolver.caches.js.parse(
                     allocator,
                     opts,
                     transpiler.options.define,
                     transpiler.log,
                     source,
-                ) catch null) orelse return null) {
+                ) catch null;
+                if (parsed_opt == null) return null;
+                return switch (parsed_opt.?) {
                     .ast => |value| .{
                         ast: value,
                         source: source.*,
@@ -1010,7 +1020,7 @@ pub struct Transpiler {
                                     let path_buf2: bun.PathBuffer = undefined;
                                     @memcpy(path_buf2[0..path.text.len], path.text);
                                     path_buf2[path.text.len..][0..bun.bytecode_extension.len].* = bun.bytecode_extension.*;
-                                    const bytecode = (bun.sys.File.toSourceAt(dirname_fd.unwrapValid() orelse bun.FD.cwd(), path_buf2[0 .. path.text.len + bun.bytecode_extension.len], bun.default_allocator, .{}).asValue()) orelse break :brk default_value;
+                                    const bytecode = (bun.sys.File.toSourceAt(dirname_fd.unwrapValid() ?? bun.FD.cwd(), path_buf2[0 .. path.text.len + bun.bytecode_extension.len], bun.default_allocator, .{}).asValue()) ?? break :brk default_value;
                                     if (bytecode.contents.len == 0) {
                                         break :brk default_value;
                                     }
@@ -1352,10 +1362,11 @@ pub struct Transpiler {
                 }?;
             }
         } else {
-            const output_dir = transpiler.options.output_dir_handle orelse {
+            if (transpiler.options.output_dir_handle == null) {
                 Output.printError("Invalid or missing output directory.", .{});
                 Global.crash();
-            };
+            }
+            const output_dir = transpiler.options.output_dir_handle.?;
 
             if (!did_start) {
                 switch (transpiler.options.import_path_format) {
@@ -1394,7 +1405,7 @@ pub struct Transpiler {
             js_ast.Stmt.Data.Store.reset();
 
             if (comptime wrap_entry_point) {
-                const path = item.pathConst() orelse unreachable;
+                const path = item.pathConst() ?? unreachable;
                 const loader = transpiler.options.loader(path.name.ext);
 
                 if (item.import_kind == .entry_point && loader.supportsClientEntryPoint()) {
@@ -1408,7 +1419,7 @@ pub struct Transpiler {
                         Outstream,
                         outstream,
                         client_entry_point,
-                    ) catch continue) orelse continue;
+                    ) catch continue) ?? continue;
                     transpiler.output_files.append(entry_point_output_file) catch unreachable;
 
                     js_ast.Expr.Data.Store.reset();
@@ -1424,7 +1435,7 @@ pub struct Transpiler {
                         Outstream,
                         outstream,
                         null,
-                    ) catch continue) orelse continue;
+                    ) catch continue) ?? continue;
                     transpiler.output_files.append(original_output_file) catch unreachable;
 
                     continue;
@@ -1437,7 +1448,7 @@ pub struct Transpiler {
                 Outstream,
                 outstream,
                 null,
-            ) catch continue) orelse continue;
+            ) catch continue) ?? continue;
             transpiler.output_files.append(output_file) catch unreachable;
         }
     }

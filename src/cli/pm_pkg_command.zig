@@ -164,11 +164,13 @@ pub fn exec(ctx: Command.Context, pm: *PackageManager, positionals: []const []co
                 _ = printHelp();
                 return;
             }
-            const subcommand = ((PmPkgSubCommand.fromString(positionals[1])) orelse {
-            _ = Output.errGeneric("Unknown subcommand: {s}", .{ positionals[1] });
-            _ = printHelp();
-            _ = Global.exit(1);
-});
+            const subcommand_opt = PmPkgSubCommand.fromString(positionals[1]);
+            if ((subcommand_opt == null)) {
+                _ = Output.errGeneric("Unknown subcommand: {s}", .{ positionals[1] });
+                _ = printHelp();
+                _ = Global.exit(1);
+            }
+            const subcommand = subcommand_opt.?;
             switch (subcommand) {
 .get => {
 _ = try execGet(ctx, pm, positionals[2..], cwd);
@@ -556,12 +558,19 @@ pub fn traverseKeyPath(root: js_ast.Expr, key: []const u8) !js_ast.Expr {
                         if ((current.data != .e_object)) {
                             return error.NotFound;
                         }
-                        const next_obj = ((current.get(prop_name)) orelse { return error.NotFound; });
-                        current = next_obj;
+                        const next_obj_opt = current.get(prop_name);
+                        if ((next_obj_opt == null)) {
+                            return error.NotFound;
+                        }
+                        current = next_obj_opt.?;
                         remaining_part = part[first_bracket..];
                     }
                     while (strings.indexOf(remaining_part, "[")) |bracket_start| {
-                        const bracket_end = ((strings.indexOf(remaining_part[bracket_start..], "]")) orelse { return error.InvalidPath; });
+                        const bracket_end_opt = strings.indexOf(remaining_part[bracket_start..], "]");
+                        if ((bracket_end_opt == null)) {
+                            return error.InvalidPath;
+                        }
+                        const bracket_end = bracket_end_opt.?;
                         const actual_bracket_end = (bracket_start + bracket_end);
                         const index_str = remaining_part[(bracket_start + 1)..actual_bracket_end];
                         if ((index_str.len == 0)) {
@@ -580,8 +589,11 @@ pub fn traverseKeyPath(root: js_ast.Expr, key: []const u8) !js_ast.Expr {
                             if ((current.data != .e_object)) {
                                 return error.NotFound;
                             }
-                            const next_obj = ((current.get(index_str)) orelse { return error.NotFound; });
-                            current = next_obj;
+                            const next_obj_opt = current.get(index_str);
+                            if ((next_obj_opt == null)) {
+                                return error.NotFound;
+                            }
+                            current = next_obj_opt.?;
                         }
                         remaining_part = remaining_part[(actual_bracket_end + 1)..];
                         if ((remaining_part.len == 0)) {
@@ -598,8 +610,11 @@ pub fn traverseKeyPath(root: js_ast.Expr, key: []const u8) !js_ast.Expr {
                             current = current.data.e_array.items.ptr[@as(usize, @intCast(index))];
                         } else {
                             if ((current.data == .e_object)) {
-                                const next_obj = ((current.get(part)) orelse { return error.NotFound; });
-                                current = next_obj;
+                                const next_obj_opt = current.get(part);
+                                if ((next_obj_opt == null)) {
+                                    return error.NotFound;
+                                }
+                                current = next_obj_opt.?;
                             } else {
                                 return error.NotFound;
                             }
@@ -608,8 +623,11 @@ pub fn traverseKeyPath(root: js_ast.Expr, key: []const u8) !js_ast.Expr {
                         if ((current.data != .e_object)) {
                             return error.NotFound;
                         }
-                        const next_obj = ((current.get(part)) orelse { return error.NotFound; });
-                        current = next_obj;
+                        const next_obj_opt = current.get(part);
+                        if ((next_obj_opt == null)) {
+                            return error.NotFound;
+                        }
+                        current = next_obj_opt.?;
                     }
                 }
             }
@@ -637,7 +655,11 @@ pub fn parseKeyPath(allocator: std.mem.Allocator, key: []const u8) !std.array_li
                         remaining_part = part[first_bracket..];
                     }
                     while (strings.indexOf(remaining_part, "[")) |bracket_start| {
-                        const bracket_end = ((strings.indexOf(remaining_part[bracket_start..], "]")) orelse { return error.InvalidPath; });
+                        const bracket_end_opt = strings.indexOf(remaining_part[bracket_start..], "]");
+                        if ((bracket_end_opt == null)) {
+                            return error.InvalidPath;
+                        }
+                        const bracket_end = bracket_end_opt.?;
                         const actual_bracket_end = (bracket_start + bracket_end);
                         const index_str = remaining_part[(bracket_start + 1)..actual_bracket_end];
                         if ((index_str.len == 0)) {

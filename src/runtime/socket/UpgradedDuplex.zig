@@ -162,7 +162,10 @@ pub fn callWriteOrEnd(self: *UpgradedDuplex, data: ?[]const u8, msg_more: bool) 
                 _ = &g;
                 const global_obj: *jsc.JSGlobalObject = g;
                 const writeOrEnd_opt = (if (msg_more) (blk_catch_0: { break :blk_catch_0 ((duplex.getFunction(global_obj, "write")) catch |__ce_0| { _ = &__ce_0; return; }); }) else (blk_catch_1: { break :blk_catch_1 ((duplex.getFunction(global_obj, "end")) catch |__ce_1| { _ = &__ce_1; return; }); }));
-                const writeOrEnd = ((writeOrEnd_opt) orelse { return; });
+                if ((writeOrEnd_opt == null)) {
+                    return;
+                }
+                const writeOrEnd = writeOrEnd_opt.?;
                 if (data) |data_| {
                     _ = &data_;
                     const buffer = (blk_catch_2: { break :blk_catch_2 ((jsc.ArrayBuffer.BinaryType.toJS(.Buffer, data_, global_obj)) catch |e| { _ = &e; _ = self.handlers.onError(self.handlers.ctx, global_obj.takeException(e));

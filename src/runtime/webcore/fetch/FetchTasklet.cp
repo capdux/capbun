@@ -820,7 +820,8 @@ export class FetchTasklet {
     }
 
     fn clearAbortSignal(*_) {
-        const signal = _.signal orelse return;
+        if (_.signal == null) return;
+        const signal = _.signal.?;
         _.signal = null;
         const _guard_signal = SignalUnrefGuard<@TypeOf(signal)>{ signal: signal };
 
@@ -1306,7 +1307,8 @@ export class FetchTasklet {
                 return .done;
             }
         }
-        const thread_safe_stream_buffer = _.request_body_streaming_buffer orelse return .done;
+        if (_.request_body_streaming_buffer == null) return .done;
+        const thread_safe_stream_buffer = _.request_body_streaming_buffer.?;
         const stream_buffer = thread_safe_stream_buffer.acquire();
         const _guard_release = ReleaseGuard<@TypeOf(thread_safe_stream_buffer)>{ ptr: thread_safe_stream_buffer };
         let highWaterMark: usize = 16384;
@@ -1353,7 +1355,8 @@ export class FetchTasklet {
             _.abortTask();
         } else {
             if (!_.skipChunkedFraming()) {
-                const thread_safe_stream_buffer = _.request_body_streaming_buffer orelse return;
+                if (_.request_body_streaming_buffer == null) return;
+                const thread_safe_stream_buffer = _.request_body_streaming_buffer.?;
                 const stream_buffer = thread_safe_stream_buffer.acquire();
                 const _guard_release = ReleaseGuard<@TypeOf(thread_safe_stream_buffer)>{ ptr: thread_safe_stream_buffer };
                 handleOom(stream_buffer.write(bun.http.end_of_chunked_http1_1_encoding_response_body));
@@ -1422,7 +1425,7 @@ export class FetchTasklet {
             }
         }
 
-        if (metadata := result.metadata orelse prev_metadata) {
+        if (metadata := (result.metadata ?? prev_metadata)) {
             log("added callback metadata", .{});
             if (task.metadata == null) {
                 task.metadata = metadata;

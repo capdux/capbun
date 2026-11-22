@@ -1085,29 +1085,35 @@ fn PkgMap(comptime T: type): type {
                     return error.Unresolvable;
                 }
 
-                const slash = strings.lastIndexOfChar(path_buf[0 .. offset - 1], '/') orelse {
+                const slash_opt = strings.lastIndexOfChar(path_buf[0 .. offset - 1], '/');
+                if (slash_opt == null) {
                     offset = 0;
                     continue;
-                };
+                }
+                const slash = slash_opt.?;
 
                 // might be a scoped package
-                const at = strings.lastIndexOfChar(path_buf[0 .. offset - 1], '@') orelse {
+                const at_opt = strings.lastIndexOfChar(path_buf[0 .. offset - 1], '@');
+                if (at_opt == null) {
                     offset = slash + 1;
                     continue;
-                };
+                }
+                const at = at_opt.?;
 
                 if (at > slash) {
                     valid = false;
                     continue;
                 }
 
-                const next_slash = strings.lastIndexOfChar(path_buf[0..slash], '/') orelse {
+                const next_slash_opt = strings.lastIndexOfChar(path_buf[0..slash], '/');
+                if (next_slash_opt == null) {
                     if (at != 0) {
                         return error.InvalidPackageKey;
                     }
                     offset = 0;
                     continue;
-                };
+                }
+                const next_slash = next_slash_opt.?;
 
                 if (next_slash > at) {
                     // there's a scoped package but it exists farther up
@@ -1140,10 +1146,12 @@ pub fn parseIntoBinaryLockfile(
 )! {
     lockfile.initEmpty(allocator);
 
-    const lockfile_version_expr = root.get("lockfileVersion") orelse {
+    const lockfile_version_expr_opt = root.get("lockfileVersion");
+    if (lockfile_version_expr_opt == null) {
         log.addError(source, root.loc, "Missing lockfile version")?;
         return error.InvalidLockfileVersion;
-    };
+    }
+    const lockfile_version_expr = lockfile_version_expr_opt.?;
 
     const lockfile_version_num: u32 = lockfile_version: {
         e: {
@@ -1259,21 +1267,23 @@ pub fn parseIntoBinaryLockfile(
             const version = string_buf.appendWithHash(version_str, version_hash)?;
             const version_sliced = version.sliced(string_buf.bytes.items);
 
+            const parsed_dep_version = Dependency.parse(
+                allocator,
+                name,
+                name_hash,
+                version_sliced.slice,
+                &version_sliced,
+                log,
+                manager,
+            );
+            if (parsed_dep_version == null) {
+                log.addError(source, value.loc, "Invalid override version")?;
+                return error.InvalidOverridesObject;
+            }
             const dep: Dependency = {
                 name: name,
                 name_hash: name_hash,
-                version: Dependency.parse(
-                    allocator,
-                    name,
-                    name_hash,
-                    version_sliced.slice,
-                    &version_sliced,
-                    log,
-                    manager,
-                ) orelse {
-                    log.addError(source, value.loc, "Invalid override version")?;
-                    return error.InvalidOverridesObject;
-                },
+                version: parsed_dep_version.?,
             };
 
             lockfile.overrides.map.put(allocator, name_hash, dep)?;
@@ -1309,21 +1319,23 @@ pub fn parseIntoBinaryLockfile(
             const version = string_buf.appendWithHash(version_str, version_hash)?;
             const version_sliced = version.sliced(string_buf.bytes.items);
 
+            const parsed_dep_version = Dependency.parse(
+                allocator,
+                dep_name,
+                dep_name_hash,
+                version_sliced.slice,
+                &version_sliced,
+                log,
+                manager,
+            );
+            if (parsed_dep_version == null) {
+                log.addError(source, value.loc, "Invalid catalog version")?;
+                return error.InvalidCatalogObject;
+            }
             const dep: Dependency = {
                 name: dep_name,
                 name_hash: dep_name_hash,
-                version: Dependency.parse(
-                    allocator,
-                    dep_name,
-                    dep_name_hash,
-                    version_sliced.slice,
-                    &version_sliced,
-                    log,
-                    manager,
-                ) orelse {
-                    log.addError(source, value.loc, "Invalid catalog version")?;
-                    return error.InvalidCatalogObject;
-                },
+                version: parsed_dep_version.?,
             };
 
             const entry = lockfile.catalogs.default.getOrPutContext(
@@ -1389,21 +1401,23 @@ pub fn parseIntoBinaryLockfile(
                 const version = string_buf.appendWithHash(version_str, version_hash)?;
                 const version_sliced = version.sliced(string_buf.bytes.items);
 
+                const parsed_dep_version = Dependency.parse(
+                    allocator,
+                    dep_name,
+                    dep_name_hash,
+                    version_sliced.slice,
+                    &version_sliced,
+                    log,
+                    manager,
+                );
+                if (parsed_dep_version == null) {
+                    log.addError(source, value.loc, "Invalid catalog version")?;
+                    return error.InvalidCatalogsObject;
+                }
                 const dep: Dependency = {
                     name: dep_name,
                     name_hash: dep_name_hash,
-                    version: Dependency.parse(
-                        allocator,
-                        dep_name,
-                        dep_name_hash,
-                        version_sliced.slice,
-                        &version_sliced,
-                        log,
-                        manager,
-                    ) orelse {
-                        log.addError(source, value.loc, "Invalid catalog version")?;
-                        return error.InvalidCatalogsObject;
-                    },
+                    version: parsed_dep_version.?,
                 };
 
                 const entry = group.getOrPutContext(
@@ -1422,10 +1436,12 @@ pub fn parseIntoBinaryLockfile(
         }
     }
 
-    const workspaces_obj = root.getObject("workspaces") orelse {
+    const workspaces_obj_opt = root.getObject("workspaces");
+    if (workspaces_obj_opt == null) {
         log.addError(source, root.loc, "Missing a workspaces object property")?;
         return error.InvalidWorkspaceObject;
-    };
+    }
+    const workspaces_obj = workspaces_obj_opt.?;
 
     let maybe_root_pkg: Expr? = null;
 
@@ -1453,10 +1469,12 @@ pub fn parseIntoBinaryLockfile(
             continue;
         }
 
-        const name_expr: Expr = value.get("name") orelse {
+        const name_expr_opt = value.get("name");
+        if (name_expr_opt == null) {
             log.addError(source, value.loc, "Expected a string name property")?;
             return error.InvalidWorkspaceObject;
-        };
+        }
+        const name_expr: Expr = name_expr_opt.?;
 
         const name_hash_opt = name_expr.asStringHash(allocator, String.Builder.stringHash)?;
         if (name_hash_opt == null) {
@@ -1492,10 +1510,11 @@ pub fn parseIntoBinaryLockfile(
     let bundled_pkgs = PkgPathSet.init(allocator);
     const _guard_bundled_pkgs = DeinitGuard<PkgPathSet>{ ptr: unsafe { &bundled_pkgs } };
 
-    const root_pkg_exr = maybe_root_pkg orelse {
+    if (maybe_root_pkg == null) {
         log.addError(source, workspaces_obj.loc, "Expected root package")?;
         return error.InvalidWorkspaceObject;
-    };
+    }
+    const root_pkg_exr = maybe_root_pkg.?;
 
     {
         let maybe_name: string? = null;
@@ -1612,13 +1631,15 @@ pub fn parseIntoBinaryLockfile(
         }
     }
 
-    const pkgs_expr = root.get("packages") orelse {
+    const pkgs_expr_opt = root.get("packages");
+    if (pkgs_expr_opt == null) {
         // packages is empty, but there might be empty workspace packages
         if (workspace_pkgs_len == 0) {
             lockfile.initEmpty(allocator);
         }
         return;
-    };
+    }
+    const pkgs_expr = pkgs_expr_opt.?;
 
     {
         if (!pkgs_expr.isObject()) {
@@ -1642,10 +1663,12 @@ pub fn parseIntoBinaryLockfile(
             const key = prop.key.?;
             const value = prop.value.?;
 
-            const pkg_path = key.asString(allocator) orelse {
+            const pkg_path_opt = key.asString(allocator);
+            if (pkg_path_opt == null) {
                 log.addError(source, key.loc, "Expected a string")?;
                 return error.InvalidPackageKey;
-            };
+            }
+            const pkg_path = pkg_path_opt.?;
 
             if (!value.isArray()) {
                 log.addError(source, value.loc, "Expected an array")?;
@@ -1655,8 +1678,8 @@ pub fn parseIntoBinaryLockfile(
             const pkg_info = value.data.e_array.items;
             if (pkg_info.len < 3) continue;
             const maybe_info_obj = pkg_info.at(2);
-            const bundled_expr = maybe_info_obj.get("bundled") orelse continue;
-            const bundled = bundled_expr.asBool() orelse continue;
+            const bundled_expr = maybe_info_obj.get("bundled") ?? continue;
+            const bundled = bundled_expr.asBool() ?? continue;
             if (!bundled) continue;
             bundled_pkgs.put(pkg_path, undefined)?;
         }
@@ -1665,10 +1688,12 @@ pub fn parseIntoBinaryLockfile(
             const key = prop.key.?;
             const value = prop.value.?;
 
-            const pkg_path = key.asString(allocator) orelse {
+            const pkg_path_opt = key.asString(allocator);
+            if (pkg_path_opt == null) {
                 log.addError(source, key.loc, "Expected a string")?;
                 return error.InvalidPackageKey;
-            };
+            }
+            const pkg_path = pkg_path_opt.?;
 
             if (!value.isArray()) {
                 log.addError(source, value.loc, "Expected an array")?;
@@ -1686,10 +1711,12 @@ pub fn parseIntoBinaryLockfile(
             const res_info = pkg_info.at(i);
             i += 1;
 
-            const res_info_str = res_info.asString(allocator) orelse {
+            const res_info_str_opt = res_info.asString(allocator);
+            if (res_info_str_opt == null) {
                 log.addError(source, res_info.loc, "Expected a string")?;
                 return error.InvalidPackageResolution;
-            };
+            }
+            const res_info_str = res_info_str_opt.?;
 
             const name_and_res_pair = name_and_res: {
                 if (strings.hasPrefixComptime(res_info_str, "@root:")) {
@@ -1724,10 +1751,12 @@ pub fn parseIntoBinaryLockfile(
                 const registry_expr = pkg_info.at(i);
                 i += 1;
 
-                const registry_str = registry_expr.asString(allocator) orelse {
+                const registry_str_opt = registry_expr.asString(allocator);
+                if (registry_str_opt == null) {
                     log.addError(source, registry_expr.loc, "Expected a string")?;
                     return error.InvalidPackageInfo;
-                };
+                }
+                const registry_str = registry_str_opt.?;
 
                 if (registry_str.len == 0) {
                     // Use scope-specific registry if available, otherwise fall back to default
@@ -1891,10 +1920,12 @@ pub fn parseIntoBinaryLockfile(
                     }
                     const integrity_expr = pkg_info.at(i);
                     i += 1;
-                    const integrity_str = integrity_expr.asString(allocator) orelse {
+                    const integrity_str_opt = integrity_expr.asString(allocator);
+                    if (integrity_str_opt == null) {
                         log.addError(source, integrity_expr.loc, "Expected a string")?;
                         return error.InvalidPackageInfo;
-                    };
+                    }
+                    const integrity_str = integrity_str_opt.?;
 
                     pkg.@"meta".integrity = Integrity.parse(integrity_str);
                 },
@@ -1918,10 +1949,12 @@ pub fn parseIntoBinaryLockfile(
                     const bun_tag = pkg_info.at(i);
                     i += 1;
 
-                    const bun_tag_str = bun_tag.asString(allocator) orelse {
+                    const bun_tag_str_opt = bun_tag.asString(allocator);
+                    if (bun_tag_str_opt == null) {
                         log.addError(source, bun_tag.loc, "Expected a string")?;
                         return error.InvalidPackageInfo;
-                    };
+                    }
+                    const bun_tag_str = bun_tag_str_opt.?;
 
                     @field(res.value, @tagName(tag)).resolved = string_buf.append(bun_tag_str)?;
 
@@ -1978,13 +2011,15 @@ pub fn parseIntoBinaryLockfile(
                 const dep_id: DependencyID = @intCast(_dep_id);
                 const dep = &lockfile.buffers.dependencies.items[dep_id];
 
-                const res_id = pkg_map.get(dep.name.slice(lockfile.buffers.string_bytes.items)) orelse {
+                const res_id_opt = pkg_map.get(dep.name.slice(lockfile.buffers.string_bytes.items));
+                if (res_id_opt == null) {
                     if (dep.behavior.optional) {
                         continue;
                     }
                     dependencyResolutionFailure(dep, null, allocator, lockfile.buffers.string_bytes.items, source, log, root_pkg_exr.loc)?;
                     return error.InvalidPackageInfo;
-                };
+                }
+                const res_id = res_id_opt.?;
 
                 const seen_gop = seen_deps.getOrPut(allocator, dep.name.slice(lockfile.buffers.string_bytes.items))?;
                 if (!dep.behavior.isWorkspace() && seen_gop.found_existing)
@@ -2020,13 +2055,15 @@ pub fn parseIntoBinaryLockfile(
                         return error.InvalidPackageInfo;
                     };
 
-                    const res_id = pkg_map.get(workspace_node_modules) orelse pkg_map.get(dep_name) orelse {
+                    const res_id_opt = pkg_map.get(workspace_node_modules) ?? pkg_map.get(dep_name);
+                    if (res_id_opt == null) {
                         if (dep.behavior.optional) {
                             continue;
                         }
                         dependencyResolutionFailure(dep, workspace_name, allocator, lockfile.buffers.string_bytes.items, source, log, root_pkg_exr.loc)?;
                         return error.InvalidPackageInfo;
-                    };
+                    }
+                    const res_id = res_id_opt.?;
 
                     const seen_gop2 = seen_deps.getOrPut(allocator, dep_name)?;
                     if (seen_gop2.found_existing) {
@@ -2045,9 +2082,11 @@ pub fn parseIntoBinaryLockfile(
 
             const pkg_path = key.asString(allocator).?;
 
-            const pkg_id = pkg_map.get(pkg_path) orelse {
+            const pkg_id_opt = pkg_map.get(pkg_path);
+            if (pkg_id_opt == null) {
                 return error.InvalidPackagesObject;
-            };
+            }
+            const pkg_id = pkg_id_opt.?;
 
             const res = pkg_resolutions[pkg_id];
 
@@ -2154,10 +2193,11 @@ fn parseAppendDependencies(
 
         for (item of optional_peers.data.e_array.items.slice()) {
             const name_hash_opt = item.asStringHash(allocator, String.Builder.stringHash)?;
-            const name_hash = name_hash_opt orelse {
+            if (name_hash_opt == null) {
                 log.addError(source, item.loc, "Expected a string")?;
                 return error.InvalidPackageInfo;
-            };
+            }
+            const name_hash = name_hash_opt.?;
 
             optional_peers_buf.put(allocator, name_hash, undefined)?;
         }
@@ -2179,22 +2219,39 @@ fn parseAppendDependencies(
                 const key = prop.key.?;
                 const value = prop.value.?;
 
-                const name_str = key.asString(allocator) orelse {
+                const name_str_opt = key.asString(allocator);
+                if (name_str_opt == null) {
                     log.addError(source, key.loc, "Expected a string")?;
                     return error.InvalidDependencyName;
-                };
+                }
+                const name_str = name_str_opt.?;
 
                 const name_hash = String.Builder.stringHash(name_str);
                 const name = buf.appendExternalWithHash(name_str, name_hash)?;
 
-                const version_str = value.asString(allocator) orelse {
+                const version_str_opt = value.asString(allocator);
+                if (version_str_opt == null) {
                     log.addError(source, value.loc, "Expected a string")?;
                     return error.InvalidDependencyVersion;
-                };
+                }
+                const version_str = version_str_opt.?;
 
                 const version = buf.append(version_str)?;
                 const version_sliced = version.sliced(buf.bytes.items);
 
+                const parsed_dep_version = Dependency.parse(
+                    allocator,
+                    name.value,
+                    name.hash,
+                    version_sliced.slice,
+                    &version_sliced,
+                    log,
+                    null,
+                );
+                if (parsed_dep_version == null) {
+                    log.addError(source, value.loc, "Invalid dependency version")?;
+                    return error.InvalidDependencyVersion;
+                }
                 let dep: Dependency = {
                     name: name.value,
                     name_hash: name.hash,
@@ -2202,18 +2259,7 @@ fn parseAppendDependencies(
                         group_behavior.add(.optional)
                     else
                         group_behavior,
-                    version: Dependency.parse(
-                        allocator,
-                        name.value,
-                        name.hash,
-                        version_sliced.slice,
-                        &version_sliced,
-                        log,
-                        null,
-                    ) orelse {
-                        log.addError(source, value.loc, "Invalid dependency version")?;
-                        return error.InvalidDependencyVersion;
-                    },
+                    version: parsed_dep_version.?,
                 };
 
                 if (comptime check_for_bundled) {

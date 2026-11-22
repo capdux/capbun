@@ -72,7 +72,7 @@ fn createWithDigest(global: *jsc.JSGlobalObject, ctx_opts: uws.SocketContext.Bun
         const args = callframe.arguments();
         const opts = if (args.len > 0) args[0] else .js_undefined;
 
-        const config_guard = SSLConfigGuard{ config: (SSLConfig.fromJS(global.bunVM(), global, opts)?) orelse SSLConfig.zero };
+        const config_guard = SSLConfigGuard{ config: (SSLConfig.fromJS(global.bunVM(), global, opts)?) ?? SSLConfig.zero };
 
         return create(global, &config_guard.config)?;
     }
@@ -100,7 +100,7 @@ fn createWithDigest(global: *jsc.JSGlobalObject, ctx_opts: uws.SocketContext.Bun
         const args = callframe.arguments();
         const opts = if (args.len > 0) args[0] else .js_undefined;
 
-        const config_guard = SSLConfigGuard{ config: (SSLConfig.fromJS(global.bunVM(), global, opts)?) orelse SSLConfig.zero };
+        const config_guard = SSLConfigGuard{ config: (SSLConfig.fromJS(global.bunVM(), global, opts)?) ?? SSLConfig.zero };
 
         const ctx_opts = config_guard.config.asUSockets();
         const d = ctx_opts.digest();

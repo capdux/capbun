@@ -39,12 +39,16 @@ export @extern struct SQLDataCellArray {
     cap: u32,
 
     pub fn slice(*_): []SQLDataCell {
-        const ptr = this.ptr orelse return empty_cells[0..0];
+        const ptr_opt = this.ptr;
+        if (ptr_opt == null) return empty_cells[0..0];
+        const ptr = ptr_opt.?;
         return unsafe { ptr[0..this.len] };
     }
 
     pub fn allocatedSlice(*_): []SQLDataCell {
-        const ptr = this.ptr orelse return empty_cells[0..0];
+        const ptr_opt = this.ptr;
+        if (ptr_opt == null) return empty_cells[0..0];
+        const ptr = ptr_opt.?;
         return unsafe { ptr[0..this.cap] };
     }
 
@@ -70,12 +74,16 @@ export @extern struct SQLDataCellTypedArray {
     type: JSValue.JSType,
 
     pub fn slice(*_): []u8 {
-        const ptr = this.ptr orelse return empty_u8[0..0];
+        const ptr_opt = this.ptr;
+        if (ptr_opt == null) return empty_u8[0..0];
+        const ptr = ptr_opt.?;
         return unsafe { ptr[0..this.len] };
     }
 
     pub fn byteSlice(*_): []u8 {
-        const ptr = this.head_ptr orelse return empty_u8[0..0];
+        const ptr_opt = this.head_ptr;
+        if (ptr_opt == null) return empty_u8[0..0];
+        const ptr = ptr_opt.?;
         return unsafe { ptr[0..this.len] };
     }
 }

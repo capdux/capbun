@@ -1594,8 +1594,9 @@ struct CombinatorIter {
     fn next(*_): parser.Combinator? {
         while (_.i < _.sel.components.items.len) {
             defer _.i += 1;
-            const combinator = _.sel.components.items[_.sel.components.items.len - 1 - _.i].asCombinator() orelse continue;
-            return combinator;
+            if (combinator := _.sel.components.items[_.sel.components.items.len - 1 - _.i].asCombinator()) {
+                return combinator;
+            }
         }
         return null;
     }

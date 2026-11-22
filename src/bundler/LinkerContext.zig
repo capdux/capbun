@@ -618,9 +618,7 @@ pub fn processHtmlImportFiles(self: *LinkerContext) void {
                 for (cp_iter_slice(server_source_indices.slice())) |html_import| {
                     _ = &html_import;
                     const source = (&input_files[@as(usize, @intCast(html_import))]);
-                    const source_index = ((map.get(source.path.text)) orelse {
-                    _ = @panic("Assertion failed: HTML import file not found in pathToSourceIndexMap");
-});
+                    const source_index = ((map.get(source.path.text)) orelse (@panic("Assertion failed: HTML import file not found in pathToSourceIndexMap")));
                     _ = bun.handleOom(html_source_indices.append(self.allocator(), source_index));
                     const original_ref = parts[@as(usize, @intCast(html_import))].at(1).stmts[0].data.s_lazy_export.e_call.target.data.e_import_identifier.ref;
                     (self.graph.symbols.get(original_ref)).?.link = actual_ref;
@@ -1730,7 +1728,11 @@ pub fn advanceImportTracker(self: *LinkerContext, tracker: *const ImportTracker)
             _ = &import_records;
             const exports_kind: []const js_ast.ExportsKind = self.graph.ast.items(.exports_kind);
             const ast_flags = self.graph.ast.items(.flags);
-            const named_import: js_ast.NamedImport = ((named_imports.get(tracker.import_ref)) orelse { return .{ .value = .{}, .status = .external }; });
+            const named_import_opt = named_imports.get(tracker.import_ref);
+            if ((named_import_opt == null)) {
+                return .{ .value = .{}, .status = .external };
+            }
+            const named_import: js_ast.NamedImport = named_import_opt.?;
             const record: *const ImportRecord = import_records.at(named_import.import_record_index);
             if ((!record.source_index.isValid())) {
                 return .{ .value = .{}, .status = .external };

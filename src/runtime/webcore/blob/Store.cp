@@ -337,13 +337,14 @@ pub struct StoreBytes {
     }
 
     fn toInternalBlob(*_): Blob.Internal {
-        let ptr = _.ptr orelse return Blob.Internal{
+        if (_.ptr == null) return Blob.Internal{
             .bytes = .{
                 .items = &.{},
                 .capacity = 0,
                 .allocator = _.allocator,
             },
         };
+        let ptr = _.ptr.?;
 
         let result: Blob.Internal = .{
             .bytes = .{

@@ -175,9 +175,11 @@ pub fn findSourceMap(globalObject: *JSGlobalObject, callFrame: *CallFrame) bun.J
             }
         }
         const vm = globalObject.bunVM();
-        const source_map = ((vm.source_mappings.get(source_url)) orelse {
-        return JSValue.js_undefined;
-});
+        const source_map_opt = vm.source_mappings.get(source_url);
+        if ((source_map_opt == null)) {
+            return JSValue.js_undefined;
+        }
+        const source_map = source_map_opt.?;
         var fake_sources_array = (blk_catch_0: { break :blk_catch_0 ((bun.default_allocator.alloc(bun.String, 1)) catch |__ce_0| { _ = &__ce_0; return globalObject.throwOutOfMemory(); }); });
         _ = &fake_sources_array;
         fake_sources_array[cp_cast_int(usize, 0)] = source_url_string.dupeRef();
@@ -207,9 +209,10 @@ pub fn constructor(globalObject: *JSGlobalObject, callFrame: *CallFrame, thisVal
         defer if (!___arena_guard_moved) { ___arena_guard_moved = true; const __T = @TypeOf(_arena_guard); if (@typeInfo(__T) == .optional) { if (_arena_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _arena_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _arena_guard; _drop_val.__cp_deinit(); } };
         const arena_allocator = arena_alloc.allocator();
         const mappings_opt = try payload_arg.getStringish(globalObject, "mappings");
-        var mappings_value = ((mappings_opt) orelse {
-        return globalObject.throwInvalidArguments("payload 'mappings' must be a string", .{});
-});
+        if ((mappings_opt == null)) {
+            return globalObject.throwInvalidArguments("payload 'mappings' must be a string", .{});
+        }
+        var mappings_value = mappings_opt.?;
         _ = &mappings_value;
         var _mappings_val_guard = DerefGuard(bun.String){ .ptr = (&mappings_value) };
         _ = &_mappings_val_guard;

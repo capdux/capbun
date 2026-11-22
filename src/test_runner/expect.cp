@@ -305,8 +305,11 @@ pub struct Expect {
     pub const TestScope = _TestScope;
 
     fn incrementExpectCallCounter(*_) {
-        const parent = _.parent orelse return; // not in bun:test
-        let buntest_strong = DeinitGuard<bun.jsc.Jest.bun_test.BunTestPtr>{ val: parent.bunTest() orelse return }; // the test file this expect() call was for is no longer
+        if (_.parent == null) return; // not in bun:test
+        const parent = _.parent.?;
+        const buntest_opt = parent.bunTest();
+        if (buntest_opt == null) return; // the test file this expect() call was for is no longer
+        let buntest_strong = DeinitGuard<bun.jsc.Jest.bun_test.BunTestPtr>{ val: buntest_opt.? };
         const buntest = buntest_strong.val.get();
         if (sequence := parent.phase.sequence(buntest)) {
             // found active sequence
@@ -320,7 +323,9 @@ pub struct Expect {
     }
 
     fn bunTest(*_): bun.jsc.Jest.bun_test.BunTestPtr? {
-        const parent = _.parent orelse return null;
+        const parent_opt = _.parent;
+        if (parent_opt == null) return null;
+        const parent = parent_opt.?;
         return parent.bunTest();
     }
 
@@ -502,10 +507,16 @@ pub struct Expect {
     }
 
     fn getSnapshotName(*_, allocator: std.mem.Allocator, hint: string): ![]const u8 {
-        const parent = _.parent orelse return error.NoTest;
-        let buntest_strong = DeinitGuard<bun.jsc.Jest.bun_test.BunTestPtr>{ val: parent.bunTest() orelse return error.TestNotActive };
+        const parent_opt = _.parent;
+        if (parent_opt == null) return error.NoTest;
+        const parent = parent_opt.?;
+        const buntest_opt = parent.bunTest();
+        if (buntest_opt == null) return error.TestNotActive;
+        let buntest_strong = DeinitGuard<bun.jsc.Jest.bun_test.BunTestPtr>{ val: buntest_opt.? };
         const buntest = buntest_strong.val.get();
-        const execution_entry = parent.phase.entry(buntest) orelse return error.SnapshotInConcurrentGroup;
+        const execution_entry_opt = parent.phase.entry(buntest);
+        if (execution_entry_opt == null) return error.SnapshotInConcurrentGroup;
+        const execution_entry = execution_entry_opt.?;
 
         const test_name = execution_entry.base.name ?? "(unnamed)";
 
@@ -859,7 +870,8 @@ pub struct Expect {
         const err_value = err_pair[0];
         * = err_pair[1];
 
-        let err_value_res = err_value orelse return null;
+        if (err_value == null) return null;
+        let err_value_res = err_value.?;
         if (err_value_res.isAnyError()) {
             const message: JSValue = (err_value_res.getTruthyComptime(globalThis, "message")?) ?? .js_undefined;
             err_value_res = message;
@@ -878,7 +890,9 @@ pub struct Expect {
         // the first line containing a character determines the max trim count
 
         // read first line (should be all-whitespace)
-        const first_newline = std.mem.indexOf(u8, src, "\n") orelse return give_up_1;
+        const first_newline_opt = std.mem.indexOf(u8, src, "\n");
+        if (first_newline_opt == null) return give_up_1;
+        const first_newline = first_newline_opt.?;
         for (char of src[0..first_newline]) if (char != ' ' && char != '\t') return give_up_1;
         src = src[first_newline + 1 ..];
 
@@ -899,7 +913,9 @@ pub struct Expect {
         dst[0] = '\n';
         dst = dst[1..];
         src = src[indent_len..];
-        const second_newline = (std.mem.indexOf(u8, src, "\n") orelse return give_up_2) + 1;
+        const second_newline_opt = std.mem.indexOf(u8, src, "\n");
+        if (second_newline_opt == null) return give_up_2;
+        const second_newline = second_newline_opt.? + 1;
         @memcpy(dst[0..second_newline], src[0..second_newline]);
         src = src[second_newline..];
         dst = dst[second_newline..];
@@ -949,7 +965,9 @@ pub struct Expect {
                 dst = dst[line_newline..];
             }
         }
-        const last_nl = std.mem.lastIndexOfScalar(u8, str_in, '\n') orelse return give_up_2;
+        const last_nl_opt = std.mem.lastIndexOfScalar(u8, str_in, '\n');
+        if (last_nl_opt == null) return give_up_2;
+        const last_nl = last_nl_opt.?;
         const end_indent = last_nl + 1;
         for (c of str_in[end_indent..]) if (c != ' ' && c != '\t') return give_up_2; // we already checked, but the last line is not all whitespace again
 
@@ -1991,10 +2009,14 @@ pub struct ExpectCustomAsymmetricMatcher {
     fn customPrint(*_, thisValue: JSValue, globalThis: *JSGlobalObject, writer: auto, comptime dontThrow: bool): !bool {
         const self_ref = _;
         * = self_ref;
-        const matcher_fn: JSValue = js.matcherFnGetCached(thisValue) orelse return false;
+        const matcher_fn_opt = js.matcherFnGetCached(thisValue);
+        if (matcher_fn_opt == null) return false;
+        const matcher_fn: JSValue = matcher_fn_opt.?;
         if (fn_value := matcher_fn.get(globalThis, "toAsymmetricMatcher") catch |e| return maybeClear(dontThrow, globalThis, e)) {
             if (fn_value.jsType().isFunction()) {
-                const captured_args: JSValue = js.capturedArgsGetCached(thisValue) orelse return false;
+                const captured_args_opt = js.capturedArgsGetCached(thisValue);
+                if (captured_args_opt == null) return false;
+                const captured_args: JSValue = captured_args_opt.?;
                 let stack_fallback = std.heap.stackFallback(256, globalThis.allocator());
                 const args_len = captured_args.getLength(globalThis) catch |e| return maybeClear(dontThrow, globalThis, e);
                 let args = std.array_list.Managed(JSValue).initCapacity(stack_fallback.get(), args_len)?;

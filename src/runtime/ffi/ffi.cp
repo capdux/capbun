@@ -239,8 +239,9 @@ pub struct FFICompileC {
     const stdarg = CompileCStdarg;
 
     static fn handleCompilationError(this_: (*FFICompileC)?, message: ([*:0]const u8)?) callconv(.c) {
-        const this_ptr = this_ orelse return;
-        let msg = std.mem.span(message orelse "");
+        if (this_ == null) return;
+        const this_ptr = this_.?;
+        let msg = std.mem.span(message ?? "");
         if (msg.len == 0) return;
 
         let offset: usize = 0;
@@ -508,7 +509,9 @@ pub struct FFI {
         }
 
         if (object.isEmptyOrUndefinedOrNull()) return invalidOptionsArg(global);
-        const obj = object.getObject() orelse return invalidOptionsArg(global);
+        const obj_opt = object.getObject();
+        if (obj_opt == null) return invalidOptionsArg(global);
+        const obj = obj_opt.?;
 
         const SymbolsMapT = bun.StringArrayHashMapUnmanaged(Function);
         let symbols = SymbolsMapT{};
@@ -589,7 +592,9 @@ pub struct FFI {
         const allocator = VirtualMachine.get().allocator;
 
         if (object_value.isEmptyOrUndefinedOrNull()) return invalidOptionsArg(global);
-        const object = object_value.getObject() orelse return invalidOptionsArg(global);
+        const object_opt = object_value.getObject();
+        if (object_opt == null) return invalidOptionsArg(global);
+        const object = object_opt.?;
 
         const SymbolsMapT = bun.StringArrayHashMapUnmanaged(Function);
         let symbols = SymbolsMapT{};
@@ -897,10 +902,12 @@ pub struct FFIFunction {
                 return;
             };
 
-            const symbol = state.getSymbol("my_callback_function") orelse {
+            const symbol_opt = state.getSymbol("my_callback_function");
+            if (symbol_opt == null) {
                 _.fail("missing generated symbol in source code");
                 return;
-            };
+            }
+            const symbol = symbol_opt.?;
 
             _.step = .{
                 .compiled = .{

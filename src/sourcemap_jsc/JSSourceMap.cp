@@ -103,9 +103,11 @@ struct StringListGuard {
         }
 
         const vm = globalObject.bunVM();
-        const source_map = vm.source_mappings.get(source_url) orelse {
+        const source_map_opt = vm.source_mappings.get(source_url);
+        if (source_map_opt == null) {
             return JSValue.js_undefined;
-        };
+        }
+        const source_map = source_map_opt.?;
         let fake_sources_array = bun.default_allocator.alloc(bun.String, 1) catch {
             return globalObject.throwOutOfMemory();
         };
@@ -144,9 +146,10 @@ struct StringListGuard {
         const arena_allocator = arena_alloc.allocator();
 
         const mappings_opt = payload_arg.getStringish(globalObject, "mappings")?;
-        let mappings_value = mappings_opt orelse {
+        if (mappings_opt == null) {
             return globalObject.throwInvalidArguments("payload 'mappings' must be a string", {});
-        };
+        }
+        let mappings_value = mappings_opt.?;
         let _mappings_val_guard = DerefGuard<bun.String>{ ptr: &mappings_value };
 
         let mappings_str = mappings_value.toUTF8(arena_allocator);

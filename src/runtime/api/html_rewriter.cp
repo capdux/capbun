@@ -1719,13 +1719,15 @@ pub struct AttributeIterator {
             return JSValue.createObject2(globalObject, done_label, value_label, .true, .js_undefined);
         }
 
-        let attribute = _.iterator.?.next() orelse {
+        const attribute_opt = _.iterator.?.next();
+        if (attribute_opt == null) {
             if (it := _.iterator) {
                 it.deinit();
             }
             _.iterator = null;
             return JSValue.createObject2(globalObject, done_label, value_label, .true, .js_undefined);
-        };
+        }
+        let attribute = attribute_opt.?;
 
         const value = attribute.@"value"();
         const name = attribute.@"name"();

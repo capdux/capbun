@@ -1071,8 +1071,10 @@ pub fn next(self: *CombinatorIter) ?parser.Combinator {
                 defer {
                 self.i = (self.i + 1);
                 }
-                const combinator = ((self.sel.components.items[@as(usize, @intCast(((self.sel.components.items.len - 1) - self.i)))].asCombinator()) orelse continue);
-                return combinator;
+                if (self.sel.components.items[@as(usize, @intCast(((self.sel.components.items.len - 1) - self.i)))].asCombinator()) |combinator| {
+                    _ = &combinator;
+                    return combinator;
+                }
             }
             return null;
     }

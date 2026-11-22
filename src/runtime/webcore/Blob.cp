@@ -2969,9 +2969,11 @@ pub struct BlobExternalSharedDescriptor {
 
         validateWritableBlob(globalThis, _)?;
 
-        const data = args.nextEat() orelse {
+        const data_opt = args.nextEat();
+        if (data_opt == null) {
             return globalThis.throwInvalidArguments("blob.write(pathOrFdOrBlob, blob) expects a Blob-y thing to write", .{});
-        };
+        }
+        const data = data_opt.?;
         if (data.isEmptyOrUndefinedOrNull()) {
             return globalThis.throwInvalidArguments("blob.write(pathOrFdOrBlob, blob) expects a Blob-y thing to write", .{});
         }
@@ -3853,8 +3855,9 @@ pub struct BlobExternalSharedDescriptor {
 }
 
 @export @c fn Blob__dupeFromJS(value: JSValue): (*Blob)? {
-    const b = Blob.fromJS(value) orelse return null;
-    return Blob.new(b.dupeWithContentType(true));
+    const b_opt = Blob.fromJS(value);
+    if (b_opt == null) return null;
+    return Blob.new(b_opt.?.dupeWithContentType(true));
 }
 
 @export @c fn Blob__setAsFile(blob: *Blob, path_str: *String) {
@@ -3881,15 +3884,17 @@ pub struct BlobExternalSharedDescriptor {
 }
 
 @export @c fn Blob__getDataPtr(value: JSValue): *!? {
-    const blob = Blob.fromJS(value) orelse return null;
-    const data = blob.sharedView();
+    const blob_opt = Blob.fromJS(value);
+    if (blob_opt == null) return null;
+    const data = blob_opt.?.sharedView();
     if (data.len == 0) return null;
     return unsafe { @constCast(data.ptr) };
 }
 
 @export @c fn Blob__getSize(value: JSValue): usize {
-    const blob = Blob.fromJS(value) orelse return 0;
-    const data = blob.sharedView();
+    const blob_opt = Blob.fromJS(value);
+    if (blob_opt == null) return 0;
+    const data = blob_opt.?.sharedView();
     return data.len;
 }
 
@@ -4046,6 +4051,7 @@ pub fn JSDOMFile__construct_(globalThis: *JSGlobalObject, callframe: *CallFrame)
 
 @export @c fn JSDOMFile__hasInstance(_: JSValue, _: *JSGlobalObject, value: JSValue) callconv(jsc.conv): bool {
     jsc.markBinding(@src());
-    const blob = value.as(Blob) orelse return false;
-    return blob.is_jsdom_file;
+    const blob_opt = value.as(Blob);
+    if (blob_opt == null) return false;
+    return blob_opt.?.is_jsdom_file;
 }

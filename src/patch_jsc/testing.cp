@@ -48,15 +48,15 @@ pub struct TestingAPIs {
         const arguments_ = callframe.arguments_old(2);
         let arguments = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments_.slice());
 
-        const old_folder_jsval = arguments.nextEat() orelse {
-            return globalThis.throw("expected 2 strings", {});
-        };
+        const old_folder_jsval_opt = arguments.nextEat();
+        if (old_folder_jsval_opt == null) return globalThis.throw("expected 2 strings", {});
+        const old_folder_jsval = old_folder_jsval_opt.?;
         let old_folder_bunstr = old_folder_jsval.toBunString(globalThis)?;
         const _g_old_bunstr = DerefGuard<@TypeOf(old_folder_bunstr)>{ ptr: &old_folder_bunstr };
 
-        const new_folder_jsval = arguments.nextEat() orelse {
-            return globalThis.throw("expected 2 strings", {});
-        };
+        const new_folder_jsval_opt = arguments.nextEat();
+        if (new_folder_jsval_opt == null) return globalThis.throw("expected 2 strings", {});
+        const new_folder_jsval = new_folder_jsval_opt.?;
         let new_folder_bunstr = new_folder_jsval.toBunString(globalThis)?;
         const _g_new_bunstr = DerefGuard<@TypeOf(new_folder_bunstr)>{ ptr: &new_folder_bunstr };
 
@@ -101,9 +101,9 @@ pub struct TestingAPIs {
         const arguments_ = callframe.arguments_old(2);
         let arguments = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments_.slice());
 
-        const patchfile_src_js = arguments.nextEat() orelse {
-            return globalThis.throw("TestingAPIs.parse: expected at least 1 argument, got 0", {});
-        };
+        const patchfile_src_js_opt = arguments.nextEat();
+        if (patchfile_src_js_opt == null) return globalThis.throw("TestingAPIs.parse: expected at least 1 argument, got 0", {});
+        const patchfile_src_js = patchfile_src_js_opt.?;
         const patchfile_src_bunstr = patchfile_src_js.toBunString(globalThis)?;
         const patchfile_src = patchfile_src_bunstr.toUTF8(bun.default_allocator);
 

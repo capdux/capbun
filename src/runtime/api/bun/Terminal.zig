@@ -664,7 +664,11 @@ pub fn onWriterClose(client: *Terminal) void {
 
 pub fn onWriterReady(client: *Terminal) void {
         _ = log("onWriterReady", .{});
-        const this_jsvalue = ((client.this_value.tryGet()) orelse { return; });
+        const this_jsvalue_opt = client.this_value.tryGet();
+        if ((this_jsvalue_opt == null)) {
+            return;
+        }
+        const this_jsvalue = this_jsvalue_opt.?;
         if (js.gc.get(.drain, this_jsvalue)) |callback| {
             _ = &callback;
             const globalThis = client.globalThis;
@@ -712,8 +716,16 @@ pub fn onReaderError(client: *Terminal, e: bun.sys.Error) void {
 }
 
 pub fn callExitCallback(client: *Terminal, exit_code: i32, signal: ?bun.SignalCode) void {
-        const this_jsvalue = ((client.this_value.tryGet()) orelse { return; });
-        const callback = ((js.gc.get(.exit, this_jsvalue)) orelse { return; });
+        const this_jsvalue_opt = client.this_value.tryGet();
+        if ((this_jsvalue_opt == null)) {
+            return;
+        }
+        const this_jsvalue = this_jsvalue_opt.?;
+        const callback_opt = js.gc.get(.exit, this_jsvalue);
+        if ((callback_opt == null)) {
+            return;
+        }
+        const callback = callback_opt.?;
         const globalThis = client.globalThis;
         var signal_value: JSValue = JSValue.jsNull();
         _ = &signal_value;
@@ -734,8 +746,16 @@ pub fn onReadChunk(client: *Terminal, chunk: []const u8, has_more: bun.io.ReadSt
             client.flags.connected = true;
             _ = client.this_value.upgrade(client.globalThis);
         }
-        const this_jsvalue = ((client.this_value.tryGet()) orelse { return true; });
-        const callback = ((js.gc.get(.data, this_jsvalue)) orelse { return true; });
+        const this_jsvalue_opt = client.this_value.tryGet();
+        if ((this_jsvalue_opt == null)) {
+            return true;
+        }
+        const this_jsvalue = this_jsvalue_opt.?;
+        const callback_opt = js.gc.get(.data, this_jsvalue);
+        if ((callback_opt == null)) {
+            return true;
+        }
+        const callback = callback_opt.?;
         const globalThis = client.globalThis;
         const duped = (blk_catch_2: { break :blk_catch_2 ((bun.default_allocator.dupe(u8, chunk)) catch |e| { _ = &e; _ = log("Terminal data allocation OOM: chunk_size={d}, error={any}", .{ chunk.len, e });
         return true; }); });

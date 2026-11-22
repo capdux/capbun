@@ -341,14 +341,22 @@ pub fn fromAddress(addr: usize, name_bytes: []u8) ?StackLine {
             return (switch (bun.Environment.os) {
 .windows => {
 {
-                const module = ((bun.windows.getModuleHandleFromAddress(addr)) orelse { return null; });
+                const module_opt = bun.windows.getModuleHandleFromAddress(addr);
+                if ((module_opt == null)) {
+                    return null;
+                }
+                const module = module_opt.?;
                 const base_address = (blk: {
                 break :blk @intFromPtr(module);
 
 });
                 var temp_buf: [512]u16 = undefined;
                 _ = &temp_buf;
-                const name = ((bun.windows.getModuleNameW(module, (&temp_buf))) orelse { return null; });
+                const name_opt = bun.windows.getModuleNameW(module, (&temp_buf));
+                if ((name_opt == null)) {
+                    return null;
+                }
+                const name = name_opt.?;
                 const image_path = bun.windows.exePathW();
                 return StackLine{ .address = (if (comptime @typeInfo(@TypeOf((addr - base_address))) == .@"enum") cp_cast_int(i32, @intFromEnum((addr - base_address))) else cp_cast_int(i32, (addr - base_address))), .object = (if ((!std.mem.eql(u16, name, image_path))) name_blk: {
                 const slash_idx = std.mem.lastIndexOfAny(u16, name, (&slash_chars_u16));
@@ -427,10 +435,11 @@ else => {
     }
 
 pub fn writeEncoded(self_opt: ?StackLine, writer: anytype) !void {
-            const known = ((self_opt) orelse {
-            _ = try writer.writeAll("_");
-            return;
-});
+            if ((self_opt == null)) {
+                _ = try writer.writeAll("_");
+                return;
+            }
+            const known = self_opt.?;
             if (known.object) |object| {
                 _ = &object;
                 _ = try VLQ.encode(1).writeTo(writer);
@@ -445,10 +454,11 @@ pub fn format(line: StackLine, writer: *std.Io.Writer) !void {
     }
 
 pub fn writeDecoded(self_opt: ?StackLine, writer: anytype) !void {
-            const known = ((self_opt) orelse {
-            _ = try writer.print("???", .{});
-            return;
-});
+            if ((self_opt == null)) {
+                _ = try writer.print("???", .{});
+                return;
+            }
+            const known = self_opt.?;
             _ = try known.format(writer);
     }
 };
@@ -1330,9 +1340,17 @@ var buf: bun.PathBuffer = undefined;
         _ = &buf;
         var buf2: bun.PathBuffer = undefined;
         _ = &buf2;
-        const path_env = ((bun.env_var.PATH.get()) orelse { return; });
+        const path_env_opt = bun.env_var.PATH.get();
+        if ((path_env_opt == null)) {
+            return;
+        }
+        const path_env = path_env_opt.?;
         const cwd_path = (blk_catch_45: { break :blk_catch_45 ((bun.getcwd((&buf2))) catch |__ce_45| { _ = &__ce_45; return; }); });
-        const curl = ((bun.which((&buf), path_env, cwd_path, "curl")) orelse { return; });
+        const curl_opt = bun.which((&buf), path_env, cwd_path, "curl");
+        if ((curl_opt == null)) {
+            return;
+        }
+        const curl = curl_opt.?;
         var cmd_line = CmdLineU8{  };
         _ = &cmd_line;
         _ = (blk_catch_46: { break :blk_catch_46 ((cmd_line.appendSlice(url)) catch |__ce_46| { _ = &__ce_46; return; }); });
@@ -1603,7 +1621,10 @@ pub fn removePreCrashHandler(ptr: *anyopaque) void {
             }
             i = (i + 1);
         }
-        const index = ((index_opt) orelse { return; });
+        if ((index_opt == null)) {
+            return;
+        }
+        const index = index_opt.?;
         _ = before_crash_handlers.orderedRemove(index);
 }
 

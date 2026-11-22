@@ -2124,3 +2124,6 @@
 
 ### [2026-11-22] Wave #58（前缀 `try expr` -> 后缀 `expr?` 纯化）
 - 完成 20 组共 212 个 `src/**/*.cp` 模块的前缀 `try` 到后缀 `?` 纯化及对应 `.zig` 重编译生成，通过 `cpc_brief.py` 四项门禁、`bun run zig:check`（5/5）及 `bun bd test`（8/8）。
+
+### [2026-11-23] Wave #59（`orelse` -> `??` 纯化）
+- 完成 12 组共 132 个 `src/**/*.cp` 模块的 `orelse` 纯化（表达式改为 `??`，控制流改为 `== null` + `.?` 或 `if (v := opt)`）及对应 `.zig` 重编译生成，通过 `bun run zig:check`（5/5）及 `bun bd test`（8/8）。
