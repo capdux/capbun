@@ -6,6 +6,13 @@ const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 const ZigString = jsc.ZigString;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
 pub const ExternColumnIdentifierValue = extern union {
     index: u32,
     name: bun.String,
@@ -157,7 +164,7 @@ type InitializeCallback = *const @TypeOf(_initCbProto);
         // https://github.com/oven-sh/WebKit/blob/397dafc9721b8f8046f9448abb6dbc14efe096d3/Source/JavaScriptCore/runtime/JSObjectInlines.h#L112
         let scope: jsc.TopExceptionScope = undefined;
         scope.init(globalThis, @src());
-        defer scope.deinit();
+        const _scope_guard = DeinitGuard<jsc.TopExceptionScope>{ ptr: unsafe { &scope } };
         const value = JSC__JSObject__getIndex(val, globalThis, i);
         scope.returnIfException()?;
         bun.assert(value != .zero);

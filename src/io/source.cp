@@ -2,6 +2,13 @@ import bun from "bun";
 const uv = bun.windows.libuv;
 const log = bun.Output.scoped(.PipeSource, .hidden);
 
+pub struct UnlockGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.unlock(); }
+    }
+}
+
 pub enum FileState: u8 {
     deinitialized,
     operating,
@@ -94,7 +101,7 @@ pub struct StdinTTYImpl {
 
     static fn getStdinTTY(loop: *uv.Loop): bun.sys.Maybe(*uv.uv_tty_t) {
         stdin_tty_lock.lock();
-        defer stdin_tty_lock.unlock();
+        const _lock_guard = UnlockGuard<bun.Mutex>{ ptr: unsafe { &stdin_tty_lock } };
 
         if (stdin_tty_initialized.swap(true, .monotonic) == false) {
             const rc = uv.uv_tty_init(loop, StdinTTYImpl.value, 0, 0);

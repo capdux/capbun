@@ -37,7 +37,7 @@ pub fn toContainValue(
 
     // handle failure
     let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalObject, quote_strings: true };
-    defer formatter.deinit();
+    const _formatter_guard = DeinitGuard<jsc.ConsoleObject.Formatter>{ ptr: unsafe { &formatter } };
     const value_fmt = value.toFmt(&formatter);
     const expected_fmt = expected.toFmt(&formatter);
     if (not) {
@@ -62,3 +62,9 @@ const JSValue = bun.jsc.JSValue;
 
 const Expect = bun.jsc.Expect.Expect;
 const getSignature = Expect.getSignature;
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}

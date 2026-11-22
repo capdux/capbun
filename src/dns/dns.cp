@@ -5,6 +5,14 @@ const JSError = bun.JSError;
 const String = bun.String;
 const default_allocator = bun.default_allocator;
 
+pub struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: T,
+    ~init() {
+        _.allocator.free(_.slice);
+    }
+}
+
 pub const AI_V4MAPPED: c_int = if (bun.Environment.isWindows) 2048 else bun.c.AI_V4MAPPED;
 pub const AI_ADDRCONFIG: c_int = if (bun.Environment.isWindows) 1024 else bun.c.AI_ADDRCONFIG;
 pub const AI_ALL: c_int = if (bun.Environment.isWindows) 256 else bun.c.AI_ALL;
@@ -242,7 +250,7 @@ pub const GetAddrInfo = struct {
 pub fn addressToString(address: *const std.net.Address): !bun.String {
     if (address.any.family == std.posix.AF.INET) {
         let addr_in = address.@"in";
-        const bytes: *const [4]u8 = @ptrCast(&addr_in.sa.addr);
+        const bytes: *const [4]u8 = unsafe { @ptrCast(&addr_in.sa.addr) };
         const b0 = bytes[0];
         const b1 = bytes[1];
         const b2 = bytes[2];
@@ -253,7 +261,8 @@ pub fn addressToString(address: *const std.net.Address): !bun.String {
         const alloc = stack.get();
         const addr_val = address.*;
         let out = std.fmt.allocPrint(alloc, "{f}", .{ addr_val })?;
-        defer alloc.free(out);
+        const out_guard = FreeGuard<@TypeOf(out)>{ allocator: alloc, slice: out };
+        * = out_guard;
         const in6_port = address.in6.getPort();
         return String.cloneLatin1(out[1 .. out.len - 1 - std.fmt.count("{d}", .{ in6_port }) - 1]);
     } else if (address.any.family == std.posix.AF.UNIX) {

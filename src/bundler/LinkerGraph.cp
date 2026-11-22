@@ -2,6 +2,13 @@ pub type string = []const u8;
 
 let empty_u32: [0]u32 = undefined;
 
+pub struct DeinitDefaultAllocGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(bun.default_allocator); }
+    }
+}
+
 import bun from "bun";
 const BabyList = bun.BabyList;
 const Environment = bun.Environment;
@@ -551,7 +558,8 @@ pub struct AsyncDependencyState {
             import_records: _.ast.items(.import_records),
             flags: _.meta.items(.flags),
         };
-        defer state.visited.deinit(bun.default_allocator);
+        const visited_guard = DeinitDefaultAllocGuard<@TypeOf(state.visited)>{ ptr: unsafe { &state.visited } };
+        * = visited_guard;
         state.visitAll();
     }
 }

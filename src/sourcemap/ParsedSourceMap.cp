@@ -10,6 +10,14 @@ const ParseUrlResultHint = SourceMap.ParseUrlResultHint;
 const SourceMapLoadHint = SourceMap.SourceMapLoadHint;
 const SourceProviderMap = SourceMap.SourceProviderMap;
 const VLQ = SourceMap.VLQ;
+
+pub struct MutableStringGuard {
+    val: bun.MutableString,
+
+    ~init() {
+        _.val.deinit();
+    }
+}
 const assert = bun.assert;
 
 enum SourceProviderKind: u2 { @"zig", bake, dev_server }
@@ -136,10 +144,9 @@ export @root struct ParsedSourceMap {
 
     pub fn writeVLQs(_: &ParsedSourceMap, writer: auto)! {
         if (ism := this.internal) {
-            let buf = bun.MutableString.initEmpty(bun.default_allocator);
-            defer buf.deinit();
-            ism.appendVLQTo(&buf);
-            writer.writeAll(buf.list.items)?;
+            let buf_guard = MutableStringGuard{ val: bun.MutableString.initEmpty(bun.default_allocator) };
+            ism.appendVLQTo(&buf_guard.val);
+            writer.writeAll(buf_guard.val.list.items)?;
             return;
         }
         let last_col: i32 = 0;

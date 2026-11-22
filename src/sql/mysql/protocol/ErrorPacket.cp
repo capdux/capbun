@@ -6,6 +6,14 @@ const Data = DataMod.Data;
 const NewReader = NewReaderMod.NewReader;
 const decoderWrap = NewReaderMod.decoderWrap;
 
+pub struct DataGuard {
+    val: Data,
+
+    ~init() {
+        _.val.deinit();
+    }
+}
+
 export struct MySQLErrorOptions {
     code: []const u8,
     errno: u16? = null,
@@ -37,9 +45,8 @@ export struct MySQLErrorOptions {
         const next_byte = reader.int(u8)?;
         if (next_byte == '#') {
             this.sql_state_marker = '#';
-            let sql_state_data = reader.read(5)?;
-            defer sql_state_data.deinit();
-            this.sql_state = unsafe { sql_state_data.slice()[0..5].* };
+            let sql_state_guard = DataGuard{ val: reader.read(5)? };
+            this.sql_state = unsafe { sql_state_guard.val.slice()[0..5].* };
         } else {
             reader.skip(-1);
         }

@@ -11,11 +11,11 @@ pub fn toBeInstanceOf(client: *Expect, globalThis: *JSGlobalObject, callFrame: *
 
     client.incrementExpectCallCounter();
     let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-    defer formatter.deinit();
+    const _formatter_guard = DeinitGuard<jsc.ConsoleObject.Formatter>{ ptr: unsafe { &formatter } };
 
     const expected_value = arguments[0];
     if (!expected_value.isConstructor()) {
-        return globalThis.throw("Expected value must be a function: {f}", .{ expected_value.toFmt(&formatter) });
+        return globalThis.throw("Expected value must be a function: {f}", .{ expected_value.toFmt(unsafe { &formatter }) });
     }
     expected_value.ensureStillAlive();
 
@@ -27,8 +27,8 @@ pub fn toBeInstanceOf(client: *Expect, globalThis: *JSGlobalObject, callFrame: *
     if (pass) return JSValue.js_undefined;
 
     // handle failure
-    const expected_fmt = expected_value.toFmt(&formatter);
-    const value_fmt = value.toFmt(&formatter);
+    const expected_fmt = expected_value.toFmt(unsafe { &formatter });
+    const value_fmt = value.toFmt(unsafe { &formatter });
     if (not) {
         const expected_line = "Expected constructor: not <green>{f}<r>\n";
         const received_line = "Received value: <red>{f}<r>\n";
@@ -51,3 +51,4 @@ const JSValue = bun.jsc.JSValue;
 
 const Expect = bun.jsc.Expect.Expect;
 const getSignature = Expect.getSignature;
+pub struct DeinitGuard<T> { ptr: *T!, ~init() { unsafe { _.ptr.deinit(); } } }

@@ -6,6 +6,14 @@ const Environment = bun.Environment;
 const assert = bun.assert;
 type U8Slice = []u8;
 
+pub struct DeinitGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.deinit();
+    }
+}
+
 @root struct StringBuilder {
     len: usize = 0,
     cap: usize = 0,
@@ -95,8 +103,8 @@ type U8Slice = []u8;
 
     pub fn appendStr(*_, str: bun.String): []const u8 {
         const slice = str.toUTF8(bun.default_allocator);
-        defer slice.deinit();
-        return this.append(slice.slice());
+        let slice_guard = DeinitGuard<@TypeOf(slice)>{ val: slice };
+        return this.append(slice_guard.val.slice());
     }
 
     pub fn append(*_, slice: []const u8): []const u8 {

@@ -60,10 +60,34 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+const Message = struct { __cp_no_message_sentinel: void = {} };
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const css = @import("../css_parser.zig");
 pub const bun = @import("bun");
+pub fn DeinitAllocGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        allocator: Allocator,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.deinit(self.allocator);
+                }
+        }
+    };
+}
+
 pub const LinearGradient = struct {
     vendor_prefix: VendorPrefix,
     direction: LineDirection,
@@ -115,9 +139,14 @@ else => -1.0,
 })) {
                     var flipped_items = (blk_catch_0: { break :blk_catch_0 ((ArrayList(GradientItem(LengthPercentage)).initCapacity(dest.allocator, self.items.items.len)) catch |e| { _ = &e; break :blk_catch_0 bun.handleOom(e); }); });
                     _ = &flipped_items;
-                    defer {
-                    _ = flipped_items.deinit(dest.allocator);
-                    }
+                    var flipped_guard = DeinitAllocGuard(@TypeOf(flipped_items)){ .ptr = (blk: {
+                    break :blk (&flipped_items);
+
+}), .allocator = dest.allocator };
+                    _ = &flipped_guard;
+                    var __flipped_guard_moved = false; _ = &__flipped_guard_moved;
+                    defer if (!__flipped_guard_moved) { __flipped_guard_moved = true; const __T = @TypeOf(flipped_guard); if (@typeInfo(__T) == .optional) { if (flipped_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { flipped_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = flipped_guard; _drop_val.__cp_deinit(); } };
+                    _ = &flipped_guard;
                     var i: usize = self.items.items.len;
                     _ = &i;
                     while ((i > 0)) {
@@ -159,7 +188,7 @@ else => unreachable,
             }
     }
 
-pub fn isCompatible(self: *const @This(), browsers: css.targets.Browsers) bool {
+pub fn isCompatible(self: LinearGradient, browsers: css.targets.Browsers) bool {
             for (self.items.items) |*item| {
                 _ = &item;
                 if ((!(item.*).isCompatible(browsers))) {
@@ -169,8 +198,8 @@ pub fn isCompatible(self: *const @This(), browsers: css.targets.Browsers) bool {
             return true;
     }
 
-pub fn deepClone(self: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+pub fn deepClone(self: LinearGradient, allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), (&self), allocator);
     }
 
 pub fn eql(self: LinearGradient, other: *const LinearGradient) bool {
@@ -201,7 +230,7 @@ pub fn parse(input: *css.Parser, vendor_prefix: VendorPrefix) Result(RadialGradi
 .result => |vv| vv,
 .err => null,
 });
-            const position = (switch (input.tryParse(struct {
+            const position = (switch (input.tryParse((struct {
 
 pub fn parse(input_: *css.Parser) Result(Position) {
             if (input_.expectIdentMatching("at").asErr()) |e| {
@@ -210,7 +239,7 @@ pub fn parse(input_: *css.Parser) Result(Position) {
             }
             return Position.parse(input_);
     }
-}.parse, .{})) {
+}).parse, .{})) {
 .result => |v| v,
 .err => null,
 });
@@ -246,7 +275,7 @@ pub fn toCss(self: RadialGradient, dest: *Printer) PrintErr!void {
             _ = try serializeItems(LengthPercentage, (&self.items), dest);
     }
 
-pub fn isCompatible(self: *const @This(), browsers: css.targets.Browsers) bool {
+pub fn isCompatible(self: RadialGradient, browsers: css.targets.Browsers) bool {
             for (self.items.items) |*item| {
                 _ = &item;
                 if ((!(item.*).isCompatible(browsers))) {
@@ -268,8 +297,8 @@ pub fn getFallback(self: RadialGradient, allocator: Allocator, kind: css.ColorFa
             return RadialGradient{ .shape = self.shape.deepClone(allocator), .position = self.position.deepClone(allocator), .items = items, .vendor_prefix = self.vendor_prefix };
     }
 
-pub fn deepClone(self: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+pub fn deepClone(self: RadialGradient, allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), (&self), allocator);
     }
 
 pub fn eql(self: RadialGradient, other: *const RadialGradient) bool {
@@ -283,7 +312,7 @@ pub const ConicGradient = struct {
     items: ArrayList(GradientItem(AnglePercentage)),
 
 pub fn parse(input: *css.Parser) Result(ConicGradient) {
-            const angle = input.tryParse(struct {
+            const angle = input.tryParse((struct {
 
 pub inline fn parse(i: *css.Parser) Result(Angle) {
             if (i.expectIdentMatching("from").asErr()) |e| {
@@ -292,8 +321,8 @@ pub inline fn parse(i: *css.Parser) Result(Angle) {
             }
             return Angle.parseWithUnitlessZero(i);
     }
-}.parse, .{});
-            const position = input.tryParse(struct {
+}).parse, .{});
+            const position = input.tryParse((struct {
 
 pub inline fn parse(i: *css.Parser) Result(Position) {
             if (i.expectIdentMatching("at").asErr()) |e| {
@@ -302,7 +331,7 @@ pub inline fn parse(i: *css.Parser) Result(Position) {
             }
             return Position.parse(i);
     }
-}.parse, .{});
+}).parse, .{});
             if ((angle.isOk() or position.isOk())) {
                 if (input.expectComma().asErr()) |e| {
                     _ = &e;
@@ -336,7 +365,7 @@ pub fn toCss(self: ConicGradient, dest: *Printer) PrintErr!void {
             return try serializeItems(AnglePercentage, (&self.items), dest);
     }
 
-pub fn isCompatible(self: *const @This(), browsers: css.targets.Browsers) bool {
+pub fn isCompatible(self: ConicGradient, browsers: css.targets.Browsers) bool {
             for (self.items.items) |*item| {
                 _ = &item;
                 if ((!(item.*).isCompatible(browsers))) {
@@ -358,11 +387,282 @@ pub fn getFallback(self: ConicGradient, allocator: Allocator, kind: css.ColorFal
             return ConicGradient{ .angle = self.angle.deepClone(allocator), .position = self.position.deepClone(allocator), .items = items };
     }
 
-pub fn deepClone(self: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+pub fn deepClone(self: ConicGradient, allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), (&self), allocator);
     }
 
 pub fn eql(self: ConicGradient, other: *const ConicGradient) bool {
+            return css.implementEql(@This(), (&self), other);
+    }
+};
+
+pub const WebKitGradientFromTo = struct {
+    p0: [2]f32,
+    p1: [2]f32,
+};
+
+pub const WebKitGradientLinear = struct {
+    @"from": WebKitGradientPoint,
+    to: WebKitGradientPoint,
+    stops: ArrayList(WebKitColorStop),
+
+pub fn deepClone(self: WebKitGradientLinear, allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), (&self), allocator);
+    }
+
+pub fn eql(self: WebKitGradientLinear, other: *const @This()) bool {
+            return css.implementEql(@This(), (&self), other);
+    }
+};
+
+pub const WebKitGradientRadial = struct {
+    @"from": WebKitGradientPoint,
+    r0: CSSNumber,
+    to: WebKitGradientPoint,
+    r1: CSSNumber,
+    stops: ArrayList(WebKitColorStop),
+
+pub fn deepClone(self: WebKitGradientRadial, allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), (&self), allocator);
+    }
+
+pub fn eql(self: WebKitGradientRadial, other: *const @This()) bool {
+            return css.implementEql(@This(), (&self), other);
+    }
+};
+
+pub const WebKitGradient = union(enum) {
+    linear: WebKitGradientLinear,
+    radial: WebKitGradientRadial,
+
+pub fn parse(input: *css.Parser) Result(WebKitGradient) {
+            const location = input.currentSourceLocation();
+            const ident = (switch (input.expectIdent()) {
+.result => |vv| vv,
+.err => |e| {
+return .{ .err = e };
+},
+});
+            if (input.expectComma().asErr()) |e| {
+                _ = &e;
+                return .{ .err = e };
+            }
+            if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "linear")) {
+                const from_pt = (switch (WebKitGradientPoint.parse(input)) {
+.result => |vv| vv,
+.err => |e| {
+return .{ .err = e };
+},
+});
+                if (input.expectComma().asErr()) |e| {
+                    _ = &e;
+                    return .{ .err = e };
+                }
+                const to_pt = (switch (WebKitGradientPoint.parse(input)) {
+.result => |vv| vv,
+.err => |e| {
+return .{ .err = e };
+},
+});
+                if (input.expectComma().asErr()) |e| {
+                    _ = &e;
+                    return .{ .err = e };
+                }
+                const stops = (switch (input.parseCommaSeparated(WebKitColorStop, WebKitColorStop.parse)) {
+.result => |vv| vv,
+.err => |e| {
+return .{ .err = e };
+},
+});
+                return .{ .result = WebKitGradient{ .linear = WebKitGradientLinear{ .@"from" = from_pt, .to = to_pt, .stops = stops } } };
+            } else {
+                if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "radial")) {
+                    const from_pt = (switch (WebKitGradientPoint.parse(input)) {
+.result => |vv| vv,
+.err => |e| {
+return .{ .err = e };
+},
+});
+                    if (input.expectComma().asErr()) |e| {
+                        _ = &e;
+                        return .{ .err = e };
+                    }
+                    const r0 = (switch (CSSNumberFns.parse(input)) {
+.result => |vv| vv,
+.err => |e| {
+return .{ .err = e };
+},
+});
+                    if (input.expectComma().asErr()) |e| {
+                        _ = &e;
+                        return .{ .err = e };
+                    }
+                    const to_pt = (switch (WebKitGradientPoint.parse(input)) {
+.result => |vv| vv,
+.err => |e| {
+return .{ .err = e };
+},
+});
+                    if (input.expectComma().asErr()) |e| {
+                        _ = &e;
+                        return .{ .err = e };
+                    }
+                    const r1 = (switch (CSSNumberFns.parse(input)) {
+.result => |vv| vv,
+.err => |e| {
+return .{ .err = e };
+},
+});
+                    if (input.expectComma().asErr()) |e| {
+                        _ = &e;
+                        return .{ .err = e };
+                    }
+                    const stops = (switch (input.parseCommaSeparated(WebKitColorStop, WebKitColorStop.parse)) {
+.result => |vv| vv,
+.err => |e| {
+return .{ .err = e };
+},
+});
+                    return .{ .result = WebKitGradient{ .radial = WebKitGradientRadial{ .@"from" = from_pt, .r0 = r0, .to = to_pt, .r1 = r1, .stops = stops } } };
+                } else {
+                    return .{ .err = location.newUnexpectedTokenError(.{ .ident = ident }) };
+                }
+            }
+    }
+
+pub fn toCss(self: WebKitGradient, dest: *Printer) PrintErr!void {
+            switch (self) {
+.linear => |linear| {
+_ = try dest.writeStr("linear");
+            _ = try dest.delim(44, false);
+            _ = try linear.@"from".toCss(dest);
+            _ = try dest.delim(44, false);
+            _ = try linear.to.toCss(dest);
+            for (linear.stops.items) |*stop| {
+                _ = &stop;
+                _ = try dest.delim(44, false);
+                _ = try (stop.*).toCss(dest);
+            }
+},
+.radial => |radial| {
+_ = try dest.writeStr("radial");
+            _ = try dest.delim(44, false);
+            _ = try radial.@"from".toCss(dest);
+            _ = try dest.delim(44, false);
+            _ = try CSSNumberFns.toCss((&radial.r0), dest);
+            _ = try dest.delim(44, false);
+            _ = try radial.to.toCss(dest);
+            _ = try dest.delim(44, false);
+            _ = try CSSNumberFns.toCss((&radial.r1), dest);
+            for (radial.stops.items) |*stop| {
+                _ = &stop;
+                _ = try dest.delim(44, false);
+                _ = try (stop.*).toCss(dest);
+            }
+},
+}
+    }
+
+pub fn getFallback(self: WebKitGradient, allocator: Allocator, kind: css.ColorFallbackKind) WebKitGradient {
+            switch (self) {
+.linear => |linear| {
+var stops = bun.handleOom(ArrayList(WebKitColorStop).initCapacity(allocator, linear.stops.items.len));
+            _ = &stops;
+            stops.items.len = linear.stops.items.len;
+            var idx: usize = 0;
+            _ = &idx;
+            while ((idx < stops.items.len)) : (idx = (idx + 1)) {
+                stops.items[cp_cast_int(usize, idx)] = linear.stops.items[@as(usize, @intCast(idx))].getFallback(allocator, kind);
+            }
+            return WebKitGradient{ .linear = WebKitGradientLinear{ .@"from" = linear.@"from".deepClone(allocator), .to = linear.to.deepClone(allocator), .stops = stops } };
+},
+.radial => |radial| {
+var stops = bun.handleOom(ArrayList(WebKitColorStop).initCapacity(allocator, radial.stops.items.len));
+            _ = &stops;
+            stops.items.len = radial.stops.items.len;
+            var idx: usize = 0;
+            _ = &idx;
+            while ((idx < stops.items.len)) : (idx = (idx + 1)) {
+                stops.items[cp_cast_int(usize, idx)] = radial.stops.items[@as(usize, @intCast(idx))].getFallback(allocator, kind);
+            }
+            return WebKitGradient{ .radial = WebKitGradientRadial{ .@"from" = radial.@"from".deepClone(allocator), .r0 = radial.r0, .to = radial.to.deepClone(allocator), .r1 = radial.r1, .stops = stops } };
+},
+}
+    }
+
+pub fn fromStandard(gradient: *const Gradient, allocator: Allocator) ?WebKitGradient {
+            switch (gradient.*) {
+.linear => |linear| {
+const ft: WebKitGradientFromTo = (switch (linear.direction) {
+.horizontal => |horizontal| (switch (horizontal) {
+.left => WebKitGradientFromTo{ .p0 = .{ 1.0, 0.0 }, .p1 = .{ 0.0, 0.0 } },
+.right => WebKitGradientFromTo{ .p0 = .{ 0.0, 0.0 }, .p1 = .{ 1.0, 0.0 } },
+}),
+.vertical => |vertical| (switch (vertical) {
+.top => WebKitGradientFromTo{ .p0 = .{ 0.0, 1.0 }, .p1 = .{ 0.0, 0.0 } },
+.bottom => WebKitGradientFromTo{ .p0 = .{ 0.0, 0.0 }, .p1 = .{ 0.0, 1.0 } },
+}),
+.corner => |corner| (switch (corner.horizontal) {
+.left => (switch (corner.vertical) {
+.top => WebKitGradientFromTo{ .p0 = .{ 1.0, 1.0 }, .p1 = .{ 0.0, 0.0 } },
+.bottom => WebKitGradientFromTo{ .p0 = .{ 1.0, 0.0 }, .p1 = .{ 0.0, 1.0 } },
+}),
+.right => (switch (corner.vertical) {
+.top => WebKitGradientFromTo{ .p0 = .{ 0.0, 1.0 }, .p1 = .{ 1.0, 0.0 } },
+.bottom => WebKitGradientFromTo{ .p0 = .{ 0.0, 0.0 }, .p1 = .{ 1.0, 1.0 } },
+}),
+}),
+.angle => |angle| brk: {
+            const degrees = angle.toDegrees();
+            if ((degrees == 0.0)) {
+                break :brk WebKitGradientFromTo{ .p0 = .{ 0.0, 1.0 }, .p1 = .{ 0.0, 0.0 } };
+            } else {
+                if ((degrees == 90.0)) {
+                    break :brk WebKitGradientFromTo{ .p0 = .{ 0.0, 0.0 }, .p1 = .{ 1.0, 0.0 } };
+                } else {
+                    if ((degrees == 180.0)) {
+                        break :brk WebKitGradientFromTo{ .p0 = .{ 0.0, 0.0 }, .p1 = .{ 0.0, 1.0 } };
+                    } else {
+                        if ((degrees == 270.0)) {
+                            break :brk WebKitGradientFromTo{ .p0 = .{ 1.0, 0.0 }, .p1 = .{ 0.0, 0.0 } };
+                        } else {
+                            return null;
+                        }
+                    }
+                }
+            }
+},
+});
+            return WebKitGradient{ .linear = WebKitGradientLinear{ .@"from" = .{ .x = .{ .number = .{ .percentage = .{ .v = ft.p0[0] } } }, .y = .{ .number = .{ .percentage = .{ .v = ft.p0[1] } } } }, .to = .{ .x = .{ .number = .{ .percentage = .{ .v = ft.p1[0] } } }, .y = .{ .number = .{ .percentage = .{ .v = ft.p1[1] } } } }, .stops = ((convertStopsToWebkit(allocator, (&linear.items))) orelse { return null; }) } };
+},
+.radial => |radial| {
+const radius = (switch (radial.shape) {
+.circle => |circle| (switch (circle) {
+.radius => |r| ((r.toPx()) orelse { return null; }),
+else => {
+return null;
+},
+}),
+else => {
+return null;
+},
+});
+            const x = ((WebKitGradientPointComponent(HorizontalPositionKeyword).fromPosition((&radial.position.x), allocator)) orelse { return null; });
+            const y = ((WebKitGradientPointComponent(VerticalPositionKeyword).fromPosition((&radial.position.y), allocator)) orelse { return null; });
+            const point = WebKitGradientPoint{ .x = x, .y = y };
+            return WebKitGradient{ .radial = WebKitGradientRadial{ .@"from" = point.deepClone(allocator), .r0 = 0.0, .to = point, .r1 = radius, .stops = ((convertStopsToWebkit(allocator, (&radial.items))) orelse { return null; }) } };
+},
+else => {
+return null;
+},
+}
+    }
+
+pub fn deepClone(self: WebKitGradient, allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), (&self), allocator);
+    }
+
+pub fn eql(self: WebKitGradient, other: *const WebKitGradient) bool {
             return css.implementEql(@This(), (&self), other);
     }
 };
@@ -397,8 +697,8 @@ pub fn eql(self: WebKitGradientPoint, other: *const WebKitGradientPoint) bool {
             return css.implementEql(@This(), (&self), other);
     }
 
-pub fn deepClone(self: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+pub fn deepClone(self: WebKitGradientPoint, allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), (&self), allocator);
     }
 };
 
@@ -418,7 +718,7 @@ return .{ .err = e };
     loc: css.SourceLocation,
     function: []const u8,
 };
-            return input.parseNestedBlock(WebKitColorStop, Closure{ .loc = location, .function = function }, struct {
+            return input.parseNestedBlock(WebKitColorStop, Closure{ .loc = location, .function = function }, (struct {
 
 pub fn parse(closure: Closure, i: *css.Parser) Result(WebKitColorStop) {
             const position: f32 = (if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(closure.function, "color-stop")) position: {
@@ -448,7 +748,7 @@ return .{ .err = e };
 });
             return .{ .result = WebKitColorStop{ .color = color, .position = position } };
     }
-}.parse);
+}).parse);
     }
 
 pub fn toCss(self: WebKitColorStop, dest: *Printer) PrintErr!void {
@@ -469,12 +769,12 @@ pub fn toCss(self: WebKitColorStop, dest: *Printer) PrintErr!void {
             _ = try dest.writeChar(41);
     }
 
-pub fn getFallback(self: *const @This(), allocator: Allocator, kind: css.ColorFallbackKind) WebKitColorStop {
+pub fn getFallback(self: WebKitColorStop, allocator: Allocator, kind: css.ColorFallbackKind) WebKitColorStop {
             return WebKitColorStop{ .color = self.color.getFallback(allocator, kind), .position = self.position };
     }
 
-pub fn deepClone(self: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+pub fn deepClone(self: WebKitColorStop, allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), (&self), allocator);
     }
 
 pub fn eql(self: WebKitColorStop, other: *const WebKitColorStop) bool {
@@ -519,7 +819,7 @@ return .{ .err = e };
     location: css.SourceLocation,
     func: []const u8,
 };
-            return input.parseNestedBlock(Gradient, Closure{ .location = location, .func = func }, struct {
+            return input.parseNestedBlock(Gradient, Closure{ .location = location, .func = func }, (struct {
 
 pub fn parse(closure: Closure, input_: *css.Parser) Result(Gradient) {
             const Map = (comptime bun.ComptimeEnumMap(enum {
@@ -703,7 +1003,7 @@ return .{ .err = e };
                 return .{ .err = closure.location.newUnexpectedTokenError(.{ .ident = closure.func }) };
             }
     }
-}.parse);
+}).parse);
     }
 
 pub fn toCss(self: @This(), dest: *Printer) PrintErr!void {
@@ -784,12 +1084,12 @@ else => VendorPrefix{ .none = true },
     }
 
 pub fn getNecessaryPrefixes(self: *const @This(), targets: css.targets.Targets) css.VendorPrefix {
-            const getPrefixes = struct {
+            const getPrefixes = (struct {
 
 pub fn call(tgts: css.targets.Targets, feature: css.prefixes.Feature, prefix: VendorPrefix) VendorPrefix {
             return tgts.prefixes(prefix, feature);
     }
-}.call;
+}).call;
             return (switch (self.*) {
 .linear => |linear| getPrefixes(targets, .linear_gradient, linear.vendor_prefix),
 .repeating_linear => |linear| getPrefixes(targets, .repeating_linear_gradient, linear.vendor_prefix),
@@ -870,279 +1170,10 @@ for (conic.items.items) |*item| {
             return fallbacks;
     }
 };
-pub const WebKitGradient = union(enum) {
-    /// A linear `-webkit-gradient()`.
-    linear: struct {
-        /// The starting point of the gradient.
-        from: WebKitGradientPoint,
-        /// The ending point of the gradient.
-        to: WebKitGradientPoint,
-        /// The color stops in the gradient.
-        stops: ArrayList(WebKitColorStop),
-
-        pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), this, allocator);
-        }
-
-        pub fn eql(this: *const @This(), other: *const @This()) bool {
-            return css.implementEql(@This(), this, other);
-        }
-    },
-    /// A radial `-webkit-gradient()`.
-    radial: struct {
-        /// The starting point of the gradient.
-        from: WebKitGradientPoint,
-        /// The starting radius of the gradient.
-        r0: CSSNumber,
-        /// The ending point of the gradient.
-        to: WebKitGradientPoint,
-        /// The ending radius of the gradient.
-        r1: CSSNumber,
-        /// The color stops in the gradient.
-        stops: ArrayList(WebKitColorStop),
-
-        pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), this, allocator);
-        }
-
-        pub fn eql(this: *const @This(), other: *const @This()) bool {
-            return css.implementEql(@This(), this, other);
-        }
-    },
-
-    pub fn parse(input: *css.Parser) Result(WebKitGradient) {
-        const location = input.currentSourceLocation();
-        const ident = switch (input.expectIdent()) {
-            .result => |vv| vv,
-            .err => |e| return .{ .err = e },
-        };
-        if (input.expectComma().asErr()) |e| return .{ .err = e };
-
-        // todo_stuff.match_ignore_ascii_case
-        if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "linear")) {
-            // todo_stuff.depth
-            const from = switch (WebKitGradientPoint.parse(input)) {
-                .result => |vv| vv,
-                .err => |e| return .{ .err = e },
-            };
-            if (input.expectComma().asErr()) |e| return .{ .err = e };
-            const to = switch (WebKitGradientPoint.parse(input)) {
-                .result => |vv| vv,
-                .err => |e| return .{ .err = e },
-            };
-            if (input.expectComma().asErr()) |e| return .{ .err = e };
-            const stops = switch (input.parseCommaSeparated(WebKitColorStop, WebKitColorStop.parse)) {
-                .result => |vv| vv,
-                .err => |e| return .{ .err = e },
-            };
-            return .{ .result = WebKitGradient{ .linear = .{
-                .from = from,
-                .to = to,
-                .stops = stops,
-            } } };
-        } else if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "radial")) {
-            const from = switch (WebKitGradientPoint.parse(input)) {
-                .result => |vv| vv,
-                .err => |e| return .{ .err = e },
-            };
-            if (input.expectComma().asErr()) |e| return .{ .err = e };
-            const r0 = switch (CSSNumberFns.parse(input)) {
-                .result => |vv| vv,
-                .err => |e| return .{ .err = e },
-            };
-            if (input.expectComma().asErr()) |e| return .{ .err = e };
-            const to = switch (WebKitGradientPoint.parse(input)) {
-                .result => |vv| vv,
-                .err => |e| return .{ .err = e },
-            };
-            if (input.expectComma().asErr()) |e| return .{ .err = e };
-            const r1 = switch (CSSNumberFns.parse(input)) {
-                .result => |vv| vv,
-                .err => |e| return .{ .err = e },
-            };
-            if (input.expectComma().asErr()) |e| return .{ .err = e };
-            // todo_stuff.depth
-            const stops = switch (input.parseCommaSeparated(WebKitColorStop, WebKitColorStop.parse)) {
-                .result => |vv| vv,
-                .err => |e| return .{ .err = e },
-            };
-            return .{ .result = WebKitGradient{
-                .radial = .{
-                    .from = from,
-                    .r0 = r0,
-                    .to = to,
-                    .r1 = r1,
-                    .stops = stops,
-                },
-            } };
-        } else {
-            return .{ .err = location.newUnexpectedTokenError(.{ .ident = ident }) };
-        }
-    }
-
-    pub fn toCss(this: *const WebKitGradient, dest: *Printer) PrintErr!void {
-        switch (this.*) {
-            .linear => |*linear| {
-                try dest.writeStr("linear");
-                try dest.delim(',', false);
-                try linear.from.toCss(dest);
-                try dest.delim(',', false);
-                try linear.to.toCss(dest);
-                for (linear.stops.items) |*stop| {
-                    try dest.delim(',', false);
-                    try stop.toCss(dest);
-                }
-            },
-            .radial => |*radial| {
-                try dest.writeStr("radial");
-                try dest.delim(',', false);
-                try radial.from.toCss(dest);
-                try dest.delim(',', false);
-                try CSSNumberFns.toCss(&radial.r0, dest);
-                try dest.delim(',', false);
-                try radial.to.toCss(dest);
-                try dest.delim(',', false);
-                try CSSNumberFns.toCss(&radial.r1, dest);
-                for (radial.stops.items) |*stop| {
-                    try dest.delim(',', false);
-                    try stop.toCss(dest);
-                }
-            },
-        }
-    }
-
-    pub fn getFallback(this: *const @This(), allocator: Allocator, kind: css.ColorFallbackKind) WebKitGradient {
-        var stops: ArrayList(WebKitColorStop) = .{};
-        switch (this.*) {
-            .linear => |linear| {
-                stops = bun.handleOom(ArrayList(WebKitColorStop).initCapacity(allocator, linear.stops.items.len));
-                stops.items.len = linear.stops.items.len;
-                for (stops.items, linear.stops.items) |*out, *in| {
-                    out.* = in.getFallback(allocator, kind);
-                }
-                return WebKitGradient{
-                    .linear = .{
-                        .from = linear.from.deepClone(allocator),
-                        .to = linear.to.deepClone(allocator),
-                        .stops = stops,
-                    },
-                };
-            },
-            .radial => |radial| {
-                stops = bun.handleOom(ArrayList(WebKitColorStop).initCapacity(allocator, radial.stops.items.len));
-                stops.items.len = radial.stops.items.len;
-                for (stops.items, radial.stops.items) |*out, *in| {
-                    out.* = in.getFallback(allocator, kind);
-                }
-                return WebKitGradient{
-                    .radial = .{
-                        .from = radial.from.deepClone(allocator),
-                        .r0 = radial.r0,
-                        .to = radial.to.deepClone(allocator),
-                        .r1 = radial.r1,
-                        .stops = stops,
-                    },
-                };
-            },
-        }
-    }
-
-    pub fn fromStandard(gradient: *const Gradient, allocator: Allocator) ?WebKitGradient {
-        switch (gradient.*) {
-            .linear => |*linear| {
-                // Convert from line direction to a from and to point, if possible.
-                const from: struct { f32, f32 }, const to: struct { f32, f32 } = switch (linear.direction) {
-                    .horizontal => |horizontal| switch (horizontal) {
-                        .left => .{ .{ 1.0, 0.0 }, .{ 0.0, 0.0 } },
-                        .right => .{ .{ 0.0, 0.0 }, .{ 1.0, 0.0 } },
-                    },
-                    .vertical => |vertical| switch (vertical) {
-                        .top => .{ .{ 0.0, 1.0 }, .{ 0.0, 0.0 } },
-                        .bottom => .{ .{ 0.0, 0.0 }, .{ 0.0, 1.0 } },
-                    },
-                    .corner => |corner| switch (corner.horizontal) {
-                        .left => switch (corner.vertical) {
-                            .top => .{ .{ 1.0, 1.0 }, .{ 0.0, 0.0 } },
-                            .bottom => .{ .{ 1.0, 0.0 }, .{ 0.0, 1.0 } },
-                        },
-                        .right => switch (corner.vertical) {
-                            .top => .{ .{ 0.0, 1.0 }, .{ 1.0, 0.0 } },
-                            .bottom => .{ .{ 0.0, 0.0 }, .{ 1.0, 1.0 } },
-                        },
-                    },
-                    .angle => |angle| brk: {
-                        const degrees = angle.toDegrees();
-                        if (degrees == 0.0) {
-                            break :brk .{ .{ 0.0, 1.0 }, .{ 0.0, 0.0 } };
-                        } else if (degrees == 90.0) {
-                            break :brk .{ .{ 0.0, 0.0 }, .{ 1.0, 0.0 } };
-                        } else if (degrees == 180.0) {
-                            break :brk .{ .{ 0.0, 0.0 }, .{ 0.0, 1.0 } };
-                        } else if (degrees == 270.0) {
-                            break :brk .{ .{ 1.0, 0.0 }, .{ 0.0, 0.0 } };
-                        } else {
-                            return null;
-                        }
-                    },
-                };
-
-                return WebKitGradient{
-                    .linear = .{
-                        .from = .{
-                            .x = .{ .number = .{ .percentage = .{ .v = from[0] } } },
-                            .y = .{ .number = .{ .percentage = .{ .v = from[1] } } },
-                        },
-                        .to = .{
-                            .x = .{ .number = .{ .percentage = .{ .v = to[0] } } },
-                            .y = .{ .number = .{ .percentage = .{ .v = to[1] } } },
-                        },
-                        .stops = convertStopsToWebkit(allocator, &linear.items) orelse return null,
-                    },
-                };
-            },
-            .radial => |*radial| {
-                // Webkit radial gradients are always circles, not ellipses, and must be specified in pixels.
-                const radius = switch (radial.shape) {
-                    .circle => |*circle| switch (circle.*) {
-                        .radius => |r| if (r.toPx()) |px| px else return null,
-                        else => return null,
-                    },
-                    else => return null,
-                };
-
-                const x = WebKitGradientPointComponent(HorizontalPositionKeyword).fromPosition(&radial.position.x, allocator) orelse return null;
-                const y = WebKitGradientPointComponent(VerticalPositionKeyword).fromPosition(&radial.position.y, allocator) orelse return null;
-                const point = WebKitGradientPoint{ .x = x, .y = y };
-                return WebKitGradient{
-                    .radial = .{
-                        .from = point.deepClone(allocator),
-                        .r0 = 0.0,
-                        .to = point,
-                        .r1 = radius,
-                        .stops = convertStopsToWebkit(allocator, &radial.items) orelse return null,
-                    },
-                };
-            },
-            else => return null,
-        }
-    }
-
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-        return css.implementDeepClone(@This(), this, allocator);
-    }
-
-    pub fn eql(this: *const WebKitGradient, other: *const WebKitGradient) bool {
-        return css.implementEql(@This(), this, other);
-    }
-};
 pub const LineDirection = union(enum) {
-    /// An angle.
     angle: Angle,
-    /// A horizontal position keyword, e.g. `left` or `right`.
     horizontal: HorizontalPositionKeyword,
-    /// A vertical position keyword, e.g. `top` or `bottom`.
     vertical: VerticalPositionKeyword,
-    /// A corner, e.g. `bottom left` or `top right`.
     corner: struct {
         /// A horizontal position keyword, e.g. `left` or `right`.
         horizontal: HorizontalPositionKeyword,
@@ -1158,86 +1189,86 @@ pub const LineDirection = union(enum) {
         }
     },
 
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+pub fn deepClone(self: *const @This(), allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), self, allocator);
     }
 
-    pub fn eql(this: *const LineDirection, other: *const LineDirection) bool {
-        return css.implementEql(@This(), this, other);
+pub fn eql(self: *const @This(), other: *const LineDirection) bool {
+            return css.implementEql(@This(), self, other);
     }
 
-    pub fn parse(input: *css.Parser, is_prefixed: bool) Result(LineDirection) {
-        // Spec allows unitless zero angles for gradients.
-        // https://w3c.github.io/csswg-drafts/css-images-3/#linear-gradient-syntax
-        if (input.tryParse(Angle.parseWithUnitlessZero, .{}).asValue()) |angle| {
-            return .{ .result = LineDirection{ .angle = angle } };
-        }
-
-        if (!is_prefixed) {
-            if (input.expectIdentMatching("to").asErr()) |e| return .{ .err = e };
-        }
-
-        if (input.tryParse(HorizontalPositionKeyword.parse, .{}).asValue()) |x| {
-            if (input.tryParse(VerticalPositionKeyword.parse, .{}).asValue()) |y| {
-                return .{ .result = LineDirection{ .corner = .{
-                    .horizontal = x,
-                    .vertical = y,
-                } } };
+pub fn parse(input: *css.Parser, is_prefixed: bool) Result(LineDirection) {
+            if (input.tryParse(Angle.parseWithUnitlessZero, .{}).asValue()) |angle| {
+                _ = &angle;
+                return .{ .result = LineDirection{ .angle = angle } };
             }
-            return .{ .result = LineDirection{ .horizontal = x } };
-        }
-
-        const y = switch (VerticalPositionKeyword.parse(input)) {
-            .result => |vv| vv,
-            .err => |e| return .{ .err = e },
-        };
-        if (input.tryParse(HorizontalPositionKeyword.parse, .{}).asValue()) |x| {
-            return .{ .result = LineDirection{ .corner = .{
-                .horizontal = x,
-                .vertical = y,
-            } } };
-        }
-        return .{ .result = LineDirection{ .vertical = y } };
+            if ((!is_prefixed)) {
+                if (input.expectIdentMatching("to").asErr()) |e| {
+                    _ = &e;
+                    return .{ .err = e };
+                }
+            }
+            if (input.tryParse(HorizontalPositionKeyword.parse, .{}).asValue()) |x| {
+                _ = &x;
+                if (input.tryParse(VerticalPositionKeyword.parse, .{}).asValue()) |y| {
+                    _ = &y;
+                    return .{ .result = LineDirection{ .corner = .{ .horizontal = x, .vertical = y } } };
+                }
+                return .{ .result = LineDirection{ .horizontal = x } };
+            }
+            const y = (switch (VerticalPositionKeyword.parse(input)) {
+.result => |vv| vv,
+.err => |e| {
+return .{ .err = e };
+},
+});
+            if (input.tryParse(HorizontalPositionKeyword.parse, .{}).asValue()) |x| {
+                _ = &x;
+                return .{ .result = LineDirection{ .corner = .{ .horizontal = x, .vertical = y } } };
+            }
+            return .{ .result = LineDirection{ .vertical = y } };
     }
 
-    pub fn toCss(this: *const LineDirection, dest: *Printer, is_prefixed: bool) PrintErr!void {
-        switch (this.*) {
-            .angle => |*angle| try angle.toCss(dest),
-            .horizontal => |*k| {
-                if (dest.minify) {
-                    try dest.writeStr(switch (k.*) {
-                        .left => "270deg",
-                        .right => "90deg",
-                    });
-                } else {
-                    if (!is_prefixed) {
-                        try dest.writeStr("to ");
-                    }
-                    try k.toCss(dest);
+pub fn toCss(self: *const @This(), dest: *Printer, is_prefixed: bool) PrintErr!void {
+            switch (self.*) {
+.angle => |*angle| {
+_ = try angle.toCss(dest);
+},
+.horizontal => |*k| {
+if (dest.minify) {
+                _ = try dest.writeStr((switch (k.*) {
+.left => "270deg",
+.right => "90deg",
+}));
+            } else {
+                if ((!is_prefixed)) {
+                    _ = try dest.writeStr("to ");
                 }
-            },
-            .vertical => |*k| {
-                if (dest.minify) {
-                    try dest.writeStr(switch (k.*) {
-                        .top => "0deg",
-                        .bottom => "180deg",
-                    });
-                } else {
-                    if (!is_prefixed) {
-                        try dest.writeStr("to ");
-                    }
-                    try k.toCss(dest);
+                _ = try k.toCss(dest);
+            }
+},
+.vertical => |*k| {
+if (dest.minify) {
+                _ = try dest.writeStr((switch (k.*) {
+.top => "0deg",
+.bottom => "180deg",
+}));
+            } else {
+                if ((!is_prefixed)) {
+                    _ = try dest.writeStr("to ");
                 }
-            },
-            .corner => |*c| {
-                if (!is_prefixed) {
-                    try dest.writeStr("to ");
-                }
-                try c.vertical.toCss(dest);
-                try dest.writeChar(' ');
-                try c.horizontal.toCss(dest);
-            },
-        }
+                _ = try k.toCss(dest);
+            }
+},
+.corner => |*c| {
+if ((!is_prefixed)) {
+                _ = try dest.writeStr("to ");
+            }
+            _ = try c.vertical.toCss(dest);
+            _ = try dest.writeChar(32);
+            _ = try c.horizontal.toCss(dest);
+},
+}
     }
 };
 pub const EndingShape = union(enum) {
@@ -1259,7 +1290,6 @@ pub fn eql(self: @This(), other: *const EndingShape) bool {
     pub const toCss = css.DeriveToCss(@This()).toCss;
 };
 pub const Ellipse = union(enum) {
-    /// An ellipse with a specified horizontal and vertical radius.
     size: struct {
         /// The x-radius of the ellipse.
         x: LengthPercentage,
@@ -1274,68 +1304,67 @@ pub const Ellipse = union(enum) {
             return css.implementEql(@This(), this, other);
         }
     },
-    /// A shape extent keyword.
     extent: ShapeExtent,
 
-    pub fn parse(input: *css.Parser) Result(Ellipse) {
-        if (input.tryParse(ShapeExtent.parse, .{}).asValue()) |extent| {
-            // The `ellipse` keyword is optional, but only if the `circle` keyword is not present.
-            // If it is, then we'll re-parse as a circle.
-            if (input.tryParse(css.Parser.expectIdentMatching, .{"circle"}).isOk()) {
-                return .{ .err = input.newErrorForNextToken() };
-            }
-            _ = input.tryParse(css.Parser.expectIdentMatching, .{"ellipse"});
-            return .{ .result = Ellipse{ .extent = extent } };
-        }
-
-        if (input.tryParse(LengthPercentage.parse, .{}).asValue()) |x| {
-            const y = switch (LengthPercentage.parse(input)) {
-                .result => |vv| vv,
-                .err => |e| return .{ .err = e },
-            };
-            // The `ellipse` keyword is optional if there are two lengths.
-            _ = input.tryParse(css.Parser.expectIdentMatching, .{"ellipse"});
-            return .{ .result = Ellipse{ .size = .{ .x = x, .y = y } } };
-        }
-
-        if (input.tryParse(css.Parser.expectIdentMatching, .{"ellipse"}).isOk()) {
+pub fn parse(input: *css.Parser) Result(Ellipse) {
             if (input.tryParse(ShapeExtent.parse, .{}).asValue()) |extent| {
+                _ = &extent;
+                if (input.tryParse(css.Parser.expectIdentMatching, .{ "circle" }).isOk()) {
+                    return .{ .err = input.newErrorForNextToken() };
+                }
+                _ = input.tryParse(css.Parser.expectIdentMatching, .{ "ellipse" });
                 return .{ .result = Ellipse{ .extent = extent } };
             }
-
             if (input.tryParse(LengthPercentage.parse, .{}).asValue()) |x| {
-                const y = switch (LengthPercentage.parse(input)) {
-                    .result => |vv| vv,
-                    .err => |e| return .{ .err = e },
-                };
+                _ = &x;
+                const y = (switch (LengthPercentage.parse(input)) {
+.result => |vv| vv,
+.err => |e| {
+return .{ .err = e };
+},
+});
+                _ = input.tryParse(css.Parser.expectIdentMatching, .{ "ellipse" });
                 return .{ .result = Ellipse{ .size = .{ .x = x, .y = y } } };
             }
-
-            // Assume `farthest-corner` if only the `ellipse` keyword is present.
-            return .{ .result = Ellipse{ .extent = .@"farthest-corner" } };
-        }
-
-        return .{ .err = input.newErrorForNextToken() };
+            if (input.tryParse(css.Parser.expectIdentMatching, .{ "ellipse" }).isOk()) {
+                if (input.tryParse(ShapeExtent.parse, .{}).asValue()) |extent| {
+                    _ = &extent;
+                    return .{ .result = Ellipse{ .extent = extent } };
+                }
+                if (input.tryParse(LengthPercentage.parse, .{}).asValue()) |x| {
+                    _ = &x;
+                    const y = (switch (LengthPercentage.parse(input)) {
+.result => |vv| vv,
+.err => |e| {
+return .{ .err = e };
+},
+});
+                    return .{ .result = Ellipse{ .size = .{ .x = x, .y = y } } };
+                }
+                return .{ .result = Ellipse{ .extent = .@"farthest-corner" } };
+            }
+            return .{ .err = input.newErrorForNextToken() };
     }
 
-    pub fn toCss(this: *const Ellipse, dest: *Printer) PrintErr!void {
-        // The `ellipse` keyword is optional, so we don't emit it.
-        return switch (this.*) {
-            .size => |*s| {
-                try s.x.toCss(dest);
-                try dest.writeChar(' ');
+pub fn toCss(self: *const @This(), dest: *Printer) PrintErr!void {
+            return (switch (self.*) {
+.size => |*s| {
+{
+                _ = try s.x.toCss(dest);
+                _ = try dest.writeChar(32);
                 return try s.y.toCss(dest);
-            },
-            .extent => |*e| try e.toCss(dest),
-        };
+            }
+},
+.extent => |*e| try e.toCss(dest),
+});
     }
 
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+pub fn deepClone(self: *const @This(), allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), self, allocator);
     }
 
-    pub fn eql(this: *const Ellipse, other: *const Ellipse) bool {
-        return css.implementEql(@This(), this, other);
+pub fn eql(self: *const @This(), other: *const Ellipse) bool {
+            return css.implementEql(@This(), self, other);
     }
 };
 pub const ShapeExtent = enum {
@@ -1608,7 +1637,7 @@ pub fn parseItems(comptime D: type, input: *css.Parser) Result(ArrayList(Gradien
     items: *ArrayList(GradientItem(D)),
     seen_stop: *bool,
 };
-            if (input.parseUntilBefore(css.Delimiters{ .comma = true }, void, Closure{ .items = (&items), .seen_stop = (&seen_stop) }, struct {
+            if (input.parseUntilBefore(css.Delimiters{ .comma = true }, void, Closure{ .items = (&items), .seen_stop = (&seen_stop) }, (struct {
 
 pub fn parse(closure: Closure, i: *css.Parser) Result(void) {
             if (closure.seen_stop.*) {
@@ -1636,7 +1665,7 @@ return .{ .err = e };
             closure.seen_stop.* = true;
             return .success;
     }
-}.parse).asErr()) |e| {
+}).parse).asErr()) |e| {
                 _ = &e;
                 return .{ .err = e };
             }

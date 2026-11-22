@@ -8,6 +8,13 @@ const ZigString = jsc.ZigString;
 import ZigURLModule from "../url/url.zig";
 const ZigURL = ZigURLModule.URL;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
 pub struct ZigSourceLine {
     line: i32,
     text: ZigString.Slice,
@@ -96,8 +103,9 @@ pub struct ZigSourceLineIterator {
                 let remain_buf = source_line_buf[0..];
                 let i: usize = 0;
                 while (source := source_lines_iter.next()) {
-                    const text = source.text.slice();
-                    defer source.text.deinit();
+                    let source_text = source.text;
+                    const _text_guard = DeinitGuard<@TypeOf(source_text)>{ ptr: unsafe { &source_text } };
+                    const text = source_text.slice();
                     bun.copy(
                         u8,
                         remain_buf,
@@ -133,17 +141,17 @@ pub struct ZigSourceLineIterator {
     }
 
     fn frames(): []const ZigStackFrame {
-        return _.frames_ptr[0.._.frames_len];
+        return unsafe { _.frames_ptr[0.._.frames_len] };
     }
 
     fn framesMutable(*_): []ZigStackFrame {
-        return _.frames_ptr[0.._.frames_len];
+        return unsafe { _.frames_ptr[0.._.frames_len] };
     }
 
     fn sourceLineIterator(): ZigSourceLineIterator {
         let i: i32 = -1;
         let j: usize = 0;
-        for (num of _.source_lines_numbers[0.._.source_lines_len]) {
+        for (num of unsafe { _.source_lines_numbers[0.._.source_lines_len] }) {
             if (num >= 0) {
                 i = @max(@as(i32, @intCast(j)), i);
             }

@@ -8,6 +8,14 @@
 //! bit. Anything else → DecodeFailed (caller has already exhausted the system
 //! backend by then).
 
+struct ErrFreeGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: []const T,
+    ~errinit() {
+        _.alloc.free(_.slice);
+    }
+}
+
 pub struct Header {
     width: u32,
     height: u32,
@@ -132,7 +140,7 @@ pub fn decode(bytes: []const u8, max_pixels: u64): codecs.Error!codecs.Decoded {
     const a_sw = shiftWidth(h.a_mask);
 
     const out = bun.default_allocator.alloc(u8, @as(usize, h.width) * h.height * 4)?;
-    errdefer bun.default_allocator.free(out);
+    const _out_guard = ErrFreeGuard<u8>{ alloc: bun.default_allocator, slice: out };
 
     let y: u32 = 0;
     while (y < h.height) : (y += 1) {

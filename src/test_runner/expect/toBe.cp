@@ -26,21 +26,21 @@ pub fn toBe(
 
     // handle failure
     let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-    defer formatter.deinit();
+    const _formatter_guard = DeinitGuard<jsc.ConsoleObject.Formatter>{ ptr: unsafe { &formatter } };
 
     if (not) {
         const signature = comptime getSignature("toBe", "<green>expected<r>", true);
-        return client.throw(globalThis, signature, "\n\nExpected: not <green>{f}<r>\n", .{ right.toFmt(&formatter) });
+        return client.throw(globalThis, signature, "\n\nExpected: not <green>{f}<r>\n", .{ right.toFmt(unsafe { &formatter }) });
     }
 
     const signature = comptime getSignature("toBe", "<green>expected<r>", false);
     if (left.deepEquals(right, globalThis)? || left.strictDeepEquals(right, globalThis)?) {
         if (!client.custom_label.isEmpty()) {
             const fmt: [:0]const u8 = "\n\nExpected: <green>{f}<r>\nReceived: serializes to the same string\n";
-            return client.throw(globalThis, signature, fmt, .{ right.toFmt(&formatter) });
+            return client.throw(globalThis, signature, fmt, .{ right.toFmt(unsafe { &formatter }) });
         } else {
             const fmt: [:0]const u8 = "\n\n<d>If this test should pass, replace \"toBe\" with \"toEqual\" or \"toStrictEqual\"<r>\n\nExpected: <green>{f}<r>\nReceived: serializes to the same string\n";
-            return client.throw(globalThis, signature, fmt, .{ right.toFmt(&formatter) });
+            return client.throw(globalThis, signature, fmt, .{ right.toFmt(unsafe { &formatter }) });
         }
     }
 
@@ -55,8 +55,8 @@ pub fn toBe(
     }
 
     return client.throw(globalThis, signature, "\n\nExpected: <green>{f}<r>\nReceived: <red>{f}<r>\n", .{ 
-        right.toFmt(&formatter),
-        left.toFmt(&formatter),
+        right.toFmt(unsafe { &formatter }),
+        left.toFmt(unsafe { &formatter }),
     });
 }
 
@@ -70,3 +70,4 @@ const JSValue = bun.jsc.JSValue;
 
 const Expect = bun.jsc.Expect.Expect;
 const getSignature = Expect.getSignature;
+pub struct DeinitGuard<T> { ptr: *T!, ~init() { unsafe { _.ptr.deinit(); } } }

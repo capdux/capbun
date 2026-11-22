@@ -13,6 +13,13 @@ const SlicedString = Semver.SlicedString;
 const SemverString = Semver.String;
 
 const Dependency = bun.install.Dependency;
+
+pub struct FreeDefaultGuard<T> {
+    slice: T,
+    ~init() {
+        bun.default_allocator.free(_.slice);
+    }
+}
 const Lockfile = bun.install.Lockfile;
 const PackageID = bun.install.PackageID;
 const PackageNameHash = bun.install.PackageNameHash;
@@ -108,7 +115,7 @@ pub fn parseWithError(
             // buffer of `input.len` bytes is always sufficient. Previously this was a
             // fixed `[2048]u8` stack array which overflowed for longer positionals.
             const temp = bun.handleOom(bun.default_allocator.alloc(u8, input.len));
-            defer bun.default_allocator.free(temp);
+            const _temp_guard = FreeDefaultGuard<@TypeOf(temp)>{ slice: temp };
             const len = std.mem.replace(u8, input, "\\\\", "/", temp);
             const input2 = temp[0 .. input.len - len];
             bun.path.platformToPosixInPlace(u8, input2);

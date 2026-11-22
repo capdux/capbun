@@ -42,9 +42,9 @@ pub fn toBeGreaterThan(client: *Expect, globalThis: *JSGlobalObject, callFrame: 
 
     // handle failure
     let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-    defer formatter.deinit();
-    const value_fmt = value.toFmt(&formatter);
-    const expected_fmt = other_value.toFmt(&formatter);
+    const _formatter_guard = DeinitGuard<jsc.ConsoleObject.Formatter>{ ptr: unsafe { &formatter } };
+    const value_fmt = value.toFmt(unsafe { &formatter });
+    const expected_fmt = other_value.toFmt(unsafe { &formatter });
     if (not) {
         const expected_line = "Expected: not \\> <green>{f}<r>\n";
         const received_line = "Received: <red>{f}<r>\n";
@@ -67,3 +67,4 @@ const JSValue = bun.jsc.JSValue;
 
 const Expect = bun.jsc.Expect.Expect;
 const getSignature = Expect.getSignature;
+pub struct DeinitGuard<T> { ptr: *T!, ~init() { unsafe { _.ptr.deinit(); } } }

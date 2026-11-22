@@ -11,9 +11,8 @@ pub fn toBeString(client: *Expect, globalThis: *JSGlobalObject, callFrame: *Call
 
     if (pass) return JSValue.js_undefined;
 
-    let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-    defer formatter.deinit();
-    const received = value.toFmt(&formatter);
+    let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true } };
+    const received = value.toFmt(&formatter.val);
 
     if (not) {
         const signature = comptime getSignature("toBeString", "", true);
@@ -33,3 +32,8 @@ const JSValue = bun.jsc.JSValue;
 
 const Expect = bun.jsc.Expect.Expect;
 const getSignature = Expect.getSignature;
+
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() { _.val.deinit(); }
+}

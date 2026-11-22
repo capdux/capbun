@@ -13,6 +13,13 @@ import * as encode from "./encode.cp";
     fn us_quic_socket_make_stream(s: *quic.Socket);
 }
 
+pub struct FreeDefaultGuard<T> {
+    slice: T,
+    ~init() {
+        bun.default_allocator.free(_.slice);
+    }
+}
+
 enum HeaderResult {
     has_body,
     finished,
@@ -120,7 +127,7 @@ export @root struct ClientSession {
         client.flags.h3_retried = true;
         _.closed = true;
         const host = bun.handleOom(bun.default_allocator.dupe(u8, _.hostname));
-        defer bun.default_allocator.free(host);
+        const _host_guard = FreeDefaultGuard<@TypeOf(host)>{ slice: host };
         stream.abort();
         _.detach(stream);
         if (!ctx.connect(client, host, _.port)) {

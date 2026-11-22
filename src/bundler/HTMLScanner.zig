@@ -80,6 +80,31 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub fn LastErrorGuard(comptime T: type) type {
+    return struct {
+        target: T,
+        __cp_errdropped: bool = false,
+
+pub fn __cp_errdeinit(self: *@This()) void {
+            if (self.__cp_errdropped) return;
+            self.__cp_errdropped = true;
+                var last_error = lol.HTMLString.lastError();
+                _ = &last_error;
+                var last_error_guard = DeinitGuard(@TypeOf(last_error)){ .ptr = (blk: {
+                break :blk (&last_error);
+
+}) };
+                _ = &last_error_guard;
+                var __last_error_guard_moved = false; _ = &__last_error_guard_moved;
+                defer if (!__last_error_guard_moved) { __last_error_guard_moved = true; const __T = @TypeOf(last_error_guard); if (@typeInfo(__T) == .optional) { if (last_error_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { last_error_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = last_error_guard; _drop_val.__cp_deinit(); } };
+                _ = &last_error_guard;
+                if ((last_error.len > 0)) {
+                    _ = self.target.onHTMLParseError(last_error.slice());
+                }
+        }
+    };
+}
+
 pub fn SelectorsDeinitGuard(comptime T: type) type {
     return struct {
         ptr: *T,
@@ -239,23 +264,11 @@ pub fn run(target: *T, input: []const u8) !void {
                 }
             }
             const memory_settings = lol.MemorySettings{ .preallocated_parsing_buffer_size = @max((input.len / 4), 1024), .max_allowed_memory_usage = ((1024 * 1024) * 10) };
-            errdefer {
-            {
-                var last_error = lol.HTMLString.lastError();
-                _ = &last_error;
-                var last_error_guard = DeinitGuard(@TypeOf(last_error)){ .ptr = (blk: {
-                break :blk (&last_error);
-
-}) };
-                _ = &last_error_guard;
-                var __last_error_guard_moved = false; _ = &__last_error_guard_moved;
-                defer if (!__last_error_guard_moved) { __last_error_guard_moved = true; const __T = @TypeOf(last_error_guard); if (@typeInfo(__T) == .optional) { if (last_error_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { last_error_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = last_error_guard; _drop_val.__cp_deinit(); } };
-                _ = &last_error_guard;
-                if ((last_error.len > 0)) {
-                    _ = target.onHTMLParseError(last_error.slice());
-                }
-            }
-            }
+            var err_guard = LastErrorGuard(@TypeOf(target)){ .target = target };
+            _ = &err_guard;
+            var __err_guard_moved = false; _ = &__err_guard_moved;
+            errdefer if (!__err_guard_moved) { __err_guard_moved = true; const __T = @TypeOf(err_guard); if (@typeInfo(__T) == .optional) { if (err_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { __cp_opt_v.__cp_errdeinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_errdeinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_errdeinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { err_guard.__cp_errdeinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_errdeinit")) { var _drop_val = err_guard; _drop_val.__cp_errdeinit(); } };
+            _ = &err_guard;
             const DoneCallback = struct {
 
 pub fn done(_unused: *T) void {

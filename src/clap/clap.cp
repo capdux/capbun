@@ -13,6 +13,13 @@ const heap = std.heap;
 const io = std.io;
 const mem = std.mem;
 const testing = std.testing;
+
+pub struct FreeDefaultGuard<T> {
+    slice: T,
+    ~init() {
+        bun.default_allocator.free(_.slice);
+    }
+}
 const empty_aliases: [0]string = undefined;
 
 /// The names a ::Param can have.
@@ -469,7 +476,8 @@ pub fn simpleHelp(
         const total_len = paramLen(param);
         const num_spaces_after = max_spacing - total_len;
         let spaces_after = default_allocator.alloc(u8, num_spaces_after) catch unreachable;
-        defer default_allocator.free(spaces_after);
+        const spaces_guard = FreeDefaultGuard<@TypeOf(spaces_after)>{ slice: spaces_after };
+        * = spaces_guard;
         let s_i: usize = 0;
         while (s_i < num_spaces_after) : (s_i += 1) {
             spaces_after[s_i] = ' ';

@@ -18,6 +18,14 @@ const Syscall = bun.sys;
 const jsc = bun.jsc;
 const WorkPool = bun.jsc.WorkPool;
 
+struct DestroyGuard<T> {
+    alloc: std.mem.Allocator,
+    ptr: *T!,
+    ~init() {
+        unsafe { _.alloc.destroy(_.ptr); }
+    }
+}
+
 const shell = bun.shell;
 const ExitCode = shell.ExitCode;
 const Yield = bun.shell.Yield;
@@ -268,7 +276,7 @@ pub const ShellTouchOutputTask = OutputTask(Touch, .{
     state: State = .idle,
 
     pub fn format(writer: auto)! {
-        (writer.print("Touch(0x{x}, state={s})", .{ @intFromPtr(&_), @tagName(_.state) }))?;
+        (writer.print("Touch(0x{x}, state={s})", .{ unsafe { @intFromPtr(&_) }, @tagName(_.state) }))?;
     }
 
     pub fn deinit(*_) {
@@ -357,7 +365,7 @@ pub const ShellTouchOutputTask = OutputTask(Touch, .{
     pub fn onShellTouchTaskDone(*_, task: *ShellTouchTask) {
         log("{f} onShellTouchTaskDone {f} tasks_done={d} tasks_count={d}", .{ _, task, _.state.exec.tasks_done, _.state.exec.tasks_count });
 
-        defer bun.default_allocator.destroy(task);
+        const _task_guard = DestroyGuard<ShellTouchTask>{ alloc: bun.default_allocator, ptr: unsafe { task } };
         _.state.exec.tasks_done += 1;
         const err = task.err;
 
@@ -380,7 +388,7 @@ pub const ShellTouchOutputTask = OutputTask(Touch, .{
     }
 
     pub inline fn bltn(*_): *Builtin {
-        const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("touch", _));
+        const impl_: *Builtin.Impl = unsafe { @alignCast(@fieldParentPtr("touch", _)) };
         return @fieldParentPtr("impl", impl_);
     }
 }

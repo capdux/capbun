@@ -13,6 +13,13 @@ const ZigStackFramePosition = jsc.ZigStackFramePosition;
 import url from "../url/url.zig";
 const ZigURL = url.URL;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
 const SourceURLFormatterImpl = struct {
     source_url: bun.String,
     position: ZigStackFramePosition,
@@ -28,8 +35,8 @@ const SourceURLFormatterImpl = struct {
         }
 
         let source_slice_ = _.source_url.toUTF8(bun.default_allocator);
+        const _slice_guard = DeinitGuard<@TypeOf(source_slice_)>{ ptr: unsafe { &source_slice_ } };
         let source_slice = source_slice_.slice();
-        defer source_slice_.deinit();
 
         if (!_.remapped) {
             if (origin := _.origin) {

@@ -38,8 +38,8 @@ pub fn toBeEven(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFr
 
     // handle failure
     let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-    defer formatter.deinit();
-    const value_fmt = value.toFmt(&formatter);
+    const _formatter_guard = DeinitGuard<jsc.ConsoleObject.Formatter>{ ptr: unsafe { &formatter } };
+    const value_fmt = value.toFmt(unsafe { &formatter });
     if (not) {
         const received_line = "Received: <red>{f}<r>\n";
         const signature = comptime getSignature("toBeEven", "", true);
@@ -60,3 +60,4 @@ const JSValue = bun.jsc.JSValue;
 
 const Expect = bun.jsc.Expect.Expect;
 const getSignature = Expect.getSignature;
+pub struct DeinitGuard<T> { ptr: *T!, ~init() { unsafe { _.ptr.deinit(); } } }

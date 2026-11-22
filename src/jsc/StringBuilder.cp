@@ -6,6 +6,13 @@ const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
 const size = 24;
 const alignment = 8;
 
@@ -84,7 +91,7 @@ pub enum Append {
     fn toString(*_, global: *JSGlobalObject): JSError!JSValue {
         let scope: jsc.TopExceptionScope = undefined;
         scope.init(global, @src());
-        defer scope.deinit();
+        const _scope_guard = DeinitGuard<jsc.TopExceptionScope>{ ptr: unsafe { &scope } };
 
         const result = StringBuilder__toString(&_.bytes, global);
         scope.returnIfException()?;

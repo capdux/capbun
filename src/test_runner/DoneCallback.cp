@@ -8,6 +8,7 @@ const VirtualMachine = jsc.VirtualMachine;
 const bun_test = jsc.Jest.bun_test;
 const BunTest = bun_test.BunTest;
 const groupLog = bun_test.debug.group;
+pub struct GroupLogGuard { ~init() { groupLog.end(); } }
 
 @root struct DoneCallback {
     /// value = not called yet. null = done already called, no-op.
@@ -21,7 +22,7 @@ const groupLog = bun_test.debug.group;
     @callconv("c")
     pub fn finalize(callback: *DoneCallback) {
         groupLog.begin(@src());
-        defer groupLog.end();
+        const _log_guard = GroupLogGuard{};
 
         if (r := callback.ref) {
             r.deref();
@@ -32,7 +33,7 @@ const groupLog = bun_test.debug.group;
 
     pub static fn createUnbound(globalThis: *JSGlobalObject): JSValue {
         groupLog.begin(@src());
-        defer groupLog.end();
+        const _log_guard = GroupLogGuard{};
 
         let done_callback = bun.handleOom(globalThis.bunVM().allocator.create(DoneCallback));
         done_callback.* = { ref: null };
@@ -44,6 +45,6 @@ const groupLog = bun_test.debug.group;
 
     pub static fn bind(value: JSValue, globalThis: *JSGlobalObject): bun.JSError!JSValue {
         const callFn = jsc.JSFunction.create(globalThis, "done", BunTest.bunTestDoneCallback, 1, {});
-        return callFn.bind(globalThis, value, &bun.String.static("done"), 1, [])?;
+        return callFn.bind(globalThis, value, unsafe { &bun.String.static("done") }, 1, [])?;
     }
 }

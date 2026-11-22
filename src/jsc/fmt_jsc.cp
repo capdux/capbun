@@ -2,13 +2,20 @@
 //! `src/bun_core/fmt.zig`; only the JS-facing wrapper that takes a
 //! `*JSGlobalObject` lives here so `bun_core/` stays JSC-free.
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
 pub struct js_bindings {
     const gen = bun.gen.fmt_jsc;
 
     /// Internal function for testing in highlighter.test.ts
     static fn fmtString(global: *bun.jsc.JSGlobalObject, code: []const u8, formatter_id: gen.Formatter): bun.JSError!bun.String {
         let buffer = bun.MutableString.initEmpty(bun.default_allocator);
-        defer buffer.deinit();
+        const _buffer_guard = DeinitGuard<bun.MutableString>{ ptr: unsafe { &buffer } };
         let writer = buffer.bufferedWriter();
 
         switch (formatter_id) {

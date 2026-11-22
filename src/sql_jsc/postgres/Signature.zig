@@ -38,7 +38,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -59,11 +59,24 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 const QueryBindingIterator = @import("../shared/QueryBindingIterator.zig").QueryBindingIterator;
 pub const types = @import("../../sql/postgres/PostgresTypes.zig");
+pub fn ErrDeinitGuard(comptime T: type) type {
+    return struct {
+        val: T,
+        __cp_errdropped: bool = false,
+
+pub fn __cp_errdeinit(self: *@This()) void {
+            if (self.__cp_errdropped) return;
+            self.__cp_errdropped = true;
+                _ = self.val.deinit();
+        }
+    };
+}
+
 pub const Signature = @This();
 
 fields: []const int4,
@@ -100,78 +113,76 @@ pub fn hash(self: *const Signature) u64 {
 }
 
 pub fn generate(globalObject: *jsc.JSGlobalObject, query: []const u8, array_value: JSValue, columns: JSValue, prepared_statement_id: u64, unnamed: bool) !@This() {
-        var fields = std.array_list.Managed(int4).init(bun.default_allocator);
-        _ = &fields;
-        var name = try std.array_list.Managed(u8).initCapacity(bun.default_allocator, query.len);
-        _ = &name;
-        _ = name.appendSliceAssumeCapacity(query);
-        errdefer {
-        {
-            _ = fields.deinit();
-            _ = name.deinit();
-        }
-        }
+        var fields_guard = ErrDeinitGuard(std.array_list.Managed(int4)){ .val = std.array_list.Managed(int4).init(bun.default_allocator) };
+        _ = &fields_guard;
+        var __fields_guard_moved = false; _ = &__fields_guard_moved;
+        errdefer if (!__fields_guard_moved) { __fields_guard_moved = true; const __T = @TypeOf(fields_guard); if (@typeInfo(__T) == .optional) { if (fields_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { __cp_opt_v.__cp_errdeinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_errdeinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_errdeinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { fields_guard.__cp_errdeinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_errdeinit")) { var _drop_val = fields_guard; _drop_val.__cp_errdeinit(); } };
+        var name_guard = ErrDeinitGuard(std.array_list.Managed(u8)){ .val = try std.array_list.Managed(u8).initCapacity(bun.default_allocator, query.len) };
+        _ = &name_guard;
+        var __name_guard_moved = false; _ = &__name_guard_moved;
+        errdefer if (!__name_guard_moved) { __name_guard_moved = true; const __T = @TypeOf(name_guard); if (@typeInfo(__T) == .optional) { if (name_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { __cp_opt_v.__cp_errdeinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_errdeinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_errdeinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { name_guard.__cp_errdeinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_errdeinit")) { var _drop_val = name_guard; _drop_val.__cp_errdeinit(); } };
+        _ = name_guard.val.appendSliceAssumeCapacity(query);
         var iter = try QueryBindingIterator.init(array_value, columns, globalObject);
         _ = &iter;
         while (try iter.next()) |value| {
             if (value.isEmptyOrUndefinedOrNull()) {
-                _ = try fields.append(0);
-                _ = try name.appendSlice(".null");
+                _ = try fields_guard.val.append(0);
+                _ = try name_guard.val.appendSlice(".null");
                 continue;
             }
             const tag = try types.Tag.fromJS(globalObject, value);
             switch (tag) {
 .int8 => {
-_ = try name.appendSlice(".int8");
+_ = try name_guard.val.appendSlice(".int8");
 },
 .int4 => {
-_ = try name.appendSlice(".int4");
+_ = try name_guard.val.appendSlice(".int4");
 },
 .int2 => {
-_ = try name.appendSlice(".int2");
+_ = try name_guard.val.appendSlice(".int2");
 },
 .float8 => {
-_ = try name.appendSlice(".float8");
+_ = try name_guard.val.appendSlice(".float8");
 },
 .float4 => {
-_ = try name.appendSlice(".float4");
+_ = try name_guard.val.appendSlice(".float4");
 },
 .numeric => {
-_ = try name.appendSlice(".numeric");
+_ = try name_guard.val.appendSlice(".numeric");
 },
 .json, .jsonb => {
-_ = try name.appendSlice(".json");
+_ = try name_guard.val.appendSlice(".json");
 },
 .@"bool" => {
-_ = try name.appendSlice(".bool");
+_ = try name_guard.val.appendSlice(".bool");
 },
 .timestamp => {
-_ = try name.appendSlice(".timestamp");
+_ = try name_guard.val.appendSlice(".timestamp");
 },
 .timestamptz => {
-_ = try name.appendSlice(".timestamptz");
+_ = try name_guard.val.appendSlice(".timestamptz");
 },
 .bytea => {
-_ = try name.appendSlice(".bytea");
+_ = try name_guard.val.appendSlice(".bytea");
 },
 else => {
-_ = try name.appendSlice(".string");
+_ = try name_guard.val.appendSlice(".string");
 },
 }
             switch (tag) {
 .@"bool", .int4, .int8, .float8, .int2, .numeric, .float4, .bytea => {
-_ = try fields.append(@intFromEnum(tag));
+_ = try fields_guard.val.append(@intFromEnum(tag));
 },
 else => {
-_ = try fields.append(0);
+_ = try fields_guard.val.append(0);
 },
 }
         }
         if (iter.anyFailed()) {
             return error.InvalidQueryBinding;
         }
-        const prepared_statement_name = (if (unnamed) "" else try std.fmt.allocPrint(bun.default_allocator, "P{s}${d}", .{ name.items[0..@min(40, name.items.len)], prepared_statement_id }));
-        return Signature{ .prepared_statement_name = prepared_statement_name, .name = name.items, .fields = fields.items, .query = try bun.default_allocator.dupe(u8, query) };
+        const prepared_statement_name = (if (unnamed) "" else try std.fmt.allocPrint(bun.default_allocator, "P{s}${d}", .{ name_guard.val.items[0..@min(40, name_guard.val.items.len)], prepared_statement_id }));
+        return Signature{ .prepared_statement_name = prepared_statement_name, .name = name_guard.val.items, .fields = fields_guard.val.items, .query = try bun.default_allocator.dupe(u8, query) };
 }
 const int4 = types.int4;
 const jsc = bun.jsc;

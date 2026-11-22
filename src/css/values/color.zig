@@ -39,7 +39,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -80,7 +80,7 @@ fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
     }
     return val >> shift;
 }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const css = @import("../css_parser.zig");
 pub const bun = @import("bun");
@@ -177,7 +177,7 @@ pub fn parse(input: *css.Parser) Result(@This()) {
             return css.enum_property_util.parse(@This(), input);
     }
 
-pub fn toCss(self: *ColorSpaceName, dest: *Printer) PrintErr!void {
+pub fn toCss(self: ColorSpaceName, dest: *Printer) PrintErr!void {
             return css.enum_property_util.toCss(@This(), self, dest);
     }
 };
@@ -201,16 +201,16 @@ pub fn parse(input: *css.Parser) Result(@This()) {
             return css.enum_property_util.parse(@This(), input);
     }
 
-pub fn toCss(self: *HueInterpolationMethod, dest: *Printer) PrintErr!void {
+pub fn toCss(self: HueInterpolationMethod, dest: *Printer) PrintErr!void {
             return css.enum_property_util.toCss(@This(), self, dest);
     }
 
-pub fn interpolate(self: *HueInterpolationMethod, a: *f32, b: *f32) void {
-            if ((self.* == .specified)) {
+pub fn interpolate(self: HueInterpolationMethod, a: *f32, b: *f32) void {
+            if ((self == .specified)) {
                 a.* = @mod((@mod(a.*, 360.0) + 360.0), 360.0);
                 b.* = @mod((@mod(b.*, 360.0) + 360.0), 360.0);
             }
-            switch (self.*) {
+            switch (self) {
 .shorter => {
 const delta = (b.* - a.*);
             if ((delta > 180.0)) {
@@ -2254,287 +2254,216 @@ pub fn hash(self: *const @This(), hasher: *std.hash.Wyhash) void {
     }
 };
 pub const NumberOrPercentage = union(enum) {
-    /// `<number>`.
     number: struct {
         /// The numeric value parsed, as a float.
         value: f32,
     },
-    /// `<percentage>`
     percentage: struct {
         /// The value as a float, divided by 100 so that the nominal range is
         /// 0.0 to 1.0.
         unit_value: f32,
     },
 
-    /// Return the value as a percentage.
-    pub fn unitValue(this: *const NumberOrPercentage) f32 {
-        return switch (this.*) {
-            .number => |v| v.value,
-            .percentage => |v| v.unit_value,
-        };
+pub fn unitValue(self: *const @This()) f32 {
+            return (switch (self.*) {
+.number => |v| (if (@typeInfo(@TypeOf(v)) == .@"enum") @intFromEnum(v) else v.value),
+.percentage => |v| v.unit_value,
+});
     }
 
-    /// Return the value as a number with a percentage adjusted to the
-    /// `percentage_basis`.
-    pub fn value(this: *const NumberOrPercentage, percentage_basis: f32) f32 {
-        return switch (this.*) {
-            .number => |v| v.value,
-            .percentage => |v| v.unit_value * percentage_basis,
-        };
+pub fn value(self: *const @This(), percentage_basis: f32) f32 {
+            return (switch (self.*) {
+.number => |v| (if (@typeInfo(@TypeOf(v)) == .@"enum") @intFromEnum(v) else v.value),
+.percentage => |v| (v.unit_value * percentage_basis),
+});
     }
 };
 const RelativeComponentParser = struct {
     names: struct { []const u8, []const u8, []const u8 },
-    components: struct { f32, f32, f32, f32 },
+    components: [4]f32,
     types: struct { ChannelType, ChannelType, ChannelType },
 
-    pub fn new(color: anytype) RelativeComponentParser {
-        return RelativeComponentParser{
-            .names = color.channels(),
-            .components = color.components(),
-            .types = color.types(),
-        };
+pub fn new(color: anytype) RelativeComponentParser {
+            const c = color.components();
+            return RelativeComponentParser{ .names = color.channels(), .components = .{ c[0], c[1], c[2], c[3] }, .types = color.types() };
     }
 
-    pub fn parseAngleOrNumber(input: *css.Parser, this: *const RelativeComponentParser) Result(css.color.AngleOrNumber) {
-        if (input.tryParse(
-            RelativeComponentParser.parseIdent,
-            .{
-                this,
-                ChannelType{ .angle = true, .number = true },
-            },
-        ).asValue()) |value| {
-            return .{ .result = .{
-                .number = .{
-                    .value = value,
-                },
-            } };
-        }
-
-        if (input.tryParse(
-            RelativeComponentParser.parseCalc,
-            .{
-                this,
-                ChannelType{ .angle = true, .number = true },
-            },
-        ).asValue()) |value| {
-            return .{ .result = .{
-                .number = .{
-                    .value = value,
-                },
-            } };
-        }
-
-        const Closure = struct {
-            angle: Angle,
-            parser: *const RelativeComponentParser,
-            pub fn tryParseFn(i: *css.Parser, t: *@This()) Result(Angle) {
-                if (Calc(Angle).parseWith(i, t, @This().calcParseIdentFn).asValue()) |val| {
-                    if (val == .value) {
-                        return .{ .result = val.value.* };
-                    }
-                }
-                return .{ .err = i.newCustomError(css.ParserError.invalid_value) };
+pub fn parseAngleOrNumber(input: *css.Parser, self: *const RelativeComponentParser) Result(css.color.AngleOrNumber) {
+            if (input.tryParse(RelativeComponentParser.parseIdent, .{ self, ChannelType{ .angle = true, .number = true } }).asValue()) |value| {
+                _ = &value;
+                return .{ .result = .{ .number = .{ .value = value } } };
             }
-
-            pub fn calcParseIdentFn(t: *@This(), ident: []const u8) ?Calc(Angle) {
-                const value = t.parser.getIdent(ident, ChannelType{ .angle = true, .number = true }) orelse return null;
-                t.angle = .{ .deg = value };
-                return Calc(Angle){
-                    .value = &t.angle,
-                };
+            if (input.tryParse(RelativeComponentParser.parseCalc, .{ self, ChannelType{ .angle = true, .number = true } }).asValue()) |value| {
+                _ = &value;
+                return .{ .result = .{ .number = .{ .value = value } } };
             }
-        };
-        var closure = Closure{
-            .angle = undefined,
-            .parser = this,
-        };
-        if (input.tryParse(Closure.tryParseFn, .{&closure}).asValue()) |value| {
-            return .{ .result = .{
-                .angle = .{
-                    .degrees = value.toDegrees(),
-                },
-            } };
-        }
-
-        return .{ .err = input.newErrorForNextToken() };
-    }
-
-    pub fn parseNumberOrPercentage(input: *css.Parser, this: *const RelativeComponentParser) Result(NumberOrPercentage) {
-        if (input.tryParse(RelativeComponentParser.parseIdent, .{ this, ChannelType{ .percentage = true, .number = true } }).asValue()) |value| {
-            return .{ .result = NumberOrPercentage{ .percentage = .{ .unit_value = value } } };
-        }
-
-        if (input.tryParse(RelativeComponentParser.parseCalc, .{ this, ChannelType{ .percentage = true, .number = true } }).asValue()) |value| {
-            return .{ .result = NumberOrPercentage{
-                .percentage = .{
-                    .unit_value = value,
-                },
-            } };
-        }
-
-        {
             const Closure = struct {
-                parser: *const RelativeComponentParser,
-                percentage: Percentage = .{ .v = 0 },
+    angle: Angle,
+    parser: *const RelativeComponentParser,
 
-                pub fn parsefn(i: *css.Parser, self: *@This()) Result(Percentage) {
-                    if (Calc(Percentage).parseWith(i, self, @This().calcparseident).asValue()) |calc_value| {
-                        if (calc_value == .value) return .{ .result = calc_value.value.* };
-                    }
-                    return .{ .err = i.newCustomError(css.ParserError.invalid_value) };
+pub fn tryParseFn(i: *css.Parser, t: *@This()) Result(Angle) {
+            if (Calc(Angle).parseWith(i, t, @This().calcParseIdentFn).asValue()) |val| {
+                _ = &val;
+                if ((val == .value)) {
+                    return .{ .result = (if (@typeInfo(@TypeOf(val)) == .@"enum") @intFromEnum(val) else val.value).* };
                 }
+            }
+            return .{ .err = i.newCustomError(css.ParserError.invalid_value) };
+    }
 
-                pub fn calcparseident(self: *@This(), ident: []const u8) ?Calc(Percentage) {
-                    const v = self.parser.getIdent(ident, ChannelType{ .percentage = true, .number = true }) orelse return null;
-                    self.percentage = .{ .v = v };
-                    // value variant is a *Percentage
-                    // but we immediately dereference it and discard the pointer
-                    // so using a field on this closure struct instead of making a gratuitous allocation
-                    return .{
-                        .value = &self.percentage,
-                    };
+pub fn calcParseIdentFn(t: *@This(), ident: []const u8) ?Calc(Angle) {
+            const value = ((t.parser.getIdent(ident, ChannelType{ .angle = true, .number = true })) orelse { return null; });
+            t.angle = .{ .deg = value };
+            return Calc(Angle){ .value = (&t.angle) };
+    }
+};
+            var closure = Closure{ .angle = undefined, .parser = self };
+            _ = &closure;
+            if (input.tryParse(Closure.tryParseFn, .{ (&closure) }).asValue()) |value| {
+                _ = &value;
+                return .{ .result = .{ .angle = .{ .degrees = value.toDegrees() } } };
+            }
+            return .{ .err = input.newErrorForNextToken() };
+    }
+
+pub fn parseNumberOrPercentage(input: *css.Parser, self: *const RelativeComponentParser) Result(NumberOrPercentage) {
+            if (input.tryParse(RelativeComponentParser.parseIdent, .{ self, ChannelType{ .percentage = true, .number = true } }).asValue()) |value| {
+                _ = &value;
+                return .{ .result = NumberOrPercentage{ .percentage = .{ .unit_value = value } } };
+            }
+            if (input.tryParse(RelativeComponentParser.parseCalc, .{ self, ChannelType{ .percentage = true, .number = true } }).asValue()) |value| {
+                _ = &value;
+                return .{ .result = NumberOrPercentage{ .percentage = .{ .unit_value = value } } };
+            }
+            {
+                const Closure = struct {
+    parser: *const RelativeComponentParser,
+    percentage: Percentage = .{ .v = 0 },
+
+pub fn parsefn(i: *css.Parser, c: *@This()) Result(Percentage) {
+            if (Calc(Percentage).parseWith(i, c, @This().calcparseident).asValue()) |calc_value| {
+                _ = &calc_value;
+                if ((calc_value == .value)) {
+                    return .{ .result = (if (@typeInfo(@TypeOf(calc_value)) == .@"enum") @intFromEnum(calc_value) else calc_value.value).* };
                 }
-            };
-            var closure = Closure{
-                .parser = this,
-            };
-            if (input.tryParse(Closure.parsefn, .{
-                &closure,
-            }).asValue()) |value| {
-                return .{ .result = NumberOrPercentage{
-                    .percentage = .{
-                        .unit_value = value.v,
-                    },
-                } };
             }
-        }
-
-        return .{ .err = input.newErrorForNextToken() };
+            return .{ .err = i.newCustomError(css.ParserError.invalid_value) };
     }
 
-    pub fn parsePercentage(
-        input: *css.Parser,
-        this: *const RelativeComponentParser,
-    ) Result(f32) {
-        if (input.tryParse(RelativeComponentParser.parseIdent, .{ this, ChannelType{ .percentage = true } }).asValue()) |value| {
-            return .{ .result = value };
-        }
-
-        const Closure = struct { self: *const RelativeComponentParser, temp: Percentage = .{ .v = 0 } };
-        var _closure = Closure{ .self = this };
-        if (input.tryParse(struct {
-            pub fn parseFn(i: *css.Parser, closure: *Closure) Result(Percentage) {
-                const calc_value = switch (Calc(Percentage).parseWith(i, closure, parseIdentFn)) {
-                    .result => |v| v,
-                    .err => return .{ .err = i.newCustomError(css.ParserError.invalid_value) },
-                };
-                if (calc_value == .value) return .{ .result = calc_value.value.* };
-                return .{ .err = i.newCustomError(css.ParserError.invalid_value) };
+pub fn calcparseident(c: *@This(), ident: []const u8) ?Calc(Percentage) {
+            const v = ((c.parser.getIdent(ident, ChannelType{ .percentage = true, .number = true })) orelse { return null; });
+            c.percentage = .{ .v = v };
+            return .{ .value = (&c.percentage) };
+    }
+};
+                var closure = Closure{ .parser = self };
+                _ = &closure;
+                if (input.tryParse(Closure.parsefn, .{ (&closure) }).asValue()) |value| {
+                    _ = &value;
+                    return .{ .result = NumberOrPercentage{ .percentage = .{ .unit_value = value.v } } };
+                }
             }
+            return .{ .err = input.newErrorForNextToken() };
+    }
 
-            pub fn parseIdentFn(closure: *Closure, ident: []const u8) ?Calc(Percentage) {
-                const v = closure.self.getIdent(ident, ChannelType{ .percentage = true }) orelse return null;
-                closure.temp = .{ .v = v };
-                return Calc(Percentage){ .value = &closure.temp };
+pub fn parsePercentage(input: *css.Parser, self: *const RelativeComponentParser) Result(f32) {
+            if (input.tryParse(RelativeComponentParser.parseIdent, .{ self, ChannelType{ .percentage = true } }).asValue()) |value| {
+                _ = &value;
+                return .{ .result = value };
             }
-        }.parseFn, .{&_closure}).asValue()) |value| {
-            return .{ .result = value.v };
-        }
+            const Closure = struct {
+    self: *const RelativeComponentParser,
+    temp: Percentage = .{ .v = 0 },
+};
+            var _closure = Closure{ .self = self };
+            _ = &_closure;
+            if (input.tryParse((struct {
 
-        return .{ .err = input.newErrorForNextToken() };
-    }
-
-    pub fn parseNumber(
-        input: *css.Parser,
-        this: *const RelativeComponentParser,
-    ) Result(f32) {
-        if (input.tryParse(
-            RelativeComponentParser.parseIdent,
-            .{ this, ChannelType{ .number = true } },
-        ).asValue()) |value| {
-            return .{ .result = value };
-        }
-
-        if (input.tryParse(
-            RelativeComponentParser.parseCalc,
-            .{ this, ChannelType{ .number = true } },
-        ).asValue()) |value| {
-            return .{ .result = value };
-        }
-
-        return .{ .err = input.newErrorForNextToken() };
-    }
-
-    pub fn parseIdent(
-        input: *css.Parser,
-        this: *const RelativeComponentParser,
-        allowed_types: ChannelType,
-    ) Result(f32) {
-        const v = this.getIdent(
-            switch (input.expectIdent()) {
-                .result => |v| v,
-                .err => |e| return .{ .err = e },
-            },
-            allowed_types,
-        ) orelse return .{ .err = input.newErrorForNextToken() };
-        return .{ .result = v };
-    }
-
-    pub fn parseCalc(
-        input: *css.Parser,
-        this: *const RelativeComponentParser,
-        allowed_types: ChannelType,
-    ) Result(f32) {
-        const Closure = struct {
-            p: *const RelativeComponentParser,
-            allowed_types: ChannelType,
-
-            pub fn parseIdentFn(self: *@This(), ident: []const u8) ?Calc(f32) {
-                const v = self.p.getIdent(ident, self.allowed_types) orelse return null;
-                return .{ .number = v };
+pub fn parseFn(i: *css.Parser, closure: *Closure) Result(Percentage) {
+            const calc_value = (switch (Calc(Percentage).parseWith(i, closure, parseIdentFn)) {
+.result => |v| v,
+.err => {
+return .{ .err = i.newCustomError(css.ParserError.invalid_value) };
+},
+});
+            if ((calc_value == .value)) {
+                return .{ .result = (if (@typeInfo(@TypeOf(calc_value)) == .@"enum") @intFromEnum(calc_value) else calc_value.value).* };
             }
-        };
-        var closure = Closure{
-            .p = this,
-            .allowed_types = allowed_types,
-        };
-        if (Calc(f32).parseWith(input, &closure, Closure.parseIdentFn).asValue()) |calc_val| {
-            // PERF: I don't like this redundant allocation
-            if (calc_val == .value) return .{ .result = calc_val.value.* };
-            if (calc_val == .number) return .{ .result = calc_val.number };
-        }
-        return .{ .err = input.newCustomError(css.ParserError.invalid_value) };
+            return .{ .err = i.newCustomError(css.ParserError.invalid_value) };
     }
 
-    pub fn getIdent(
-        this: *const RelativeComponentParser,
-        ident: []const u8,
-        allowed_types: ChannelType,
-    ) ?f32 {
-        if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, this.names[0]) and
-            bits.intersects(ChannelType, allowed_types, this.types[0]))
-        {
-            return this.components[0];
-        }
+pub fn parseIdentFn(closure: *Closure, ident: []const u8) ?Calc(Percentage) {
+            const v = ((closure.self.getIdent(ident, ChannelType{ .percentage = true })) orelse { return null; });
+            closure.temp = .{ .v = v };
+            return Calc(Percentage){ .value = (&closure.temp) };
+    }
+}).parseFn, .{ (&_closure) }).asValue()) |value| {
+                _ = &value;
+                return .{ .result = value.v };
+            }
+            return .{ .err = input.newErrorForNextToken() };
+    }
 
-        if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, this.names[1]) and
-            bits.intersects(ChannelType, allowed_types, this.types[1]))
-        {
-            return this.components[1];
-        }
+pub fn parseNumber(input: *css.Parser, self: *const RelativeComponentParser) Result(f32) {
+            if (input.tryParse(RelativeComponentParser.parseIdent, .{ self, ChannelType{ .number = true } }).asValue()) |value| {
+                _ = &value;
+                return .{ .result = value };
+            }
+            if (input.tryParse(RelativeComponentParser.parseCalc, .{ self, ChannelType{ .number = true } }).asValue()) |value| {
+                _ = &value;
+                return .{ .result = value };
+            }
+            return .{ .err = input.newErrorForNextToken() };
+    }
 
-        if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, this.names[2]) and
-            bits.intersects(ChannelType, allowed_types, this.types[2]))
-        {
-            return this.components[2];
-        }
+pub fn parseIdent(input: *css.Parser, self: *const RelativeComponentParser, allowed_types: ChannelType) Result(f32) {
+            const v = ((self.getIdent((switch (input.expectIdent()) {
+.result => |v| v,
+.err => |e| {
+return .{ .err = e };
+},
+}), allowed_types)) orelse { return .{ .err = input.newErrorForNextToken() }; });
+            return .{ .result = v };
+    }
 
-        if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "alpha") and allowed_types.percentage) {
-            return this.components[3];
-        }
+pub fn parseCalc(input: *css.Parser, self: *const RelativeComponentParser, allowed_types: ChannelType) Result(f32) {
+            const Closure = struct {
+    p: *const RelativeComponentParser,
+    allowed_types: ChannelType,
 
-        return null;
+pub fn parseIdentFn(c: *@This(), ident: []const u8) ?Calc(f32) {
+            const v = ((c.p.getIdent(ident, c.allowed_types)) orelse { return null; });
+            return .{ .number = v };
+    }
+};
+            var closure = Closure{ .p = self, .allowed_types = allowed_types };
+            _ = &closure;
+            if (Calc(f32).parseWith(input, (&closure), Closure.parseIdentFn).asValue()) |calc_val| {
+                _ = &calc_val;
+                if ((calc_val == .value)) {
+                    return .{ .result = (if (@typeInfo(@TypeOf(calc_val)) == .@"enum") @intFromEnum(calc_val) else calc_val.value).* };
+                }
+                if ((calc_val == .number)) {
+                    return .{ .result = calc_val.number };
+                }
+            }
+            return .{ .err = input.newCustomError(css.ParserError.invalid_value) };
+    }
+
+pub fn getIdent(self: *const @This(), ident: []const u8, allowed_types: ChannelType) ?f32 {
+            if ((bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, self.names[0]) and bits.intersects(ChannelType, allowed_types, self.types[0]))) {
+                return self.components[0];
+            }
+            if ((bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, self.names[1]) and bits.intersects(ChannelType, allowed_types, self.types[1]))) {
+                return self.components[1];
+            }
+            if ((bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, self.names[2]) and bits.intersects(ChannelType, allowed_types, self.types[2]))) {
+                return self.components[2];
+            }
+            if ((bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "alpha") and allowed_types.percentage)) {
+                return self.components[3];
+            }
+            return null;
     }
 };
 pub const ChannelType = packed struct(u8) {
@@ -2660,32 +2589,32 @@ pub fn parseColorFunction(location: css.SourceLocation, function: []const u8, in
         if (Map.getASCIIICaseInsensitive(function)) |val| {
             _ = &val;
             return (switch (val) {
-.lab => parseLab(LAB, input, (&parser), struct {
+.lab => parseLab(LAB, input, (&parser), (struct {
 
 pub fn callback(l: f32, a: f32, b: f32, alpha: f32) LABColor {
             return .{ .lab = .{ .l = l, .a = a, .b = b, .alpha = alpha } };
     }
-}.callback),
-.oklab => parseLab(OKLAB, input, (&parser), struct {
+}).callback),
+.oklab => parseLab(OKLAB, input, (&parser), (struct {
 
 pub fn callback(l: f32, a: f32, b: f32, alpha: f32) LABColor {
             return .{ .oklab = .{ .l = l, .a = a, .b = b, .alpha = alpha } };
     }
-}.callback),
-.lch => parseLch(LCH, input, (&parser), struct {
+}).callback),
+.lch => parseLch(LCH, input, (&parser), (struct {
 
 pub fn callback(l: f32, c: f32, h: f32, alpha: f32) LABColor {
             return .{ .lch = .{ .l = l, .c = c, .h = h, .alpha = alpha } };
     }
-}.callback),
-.oklch => parseLch(OKLCH, input, (&parser), struct {
+}).callback),
+.oklch => parseLch(OKLCH, input, (&parser), (struct {
 
 pub fn callback(l: f32, c: f32, h: f32, alpha: f32) LABColor {
             return .{ .oklch = .{ .l = l, .c = c, .h = h, .alpha = alpha } };
     }
-}.callback),
+}).callback),
 .color => parsePredefined(input, (&parser)),
-.hsl, .hsla => parseHslHwb(HSL, input, (&parser), true, struct {
+.hsl, .hsla => parseHslHwb(HSL, input, (&parser), true, (struct {
 
 pub fn callback(allocator: Allocator, h: f32, s: f32, l: f32, a: f32) CssColor {
             const hsl = HSL{ .h = h, .s = s, .l = l, .alpha = a };
@@ -2695,8 +2624,8 @@ pub fn callback(allocator: Allocator, h: f32, s: f32, l: f32, a: f32) CssColor {
                 return CssColor{ .float = bun.create(allocator, FloatColor, .{ .hsl = hsl }) };
             }
     }
-}.callback),
-.hwb => parseHslHwb(HWB, input, (&parser), false, struct {
+}).callback),
+.hwb => parseHslHwb(HWB, input, (&parser), false, (struct {
 
 pub fn callback(allocator: Allocator, h: f32, w: f32, b: f32, a: f32) CssColor {
             const hwb = HWB{ .h = h, .w = w, .b = b, .alpha = a };
@@ -2706,15 +2635,15 @@ pub fn callback(allocator: Allocator, h: f32, w: f32, b: f32, a: f32) CssColor {
                 return CssColor{ .float = bun.create(allocator, FloatColor, .{ .hwb = hwb }) };
             }
     }
-}.callback),
+}).callback),
 .rgb, .rgba => parseRgb(input, (&parser)),
-.@"color-mix" => input.parseNestedBlock(CssColor, .{}, struct {
+.@"color-mix" => input.parseNestedBlock(CssColor, .{}, (struct {
 
 pub fn parseFn(_: @TypeOf(.{}), i: *css.Parser) Result(CssColor) {
             return parseColorMix(i);
     }
-}.parseFn),
-.@"light-dark" => input.parseNestedBlock(CssColor, .{}, struct {
+}).parseFn),
+.@"light-dark" => input.parseNestedBlock(CssColor, .{}, (struct {
 
 pub fn callback(_: @TypeOf(.{}), i: *css.Parser) Result(CssColor) {
             const light = (switch ((switch (CssColor.parse(i)) {
@@ -2741,13 +2670,13 @@ else => |v| bun.create(i.allocator(), CssColor, v),
 });
             return .{ .result = .{ .light_dark = .{ .light = light, .dark = dark } } };
     }
-}.callback),
+}).callback),
 });
         }
         return .{ .err = location.newUnexpectedTokenError(.{ .ident = function }) };
 }
 
-pub fn parseRGBComponents(input: *css.Parser, parser: *ComponentParser) Result(struct{f32,f32,f32,bool}) {
+pub fn parseRGBComponents(input: *css.Parser, parser: *ComponentParser) Result(struct { f32, f32, f32, bool }) {
         const red = (switch (parser.parseNumberOrPercentage(input)) {
 .err => |e| {
 return .{ .err = e };
@@ -2797,7 +2726,7 @@ return .{ .err = e };
         break :brk .{ r, g, b };
 },
 }) else blk: {
-        const getComponent = struct {
+        const getComponent = (struct {
 
 pub fn get(value: NumberOrPercentage) f32 {
             return (switch (value) {
@@ -2805,7 +2734,7 @@ pub fn get(value: NumberOrPercentage) f32 {
 .percentage => |v| bun.clamp(v.unit_value, 0.0, 1.0),
 });
     }
-}.get;
+}).get;
         const r = getComponent(red);
         const g = getComponent((switch (parser.parseNumberOrPercentage(input)) {
 .err => |e| {
@@ -2830,7 +2759,7 @@ return .{ .err = e };
         return .{ .result = .{ r, g, b, is_legacy_syntax } };
 }
 
-pub fn parseHSLHWBComponents(comptime T: type, input: *css.Parser, parser: *ComponentParser, allows_legacy: bool) Result(struct{f32,f32,f32,bool}) {
+pub fn parseHSLHWBComponents(comptime T: type, input: *css.Parser, parser: *ComponentParser, allows_legacy: bool) Result(struct { f32, f32, f32, bool }) {
         _ = @sizeOf(T);
         const h = (switch (parseAngleOrNumber(input, parser)) {
 .result => |v| v,
@@ -2963,6 +2892,10 @@ pub fn parseRelativeFn(i: *css.Parser, p: *ComponentParser, self: *@This()) Resu
             _ = self.parser;
             if (p.@"from") |*@"from"| {
                 _ = &@"from";
+                @"from".components[cp_cast_int(usize, 2)] = @mod(@"from".components[2], 360.0);
+                if ((@"from".components[2] < 0.0)) {
+                    @"from".components[cp_cast_int(usize, 2)] = (@"from".components[2] + 360.0);
+                }
             }
             const l = bun.clamp((switch (p.parsePercentage(i)) {
 .result => |vv| vv,
@@ -3031,7 +2964,7 @@ return .{ .err = e };
         return input.parseNestedBlock(CssColor, (&closure), Closure.parseNestedBlockFn);
 }
 
-pub fn parseHslHwbComponents(comptime T: type, input: *css.Parser, parser: *ComponentParser, allows_legacy: bool) Result(struct{f32,f32,f32,bool}) {
+pub fn parseHslHwbComponents(comptime T: type, input: *css.Parser, parser: *ComponentParser, allows_legacy: bool) Result(struct { f32, f32, f32, bool }) {
         _ = @sizeOf(T);
         const h = (switch (parseAngleOrNumber(input, parser)) {
 .result => |vv| vv,
@@ -3173,7 +3106,7 @@ pub fn parsePredefined(input: *css.Parser, parser: *ComponentParser) Result(CssC
 };
         var closure = Closure{ .p = parser };
         _ = &closure;
-        const res = (switch (input.parseNestedBlock(CssColor, (&closure), struct {
+        const res = (switch (input.parseNestedBlock(CssColor, (&closure), (struct {
 
 pub fn parseFn(c: *Closure, i: *css.Parser) Result(CssColor) {
             const @"from": ?CssColor = (if (i.tryParse(css.Parser.expectIdentMatching, .{ "from" }).isOk()) (switch (CssColor.parse(i)) {
@@ -3182,16 +3115,38 @@ pub fn parseFn(c: *Closure, i: *css.Parser) Result(CssColor) {
 return .{ .err = e };
 },
 }) else null);
-            _ = &@"from";
             const colorspace = (switch (i.expectIdent()) {
 .result => |v| v,
 .err => |e| {
 return .{ .err = e };
 },
 });
+            if (@"from") |f| {
+                _ = &f;
+                if ((f == .light_dark)) {
+                    const state = i.state();
+                    const light = (switch (parsePredefinedRelative(i, c.p, colorspace, f.light_dark.light)) {
+.result => |vv| vv,
+.err => |e| {
+return .{ .err = e };
+},
+});
+                    _ = i.reset((&state));
+                    const dark = (switch (parsePredefinedRelative(i, c.p, colorspace, f.light_dark.dark)) {
+.result => |vv| vv,
+.err => |e| {
+return .{ .err = e };
+},
+});
+                    return .{ .result = CssColor{ .light_dark = .{ .light = bun.create(i.allocator(), CssColor, light), .dark = bun.create(i.allocator(), CssColor, dark) } } };
+                }
+            }
+            if ((@"from" != null)) {
+                return parsePredefinedRelative(i, c.p, colorspace, (&@"from".?));
+            }
             return parsePredefinedRelative(i, c.p, colorspace, null);
     }
-}.parseFn)) {
+}).parseFn)) {
 .result => |vv| vv,
 .err => |e| {
 return .{ .err = e };
@@ -3496,44 +3451,38 @@ pub fn DefineColorspace(comptime T: type, comptime ChannelTypeMap: anytype) type
             _ = @compileError(("A Colorspace must define a field for each channel, missing: " ++ c));
         }
         return struct {
-        pub fn components(color_val: *const T) struct { f32, f32, f32, f32 } {
-            return .{
-                @field(color_val, a),
-                @field(color_val, b),
-                @field(color_val, c),
-                @field(color_val, alpha),
-            };
-        }
 
-        pub fn channels(_: *const T) struct { []const u8, []const u8, []const u8 } {
+pub fn components(color_val: *const T) struct { f32, f32, f32, f32 } {
+            return .{ @field(color_val, a), @field(color_val, b), @field(color_val, c), @field(color_val, alpha) };
+    }
+
+pub fn channels(_: *const T) struct { []const u8, []const u8, []const u8 } {
             return .{ a, b, c };
-        }
+    }
 
-        pub fn types(_: *const T) struct { ChannelType, ChannelType, ChannelType } {
-            return .{
-                @field(ChannelTypeMap, a),
-                @field(ChannelTypeMap, b),
-                @field(ChannelTypeMap, c),
-            };
-        }
+pub fn types(_: *const T) struct { ChannelType, ChannelType, ChannelType } {
+            return .{ @field(ChannelTypeMap, a), @field(ChannelTypeMap, b), @field(ChannelTypeMap, c) };
+    }
 
-        pub fn resolveMissing(color_val: *const T) T {
+pub fn resolveMissing(color_val: *const T) T {
             var result: T = color_val.*;
-            @field(result, a) = if (std.math.isNan(@field(color_val, a))) 0.0 else @field(color_val, a);
-            @field(result, b) = if (std.math.isNan(@field(color_val, b))) 0.0 else @field(color_val, b);
-            @field(result, c) = if (std.math.isNan(@field(color_val, c))) 0.0 else @field(color_val, c);
-            @field(result, alpha) = if (std.math.isNan(@field(color_val, alpha))) 0.0 else @field(color_val, alpha);
+            _ = &result;
+            @field(result, a) = (if (std.math.isNan(@field(color_val, a))) 0.0 else @field(color_val, a));
+            @field(result, b) = (if (std.math.isNan(@field(color_val, b))) 0.0 else @field(color_val, b));
+            @field(result, c) = (if (std.math.isNan(@field(color_val, c))) 0.0 else @field(color_val, c));
+            @field(result, alpha) = (if (std.math.isNan(@field(color_val, alpha))) 0.0 else @field(color_val, alpha));
             return result;
-        }
+    }
 
-        pub fn resolve(color_val: *const T) T {
+pub fn resolve(color_val: *const T) T {
             var resolved = resolveMissing(color_val);
-            if (!resolved.inGamut()) {
+            _ = &resolved;
+            if ((!resolved.inGamut())) {
                 resolved = mapGamut(T, resolved);
             }
             return resolved;
-        }
-    };
+    }
+};
 }
 
 pub fn BoundedColorGamut(comptime T: type) type {

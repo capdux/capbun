@@ -11,6 +11,13 @@ const OOM = bun.OOM;
 const OSPathSlice = bun.OSPathSlice;
 const OSPathSliceZ = bun.OSPathSliceZ;
 
+struct DeinitGuard<T> {
+    val: T,
+    active: bool = true,
+    fn disarm(*_) { _.active = false; }
+    ~init() { if (_.active) _.val.deinit(); }
+}
+
 @root struct Walker {
     stack: std.array_list.Managed(StackItem),
     name_buffer: NameBufferList,
@@ -163,11 +170,8 @@ const OSPathSliceZ = bun.OSPathSliceZ;
         skip_filenames: []const OSPathSlice,
         skip_dirnames: []const OSPathSlice,
     ): Walker!OOM {
-        let name_buffer = NameBufferList.init(allocator);
-        errdefer name_buffer.deinit();
-
-        let stack = std.array_list.Managed(Walker.StackItem).init(allocator);
-        errdefer stack.deinit();
+        let name_buffer_guard = DeinitGuard<NameBufferList>{ val: NameBufferList.init(allocator) };
+        let stack_guard = DeinitGuard<std.array_list.Managed(Walker.StackItem)>{ val: std.array_list.Managed(Walker.StackItem).init(allocator) };
 
         let skip_names = allocator.alloc(u64, skip_filenames.len + skip_dirnames.len)?;
         const seed = skip_filenames.len + skip_dirnames.len;
@@ -186,14 +190,16 @@ const OSPathSliceZ = bun.OSPathSliceZ;
             mut_i += 1;
         }
 
-        stack.append(Walker.StackItem{
+        stack_guard.val.append(Walker.StackItem{
             .iter = DirIterator.iterate(dir, iter_kind),
             .dirname_len = 0,
         })?;
 
+        name_buffer_guard.disarm();
+        stack_guard.disarm();
         return Walker{
-            .stack = stack,
-            .name_buffer = name_buffer,
+            .stack = stack_guard.val,
+            .name_buffer = name_buffer_guard.val,
             .skip_all = skip_names,
             .seed = seed,
             .skip_filenames = skip_filenames_,

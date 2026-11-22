@@ -6,6 +6,29 @@ import { NewReader } from "./NewReader.zig";
 
 const debug = bun.Output.scoped(.Postgres, .hidden);
 
+struct DataGuard {
+    data: Data,
+
+    ~init() {
+        _.data.deinit();
+    }
+}
+
+struct DisarmDataGuard {
+    data: Data,
+    armed: bool = true,
+
+    fn disarm(*_) {
+        _.armed = false;
+    }
+
+    ~init() {
+        if (_.armed) {
+            _.data.deinit();
+        }
+    }
+}
+
 pub struct EmptyAuth {}
 pub struct MD5PasswordAuth {
     salt: [4]u8,
@@ -39,14 +62,14 @@ pub union(enum) Authentication {
     Unknown: void,
 
     pub fn deinit(*_) {
-        switch (unsafe { this.* }) {
+        switch (unsafe { _.* }) {
             .MD5Password => {},
             .SASL => {},
             .SASLContinue => {
-                this.SASLContinue.data.zdeinit();
+                _.SASLContinue.data.zdeinit();
             },
             .SASLFinal => {
-                this.SASLFinal.data.zdeinit();
+                _.SASLFinal.data.zdeinit();
             },
             else => {},
         }
@@ -58,52 +81,50 @@ pub union(enum) Authentication {
         switch (reader.int4()?) {
             0 => {
                 if (message_length != 8) return err.InvalidMessageLength;
-                unsafe { this.* = .Ok; }
+                unsafe { _.* = .Ok; }
             },
             2 => {
                 if (message_length != 8) return err.InvalidMessageLength;
-                unsafe { this.* = { KerberosV5: EmptyAuth{} }; }
+                unsafe { _.* = { KerberosV5: EmptyAuth{} }; }
             },
             3 => {
                 if (message_length != 8) return err.InvalidMessageLength;
-                unsafe { this.* = { ClearTextPassword: EmptyAuth{} }; }
+                unsafe { _.* = { ClearTextPassword: EmptyAuth{} }; }
             },
             5 => {
                 if (message_length != 12) return err.InvalidMessageLength;
-                let salt_data = reader.bytes(4)?;
-                defer salt_data.deinit();
+                let salt_guard = DataGuard{ data: reader.bytes(4)? };
                 unsafe {
-                    this.* = {
+                    _.* = {
                         MD5Password: MD5PasswordAuth{
-                            salt: salt_data.slice()[0..4].*,
+                            salt: salt_guard.data.slice()[0..4].*,
                         },
                     };
                 }
             },
             7 => {
                 if (message_length != 8) return err.InvalidMessageLength;
-                unsafe { this.* = { GSS: EmptyAuth{} }; }
+                unsafe { _.* = { GSS: EmptyAuth{} }; }
             },
             8 => {
                 if (message_length < 9) return err.InvalidMessageLength;
                 const bytes = reader.read(@intCast(message_length - 8))?;
-                unsafe { this.* = { GSSContinue: DataAuth{ data: bytes } }; }
+                unsafe { _.* = { GSSContinue: DataAuth{ data: bytes } }; }
             },
             9 => {
                 if (message_length != 8) return err.InvalidMessageLength;
-                unsafe { this.* = { SSPI: EmptyAuth{} }; }
+                unsafe { _.* = { SSPI: EmptyAuth{} }; }
             },
             10 => {
                 if (message_length < 9) return err.InvalidMessageLength;
                 reader.skip(@intCast(message_length - 8))?;
-                unsafe { this.* = { SASL: EmptyAuth{} }; }
+                unsafe { _.* = { SASL: EmptyAuth{} }; }
             },
             11 => {
                 if (message_length < 9) return err.InvalidMessageLength;
-                let bytes = reader.bytes(@intCast(message_length - 8))?;
-                errdefer bytes.deinit();
+                let bytes_guard = DisarmDataGuard{ data: reader.bytes(@intCast(message_length - 8))? };
 
-                let iter = bun.strings.split(bytes.slice(), ",");
+                let iter = bun.strings.split(bytes_guard.data.slice(), ",");
                 let r: ([]const u8)? = null;
                 let i: ([]const u8)? = null;
                 let s: ([]const u8)? = null;
@@ -126,25 +147,30 @@ pub union(enum) Authentication {
                 if (s == null) debug("Missing s", .{});
                 if (i == null) debug("Missing i", .{});
 
+                const r_val = r orelse return err.InvalidMessage;
+                const s_val = s orelse return err.InvalidMessage;
+                const i_val = i orelse return err.InvalidMessage;
+
                 unsafe {
-                    this.* = {
+                    _.* = {
                         SASLContinue: SASLContinueAuth{
-                            data: bytes,
-                            r: r orelse return err.InvalidMessage,
-                            s: s orelse return err.InvalidMessage,
-                            i: i orelse return err.InvalidMessage,
+                            data: bytes_guard.data,
+                            r: r_val,
+                            s: s_val,
+                            i: i_val,
                         },
                     };
                 }
+                bytes_guard.disarm();
             },
             12 => {
                 if (message_length < 9) return err.InvalidMessageLength;
                 const remaining: usize = @intCast(message_length - 8);
                 const bytes = reader.read(remaining)?;
-                unsafe { this.* = { SASLFinal: DataAuth{ data: bytes } }; }
+                unsafe { _.* = { SASLFinal: DataAuth{ data: bytes } }; }
             },
             else => {
-                unsafe { this.* = .Unknown; }
+                unsafe { _.* = .Unknown; }
             },
         }
     }

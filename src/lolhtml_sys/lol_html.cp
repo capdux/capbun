@@ -5,6 +5,13 @@ import lolhtml_jsc from "../runtime/api/lolhtml_jsc.zig";
 pub err HtmlError { Fail }
 pub type Error = HtmlError;
 
+struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
 pub @c struct MemorySettings {
     preallocated_parsing_buffer_size: usize,
     max_allowed_memory_usage: usize,
@@ -510,7 +517,7 @@ pub @c struct HTMLString {
                 return bun.String.createExternal([*]u8, bytes, true, @constCast(bytes.ptr), &HTMLString.deinit_external);
             }
         }
-        defer this.deinit();
+        const _guard = DeinitGuard<HTMLString>{ val: _ };
         return bun.String.cloneUTF8(bytes);
     }
 

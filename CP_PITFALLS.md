@@ -176,3 +176,6 @@
   - 错误联合函数内 `return .variant;` 已区分枚举成功值与错误集，不再误降级为 `error.variant`（`task-bun-20261122-return-dot-enum-err`）；
   - 泛型实参直接传入 `*Foo!` / `*const Foo!` / `[*:0]u8!` 等 CP 裸指针类型已正确剥离 `!` 并完整转译（`task-bun-20261122-generic-raw-ptr-arg`）；
   - comptime 工厂函数 `return struct { ... }` 现已支持完整 CP lowering 与顶层 `~init()` Guard 自动注入 `defer __cp_deinit()`（`task-bun-20261122-factory-struct-raii-lowering`）。
+  - `Factory(): type` 内局部类型别名 `const G = Guard(T); const g = G{ ... };` 已支持自动注入 `defer __cp_deinit()`（`task-bun-20261122-local-alias-raii-drop`）；
+  - 原生支持 `~errinit()`（对应 Zig `errdefer`：仅在 error 返回路径自动触发 `__cp_errdeinit()`，正常路径自动跳过无需手写 `disarm()`；亦支持 `move(guard)` 编译器级撤防）（`task-bun-20261122-raii-errinit-or-move-disarm`）；
+  - `pub enum` 中未写 `*_` 的只读实例方法现正确生成只读值接收者 `self: Enum`，`*const Enum` 可直接调用（`task-bun-20261122-enum-readonly-method-mut-self`）。

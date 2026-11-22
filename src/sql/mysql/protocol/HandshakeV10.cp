@@ -12,6 +12,14 @@ const NewReader = NewReaderMod.NewReader;
 const decoderWrap = NewReaderMod.decoderWrap;
 const empty_u8: [0]u8 = undefined;
 
+struct DataGuard {
+    data: Data,
+
+    ~init() {
+        _.data.deinit();
+    }
+}
+
 @root struct HandshakeV10 {
     protocol_version: u8 = 10,
     server_version: Data = .empty,
@@ -24,31 +32,30 @@ const empty_u8: [0]u8 = undefined;
     auth_plugin_name: Data = .empty,
 
     pub fn deinit(*_)  {
-        this.server_version.deinit();
-        this.auth_plugin_name.deinit();
+        _.server_version.deinit();
+        _.auth_plugin_name.deinit();
     }
 
     pub fn decodeInternal(*_, comptime Context: type, reader: NewReader(Context)): anyerror!void {
-        this.protocol_version = reader.int(u8)?;
-        if (this.protocol_version != 10) {
+        _.protocol_version = reader.int(u8)?;
+        if (_.protocol_version != 10) {
             return error.UnsupportedProtocolVersion;
         }
 
-        this.server_version = reader.readZ()?;
-        this.connection_id = reader.int(u32)?;
+        _.server_version = reader.readZ()?;
+        _.connection_id = reader.int(u32)?;
 
-        let auth_data = reader.read(8)?;
-        defer auth_data.deinit();
-        @memcpy(&this.auth_plugin_data_part_1, auth_data.slice());
+        let auth_data_guard = DataGuard{ data: reader.read(8)? };
+        @memcpy(unsafe { &_.auth_plugin_data_part_1 }, auth_data_guard.data.slice());
 
         * = reader.int(u8)?;
 
         const capabilities_lower = reader.int(u16)?;
-        this.character_set = @enumFromInt(reader.int(u8)?);
-        this.status_flags = StatusFlags.fromInt(reader.int(u16)?);
+        _.character_set = @enumFromInt(reader.int(u8)?);
+        _.status_flags = StatusFlags.fromInt(reader.int(u16)?);
 
         const capabilities_upper = reader.int(u16)?;
-        this.capability_flags = Capabilities.fromInt(@as(u32, capabilities_upper) << 16 | capabilities_lower);
+        _.capability_flags = Capabilities.fromInt(@as(u32, capabilities_upper) << 16 | capabilities_lower);
 
         let auth_plugin_data_len = reader.int(u8)?;
         if (auth_plugin_data_len < 21) {
@@ -58,12 +65,11 @@ const empty_u8: [0]u8 = undefined;
         reader.skip(10);
 
         const remaining_auth_len = @max(13, auth_plugin_data_len - 8);
-        let auth_data_2 = reader.read(remaining_auth_len)?;
-        defer auth_data_2.deinit();
-        this.auth_plugin_data_part_2 = bun.default_allocator.dupe(u8, auth_data_2.slice())?;
+        let auth_data_2_guard = DataGuard{ data: reader.read(remaining_auth_len)? };
+        _.auth_plugin_data_part_2 = bun.default_allocator.dupe(u8, auth_data_2_guard.data.slice())?;
 
-        if (this.capability_flags.CLIENT_PLUGIN_AUTH) {
-            this.auth_plugin_name = reader.readZ()?;
+        if (_.capability_flags.CLIENT_PLUGIN_AUTH) {
+            _.auth_plugin_name = reader.readZ()?;
         }
     }
 

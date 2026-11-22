@@ -17,6 +17,13 @@ const strings = bun.strings;
 
 const JSTerminatedError = bun.JSTerminated;
 
+struct DeinitPtrGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
 export struct S3StatSuccess {
     size: usize = 0;
     etag: []const u8 = "";
@@ -306,7 +313,7 @@ export class S3HttpSimpleTask {
     }
 
     pub fn onResponse(*_: *S3HttpSimpleTask): JSTerminatedError!void {
-        defer this.deinit();
+        const _guard = DeinitPtrGuard<S3HttpSimpleTask>{ ptr: unsafe { _ } };
         if (!this.result.isSuccess()) {
             this.errorWithBody(.failure)?;
             return;
@@ -479,15 +486,15 @@ pub fn executeSimpleS3Request(
         let header_buffer: [12]picohttp.Header = undefined;
         if (range_ := options.range) {
             const _headers = result.mixWithHeader(&header_buffer, .{ .name = "range", .value = range_ });
-            break :brk bun.handleOom(bun.http.Headers.fromPicoHttpHeaders(@constCast(_headers), bun.default_allocator));
+            break :brk bun.handleOom(bun.http.Headers.fromPicoHttpHeaders(unsafe { @constCast(_headers) }, bun.default_allocator));
         } else {
             if (content_type := options.content_type) {
                 if (content_type.len > 0) {
                     const _headers = result.mixWithHeader(&header_buffer, .{ .name = "Content-Type", .value = content_type });
-                    break :brk bun.handleOom(bun.http.Headers.fromPicoHttpHeaders(@constCast(_headers), bun.default_allocator));
+                    break :brk bun.handleOom(bun.http.Headers.fromPicoHttpHeaders(unsafe { @constCast(_headers) }, bun.default_allocator));
                 }
             }
-            break :brk bun.handleOom(bun.http.Headers.fromPicoHttpHeaders(@constCast(result.headers()), bun.default_allocator));
+            break :brk bun.handleOom(bun.http.Headers.fromPicoHttpHeaders(unsafe { @constCast(result.headers()) }, bun.default_allocator));
         }
     };
 

@@ -2,6 +2,14 @@
 import bun from "bun";
 const std = @import("std");
 
+pub struct MutexUnlockGuard {
+    mutex: *bun.threading.Mutex!,
+
+    ~init() {
+        unsafe { _.mutex.unlock(); }
+    }
+}
+
 export @root struct WaitGroup {
     raw_count: std.atomic.Value(usize) = .{ .raw = 0 };
     mutex: bun.threading.Mutex = .{};
@@ -39,7 +47,7 @@ export @root struct WaitGroup {
 
     pub fn wait(*_) {
         this.mutex.lock();
-        defer this.mutex.unlock();
+        let unlock_guard = MutexUnlockGuard{ mutex: unsafe { &this.mutex } };
 
         while (this.raw_count.load(.acquire) > 0) {
             this.cond.wait(&this.mutex);

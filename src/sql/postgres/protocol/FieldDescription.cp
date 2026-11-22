@@ -7,6 +7,14 @@ import types from "../PostgresTypes.zig";
 const int4 = types.int4;
 const short = types.short;
 
+pub struct ErrDeinitGuard<T> {
+    val: T,
+
+    ~errinit() {
+        _.val.deinit();
+    }
+}
+
 @root struct FieldDescription {
     name_or_index: ColumnIdentifier = {
         name: .empty,
@@ -25,10 +33,10 @@ const short = types.short;
     }
 
     pub fn decodeInternal(*_, comptime Container: type, reader: NewReader(Container)): AnyPostgresError!void {
-        let name = reader.readZ()?;
-        errdefer name.deinit();
+        const name_val = reader.readZ()?;
+        let name_guard = ErrDeinitGuard<@TypeOf(name_val)>{ val: name_val };
 
-        const field_name = ColumnIdentifier.init(name)?;
+        const field_name = ColumnIdentifier.init(name_guard.val)?;
         const table_oid = reader.int4()?;
         const column_index = reader.short()?;
         const type_oid = reader.int4()?;

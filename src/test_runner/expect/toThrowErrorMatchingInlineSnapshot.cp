@@ -28,7 +28,7 @@ pub fn toThrowErrorMatchingInlineSnapshot(client: *Expect, globalThis: *JSGlobal
     }
 
     let expected = expected_string.toSlice(default_allocator);
-    defer expected.deinit();
+    const _expected_guard = DeinitGuard<@TypeOf(expected)>{ ptr: unsafe { &expected } };
 
     const expected_slice: ([]const u8)? = if (has_expected) expected.slice() else null;
 
@@ -54,3 +54,9 @@ const JSValue = bun.jsc.JSValue;
 
 const Expect = bun.jsc.Expect.Expect;
 const getSignature = Expect.getSignature;
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}

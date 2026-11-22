@@ -7,6 +7,13 @@ const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 const VM = jsc.VM;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
 @c {
     fn JSC__AnyPromise__wrap(arg0: *JSGlobalObject, arg1: JSValue, arg2: *!, arg3: *const fn (*!, *JSGlobalObject) callconv(.c) JSValue);
 }
@@ -62,7 +69,7 @@ pub union(enum) AnyPromise {
     pub fn asJSPromise(): *JSPromise {
         return switch (_) {
             .normal => |p| p,
-            .internal => |p| @ptrCast(p),
+            .internal => |p| unsafe { @ptrCast(p) },
         };
     }
 
@@ -95,9 +102,9 @@ pub union(enum) AnyPromise {
 
         let scope: jsc.TopExceptionScope = undefined;
         scope.init(globalObject, @src());
-        defer scope.deinit();
+        const _scope_guard = DeinitGuard<jsc.TopExceptionScope>{ ptr: unsafe { &scope } };
         let ctx = Wrapper{ args: args };
-        JSC__AnyPromise__wrap(globalObject, _.asValue(), &ctx, @ptrCast(&Wrapper.call));
+        JSC__AnyPromise__wrap(globalObject, _.asValue(), unsafe { &ctx }, unsafe { @ptrCast(&Wrapper.call) });
         scope.assertNoExceptionExceptTermination()?;
     }
 }

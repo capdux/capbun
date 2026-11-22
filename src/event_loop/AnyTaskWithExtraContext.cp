@@ -8,6 +8,8 @@ const Task = jsc.Task;
 
 type CallbackFn = *const fn (*!, *!);
 
+pub struct DestroyDefaultGuard<T> { ptr: *T!, ~init() { bun.default_allocator.destroy(_.ptr); } }
+
 @root struct AnyTaskWithExtraContext {
     ctx: *!? = undefined,
     callback: CallbackFn = undefined,
@@ -21,7 +23,7 @@ type CallbackFn = *const fn (*!, *!);
             static fn function(raw: *!, extra: *!) {
                 unsafe {
                     const that: *@This() = @ptrCast(@alignCast(raw));
-                    defer bun.default_allocator.destroy(that);
+                    * = DestroyDefaultGuard<@This()>{ ptr: that };
                     const ctx = that.wrapped;
                     @field(Ptr, fieldName)(ctx, extra);
                 }

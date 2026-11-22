@@ -44,7 +44,7 @@ fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @Type
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
 fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == __CpErr) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return __CpErr{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return __CpErr{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return __CpErr{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return __CpErr.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return __CpErr.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return __CpErr{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
 fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 pub const lolhtml_jsc = @import("../runtime/api/lolhtml_jsc.zig");
@@ -72,6 +72,19 @@ pub const Encoding = enum {
     pub const label = ENCODING_LABEL;
 };
 
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        val: T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.val.deinit();
+        }
+    };
+}
+
 pub const MemorySettings = extern struct {
     preallocated_parsing_buffer_size: usize,
     max_allowed_memory_usage: usize,
@@ -98,14 +111,14 @@ pub fn init() *HTMLRewriterBuilder {
             }
     }
 
-pub fn addDocumentContentHandlers(self: *HTMLRewriterBuilder, comptime DocTypeHandler: type, comptime doctype_handler: ?DirectiveFunctionTypeForHandler(DocType,DocTypeHandler), doctype_handler_data: ?*DocTypeHandler, comptime CommentHandler: type, comptime comment_handler: ?DirectiveFunctionTypeForHandler(Comment,CommentHandler), comment_handler_data: ?*CommentHandler, comptime TextChunkHandler: type, comptime text_chunk_handler: ?DirectiveFunctionTypeForHandler(TextChunk,TextChunkHandler), text_chunk_handler_data: ?*TextChunkHandler, comptime DocEndHandler: type, comptime end_tag_handler: ?DirectiveFunctionTypeForHandler(DocEnd,DocEndHandler), end_tag_handler_data: ?*DocEndHandler) void {
+pub fn addDocumentContentHandlers(self: *HTMLRewriterBuilder, comptime DocTypeHandler: type, comptime doctype_handler: ?DirectiveFunctionTypeForHandler(DocType, DocTypeHandler), doctype_handler_data: ?*DocTypeHandler, comptime CommentHandler: type, comptime comment_handler: ?DirectiveFunctionTypeForHandler(Comment, CommentHandler), comment_handler_data: ?*CommentHandler, comptime TextChunkHandler: type, comptime text_chunk_handler: ?DirectiveFunctionTypeForHandler(TextChunk, TextChunkHandler), text_chunk_handler_data: ?*TextChunkHandler, comptime DocEndHandler: type, comptime end_tag_handler: ?DirectiveFunctionTypeForHandler(DocEnd, DocEndHandler), end_tag_handler_data: ?*DocEndHandler) void {
             _ = auto_disable();
             {
                 _ = lol_html_rewriter_builder_add_document_content_handlers(self, (if ((doctype_handler_data != null)) DirectiveHandler(DocType, DocTypeHandler, doctype_handler.?) else null), doctype_handler_data, (if ((comment_handler_data != null)) DirectiveHandler(Comment, CommentHandler, comment_handler.?) else null), comment_handler_data, (if ((text_chunk_handler_data != null)) DirectiveHandler(TextChunk, TextChunkHandler, text_chunk_handler.?) else null), text_chunk_handler_data, (if ((end_tag_handler_data != null)) DirectiveHandler(DocEnd, DocEndHandler, end_tag_handler.?) else null), end_tag_handler_data);
             }
     }
 
-pub fn addElementContentHandlers(self: *HTMLRewriterBuilder, selector: *HTMLSelector, comptime ElementHandler: type, comptime element_handler: ?DirectiveFunctionTypeForHandler(Element,ElementHandler), element_handler_data: ?*ElementHandler, comptime CommentHandler: type, comptime comment_handler: ?DirectiveFunctionTypeForHandler(Comment,CommentHandler), comment_handler_data: ?*CommentHandler, comptime TextChunkHandler: type, comptime text_chunk_handler: ?DirectiveFunctionTypeForHandler(TextChunk,TextChunkHandler), text_chunk_handler_data: ?*TextChunkHandler) HtmlError!void {
+pub fn addElementContentHandlers(self: *HTMLRewriterBuilder, selector: *HTMLSelector, comptime ElementHandler: type, comptime element_handler: ?DirectiveFunctionTypeForHandler(Element, ElementHandler), element_handler_data: ?*ElementHandler, comptime CommentHandler: type, comptime comment_handler: ?DirectiveFunctionTypeForHandler(Comment, CommentHandler), comment_handler_data: ?*CommentHandler, comptime TextChunkHandler: type, comptime text_chunk_handler: ?DirectiveFunctionTypeForHandler(TextChunk, TextChunkHandler), text_chunk_handler_data: ?*TextChunkHandler) HtmlError!void {
             _ = auto_disable();
             {
                 const rc = lol_html_rewriter_builder_add_element_content_handlers(self, selector, (if (((element_handler != null) and (element_handler_data != null))) DirectiveHandler(Element, ElementHandler, element_handler.?) else null), element_handler_data, (if (((comment_handler != null) and (comment_handler_data != null))) DirectiveHandler(Comment, CommentHandler, comment_handler.?) else null), comment_handler_data, (if (((text_chunk_handler != null) and (text_chunk_handler_data != null))) DirectiveHandler(TextChunk, TextChunkHandler, text_chunk_handler.?) else null), text_chunk_handler_data);
@@ -132,7 +145,7 @@ pub fn build(self: *HTMLRewriterBuilder, encoding: Encoding, memory_settings: Me
     }
 
 pub fn OutputSinkFunction(comptime OutputSinkType: type, comptime Writer: *const fn (*OutputSinkType, []const u8) void, comptime Done: *const fn (*OutputSinkType) void) OutputSinkFn {
-            return struct {
+            return (struct {
 
 pub fn writeChunk(ptr: [*]const u8, len: usize, user_data: *anyopaque) callconv(.c) void {
             _ = auto_disable();
@@ -146,7 +159,7 @@ pub fn writeChunk(ptr: [*]const u8, len: usize, user_data: *anyopaque) callconv(
                 }
             }
     }
-}.writeChunk;
+}).writeChunk;
     }
 };
 
@@ -206,7 +219,7 @@ pub const TextChunkContent = extern struct {
     ptr: [*]const u8,
     len: usize,
 
-pub fn slice(self: TextChunkContent) []const u8 {
+pub fn slice(self: *const TextChunkContent) []const u8 {
             _ = auto_disable();
             {
                 return self.ptr[0..self.len];
@@ -491,7 +504,7 @@ pub fn lastError() HTMLString {
             }
     }
 
-pub fn slice(self: HTMLString) []const u8 {
+pub fn slice(self: *const HTMLString) []const u8 {
             _ = auto_disable();
             _ = @setRuntimeSafety(false);
             {
@@ -513,9 +526,10 @@ pub fn toString(self: HTMLString) bun.String {
                     return bun.String.createExternal([*]u8, bytes, true, @constCast(bytes.ptr), (&HTMLString.deinit_external));
                 }
             }
-            defer {
-            _ = self.deinit();
-            }
+            var _guard = DeinitGuard(HTMLString){ .val = self };
+            _ = &_guard;
+            var ___guard_moved = false; _ = &___guard_moved;
+            defer if (!___guard_moved) { ___guard_moved = true; const __T = @TypeOf(_guard); if (@typeInfo(__T) == .optional) { if (_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard; _drop_val.__cp_deinit(); } };
             return bun.String.cloneUTF8(bytes);
     }
     pub const toJS = lolhtml_jsc.htmlStringToJS;
@@ -894,7 +908,7 @@ pub fn DocTypeHandlerCallback(comptime UserDataType: type) type {
 }
 
 pub fn DirectiveHandler(comptime Container: type, comptime UserDataType: type, comptime Callback: *const fn (*UserDataType, *Container) bool) DirectiveFunctionType(Container) {
-        return struct {
+        return (struct {
 
 pub fn callback(container: *Container, user_data: ?*anyopaque) callconv(.c) Directive {
             _ = auto_disable();
@@ -903,7 +917,7 @@ pub fn callback(container: *Container, user_data: ?*anyopaque) callconv(.c) Dire
                 return @as(Directive, @enumFromInt((if (comptime @typeInfo(c_uint) == .@"enum") @as(c_uint, @enumFromInt(@intFromBool(Callback(ud, container)))) else @as(c_uint, @intFromBool(Callback(ud, container))))));
             }
     }
-}.callback;
+}).callback;
 }
 
 extern "c" fn lol_html_doctype_name_get(doctype: *const DocType) callconv(.c) HTMLString;

@@ -8,6 +8,9 @@ const short = int_types.short;
 const jsc = bun.jsc;
 const JSValue = jsc.JSValue;
 
+struct DerefGuard<T> { ptr: *T!, ~init() { unsafe { _.ptr.deref(); } } }
+struct DeinitGuard<T> { ptr: *T!, ~init() { unsafe { _.ptr.deinit(); } } }
+
 pub const to = 1184;
 pub const from: [3]short = [ @as(short, 1082), @as(short, 1114), @as(short, 1184) ];
 
@@ -27,7 +30,7 @@ pub fn fromJS(globalObject: *jsc.JSGlobalObject, value: JSValue): bun.JSError!i6
         double_value = value.asNumber();
     } else if (value.isString()) {
         let str = value.toBunString(globalObject) catch @panic("unreachable");
-        defer str.deref();
+        const _str_guard = unsafe { DerefGuard<@TypeOf(str)>{ ptr: &str } };
         double_value = str.parseDate(globalObject)?;
     } else {
         return 0;
@@ -47,7 +50,7 @@ pub fn toJS(
             return JSValue.fromDateNumber(globalObject, @floatFromInt(ms));
         },
         *Data => {
-            defer value.deinit();
+            const _val_guard = unsafe { DeinitGuard<Data>{ ptr: value } };
             return JSValue.fromDateString(globalObject, value.sliceZ().ptr);
         },
         else => @compileError("unsupported type"),

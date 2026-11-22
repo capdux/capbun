@@ -61,7 +61,7 @@ pub struct EventIterator {
     pub fn next(*_): FileEvent? {
         if (!this.hasNext) return null;
         const info_size = @sizeOf(w.FILE_NOTIFY_INFORMATION);
-        const info: *w.FILE_NOTIFY_INFORMATION = @ptrCast(@alignCast(this.watcher.buf[this.offset..].ptr));
+        const info: *w.FILE_NOTIFY_INFORMATION = unsafe { @ptrCast(@alignCast(this.watcher.buf[this.offset..].ptr)) };
         const name_ptr: [*]u16! = unsafe { @ptrCast(@alignCast(this.watcher.buf[this.offset + info_size ..])) };
         const filename: []u16 = unsafe { name_ptr[0 .. info.FileNameLength / @sizeOf(u16)] };
 
@@ -87,6 +87,13 @@ pub enum Timeout: w.DWORD {
 }
 
 type OptionalEventIterator = EventIterator?;
+
+struct HandleErrGuard {
+    handle: w.HANDLE,
+    ~errinit() {
+        * = bun.windows.CloseHandle(_.handle);
+    }
+}
 
 @root struct WindowsWatcher {
     mutex: Mutex = {},
@@ -133,10 +140,10 @@ type OptionalEventIterator = EventIterator?;
             log("failed to open directory for watching: {s}", [@tagName(e)]);
             return Error.CreateFileFailed;
         }
-        errdefer * = bun.windows.CloseHandle(handle);
+        const _handle_err_guard = HandleErrGuard{ handle: handle };
 
         this.iocp = w.CreateIoCompletionPort(handle, null, 0, 1)?;
-        errdefer * = bun.windows.CloseHandle(this.iocp);
+        const _iocp_err_guard = HandleErrGuard{ handle: this.iocp };
 
         this.watcher = { dirHandle: handle };
 

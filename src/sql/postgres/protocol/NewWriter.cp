@@ -7,6 +7,14 @@ const Int32 = int_types.Int32;
 const PostgresInt32 = int_types.PostgresInt32;
 const PostgresInt64 = int_types.PostgresInt64;
 
+pub struct DeinitGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.deinit();
+    }
+}
+
 fn NewWriterLengthWriter(comptime WrappedWriter: type): type {
     return struct {
         index: usize,
@@ -128,9 +136,9 @@ pub fn NewWriterWrap(
                 return;
             }
 
-            let sliced = value.toUTF8(bun.default_allocator);
-            defer sliced.deinit();
-            const slice = sliced.slice();
+            const sliced = value.toUTF8(bun.default_allocator);
+            let sliced_guard = DeinitGuard<@TypeOf(sliced)>{ val: sliced };
+            const slice = sliced_guard.val.slice();
 
             this.write(slice)?;
             if (slice.len == 0 || slice[slice.len - 1] != 0) {

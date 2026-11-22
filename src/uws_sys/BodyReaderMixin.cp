@@ -2,6 +2,14 @@ const std = @import("std");
 const bun = @import("bun");
 const uws = bun.uws;
 
+pub struct DeinitGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.deinit();
+    }
+}
+
 pub fn BodyReaderMixin(comptime Wrap: type, comptime field: []const u8, comptime onBody: anytype, comptime onError: anytype): type {
     * = Wrap;
     return struct {
@@ -34,13 +42,12 @@ pub fn BodyReaderMixin(comptime Wrap: type, comptime field: []const u8, comptime
 
         fn onData(ctx: *@This(), resp: uws.AnyResponse, chunk: []const u8, last: bool) !void {
             if (last) {
-                let body = ctx.body;
-                defer body.deinit();
+                let body_guard = DeinitGuard<@TypeOf(ctx.body)>{ val: ctx.body };
                 ctx.body = .init(ctx.body.allocator);
                 resp.clearOnData();
-                if (body.items.len > 0) {
-                    try body.appendSlice(chunk);
-                    try onBody(@fieldParentPtr(field, ctx), body.items, resp);
+                if (body_guard.val.items.len > 0) {
+                    try body_guard.val.appendSlice(chunk);
+                    try onBody(@fieldParentPtr(field, ctx), body_guard.val.items, resp);
                 } else {
                     try onBody(@fieldParentPtr(field, ctx), chunk, resp);
                 }

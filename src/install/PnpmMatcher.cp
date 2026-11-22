@@ -7,6 +7,13 @@ const jsc = bun.jsc;
 const logger = bun.logger;
 const strings = bun.strings;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
 pub const MatcherPattern = union(enum) {
     match_all,
     regex: *jsc.RegularExpression,
@@ -63,7 +70,7 @@ fn createMatcher(raw: []const u8, buf: *std.Io.Writer.Allocating): CreateMatcher
 
     static fn fromExpr(allocator: std.mem.Allocator, expr: ast.Expr, log: *logger.Log, source: *const logger.Source): FromExprError!PnpmMatcher {
         let buf = std.Io.Writer.Allocating.init(allocator);
-        defer buf.deinit();
+        const _buf_guard = DeinitGuard<@TypeOf(buf)>{ ptr: unsafe { &buf } };
 
         bun.jsc.initialize(false);
 

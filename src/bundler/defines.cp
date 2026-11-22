@@ -17,6 +17,14 @@ pub const RawDefines = bun.StringArrayHashMap(string);
 pub const UserDefines = bun.StringHashMap(DefineData);
 pub const UserDefinesArray = bun.StringArrayHashMap(DefineData);
 
+pub struct DestroyGuard<T> {
+    allocator: std.mem.Allocator,
+    ptr: *T!,
+    ~errinit() {
+        _.allocator.destroy(_.ptr);
+    }
+}
+
 pub struct DefineData {
     value: js_ast.Expr.Data,
 
@@ -357,7 +365,8 @@ pub struct Define {
 
     static fn init(allocator: std.mem.Allocator, _user_defines: UserDefines?, string_defines: UserDefinesArray?, drop_debugger: bool, omit_unused_global_calls: bool): (*Define) ! bun.OOM {
         const define = allocator.create(Define)?;
-        errdefer allocator.destroy(define);
+        const define_guard = DestroyGuard<Define>{ allocator: allocator, ptr: define };
+        * = define_guard;
         define.* = {
             allocator: allocator,
             identifiers: bun.StringHashMap(IdentifierDefine).init(allocator),

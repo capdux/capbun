@@ -14,7 +14,7 @@ pub fn toMatch(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFra
     client.incrementExpectCallCounter();
 
     let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-    defer formatter.deinit();
+    const _formatter_guard = DeinitGuard<jsc.ConsoleObject.Formatter>{ ptr: unsafe { &formatter } };
 
     const expected_value = arguments[0];
     if (!expected_value.isString() && !expected_value.isRegExp()) {
@@ -65,3 +65,9 @@ const JSValue = bun.jsc.JSValue;
 
 const Expect = bun.jsc.Expect.Expect;
 const getSignature = Expect.getSignature;
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}

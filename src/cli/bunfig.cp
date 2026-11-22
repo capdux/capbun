@@ -6,6 +6,13 @@ const LoaderMap = bun.StringArrayHashMapUnmanaged(options.Loader);
 const OfflineMode = @import("../options_types/OfflineMode.zig").OfflineMode;
 const Prefer = @import("../options_types/OfflineMode.zig").Prefer;
 
+pub struct ErrDeinitGuard<T> {
+    ptr: *T!,
+    ~errinit() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
 // TODO: replace api.TransformOptions with Bunfig
 pub struct BunfigParser {
         json: js_ast.Expr,
@@ -124,7 +131,8 @@ pub struct BunfigParser {
             if (array_ := expr.asArray()) {
                 let array = array_;
                 let preloads = std.array_list.Managed(string).initCapacity(allocator, array.array.items.len)?;
-                errdefer preloads.deinit();
+                const preloads_guard = ErrDeinitGuard<@TypeOf(preloads)>{ ptr: unsafe { &preloads } };
+                * = preloads_guard;
                 while (item := array.next()) {
                     _.expectString(item)?;
                     if (item.data.e_string.len() > 0)

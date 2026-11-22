@@ -30,6 +30,13 @@ pub enum StatementStatus {
     failed,
 }
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
 @root struct MySQLStatement {
     const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, .{});
     pub const Status = StatementStatus;
@@ -53,47 +60,47 @@ pub enum StatementStatus {
     pub const ref = RefCount.ref;
     pub const deref = RefCount.deref;
 
-    pub fn reset(*_) {
-        this.result_count = 0;
-        this.columns_received = 0;
-        this.execution_flags = .{};
+    fn reset(*_) {
+        _.result_count = 0;
+        _.columns_received = 0;
+        _.execution_flags = .{};
     }
 
-    pub fn deinit(*_) {
+    fn deinit(*_) {
         debug("MySQLStatement deinit", .{});
 
-        for (i of 0..this.columns.len) {
-            this.columns[i].deinit();
+        for (i of 0.._.columns.len) {
+            _.columns[i].deinit();
         }
-        if (this.columns.len > 0) {
-            bun.default_allocator.free(this.columns);
+        if (_.columns.len > 0) {
+            bun.default_allocator.free(_.columns);
         }
-        if (this.params.len > 0) {
-            bun.default_allocator.free(this.params);
+        if (_.params.len > 0) {
+            bun.default_allocator.free(_.params);
         }
-        this.cached_structure.deinit();
-        this.error_response.deinit();
-        this.signature.deinit();
-        bun.destroy(this);
+        _.cached_structure.deinit();
+        _.error_response.deinit();
+        _.signature.deinit();
+        bun.destroy(_);
     }
 
-    pub fn checkForDuplicateFields(*_) {
-        if (!this.execution_flags.needs_duplicate_check) return;
-        this.execution_flags.needs_duplicate_check = false;
+    fn checkForDuplicateFields(*_) {
+        if (!_.execution_flags.needs_duplicate_check) return;
+        _.execution_flags.needs_duplicate_check = false;
 
         let seen_numbers = std.array_list.Managed(u32).init(bun.default_allocator);
-        defer seen_numbers.deinit();
+        let _seen_numbers_guard = DeinitGuard<std.array_list.Managed(u32)>{ ptr: unsafe { &seen_numbers } };
         let seen_fields = bun.StringHashMap(void).init(bun.default_allocator);
-        bun.handleOom(seen_fields.ensureUnusedCapacity(@intCast(this.columns.len)));
-        defer seen_fields.deinit();
+        let _seen_fields_guard = DeinitGuard<bun.StringHashMap(void)>{ ptr: unsafe { &seen_fields } };
+        bun.handleOom(seen_fields.ensureUnusedCapacity(@intCast(_.columns.len)));
 
-        let remaining = this.columns.len;
+        let remaining = _.columns.len;
         let flags: SQLDataCell.Flags = .{};
         while (remaining > 0) {
             remaining -= 1;
-            let field = &this.columns[remaining];
+            let field = unsafe { &_.columns[remaining] };
             switch (field.name_or_index) {
-                .name => |*name| {
+                .name name => {
                     const seen = seen_fields.getOrPut(name.slice()) catch unreachable;
                     if (seen.found_existing) {
                         field.name_or_index.deinit();
@@ -102,7 +109,7 @@ pub enum StatementStatus {
                     }
                     flags.has_named_columns = true;
                 },
-                .index => |index| {
+                .index index => {
                     if (std.mem.indexOfScalar(u32, seen_numbers.items, index) != null) {
                         field.name_or_index = .duplicate;
                         flags.has_duplicate_columns = true;
@@ -117,35 +124,35 @@ pub enum StatementStatus {
             }
         }
 
-        this.fields_flags = flags;
+        _.fields_flags = flags;
     }
 
-    pub fn structure(*_, owner: JSValue, globalObject: *jsc.JSGlobalObject): CachedStructure {
-        if (this.cached_structure.has()) {
-            return this.cached_structure;
+    fn structure(*_, owner: JSValue, globalObject: *jsc.JSGlobalObject): CachedStructure {
+        if (_.cached_structure.has()) {
+            return _.cached_structure;
         }
-        this.checkForDuplicateFields();
+        _.checkForDuplicateFields();
 
         let stack_ids: [70]jsc.JSObject.ExternColumnIdentifier = undefined;
-        let nonDuplicatedCount = this.columns.len;
-        for (idx of 0..this.columns.len) {
-            if (this.columns[idx].name_or_index == .duplicate) {
+        let nonDuplicatedCount = _.columns.len;
+        for (idx of 0.._.columns.len) {
+            if (_.columns[idx].name_or_index == .duplicate) {
                 nonDuplicatedCount -= 1;
             }
         }
         const ids = if (nonDuplicatedCount <= jsc.JSObject.maxInlineCapacity()) stack_ids[0..nonDuplicatedCount] else bun.handleOom(bun.default_allocator.alloc(jsc.JSObject.ExternColumnIdentifier, nonDuplicatedCount));
 
         let i: usize = 0;
-        for (idx of 0..this.columns.len) {
-            const column = &this.columns[idx];
+        for (idx of 0.._.columns.len) {
+            const column = unsafe { &_.columns[idx] };
             if (column.name_or_index == .duplicate) continue;
 
-            let id = &ids[i];
+            let id = unsafe { &ids[i] };
             switch (column.name_or_index) {
-                .name => |name| {
+                .name name => {
                     id.value = { name: String.createAtomIfPossible(name.slice()) };
                 },
-                .index => |index| {
+                .index index => {
                     id.value = { index: index };
                 },
                 .duplicate => unreachable,
@@ -161,16 +168,16 @@ pub enum StatementStatus {
         }
 
         if (nonDuplicatedCount > jsc.JSObject.maxInlineCapacity()) {
-            this.cached_structure.set(globalObject, null, ids);
+            _.cached_structure.set(globalObject, null, ids);
         } else {
-            this.cached_structure.set(globalObject, jsc.JSObject.createStructure(
+            _.cached_structure.set(globalObject, jsc.JSObject.createStructure(
                 globalObject,
                 owner,
                 @truncate(ids.len),
-                ids.ptr,
+                unsafe { ids.ptr },
             ), null);
         }
 
-        return this.cached_structure;
+        return _.cached_structure;
     }
 }

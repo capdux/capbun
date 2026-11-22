@@ -56,10 +56,10 @@ pub fn toBeCloseTo(client: *Expect, globalThis: *JSGlobalObject, callFrame: *Cal
     if (pass) return JSValue.js_undefined;
 
     let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-    defer formatter.deinit();
+    const _formatter_guard = DeinitGuard<jsc.ConsoleObject.Formatter>{ ptr: unsafe { &formatter } };
 
-    const expected_fmt = expected_.toFmt(&formatter);
-    const received_fmt = received_.toFmt(&formatter);
+    const expected_fmt = expected_.toFmt(unsafe { &formatter });
+    const received_fmt = received_.toFmt(unsafe { &formatter });
 
     const expected_line = "Expected: <green>{f}<r>\n";
     const received_line = "Received: <red>{f}<r>\n";
@@ -87,3 +87,4 @@ const JSValue = bun.jsc.JSValue;
 
 const Expect = bun.jsc.Expect.Expect;
 const getSignature = Expect.getSignature;
+pub struct DeinitGuard<T> { ptr: *T!, ~init() { unsafe { _.ptr.deinit(); } } }

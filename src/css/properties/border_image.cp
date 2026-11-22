@@ -14,6 +14,14 @@ const Percentage = css.css_values.percentage.Percentage;
 const Property = css.Property;
 const VendorPrefix = css.VendorPrefix;
 
+pub struct DeinitAllocGuard<T> {
+    ptr: *T!,
+    allocator: Allocator,
+    ~init() {
+        unsafe { _.ptr.deinit(_.allocator); }
+    }
+}
+
 /// A value for the [border-image](https://www.w3.org/TR/css-backgrounds-3/#border-image) shorthand property.
 const WidthAndOutset = struct {
     width: Rect(BorderImageSideWidth)?,
@@ -172,7 +180,8 @@ pub struct BorderImage {
 
     fn getFallbacks(*_, allocator: Allocator, targets: css.targets.Targets): css.SmallList(BorderImage, 6) {
         let fallbacks = this.source.getFallbacks(allocator, targets);
-        defer fallbacks.deinit(allocator);
+        const fallbacks_guard = DeinitAllocGuard<@TypeOf(fallbacks)>{ ptr: unsafe { &fallbacks }, allocator: allocator };
+        * = fallbacks_guard;
         let res = css.SmallList(BorderImage, 6).initCapacity(allocator, fallbacks.len());
         res.setLen(fallbacks.len());
         const fallbacks_slice = fallbacks.slice();

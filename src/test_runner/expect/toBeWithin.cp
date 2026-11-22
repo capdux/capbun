@@ -38,11 +38,10 @@ pub fn toBeWithin(client: *Expect, globalThis: *JSGlobalObject, callFrame: *Call
 
     if (pass) return JSValue.js_undefined;
 
-    let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-    defer formatter.deinit();
-    const start_fmt = startValue.toFmt(&formatter);
-    const end_fmt = endValue.toFmt(&formatter);
-    const received_fmt = value.toFmt(&formatter);
+    let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true } };
+    const start_fmt = startValue.toFmt(&formatter.val);
+    const end_fmt = endValue.toFmt(&formatter.val);
+    const received_fmt = value.toFmt(&formatter.val);
 
     if (not) {
         const expected_line = "Expected: not between <green>{f}<r> <d>(inclusive)<r> and <green>{f}<r> <d>(exclusive)<r>\n";
@@ -66,3 +65,8 @@ const JSValue = bun.jsc.JSValue;
 
 const Expect = bun.jsc.Expect.Expect;
 const getSignature = Expect.getSignature;
+
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() { _.val.deinit(); }
+}

@@ -6,9 +6,16 @@ const logger = bun.logger;
 const UpdateRequest = bun.install.PackageManager.UpdateRequest;
 type ByteSlice = []const u8;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
 pub fn fromJS(globalThis: *jsc.JSGlobalObject, input: jsc.JSValue): jsc.JSValue ! bun.JSError {
     let arena_alloc = std.heap.ArenaAllocator.init(bun.default_allocator);
-    defer arena_alloc.deinit();
+    const _arena_guard = DeinitGuard<@TypeOf(arena_alloc)>{ ptr: unsafe { &arena_alloc } };
     let stack = std.heap.stackFallback(1024, arena_alloc.allocator());
     const allocator = stack.get();
     let all_positionals = std.array_list.Managed(ByteSlice).init(allocator);

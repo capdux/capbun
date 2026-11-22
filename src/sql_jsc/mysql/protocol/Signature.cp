@@ -10,6 +10,14 @@ const FieldType = types.FieldType;
 const jsc = bun.jsc;
 const JSValue = jsc.JSValue;
 const ParamList = std.array_list.Managed(Param);
+
+pub struct ErrDeinitGuard<T> {
+    val: T,
+
+    ~errinit() {
+        _.val.deinit();
+    }
+}
 const ByteList = std.array_list.Managed(u8);
 
 @root struct Signature {
@@ -45,33 +53,28 @@ const ByteList = std.array_list.Managed(u8);
     }
 
     pub static fn generate(globalObject: *jsc.JSGlobalObject, query: []const u8, array_value: JSValue, columns: JSValue): anyerror!Signature {
-        let fields = ParamList.init(bun.default_allocator);
-        let name = ByteList.initCapacity(bun.default_allocator, query.len)?;
+        let fields_guard = ErrDeinitGuard<ParamList>{ val: ParamList.init(bun.default_allocator) };
+        let name_guard = ErrDeinitGuard<ByteList>{ val: ByteList.initCapacity(bun.default_allocator, query.len)? };
 
-        name.appendSliceAssumeCapacity(query);
-
-        errdefer {
-            fields.deinit();
-            name.deinit();
-        }
+        name_guard.val.appendSliceAssumeCapacity(query);
 
         let iter = QueryBindingIterator.init(array_value, columns, globalObject)?;
 
         while (value := iter.next()?) {
             if (value.isEmptyOrUndefinedOrNull()) {
-                fields.append(Param{ type: .MYSQL_TYPE_NULL, flags: {} })?;
-                name.appendSlice(".null")?;
+                fields_guard.val.append(Param{ type: .MYSQL_TYPE_NULL, flags: {} })?;
+                name_guard.val.appendSlice(".null")?;
                 continue;
             }
             let unsigned = false;
             const tag = FieldType.fromJS(globalObject, value, &unsigned)?;
             if (unsigned) {
                 let tag_name_buf: [128]u8 = [0; 128];
-                name.appendSlice(std.fmt.bufPrint(tag_name_buf[0..], "U{s}", .{@tagName(tag)}) catch @tagName(tag))?;
+                name_guard.val.appendSlice(std.fmt.bufPrint(tag_name_buf[0..], "U{s}", .{@tagName(tag)}) catch @tagName(tag))?;
             } else {
-                name.appendSlice(@tagName(tag))?;
+                name_guard.val.appendSlice(@tagName(tag))?;
             }
-            fields.append(Param{ type: tag, flags: { UNSIGNED: unsigned } })?;
+            fields_guard.val.append(Param{ type: tag, flags: { UNSIGNED: unsigned } })?;
         }
 
         if (iter.anyFailed()) {
@@ -79,8 +82,8 @@ const ByteList = std.array_list.Managed(u8);
         }
 
         return Signature{
-            name: name.items,
-            fields: fields.items,
+            name: name_guard.val.items,
+            fields: fields_guard.val.items,
             query: bun.default_allocator.dupe(u8, query)?,
         };
     }

@@ -7,6 +7,14 @@ type TCCErrorFunc = (@c fn (*!?, cstr): void)?;
 type OptCString = cstring?;
 type CStr = cstr;
 
+pub struct StateErrGuard {
+    state: *State!,
+
+    ~errinit() {
+        unsafe { _.state.deinit(); }
+    }
+}
+
 fn ErrorFunc(comptime Ctx: type): type {
     return @c fn (ctx: *Ctx!?, msg: cstr): void;
 }
@@ -99,7 +107,7 @@ export @opaque struct State {
     /// Create and initialize a new TCC compilation context
     pub static fn init(comptime ErrCtx: type, config: Config(ErrCtx), comptime validate_options: bool): *State ! TccError {
         const state = State.new()?;
-        errdefer state.deinit();
+        let state_guard = StateErrGuard{ state: state };
 
         // setOutputType has side effects that are conditional on existing
         // options, so this must be called after setOptions

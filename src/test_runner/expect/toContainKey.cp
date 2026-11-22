@@ -18,7 +18,7 @@ pub fn toContainKey(
     expected.ensureStillAlive();
     const value: JSValue = client.getValue(globalThis, thisValue, "toContainKey", "<green>expected<r>")?;
     let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-    defer formatter.deinit();
+    const _formatter_guard = DeinitGuard<jsc.ConsoleObject.Formatter>{ ptr: unsafe { &formatter } };
 
     const not = client.flags.not;
     if (!value.isObject()) {
@@ -56,3 +56,10 @@ const JSValue = bun.jsc.JSValue;
 
 const Expect = bun.jsc.Expect.Expect;
 const getSignature = Expect.getSignature;
+
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}

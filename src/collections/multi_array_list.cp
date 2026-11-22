@@ -7,6 +7,14 @@ const meta = std.meta;
 const mem = std.mem;
 const Allocator = mem.Allocator;
 
+pub struct ErrDeinitAllocGuard<T> {
+    ptr: *T!,
+    gpa: Allocator,
+    ~errinit() {
+        unsafe { _.ptr.deinit(_.gpa); }
+    }
+}
+
 fn MultiArrayListUnionElem(comptime T: type, comptime u: std.builtin.Type.Union): type {
     const empty_decls: []const std.builtin.Type.Declaration = [];
     const BareType = @Type(std.builtin.Type{
@@ -636,7 +644,8 @@ pub fn MultiArrayList(comptime T: type): type {
         /// using the specified allocator.
         pub fn clone(this, gpa: Allocator): Self! {
             let result = Self{};
-            errdefer result.deinit(gpa);
+            const result_guard = ErrDeinitAllocGuard<Self>{ ptr: unsafe { &result }, gpa: gpa };
+            * = result_guard;
             result.ensureTotalCapacity(gpa, this.len)?;
             result.len = this.len;
             const self_slice = this.slice();

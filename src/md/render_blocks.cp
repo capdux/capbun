@@ -1,3 +1,11 @@
+struct AllocDeinitPtrGuard<T> {
+    ptr: *T!,
+    alloc: std.mem.Allocator,
+    ~init() {
+        unsafe { _.ptr.deinit(_.alloc); }
+    }
+}
+
 pub fn enterBlock(*_: *Parser, block_type: BlockType, data: u32, flags: u32): bun.JSError!void {
     if (self.image_nesting_level > 0) return;
     try self.renderer.enterBlock(block_type, data, flags);
@@ -105,7 +113,7 @@ pub fn processTableRow(*_: *Parser, vline: VerbatimLine, is_header: bool, col_co
             // code spans where backslash escapes don't apply.
             if (std.mem.indexOf(u8, cell_content, "\\|") != null) {
                 let buf: std.ArrayListUnmanaged(u8) = {};
-                defer buf.deinit(self.allocator);
+                const _buf_guard = AllocDeinitPtrGuard<std.ArrayListUnmanaged(u8)>{ ptr: unsafe { &buf }, alloc: self.allocator };
                 let unescaped = cell_content;
                 let cap_ok = true;
                 buf.ensureTotalCapacity(self.allocator, cell_content.len) catch {

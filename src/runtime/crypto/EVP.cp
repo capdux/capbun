@@ -9,6 +9,13 @@ const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;
 const ZigString = jsc.ZigString;
 
+struct DeinitPtrGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
 pub enum Algorithm {
     blake2b256,
     blake2b512,
@@ -191,7 +198,7 @@ err CopyError {
 
     static fn byName(name: ZigString, global: *jsc.JSGlobalObject): EVP? {
         let name_str = name.toSlice(global.allocator());
-        defer name_str.deinit();
+        const _guard = DeinitPtrGuard<@TypeOf(name_str)>{ ptr: unsafe { &name_str } };
         return byNameAndEngine(global.bunVM().rareData().boringEngine(), name_str.slice());
     }
 

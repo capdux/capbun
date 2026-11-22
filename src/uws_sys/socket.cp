@@ -9,6 +9,17 @@ import { us_socket_t } from "./us_socket_t.cp";
 
 pub type AnyPtr = *!;
 
+pub struct HostZFreeGuard {
+    slice: [:0]const u8,
+    should_free: bool,
+
+    ~init() {
+        if (_.should_free) {
+            bun.default_allocator.free(_.slice);
+        }
+    }
+}
+
 export enum InternalSocket {
     connected(*us_socket_t),
     connecting(*ConnectingSocket),
@@ -271,7 +282,7 @@ export class SocketHandler<const is_ssl: bool> {
         if (is_ssl) {
             let handle = _.getNativeHandle();
             if (handle != null) {
-                return @ptrCast(handle.?);
+                return unsafe { @ptrCast(handle.?) };
             }
         }
         return null;
@@ -487,9 +498,9 @@ export class SocketHandler<const is_ssl: bool> {
             stack[host.len] = 0;
             break :blk stack[0..host.len :0];
         } else bun.handleOom(bun.default_allocator.dupeZ(u8, host));
-        defer if (hostZ.ptr != &stack) bun.default_allocator.free(hostZ);
+        let host_guard = HostZFreeGuard{ slice: hostZ, should_free: host.len >= stack.len };
 
-        return switch (g.connect(kind, ssl_ctx, hostZ, @intCast(port), opts, @sizeOf(OwnerPtr))) {
+        return switch (g.connect(kind, ssl_ctx, host_guard.slice, @intCast(port), opts, @sizeOf(OwnerPtr))) {
             .failed => error.FailedToOpenSocket,
             .socket => |s| blk: {
                 s.ext(OwnerPtr).* = owner;

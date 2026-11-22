@@ -55,12 +55,11 @@ pub fn toContainAllValues(
     if (pass) return thisValue;
 
     // handle failure
-    let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalObject, quote_strings: true };
-    defer formatter.deinit();
-    const value_fmt = value.toFmt(&formatter);
-    const expected_fmt = expected.toFmt(&formatter);
+    let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalObject, quote_strings: true } };
+    const value_fmt = value.toFmt(&formatter.val);
+    const expected_fmt = expected.toFmt(&formatter.val);
     if (not) {
-        const received_fmt = value.toFmt(&formatter);
+        const received_fmt = value.toFmt(&formatter.val);
         const expected_line = "Expected to not contain all values: <green>{f}<r>\nReceived: <red>{f}<r>\n";
         const fmt = "\n\n" ++ expected_line;
         return client.throw(globalObject, comptime getSignature("toContainAllValues", "<green>expected<r>", true), fmt, .{ expected_fmt, received_fmt });
@@ -81,3 +80,8 @@ const JSValue = bun.jsc.JSValue;
 
 const Expect = bun.jsc.Expect.Expect;
 const getSignature = Expect.getSignature;
+
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() { _.val.deinit(); }
+}

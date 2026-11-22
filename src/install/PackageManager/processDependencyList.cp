@@ -1,3 +1,11 @@
+pub struct FreeAllocGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: T,
+    ~init() {
+        _.allocator.free(_.slice);
+    }
+}
+
 pub struct GitResolver {
     resolved: string,
     resolution: *const Resolution,
@@ -113,7 +121,7 @@ pub fn processExtractedTarballPackage(
                 };
 
                 const new_name = Repository.createDependencyNameFromVersionLiteral(manager.allocator, &repo, manager.lockfile, dep_id);
-                defer manager.allocator.free(new_name);
+                const _new_name_guard = FreeAllocGuard<@TypeOf(new_name)>{ allocator: manager.allocator, slice: new_name };
 
                 {
                     let builder = manager.lockfile.stringBuilder();

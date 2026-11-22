@@ -7,13 +7,20 @@ const jsc = bun.jsc;
 const node = bun.api.node;
 const Slice = jsc.ZigString.Slice;
 
+struct ErrDeinitPtrGuard<T> {
+    ptr: *T!,
+    ~errinit() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
 pub union(enum) Args {
     slices: []const Slice,
     args: []const node.BlobOrStringOrBuffer,
     raw: []const []const u8,
 
     pub fn len(): usize {
-        return switch (_.*) {
+        return switch (_) {
             .slices => |args| args.len,
             .args => |args| args.len,
             .raw => |args| args.len,
@@ -175,7 +182,7 @@ pub struct PromisePair {
 
     pub fn serialize(allocator: std.mem.Allocator): ![]u8 {
         let buf = (std.array_list.Managed(u8).initCapacity(allocator, _.byteLength()))?;
-        errdefer buf.deinit();
+        const _buf_guard = ErrDeinitPtrGuard<@TypeOf(buf)>{ ptr: unsafe { &buf } };
         (_.write(buf.writer()))?;
         return buf.items;
     }

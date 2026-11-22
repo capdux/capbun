@@ -7,6 +7,14 @@ const JSValue = jsc.JSValue;
 const empty_cells: [0]SQLDataCell = undefined;
 const empty_u8: [0]u8 = undefined;
 
+pub struct ExceptionScopeGuard {
+    scope: jsc.ExceptionValidationScope = undefined,
+
+    ~init() {
+        _.scope.deinit();
+    }
+}
+
 export enum SQLDataCellTag: u8 {
     @"null" = 0,
     string = 1,
@@ -144,8 +152,10 @@ export @extern struct SQLDataCell {
             },
             .bytea => {
                 if (this.value.bytea[1] == 0) return;
-                const ptr: [*]u8 = @ptrFromInt(this.value.bytea[0]);
-                const slice = unsafe { ptr[0..this.value.bytea[1]] };
+                const slice = unsafe {
+                    const ptr: [*]u8 = @ptrFromInt(this.value.bytea[0]);
+                    ptr[0..this.value.bytea[1]]
+                };
                 bun.default_allocator.free(slice);
             },
             .array => {
@@ -190,11 +200,10 @@ export @extern struct SQLDataCell {
         namesCount: u32,
     ): anyerror!jsc.JSValue {
         if (comptime bun.Environment.ci_assert) {
-            let scope: jsc.ExceptionValidationScope = undefined;
-            scope.init(globalObject, @src());
-            defer scope.deinit();
+            let scope_guard = ExceptionScopeGuard{};
+            scope_guard.scope.init(globalObject, @src());
             const value = unsafe { constructObjectFromDataCellExtern(globalObject, encodedArrayValue, encodedStructureValue, cells, count, flags, result_mode, namesPtr, namesCount) };
-            scope.assertExceptionPresenceMatches(value == .zero);
+            scope_guard.scope.assertExceptionPresenceMatches(value == .zero);
             return if (value == .zero) error.JSError else value;
         } else {
             const value = unsafe { constructObjectFromDataCellExtern(globalObject, encodedArrayValue, encodedStructureValue, cells, count, flags, result_mode, namesPtr, namesCount) };

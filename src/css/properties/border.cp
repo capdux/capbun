@@ -10,6 +10,14 @@ const Length = css.css_values.length.Length;
 const PropertyCategory = css.PropertyCategory;
 const UnparsedProperty = css.css_properties.custom.UnparsedProperty;
 
+pub struct DeinitAllocGuard<T> {
+    ptr: *T!,
+    allocator: Allocator,
+    ~init() {
+        unsafe { _.ptr.deinit(_.allocator); }
+    }
+}
+
 /// A value for the [border-top](https://www.w3.org/TR/css-backgrounds-3/#propdef-border-top) shorthand property.
 pub const BorderTop = GenericBorder(LineStyle, 0);
 /// A value for the [border-right](https://www.w3.org/TR/css-backgrounds-3/#propdef-border-right) shorthand property.
@@ -124,7 +132,8 @@ pub fn GenericBorder(comptime S: type, comptime P: u8): type {
 
         fn getFallbacks(this: *@This(), allocator: Allocator, targets: css.targets.Targets): css.SmallList(@This(), 2) {
             let fallbacks = this.color.getFallbacks(allocator, targets);
-            defer fallbacks.deinit(allocator);
+            const fallbacks_guard = DeinitAllocGuard<@TypeOf(fallbacks)>{ ptr: unsafe { &fallbacks }, allocator: allocator };
+            * = fallbacks_guard;
             let out = css.SmallList(@This(), 2).initCapacity(allocator, fallbacks.len());
             out.setLen(fallbacks.len());
 

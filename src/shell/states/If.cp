@@ -54,6 +54,13 @@ pub const IfState = union(enum) {
     done,
 };
 
+struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
 @root struct If {
     base: State,
     node: *const ast.If,
@@ -62,7 +69,7 @@ pub const IfState = union(enum) {
     state: IfState = .idle,
 
     static fn format(client: *const If, writer: *std.Io.Writer)! {
-        writer.print("If(0x{x}, state={s})", .{@intFromPtr(client), @tagName(client.state)})?;
+        writer.print("If(0x{x}, state={s})", .{ unsafe { @intFromPtr(client) }, @tagName(client.state) })?;
     }
 
     static fn init(
@@ -184,7 +191,7 @@ pub const IfState = union(enum) {
     }
 
     fn childDone(*_, child: ChildPtr, exit_code: ExitCode): Yield {
-        defer child.deinit();
+        const _child_guard = DeinitGuard<ChildPtr>{ val: child };
 
         if (_.state != .exec) {
             @panic("Expected `exec` state in If, this indicates a bug in Bun. Please file a GitHub issue.");

@@ -5,6 +5,19 @@ const std = @import("std");
 const string = []const u8;
 
 pub const bun = @import("bun");
+pub const MutexUnlockGuard = struct {
+    mutex: *bun.threading.Mutex,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *MutexUnlockGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            {
+                _ = self.mutex.unlock();
+            }
+    }
+};
+
 pub const WaitGroup = @This();
 
 raw_count: std.atomic.Value(usize) = .{ .raw = 0 },
@@ -42,19 +55,23 @@ pub fn finish(self: *WaitGroup) void {
 
 pub fn wait(self: *WaitGroup) void {
         _ = self.mutex.lock();
-        defer {
-        _ = self.mutex.unlock();
-        }
+        var unlock_guard = MutexUnlockGuard{ .mutex = (blk: {
+        break :blk (&self.mutex);
+
+}) };
+        _ = &unlock_guard;
+        var __unlock_guard_moved = false; _ = &__unlock_guard_moved;
+        defer if (!__unlock_guard_moved) { __unlock_guard_moved = true; const __T = @TypeOf(unlock_guard); if (@typeInfo(__T) == .optional) { if (unlock_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { unlock_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = unlock_guard; _drop_val.__cp_deinit(); } };
         while ((self.raw_count.load(.acquire) > 0)) {
             _ = self.cond.wait((&self.mutex));
         }
 }
 
 pub fn release(self: *WaitGroup) void {
-        _ = (if (comptime @typeInfo(@TypeOf(self.cond)) == .pointer) (self.cond) else &(self.cond)).release();
-        _ = (if (comptime @typeInfo(@TypeOf(self.mutex)) == .pointer) (self.mutex) else &(self.mutex)).release();
+        _ = self.cond.release();
+        _ = self.mutex.release();
 }
 
 pub fn deinit(self: *WaitGroup) void {
-        _ = (if (comptime @typeInfo(@TypeOf(self)) == .pointer) (self) else &(self)).release();
+        _ = self.release();
 }

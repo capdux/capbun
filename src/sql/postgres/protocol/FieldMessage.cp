@@ -6,6 +6,14 @@ import { NewReader } from "./NewReader.zig";
 const String = bun.String;
 type InitRet = FieldMessage;
 
+pub struct DeinitGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.deinit();
+    }
+}
+
 pub union(FieldType) FieldMessage {
     severity: String,
     localized_severity: String,
@@ -49,11 +57,11 @@ pub union(FieldType) FieldMessage {
             if (field_int == 0) break;
             const field: FieldType = @enumFromInt(field_int);
 
-            let message = reader.readZ()?;
-            defer message.deinit();
-            if (message.slice().len == 0) break;
+            const msg_val = reader.readZ()?;
+            let msg_guard = DeinitGuard<@TypeOf(msg_val)>{ val: msg_val };
+            if (msg_guard.val.slice().len == 0) break;
 
-            messages.append(bun.default_allocator, FieldMessage.init(field, message.slice()) catch continue)?;
+            messages.append(bun.default_allocator, FieldMessage.init(field, msg_guard.val.slice()) catch continue)?;
         }
 
         return messages;

@@ -8,6 +8,13 @@ import * as H2FrameParser from "../H2FrameParser.cp";
 const bun = @import("bun");
 import { HPACK } from "../lshpack.cp";
 
+pub struct FreeDefaultOptGuard<T> {
+    slice: T? = null,
+    ~init() {
+        if (buf := _.slice) bun.default_allocator.free(buf);
+    }
+}
+
 enum RequestHeader {
     drop,
     host,
@@ -80,15 +87,14 @@ pub fn writeRequest(session: *ClientSession, client: *bun.http.HTTPClient, strea
 
     let lower_buf: [u8; 256] = [0; 256];
     for (h of request.headers) {
-        let heap: (u8[])? = null;
-        defer if (buf := heap) bun.default_allocator.free(buf);
+        let _heap_guard = FreeDefaultOptGuard<[]u8>{};
         let name: string = "";
         if (h.name.len <= lower_buf.len) {
             name = bun.strings.copyLowercaseIfNeeded(h.name, &lower_buf);
         } else {
             const hbuf = bun.handleOom(bun.default_allocator.alloc(u8, h.name.len));
             name = bun.strings.copyLowercaseIfNeeded(h.name, hbuf);
-            heap = hbuf;
+            _heap_guard.slice = hbuf;
         }
         let never_index = false;
         if (kind := classifyHeader(name)) {

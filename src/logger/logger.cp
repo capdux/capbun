@@ -15,6 +15,14 @@ const strings = bun.strings;
 const Index = bun.ast.Index;
 const api = bun.schema.api;
 
+struct FreeGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: []const T,
+    ~init() {
+        _.alloc.free(_.slice);
+    }
+}
+
 pub enum Kind: u8 {
     err = 0,
     warn = 1,
@@ -944,7 +952,7 @@ pub struct Log {
             const sys_errno = @field(pair, "1");
             const prefix = bun.sys.coreutils_error_map.get(sys_errno) ?? tag_name;
             const msg_body = allocPrint(alloc, fmt, args)?;
-            defer alloc.free(msg_body);
+            const _msg_guard = FreeGuard<u8>{ alloc: alloc, slice: msg_body };
             this.addErrorFmt(
                 null,
                 Loc.Empty,

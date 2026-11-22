@@ -12,6 +12,14 @@ const Range = bun.Semver.Range;
 const SlicedString = bun.Semver.SlicedString;
 const Version = bun.Semver.Version;
 
+struct FreeGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: []const T,
+    ~init() {
+        _.alloc.free(_.slice);
+    }
+}
+
 /// Linked-list of AND ranges
 /// "^1 ^2"
 /// ----|-----
@@ -187,7 +195,7 @@ struct Query {
 
         pub fn jsonStringify(this: *const Group, writer: anytype) !void {
             const temp = try std.fmt.allocPrint(bun.default_allocator, "{f}", .{this.fmt()});
-            defer bun.default_allocator.free(temp);
+            const _temp_guard = FreeGuard<u8>{ alloc: bun.default_allocator, slice: temp };
             try std.json.encodeJsonString(temp, .{}, writer);
         }
 

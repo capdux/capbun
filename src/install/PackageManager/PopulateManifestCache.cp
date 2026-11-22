@@ -9,6 +9,13 @@ const Resolution = bun.install.Resolution;
 const Task = bun.install.Task;
 const invalid_package_id = bun.install.invalid_package_id;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
 struct RunClosure {
     manager: *PackageManager,
     @"err": anyerror? = null,
@@ -76,7 +83,7 @@ pub fn populateManifestCache(manager: *PackageManager, packages: Packages)! {
     switch (packages) {
         .all => {
             let seen_pkg_ids: std.AutoHashMap(PackageID, void) = .init(manager.allocator);
-            defer seen_pkg_ids.deinit();
+            const _seen_guard = DeinitGuard<@TypeOf(seen_pkg_ids)>{ ptr: unsafe { &seen_pkg_ids } };
 
             let _dep_id: usize = 0;
             while (_dep_id < dependencies.len) : (_dep_id += 1) {

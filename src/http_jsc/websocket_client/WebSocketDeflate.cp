@@ -13,6 +13,13 @@ const COMPRESSION_BUFFER_SIZE = 4096;
 const MAX_DECOMPRESSED_SIZE: usize = 128 * 1024 * 1024;
 const DEFLATE_TRAILER: [4]u8 = [0x00, 0x00, 0xff, 0xff];
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
 export @c struct Params {
     server_max_window_bits: u8 = 15,
     client_max_window_bits: u8 = 15,
@@ -158,7 +165,7 @@ pub err CompressError { DeflateFailed, OutOfMemory }
         }
 
         let in_with_trailer = std.array_list.Managed(u8).init(this.allocator);
-        defer in_with_trailer.deinit();
+        const _in_guard = DeinitGuard<@TypeOf(in_with_trailer)>{ ptr: unsafe { &in_with_trailer } };
         in_with_trailer.appendSlice(in_buf)?;
         in_with_trailer.appendSlice(DEFLATE_TRAILER[0..])?;
 

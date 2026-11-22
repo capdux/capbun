@@ -363,3 +363,14 @@
 - 完成 29 个 2-defer 模块核验与改造（含变更提交 27 模块：`font`, `transform`, `supports`, `builder`, `calc`, `JSPropertyIterator`, `JSSecrets`, `TopExceptionScope`, `ZigException`, `GeneratedBindings`, `resolve_path_jsc`, `uuid`, `Router`, `HashObject`, `JSBundler`, `SecureContext`, `spawn`, `node_fs_stat_watcher`, `UpgradedDuplex`, `WindowsNamedPipeContext`, `uws_jsc`, `WTFTimer`, `BakeResponse`, `download_stream`, `CriticalSection`, `Yield`, `Chunk`；及免改核验 2 模块：`update_interactive_command`, `win_watcher`）。
 - 顺带修复 `calc.cp` 45 处既有 `ast-check` 与语义错误（`RoundingStrategy`/`Constant` 只读接收者、`void` 实参传参 `@as(void, undefined)`、`css.ParserError.invalid_value` 规范化），并向 `cp_agy` 投递 `task-bun-20261122-enum-readonly-method-mut-self`。
 - 验证：`cpc_brief.py` 四门禁全绿（膨胀率 `0.727 ~ 1.14 <= 1.2x`，注 `Router_.zig` 为历史无备份文件）；`bun run zig:check` 5/5 PASS；`bun bd test test/regression/issue/29181.test.ts test/js/bun/util/bun-file.test.ts` 8/8 PASS（460 expect() calls）。
+
+### [2026-11-22 上游 `cp_agy` 结单验收（3 条）]
+- `task-bun-20261122-local-alias-raii-drop`：已修复并验收。`cpc` 在 `stmt.rs`/`types/mod.rs`/`borrow.rs` 穿透解析 `type_aliases`，支持 `Factory(): type` 内局部别名 `const G = Guard(T)` 自动注入 `defer __cp_deinit()`。
+- `task-bun-20261122-raii-errinit-or-move-disarm`：已实现并验收。`cpc` 原生支持 `~errinit()`（生成 `__cp_errdeinit` 并自动注入 `errdefer if (!__<var>_moved) ...`，正常路径自动跳过）与 `move(guard)` 编译器级撤防。
+- `task-bun-20261122-enum-readonly-method-mut-self`：已修复并验收。`pub enum` 未写 `*_` 的只读实例方法现正确生成只读值接收者 `self: Enum`，`*const Enum` 可直接调用。
+
+### [2026-11-22 Wave #35 & Wave #36] 全仓 `defer`/`errdefer` -> RAII `~init()`/`~errinit()` + `unsafe {}` 收官清零（149 模块，全仓 `zig:check` + `bun bd test` 通过）
+- **Wave #35（2-defer 全清零，63 模块）**：完成 `Mapping`, `HandshakeV10`, `Authentication`, `NegotiateProtocolVersion`, `MySQLStatement`, `PostgresSQLStatement`, `notice_response_jsc`, `date`, `json`, `fd`, `walker_skippable`, `windows/env`, `DoneCallback`, `test_runner/expect/*.cp` (52 个同构模块), `uucode_lib` (3 个), `KEventWatcher`, `WindowsWatcher`（使用 `~errinit()`）。
+- **Wave #36（1-defer 全清零，86 模块）**：分 4 批完成全仓全部 86 个可改造 1-defer 模块（`HTMLScanner`..`EventLoopTimer` 21 模块、`ManagedTask`..`fmt_jsc` 22 模块、`logger`..`InternalSourceMap` 21 模块、`ParsedSourceMap`..`socket` 22 模块），全面采用 `~init()` / `~errinit()` 原生析构。
+- **联合排雷**：修复 `MySQLStatement`/`PostgresSQLStatement` (`pub const Status/ref/deref`)、`ValkeyCommand` (`switch (_)`)、`custom.cp` (元组解包)、`color.cp` (`RelativeComponentParser` `static fn` 与 `[4]f32`)、`gradient.cp` (`WebKitGradient` 纯 CP 重构)。
+- **全仓验证**：`cpc_brief.py` 四门禁全绿（膨胀率 `0.794 ~ 1.195 <= 1.2x`）；`bun run zig:check` 5/5 PASS；`bun bd test test/regression/issue/29181.test.ts test/js/bun/util/bun-file.test.ts` 8/8 PASS（460 expect() calls，Debug + ASan）。

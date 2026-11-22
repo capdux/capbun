@@ -37,7 +37,7 @@ pub fn toSatisfy(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallF
     if (pass) return JSValue.js_undefined;
 
     let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-    defer formatter.deinit();
+    const _formatter_guard = DeinitGuard<jsc.ConsoleObject.Formatter>{ ptr: unsafe { &formatter } };
 
     if (not) {
         const signature = comptime getSignature("toSatisfy", "<green>expected<r>", true);
@@ -62,3 +62,9 @@ const JSValue = bun.jsc.JSValue;
 
 const Expect = bun.jsc.Expect.Expect;
 const getSignature = Expect.getSignature;
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}

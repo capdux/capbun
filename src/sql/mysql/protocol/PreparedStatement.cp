@@ -10,6 +10,14 @@ import NewWriterMod from "./NewWriter.zig";
 const CommandType = CommandTypeMod.CommandType;
 const Param = ParamMod.Param;
 const Value = TypesMod.Value;
+
+pub struct DeinitGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.deinit();
+    }
+}
 const NewReader = NewReaderMod.NewReader;
 const decoderWrap = NewReaderMod.decoderWrap;
 const NewWriter = NewWriterMod.NewWriter;
@@ -105,12 +113,12 @@ export struct Execute {
                 idx += 1;
                 if (unsafe { param.* } == .@"null" || param_type.type == .MYSQL_TYPE_NULL) continue;
 
-                let value = param.toData(param_type.type)?;
-                defer value.deinit();
+                const val = param.toData(param_type.type)?;
+                let val_guard = DeinitGuard<@TypeOf(val)>{ val: val };
                 if (param_type.type.isBinaryFormatSupported()) {
-                    writer.write(value.slice())?;
+                    writer.write(val_guard.val.slice())?;
                 } else {
-                    writer.writeLengthEncodedString(value.slice())?;
+                    writer.writeLengthEncodedString(val_guard.val.slice())?;
                 }
             }
         }

@@ -39,7 +39,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -60,7 +60,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 pub const SourceMap = @import("./sourcemap.zig");
@@ -109,6 +109,37 @@ pub fn toNamed(self: *const MappingWithoutName) Mapping {
     }
 };
 
+pub const WithoutNamesGuard = struct {
+    list: bun.MultiArrayList(MappingWithoutName),
+    allocator: std.mem.Allocator,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *WithoutNamesGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = self.list.deinit(self.allocator);
+    }
+};
+
+pub const DisarmListGuard = struct {
+    list: List,
+    allocator: std.mem.Allocator,
+    armed: bool = true,
+    __cp_dropped: bool = false,
+
+pub fn disarm(self: *DisarmListGuard) void {
+            self.armed = false;
+    }
+
+pub fn __cp_deinit(self: *DisarmListGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (self.armed) {
+                _ = self.list.deinit(self.allocator);
+            }
+    }
+};
+
 pub const SortContext = struct {
     generated: []const LineColumnOffset,
 
@@ -139,11 +170,12 @@ pub fn ensureWithNames(self: *List, allocator: std.mem.Allocator) !void {
             var with_names = WithNamesList{  };
             _ = &with_names;
             _ = try with_names.ensureTotalCapacity(allocator, without_names.len);
-            defer {
-            _ = without_names.deinit(allocator);
-            }
-            with_names.len = without_names.len;
-            var old_slices = without_names.slice();
+            var without_names_guard = WithoutNamesGuard{ .list = without_names, .allocator = allocator };
+            _ = &without_names_guard;
+            var __without_names_guard_moved = false; _ = &__without_names_guard_moved;
+            defer if (!__without_names_guard_moved) { __without_names_guard_moved = true; const __T = @TypeOf(without_names_guard); if (@typeInfo(__T) == .optional) { if (without_names_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { without_names_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = without_names_guard; _drop_val.__cp_deinit(); } };
+            with_names.len = without_names_guard.list.len;
+            var old_slices = without_names_guard.list.slice();
             _ = &old_slices;
             var new_slices = with_names.slice();
             _ = &new_slices;
@@ -281,7 +313,10 @@ pub fn getName(self: *List, index: i32) ?[]const u8 {
             }
             if ((self.impl == .with_names)) {
                 const sliceFn = bun.Semver.String.slice;
-                return sliceFn((&self.names[@as(usize, @intCast(i))]), self.names_buffer.slice());
+                return sliceFn((blk: {
+                break :blk (&self.names[@as(usize, @intCast(i))]);
+
+}), self.names_buffer.slice());
             }
             return null;
     }
@@ -353,7 +388,13 @@ pub fn getSourceCode(self: Lookup, base_filename: []const u8) ?bun.jsc.ZigString
             var buf: bun.PathBuffer = undefined;
             _ = &buf;
             const paths: [1][]const u8 = .{ src_name };
-            const normalized = bun.path.joinAbsStringBufZ(bun.path.dirname(base_filename, .auto), (&buf), (&paths), .loose);
+            const normalized = bun.path.joinAbsStringBufZ(bun.path.dirname(base_filename, .auto), (blk: {
+            break :blk (&buf);
+
+}), (blk: {
+            break :blk (&paths);
+
+}), .loose);
             break :bytes (switch (bun.sys.File.readFrom(std.fs.cwd(), normalized, bun.default_allocator)) {
 .result => |r| break :bytes r,
 .err => {
@@ -404,14 +445,13 @@ pub inline fn nameIndex(self: *const Mapping) i32 {
 
 pub fn parse(allocator: std.mem.Allocator, bytes: []const u8, estimated_mapping_count: ?usize, sources_count: i32, input_line_count: usize, options: ParseOptions) ParseResult {
         _ = debug("parse mappings ({d} bytes)", .{ bytes.len });
-        var mapping = List{  };
-        _ = &mapping;
-        errdefer {
-        _ = mapping.deinit(allocator);
-        }
+        var mapping_guard = DisarmListGuard{ .list = List{  }, .allocator = allocator };
+        _ = &mapping_guard;
+        var __mapping_guard_moved = false; _ = &__mapping_guard_moved;
+        defer if (!__mapping_guard_moved) { __mapping_guard_moved = true; const __T = @TypeOf(mapping_guard); if (@typeInfo(__T) == .optional) { if (mapping_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { mapping_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = mapping_guard; _drop_val.__cp_deinit(); } };
         if (estimated_mapping_count) |count| {
             _ = &count;
-            _ = (blk_catch_0: { break :blk_catch_0 ((mapping.ensureTotalCapacity(allocator, count)) catch |__ce_0| { _ = &__ce_0; return ParseResult{ .fail = .{ .msg = "Out of memory", .err = error.OutOfMemory, .loc = .{} } }; }); });
+            _ = (blk_catch_0: { break :blk_catch_0 ((mapping_guard.list.ensureTotalCapacity(allocator, count)) catch |__ce_0| { _ = &__ce_0; return ParseResult{ .fail = .{ .msg = "Out of memory", .err = error.OutOfMemory, .loc = .{} } }; }); });
         }
         var generated = LineColumnOffset{ .lines = bun.Ordinal.start, .columns = bun.Ordinal.start };
         _ = &generated;
@@ -512,7 +552,7 @@ const c = remain[0];
                 if (options.allow_names) {
                     name_index = (name_index + (if (@typeInfo(@TypeOf(name_index_delta)) == .@"enum") @intFromEnum(name_index_delta) else name_index_delta.value));
                     if ((!has_names)) {
-                        _ = (blk_catch_1: { break :blk_catch_1 ((mapping.ensureWithNames(allocator)) catch |__ce_1| { _ = &__ce_1; return ParseResult{ .fail = .{ .msg = "Out of memory", .err = error.OutOfMemory, .loc = .{ .start = (if (comptime @typeInfo(@TypeOf((bytes.len - remain.len))) == .@"enum") cp_cast_int(i32, @intFromEnum((bytes.len - remain.len))) else cp_cast_int(i32, (bytes.len - remain.len))) } } }; }); });
+                        _ = (blk_catch_1: { break :blk_catch_1 ((mapping_guard.list.ensureWithNames(allocator)) catch |__ce_1| { _ = &__ce_1; return ParseResult{ .fail = .{ .msg = "Out of memory", .err = error.OutOfMemory, .loc = .{ .start = (if (comptime @typeInfo(@TypeOf((bytes.len - remain.len))) == .@"enum") cp_cast_int(i32, @intFromEnum((bytes.len - remain.len))) else cp_cast_int(i32, (bytes.len - remain.len))) } } }; }); });
                     }
                     has_names = true;
                 }
@@ -532,12 +572,16 @@ else => {
 },
 }
             }
-            _ = (blk_catch_2: { break :blk_catch_2 ((mapping.append(allocator, (&.{ .generated = generated, .original = original, .source_index = source_index, .name_index = name_index }))) catch |e| { _ = &e; break :blk_catch_2 @as(void, bun.handleOom(e)); }); });
+            _ = (blk_catch_2: { break :blk_catch_2 ((mapping_guard.list.append(allocator, (blk: {
+            break :blk (&.{ .generated = generated, .original = original, .source_index = source_index, .name_index = name_index });
+
+}))) catch |e| { _ = &e; break :blk_catch_2 bun.handleOom(e); }); });
         }
         if ((needs_sort and options.sort)) {
-            _ = mapping.sort();
+            _ = mapping_guard.list.sort();
         }
-        return ParseResult{ .success = .{ .ref_count = .init(), .mappings = mapping, .input_line_count = input_line_count } };
+        _ = mapping_guard.disarm();
+        return ParseResult{ .success = .{ .ref_count = .init(), .mappings = mapping_guard.list, .input_line_count = input_line_count } };
 }
 const WithNamesList = bun.MultiArrayList(Mapping);
 const LineColumnOffset = SourceMap.LineColumnOffset;

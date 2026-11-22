@@ -20,6 +20,19 @@ pub struct PtrDeinitGuard<T> {
     }
 }
 
+pub struct LastErrorGuard<T> {
+    target: T,
+    ~errinit() {
+        let last_error = lol.HTMLString.lastError();
+        const last_error_guard = DeinitGuard<@TypeOf(last_error)>{ ptr: unsafe { &last_error } };
+        * = last_error_guard;
+
+        if (last_error.len > 0) {
+            _.target.onHTMLParseError(last_error.slice());
+        }
+    }
+}
+
 pub struct SelectorsDeinitGuard<T> {
     ptr: *T!,
     ~init() {
@@ -230,15 +243,8 @@ pub fn HTMLProcessor(
                 max_allowed_memory_usage: 1024 * 1024 * 10,
             };
 
-            errdefer {
-                let last_error = lol.HTMLString.lastError();
-                const last_error_guard = DeinitGuard<@TypeOf(last_error)>{ ptr: unsafe { &last_error } };
-                * = last_error_guard;
-
-                if (last_error.len > 0) {
-                    target.onHTMLParseError(last_error.slice());
-                }
-            }
+            const err_guard = LastErrorGuard<@TypeOf(target)>{ target: target };
+            * = err_guard;
 
             const DoneCallback = struct {
                 static fn done(_unused: *T) {}

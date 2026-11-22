@@ -12,7 +12,7 @@ pub fn toHaveBeenCalledTimes(client: *Expect, globalThis: *JSGlobalObject, callf
     const calls = bun.cpp.JSMockFunction__getCalls(globalThis, value)?;
     if (!calls.jsType().isArray()) {
         let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-        defer formatter.deinit();
+        const _formatter_guard = DeinitGuard<jsc.ConsoleObject.Formatter>{ ptr: unsafe { &formatter } };
         return globalThis.throw("Expected value must be a mock function: {f}", .{ value.toFmt(&formatter) });
     }
 
@@ -48,3 +48,9 @@ const JSValue = bun.jsc.JSValue;
 
 const Expect = bun.jsc.Expect.Expect;
 const getSignature = Expect.getSignature;
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}

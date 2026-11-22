@@ -10,6 +10,14 @@ const MySQLInt32 = types.MySQLInt32;
 const MySQLInt64 = types.MySQLInt64;
 const debug = bun.Output.scoped(.NewWriter, .hidden);
 
+pub struct DeinitGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.deinit();
+    }
+}
+
 pub fn NewWriterPacket(comptime WrappedWriter: type): type {
     return struct {
         header: PacketHeader,
@@ -110,9 +118,9 @@ pub fn NewWriterWrap(
                 return;
             }
 
-            let sliced = value.toUTF8(bun.default_allocator);
-            defer sliced.deinit();
-            const slice = sliced.slice();
+            const sliced = value.toUTF8(bun.default_allocator);
+            let sliced_guard = DeinitGuard<@TypeOf(sliced)>{ val: sliced };
+            const slice = sliced_guard.val.slice();
 
             this.write(slice)?;
             if (slice.len == 0 || slice[slice.len - 1] != 0) {

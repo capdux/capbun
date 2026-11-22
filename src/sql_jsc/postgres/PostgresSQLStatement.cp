@@ -16,21 +16,30 @@ const jsc = bun.jsc;
 const JSValue = jsc.JSValue;
 const debug = bun.Output.scoped(.Postgres, .visible);
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
 pub union(enum) StatementError {
     protocol: protocol.ErrorResponse,
     postgres_error: AnyPostgresError,
 
-    pub fn deinit(*_) {
-        switch (unsafe { this.* }) {
-            .protocol => |*e| e.deinit(),
+    fn deinit(*_) {
+        const self_ptr = _;
+        switch (unsafe { self_ptr.* }) {
+            .protocol => unsafe { self_ptr.protocol.deinit(); },
             .postgres_error => {},
         }
     }
 
-    pub fn toJS(_: *const @This(), globalObject: *jsc.JSGlobalObject): JSError!JSValue {
-        return switch (unsafe { this.* }) {
-            .protocol => |e| e.toJS(globalObject),
-            .postgres_error => |e| postgresErrorToJS(globalObject, null, e),
+    fn toJS(_: *const @This(), globalObject: *jsc.JSGlobalObject): JSError!JSValue {
+        const self_ptr = _;
+        return switch (unsafe { self_ptr.* }) {
+            .protocol e => e.toJS(globalObject),
+            .postgres_error e => postgresErrorToJS(globalObject, null, e),
         };
     }
 }
@@ -41,7 +50,7 @@ pub enum StatementStatus {
     prepared,
     failed,
 
-    pub fn isRunning(): bool {
+    fn isRunning(): bool {
         return _ == .parsing;
     }
 }
@@ -65,23 +74,23 @@ pub const Error = StatementError;
     pub const ref = RefCount.ref;
     pub const deref = RefCount.deref;
 
-    pub fn checkForDuplicateFields(*_) {
-        if (!this.needs_duplicate_check) return;
-        this.needs_duplicate_check = false;
+    fn checkForDuplicateFields(*_) {
+        if (!_.needs_duplicate_check) return;
+        _.needs_duplicate_check = false;
 
         let seen_numbers = std.array_list.Managed(u32).init(bun.default_allocator);
-        defer seen_numbers.deinit();
+        let _seen_numbers_guard = DeinitGuard<std.array_list.Managed(u32)>{ ptr: unsafe { &seen_numbers } };
         let seen_fields = bun.StringHashMap(void).init(bun.default_allocator);
-        bun.handleOom(seen_fields.ensureUnusedCapacity(@intCast(this.fields.len)));
-        defer seen_fields.deinit();
+        let _seen_fields_guard = DeinitGuard<bun.StringHashMap(void)>{ ptr: unsafe { &seen_fields } };
+        bun.handleOom(seen_fields.ensureUnusedCapacity(@intCast(_.fields.len)));
 
-        let remaining = this.fields.len;
+        let remaining = _.fields.len;
         let flags: DataCell.Flags = .{};
         while (remaining > 0) {
             remaining -= 1;
-            let field = &this.fields[remaining];
+            let field = unsafe { &_.fields[remaining] };
             switch (field.name_or_index) {
-                .name => |*name| {
+                .name name => {
                     const seen = seen_fields.getOrPut(name.slice()) catch unreachable;
                     if (seen.found_existing) {
                         field.name_or_index = .duplicate;
@@ -89,7 +98,7 @@ pub const Error = StatementError;
                     }
                     flags.has_named_columns = true;
                 },
-                .index => |index| {
+                .index index => {
                     if (std.mem.indexOfScalar(u32, seen_numbers.items, index) != null) {
                         field.name_or_index = .duplicate;
                         flags.has_duplicate_columns = true;
@@ -104,55 +113,55 @@ pub const Error = StatementError;
             }
         }
 
-        this.fields_flags = flags;
+        _.fields_flags = flags;
     }
 
-    pub fn deinit(*_) {
+    fn deinit(*_) {
         debug("PostgresSQLStatement deinit", .{});
 
-        this.ref_count.assertNoRefs();
+        _.ref_count.assertNoRefs();
 
-        for (i of 0..this.fields.len) {
-            this.fields[i].deinit();
+        for (i of 0.._.fields.len) {
+            _.fields[i].deinit();
         }
-        bun.default_allocator.free(this.fields);
-        bun.default_allocator.free(this.parameters);
-        this.cached_structure.deinit();
-        if (e := this.error_response) {
-            this.error_response = null;
+        bun.default_allocator.free(_.fields);
+        bun.default_allocator.free(_.parameters);
+        _.cached_structure.deinit();
+        if (e := _.error_response) {
+            _.error_response = null;
             let _error = e;
             _error.deinit();
         }
-        this.signature.deinit();
-        bun.default_allocator.destroy(this);
+        _.signature.deinit();
+        bun.default_allocator.destroy(_);
     }
 
-    pub fn structure(*_, owner: JSValue, globalObject: *jsc.JSGlobalObject): PostgresCachedStructure {
-        if (this.cached_structure.has()) {
-            return this.cached_structure;
+    fn structure(*_, owner: JSValue, globalObject: *jsc.JSGlobalObject): PostgresCachedStructure {
+        if (_.cached_structure.has()) {
+            return _.cached_structure;
         }
-        this.checkForDuplicateFields();
+        _.checkForDuplicateFields();
 
         let stack_ids: [70]jsc.JSObject.ExternColumnIdentifier = undefined;
-        let nonDuplicatedCount = this.fields.len;
-        for (idx of 0..this.fields.len) {
-            if (this.fields[idx].name_or_index == .duplicate) {
+        let nonDuplicatedCount = _.fields.len;
+        for (idx of 0.._.fields.len) {
+            if (_.fields[idx].name_or_index == .duplicate) {
                 nonDuplicatedCount -= 1;
             }
         }
         const ids = if (nonDuplicatedCount <= jsc.JSObject.maxInlineCapacity()) stack_ids[0..nonDuplicatedCount] else bun.handleOom(bun.default_allocator.alloc(jsc.JSObject.ExternColumnIdentifier, nonDuplicatedCount));
 
         let i: usize = 0;
-        for (idx of 0..this.fields.len) {
-            const field = &this.fields[idx];
+        for (idx of 0.._.fields.len) {
+            const field = unsafe { &_.fields[idx] };
             if (field.name_or_index == .duplicate) continue;
 
-            let id = &ids[i];
+            let id = unsafe { &ids[i] };
             switch (field.name_or_index) {
-                .name => |name| {
+                .name name => {
                     id.value = { name: String.createAtomIfPossible(name.slice()) };
                 },
-                .index => |index| {
+                .index index => {
                     id.value = { index: index };
                 },
                 .duplicate => unreachable,
@@ -166,16 +175,16 @@ pub const Error = StatementError;
         }
 
         if (nonDuplicatedCount > jsc.JSObject.maxInlineCapacity()) {
-            this.cached_structure.set(globalObject, null, ids);
+            _.cached_structure.set(globalObject, null, ids);
         } else {
-            this.cached_structure.set(globalObject, jsc.JSObject.createStructure(
+            _.cached_structure.set(globalObject, jsc.JSObject.createStructure(
                 globalObject,
                 owner,
                 @truncate(ids.len),
-                ids.ptr,
+                unsafe { ids.ptr },
             ), null);
         }
 
-        return this.cached_structure;
+        return _.cached_structure;
     }
 }

@@ -10,6 +10,13 @@ const webcore = bun.webcore;
 const Blob = webcore.Blob;
 const streams = webcore.streams;
 
+struct DeinitPtrGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
 pub const TeeResult = struct { ReadableStream, ReadableStream };
 pub type CloseHandlerFn = fn (*!?) void;
 
@@ -307,7 +314,7 @@ static fn fromNative(globalThis: *JSGlobalObject, native: jsc.JSValue): bun.JSEr
 
 static fn fromOwnedSlice(globalThis: *JSGlobalObject, bytes: []u8, recommended_chunk_size: Blob.SizeType): bun.JSError!jsc.JSValue {
     let blob = Blob.init(bytes, bun.default_allocator, globalThis);
-    defer blob.deinit();
+    const _blob_guard = DeinitPtrGuard<Blob>{ ptr: unsafe { &blob } };
     return fromBlobCopyRef(globalThis, &blob, recommended_chunk_size);
 }
 

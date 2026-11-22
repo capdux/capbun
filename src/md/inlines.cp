@@ -1,4 +1,12 @@
 /// Emphasis delimiter entry for CommonMark emphasis algorithm.
+struct FreeGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: []const T,
+    ~init() {
+        _.alloc.free(_.slice);
+    }
+}
+
 pub const MAX_EMPH_MATCHES = 6;
 
 pub struct EmphDelim {
@@ -60,7 +68,7 @@ pub fn processInlineContent(p: *Parser, content: []const u8, base_off: u32): voi
         p.emitText(.normal, content)?;
         return;
     };
-    defer p.allocator.free(resolved);
+    const _resolved_guard = FreeGuard<EmphDelim>{ alloc: p.allocator, slice: resolved };
 
     // Phase 2: Emit content using resolved emphasis info
     let i: usize = 0;

@@ -892,14 +892,18 @@ pub const UnresolvedColor = union(enum) {
             const Closure = struct {
                 options: *const css.ParserOptions,
                 parser: *ComponentParser,
-                pub fn parsefn(this: *@This(), input2: *css.Parser) Result(UnresolvedColor) {
-                    return this.parser.parseRelative(input2, SRGB, UnresolvedColor, @This().innerParseFn, .{this.options});
+                static fn parsefn(c: *@This(), input2: *css.Parser): Result(UnresolvedColor) {
+                    return c.parser.parseRelative(input2, SRGB, UnresolvedColor, @This().innerParseFn, .{c.options});
                 }
-                pub fn innerParseFn(i: *css.Parser, p: *ComponentParser, opts: *const css.ParserOptions) Result(UnresolvedColor) {
-                    const r, const g, const b, const is_legacy = switch (css.css_values.color.parseRGBComponents(i, p)) {
+                static fn innerParseFn(i: *css.Parser, p: *ComponentParser, opts: *const css.ParserOptions): Result(UnresolvedColor) {
+                    const rgb = switch (css.css_values.color.parseRGBComponents(i, p)) {
                         .result => |vv| vv,
                         .err => |e| return .{ .err = e },
                     };
+                    const r = rgb[0];
+                    const g = rgb[1];
+                    const b = rgb[2];
+                    const is_legacy = rgb[3];
                     if (is_legacy) {
                         return .{ .err = i.newCustomError(css.ParserError.invalid_value) };
                     }
@@ -927,14 +931,18 @@ pub const UnresolvedColor = union(enum) {
             const Closure = struct {
                 options: *const css.ParserOptions,
                 parser: *ComponentParser,
-                pub fn parsefn(this: *@This(), input2: *css.Parser) Result(UnresolvedColor) {
-                    return this.parser.parseRelative(input2, HSL, UnresolvedColor, @This().innerParseFn, .{this.options});
+                static fn parsefn(c: *@This(), input2: *css.Parser): Result(UnresolvedColor) {
+                    return c.parser.parseRelative(input2, HSL, UnresolvedColor, @This().innerParseFn, .{c.options});
                 }
-                pub fn innerParseFn(i: *css.Parser, p: *ComponentParser, opts: *const css.ParserOptions) Result(UnresolvedColor) {
-                    const h, const s, const l, const is_legacy = switch (css.css_values.color.parseHSLHWBComponents(HSL, i, p, false)) {
+                static fn innerParseFn(i: *css.Parser, p: *ComponentParser, opts: *const css.ParserOptions): Result(UnresolvedColor) {
+                    const hsl = switch (css.css_values.color.parseHSLHWBComponents(HSL, i, p, false)) {
                         .result => |vv| vv,
                         .err => |e| return .{ .err = e },
                     };
+                    const h = hsl[0];
+                    const s = hsl[1];
+                    const l = hsl[2];
+                    const is_legacy = hsl[3];
                     if (is_legacy) {
                         return .{ .err = i.newCustomError(css.ParserError.invalid_value) };
                     }
@@ -962,10 +970,10 @@ pub const UnresolvedColor = union(enum) {
             const Closure = struct {
                 options: *const css.ParserOptions,
                 parser: *ComponentParser,
-                pub fn parsefn(this: *@This(), input2: *css.Parser) Result(UnresolvedColor) {
+                static fn parsefn(c: *@This(), input2: *css.Parser): Result(UnresolvedColor) {
                     // errdefer doesn't fire on `return .{ .err = ... }` — Result(T) is a
                     // tagged union, not an error union. Clean up `light` inline.
-                    let light = switch (input2.parseUntilBefore(css.Delimiters{ .comma = true }, TokenList, this, @This().parsefn2)) {
+                    let light = switch (input2.parseUntilBefore(css.Delimiters{ .comma = true }, TokenList, c, @This().parsefn2)) {
                         .result => |vv| vv,
                         .err => |e| return .{ .err = e },
                     };
@@ -973,7 +981,7 @@ pub const UnresolvedColor = union(enum) {
                         light.deinit(input2.allocator());
                         return .{ .err = e };
                     }
-                    const dark = switch (TokenListFns.parse(input2, this.options, 0)) {
+                    const dark = switch (TokenListFns.parse(input2, c.options, 0)) {
                         .result => |vv| vv,
                         .err => |e| {
                             light.deinit(input2.allocator());
@@ -988,8 +996,8 @@ pub const UnresolvedColor = union(enum) {
                     } };
                 }
 
-                pub fn parsefn2(this: *@This(), input2: *css.Parser) Result(TokenList) {
-                    return TokenListFns.parse(input2, this.options, 1);
+                static fn parsefn2(c: *@This(), input2: *css.Parser): Result(TokenList) {
+                    return TokenListFns.parse(input2, c.options, 1);
                 }
             };
             let closure = Closure{

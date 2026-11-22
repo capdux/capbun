@@ -81,6 +81,21 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub fn EndGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.end();
+                }
+        }
+    };
+}
+
 pub fn DeinitPtrGuard(comptime T: type) type {
     return struct {
         ptr: ?T,
@@ -228,9 +243,13 @@ pub fn nameAndBasename(self: *const ExtractTarball) struct { []const u8, []const
 pub fn extract(self: ExtractTarball, log: *logger.Log, tgz_bytes: []const u8) !Install.ExtractData {
         var tracer = bun.perf.trace("ExtractTarball.extract");
         _ = &tracer;
-        defer {
-        _ = tracer.end();
-        }
+        var _tracer_guard = EndGuard(@TypeOf(tracer)){ .ptr = (blk: {
+        break :blk (&tracer);
+
+}) };
+        _ = &_tracer_guard;
+        var ___tracer_guard_moved = false; _ = &___tracer_guard_moved;
+        defer if (!___tracer_guard_moved) { ___tracer_guard_moved = true; const __T = @TypeOf(_tracer_guard); if (@typeInfo(__T) == .optional) { if (_tracer_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _tracer_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _tracer_guard; _drop_val.__cp_deinit(); } };
         const tmpdir = self.temp_dir;
         var tmpname_buf: if (Environment.isWindows) bun.WPathBuffer else bun.PathBuffer = undefined;
         _ = &tmpname_buf;

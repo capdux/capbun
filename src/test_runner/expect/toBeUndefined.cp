@@ -13,9 +13,8 @@ pub fn toBeUndefined(client: *Expect, globalThis: *JSGlobalObject, callFrame: *C
     if (pass) return JSValue.js_undefined;
 
     // handle failure
-    let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-    defer formatter.deinit();
-    const value_fmt = value.toFmt(&formatter);
+    let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true } };
+    const value_fmt = value.toFmt(&formatter.val);
     if (not) {
         const received_line = "Received: <red>{f}<r>\n";
         const signature = comptime getSignature("toBeUndefined", "", true);
@@ -36,3 +35,8 @@ const JSValue = bun.jsc.JSValue;
 
 const Expect = bun.jsc.Expect.Expect;
 const getSignature = Expect.getSignature;
+
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() { _.val.deinit(); }
+}

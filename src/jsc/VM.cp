@@ -4,6 +4,13 @@ const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
 type APILockCallback = *const fn (ctx: *!?) callconv(.c) void;
 err ThrowError { JSError }
 
@@ -174,7 +181,7 @@ pub struct VMLock {
     pub fn throwError(*_, global_object: *JSGlobalObject, value: JSValue): ThrowError {
         let scope: bun.jsc.ExceptionValidationScope = undefined;
         scope.init(global_object, @src());
-        defer scope.deinit();
+        const _scope_guard = DeinitGuard<bun.jsc.ExceptionValidationScope>{ ptr: unsafe { &scope } };
         scope.assertNoException();
         JSC__VM__throwError(_, global_object, value);
         scope.assertExceptionPresenceMatches(true);

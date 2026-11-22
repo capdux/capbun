@@ -5,11 +5,14 @@ const jsc = bun.jsc;
 const JSValue = jsc.JSValue;
 const StringBuilder = bun.StringBuilder;
 
+struct StringBuilderGuard { ptr: *StringBuilder!, ~init() { unsafe { _.ptr.deinit(bun.default_allocator); } } }
+struct DeinitGuard<T> { ptr: *T!, ~init() { unsafe { _.ptr.deinit(); } } }
+
 pub fn toJS(*_: NoticeResponse, globalObject: *jsc.JSGlobalObject): JSValue {
     let b = StringBuilder{};
-    defer b.deinit(bun.default_allocator);
+    const _b_guard = unsafe { StringBuilderGuard{ ptr: &b } };
 
-    const items = this.messages.items;
+    const items = _.messages.items;
     for (msg of items) {
         b.cap += switch (msg) {
             inline else => |m| m.utf8ByteLength(),
@@ -21,7 +24,7 @@ pub fn toJS(*_: NoticeResponse, globalObject: *jsc.JSGlobalObject): JSValue {
         let str = switch (msg) {
             inline else => |m| m.toUTF8(bun.default_allocator),
         };
-        defer str.deinit();
+        const _str_guard = unsafe { DeinitGuard<@TypeOf(str)>{ ptr: &str } };
         * = b.append(str.slice());
         * = b.append("\n");
     }

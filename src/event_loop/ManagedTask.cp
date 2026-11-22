@@ -11,6 +11,8 @@ pub const CallbackFn = fn (TaskContext) bun.JSError!void;
 
 fn noopCallback(_: TaskContext): bun.JSError!void {}
 
+pub struct DestroyDefaultGuard<T> { ptr: *T!, ~init() { bun.default_allocator.destroy(_.ptr); } }
+
 @root struct ManagedTask {
     ctx: RawContext = null,
     callback: CallbackFn,
@@ -21,7 +23,7 @@ fn noopCallback(_: TaskContext): bun.JSError!void {}
 
     fn run(*_): bun.JSError!void {
         @setRuntimeSafety(false);
-        defer bun.default_allocator.destroy(_);
+        const _self_guard = DestroyDefaultGuard<ManagedTask>{ ptr: _ };
         const cb = _.callback;
         const context = _.ctx;
         cb(context.?)?;

@@ -62,7 +62,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const css = @import("../css_parser.zig");
 pub const bun = @import("bun");
@@ -103,6 +103,22 @@ pub fn default() LineStyle {
     
     pub const deepClone = css_impl.deepClone;
 };
+
+pub fn DeinitAllocGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        allocator: Allocator,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.deinit(self.allocator);
+                }
+        }
+    };
+}
 
 pub const BorderColor = struct {
     top: CssColor,
@@ -313,7 +329,7 @@ pub const BorderHandler = struct {
 
 pub fn handleProperty(self: *BorderHandler, property: *const css.Property, dest: *css.DeclarationList, context: *css.PropertyHandlerContext) bool {
             const allocator = context.allocator;
-            const flushHelper = struct {
+            const flushHelper = (struct {
 
 pub inline fn flushHelper(handler: *BorderHandler, d: *css.DeclarationList, c: *css.PropertyHandlerContext, comptime key: []const u8, comptime prop: []const u8, val: anytype, category: PropertyCategory) void {
             if ((category != handler.category)) {
@@ -323,8 +339,8 @@ pub inline fn flushHelper(handler: *BorderHandler, d: *css.DeclarationList, c: *
                 _ = handler.flush(d, c);
             }
     }
-}.flushHelper;
-            const propertyHelper = struct {
+}).flushHelper;
+            const propertyHelper = (struct {
 
 pub inline fn propertyHelper(handler: *BorderHandler, d: *css.DeclarationList, c: *css.PropertyHandlerContext, comptime key: []const u8, comptime prop: []const u8, val: anytype, category: PropertyCategory) void {
             _ = flushHelper(handler, d, c, key, prop, val, category);
@@ -332,8 +348,8 @@ pub inline fn propertyHelper(handler: *BorderHandler, d: *css.DeclarationList, c
             handler.category = category;
             handler.has_any = true;
     }
-}.propertyHelper;
-            const setBorderHelper = struct {
+}).propertyHelper;
+            const setBorderHelper = (struct {
 
 pub inline fn setBorderHelper(handler: *BorderHandler, d: *css.DeclarationList, c: *css.PropertyHandlerContext, comptime key: []const u8, val: anytype, category: PropertyCategory) void {
             if ((category != handler.category)) {
@@ -343,7 +359,7 @@ pub inline fn setBorderHelper(handler: *BorderHandler, d: *css.DeclarationList, 
             handler.category = category;
             handler.has_any = true;
     }
-}.setBorderHelper;
+}).setBorderHelper;
             switch (property.*) {
 .@"border-top-color" => |*val| {
 _ = propertyHelper(self, dest, context, "border_top", "color", val, .physical);
@@ -577,7 +593,7 @@ pub fn flushUnparsed(self: *BorderHandler, unparsed: *const UnparsedProperty, de
                 _ = bun.handleOom(dest.append(context.allocator, .{ .unparsed = up }));
                 return;
             }
-            const prop = struct {
+            const prop = (struct {
 
 pub inline fn prop(handler: *BorderHandler, c: *css.PropertyHandlerContext, up: *const UnparsedProperty, comptime id: []const u8) void {
             var upppppppppp = up.withPropertyId(c.allocator, @unionInit(css.PropertyId, id, undefined));
@@ -585,13 +601,13 @@ pub inline fn prop(handler: *BorderHandler, c: *css.PropertyHandlerContext, up: 
             _ = c.addUnparsedFallbacks((&upppppppppp));
             _ = bun.bits.insert(BorderProperty, (&handler.flushed_properties), @field(BorderProperty, id));
     }
-}.prop;
-            const logical_prop = struct {
+}).prop;
+            const logical_prop = (struct {
 
 pub inline fn logical_prop(c: *css.PropertyHandlerContext, up: *const UnparsedProperty, comptime ltr: []const u8, comptime rtl: []const u8) void {
             _ = c.addLogicalRule(c.allocator, css.Property{ .unparsed = up.withPropertyId(c.allocator, @unionInit(css.PropertyId, ltr, undefined)) }, css.Property{ .unparsed = up.withPropertyId(c.allocator, @unionInit(css.PropertyId, rtl, undefined)) });
     }
-}.logical_prop;
+}).logical_prop;
             switch (unparsed.property_id) {
 .@"border-inline-start" => {
 _ = logical_prop(context, unparsed, "border-left", "border-right");
@@ -956,7 +972,7 @@ var up = unparsed.deepClone(context.allocator);
                                         _ = state.side_diff(inline_start, block_end, block_end_prop, block_end_width, block_end_style, block_end_color);
                                     } else {
                                         if (top_eq_bottom) {
-                                            _ = state.prop_diff(block_start, struct {
+                                            _ = state.prop_diff(block_start, (struct {
     
     pub fn fallback(s: *State) void {
                 var handled = false;
@@ -1000,27 +1016,27 @@ var up = unparsed.deepClone(context.allocator);
                     _ = s.side_diff(s.block_start, s.inline_end, inline_end_prop, inline_end_width, inline_end_style, inline_end_color);
                 }
         }
-    }.fallback, true);
+    }).fallback, true);
                                         } else {
                                             if (left_eq_right) {
-                                                _ = state.prop_diff(inline_start, struct {
+                                                _ = state.prop_diff(inline_start, (struct {
     
     pub fn fallback(s: *State) void {
                 _ = s.side_diff(s.inline_start, s.block_start, block_start_prop, block_start_width, block_start_style, block_start_color);
                 _ = s.side_diff(s.inline_start, s.block_end, block_end_prop, block_end_width, block_end_style, block_end_color);
         }
-    }.fallback, true);
+    }).fallback, true);
                                             } else {
                                                 if (bottom_eq_right) {
-                                                    _ = state.prop_diff(block_end, struct {
+                                                    _ = state.prop_diff(block_end, (struct {
     
     pub fn fallback(s: *State) void {
                 _ = s.side_diff(s.block_end, s.block_start, block_start_prop, block_start_width, block_start_style, block_start_color);
                 _ = s.side_diff(s.block_end, s.inline_start, inline_start_prop, inline_start_width, inline_start_style, inline_start_color);
         }
-    }.fallback, true);
+    }).fallback, true);
                                                 } else {
-                                                    _ = state.prop_diff(block_start, struct {
+                                                    _ = state.prop_diff(block_start, (struct {
     
     pub fn fallback(s: *State) void {
                 _ = s.f.prop(block_start_prop, s.block_start.toBorder(s.f.ctx.allocator));
@@ -1028,7 +1044,7 @@ var up = unparsed.deepClone(context.allocator);
                 _ = s.f.prop(inline_start_prop, s.inline_start.toBorder(s.f.ctx.allocator));
                 _ = s.f.prop(inline_end_prop, s.inline_end.toBorder(s.f.ctx.allocator));
         }
-    }.fallback, false);
+    }).fallback, false);
                                                 }
                                             }
                                         }
@@ -1316,12 +1332,17 @@ pub fn toCss(self: @This(), dest: *Printer) PrintErr!void {
             return;
     }
 
-pub fn getFallbacks(self: *@This(), allocator: Allocator, targets: css.targets.Targets) css.SmallList(@This(),2) {
+pub fn getFallbacks(self: *@This(), allocator: Allocator, targets: css.targets.Targets) css.SmallList(@This(), 2) {
             var fallbacks = self.color.getFallbacks(allocator, targets);
             _ = &fallbacks;
-            defer {
-            _ = fallbacks.deinit(allocator);
-            }
+            var fallbacks_guard = DeinitAllocGuard(@TypeOf(fallbacks)){ .ptr = (blk: {
+            break :blk (&fallbacks);
+
+}), .allocator = allocator };
+            _ = &fallbacks_guard;
+            var __fallbacks_guard_moved = false; _ = &__fallbacks_guard_moved;
+            defer if (!__fallbacks_guard_moved) { __fallbacks_guard_moved = true; const __T = @TypeOf(fallbacks_guard); if (@typeInfo(__T) == .optional) { if (fallbacks_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { fallbacks_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = fallbacks_guard; _drop_val.__cp_deinit(); } };
+            _ = &fallbacks_guard;
             var out = css.SmallList(@This(), 2).initCapacity(allocator, fallbacks.len());
             _ = &out;
             _ = out.setLen(fallbacks.len());
@@ -1355,14 +1376,14 @@ pub inline fn default() This {
 pub fn ImplFallbacks(comptime T: type) type {
         return struct {
 
-pub fn getFallbacks(this_val: *T, allocator: std.mem.Allocator, targets: css.Targets) css.SmallList(T,2) {
+pub fn getFallbacks(this_val: *T, allocator: std.mem.Allocator, targets: css.Targets) css.SmallList(T, 2) {
             const ColorFallbackKind = css.css_values.color.ColorFallbackKind;
             var fallbacks = ColorFallbackKind{  };
             _ = &fallbacks;
             inline for (fields) |field| {
                 _ = bun.bits.insert(ColorFallbackKind, (&fallbacks), @field(this_val, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)).getNecessaryFallbacks(targets));
             }
-            var res: css.SmallList(T,2) = .{};
+            var res: css.SmallList(T, 2) = .{};
             _ = &res;
             if (fallbacks.rgb) {
                 var out: T = undefined;

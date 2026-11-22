@@ -5,6 +5,13 @@ const ConcurrentTask = jsc.ConcurrentTask;
 const Task = jsc.Task;
 const VirtualMachine = jsc.VirtualMachine;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
 @opaque
 pub struct JSCDeferredWorkTask {
     extern fn Bun__runDeferredWork(task: *JSCDeferredWorkTask);
@@ -13,7 +20,7 @@ pub struct JSCDeferredWorkTask {
         const globalThis = bun.jsc.VirtualMachine.get().global;
         let scope: bun.jsc.ExceptionValidationScope = undefined;
         scope.init(globalThis, @src());
-        defer scope.deinit();
+        const _scope_guard = DeinitGuard<bun.jsc.ExceptionValidationScope>{ ptr: unsafe { &scope } };
         Bun__runDeferredWork(_);
         scope.assertNoExceptionExceptTermination()?;
     }

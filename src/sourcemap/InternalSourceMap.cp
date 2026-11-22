@@ -17,6 +17,13 @@ const flag_has_src_idx: u8 = 1 << 3;
 
 pub const TestingAPIs = internal_jsc.TestingAPIs;
 
+struct ErrDeinitPtrGuard<T> {
+    ptr: *T!,
+    ~errinit() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
 pub @c struct SyncEntry {
     generated_line: i32,
     generated_column: i32,
@@ -732,7 +739,7 @@ export @root struct InternalSourceMap {
         input_line_count_hint: u32,
     ): []u8 ! InvalidSourceMapError {
         let builder = Builder.init(allocator);
-        errdefer builder.deinit();
+        const _builder_guard = ErrDeinitPtrGuard<Builder>{ ptr: unsafe { &builder } };
 
         let generated_column: i32 = 0;
         let source_index: i32 = 0;

@@ -38,7 +38,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -59,7 +59,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 const StatWatcherScheduler = @import("../runtime/node/node_fs_stat_watcher.zig").StatWatcherScheduler;
@@ -145,6 +145,21 @@ pub const State = enum {
     pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
+
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.deinit();
+                }
+        }
+    };
+}
 
 pub const UnreachableTimer = struct {
     event_loop_timer: EventLoopTimer,
@@ -246,102 +261,106 @@ pub fn ns(self: EventLoopTimer) u64 {
 }
 
 pub fn fire(self: *EventLoopTimer, now: *const timespec, vm: *VirtualMachine) void {
-        switch (self.tag) {
+        {
+            switch (self.tag) {
 .PostgresSQLConnectionTimeout => {
 const container: *api.Postgres.PostgresSQLConnection = @alignCast(@fieldParentPtr("timer", self));
-        _ = container.onConnectionTimeout();
+            _ = container.onConnectionTimeout();
 },
 .PostgresSQLConnectionMaxLifetime => {
 const container: *api.Postgres.PostgresSQLConnection = @alignCast(@fieldParentPtr("max_lifetime_timer", self));
-        _ = container.onMaxLifetimeTimeout();
+            _ = container.onMaxLifetimeTimeout();
 },
 .MySQLConnectionTimeout => {
 const container: *api.MySQL.MySQLConnection = @alignCast(@fieldParentPtr("timer", self));
-        _ = container.onConnectionTimeout();
+            _ = container.onConnectionTimeout();
 },
 .MySQLConnectionMaxLifetime => {
 const container: *api.MySQL.MySQLConnection = @alignCast(@fieldParentPtr("max_lifetime_timer", self));
-        _ = container.onMaxLifetimeTimeout();
+            _ = container.onMaxLifetimeTimeout();
 },
 .ValkeyConnectionTimeout => {
 const container: *api.Valkey = @alignCast(@fieldParentPtr("timer", self));
-        _ = container.onConnectionTimeout();
+            _ = container.onConnectionTimeout();
 },
 .ValkeyConnectionReconnect => {
 const container: *api.Valkey = @alignCast(@fieldParentPtr("reconnect_timer", self));
-        _ = container.onReconnectTimer();
+            _ = container.onReconnectTimer();
 },
 .DevServerMemoryVisualizerTick => {
 _ = bun.bake.DevServer.emitMemoryVisualizerMessageTimer(self, now);
 },
 .DevServerSweepSourceMaps => {
 const store: *bun.bake.DevServer.SourceMapStore = @alignCast(@fieldParentPtr("weak_ref_sweep_timer", self));
-        _ = store.sweepWeakRefs(self, now);
+            _ = store.sweepWeakRefs(self, now);
 },
 .AbortSignalTimeout => {
 const timeout: *jsc.WebCore.AbortSignal.Timeout = @alignCast(@fieldParentPtr("event_loop_timer", self));
-        _ = timeout.run(vm);
+            _ = timeout.run(vm);
 },
 .DateHeaderTimer => {
 const date_header_timer: *jsc.API.Timer.DateHeaderTimer = @alignCast(@fieldParentPtr("event_loop_timer", self));
-        _ = date_header_timer.run(vm);
+            _ = date_header_timer.run(vm);
 },
 .BunTest => {
 var container_strong = jsc.Jest.bun_test.BunTestPtr.cloneFromRawUnsafe(@fieldParentPtr("timer", self));
-        _ = &container_strong;
-        defer {
-        _ = container_strong.deinit();
-        }
-        _ = jsc.Jest.bun_test.BunTest.bunTestTimeoutCallback(container_strong, now, vm);
+            _ = &container_strong;
+            var container_guard = DeinitGuard(@TypeOf(container_strong)){ .ptr = (&container_strong) };
+            _ = &container_guard;
+            var __container_guard_moved = false; _ = &__container_guard_moved;
+            defer if (!__container_guard_moved) { __container_guard_moved = true; const __T = @TypeOf(container_guard); if (@typeInfo(__T) == .optional) { if (container_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { container_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = container_guard; _drop_val.__cp_deinit(); } };
+            _ = &container_guard;
+            _ = jsc.Jest.bun_test.BunTest.bunTestTimeoutCallback(container_strong, now, vm);
 },
 .EventLoopDelayMonitor => {
 const monitor: *jsc.API.Timer.EventLoopDelayMonitor = @alignCast(@fieldParentPtr("event_loop_timer", self));
-        _ = monitor.onFire(vm, now);
+            _ = monitor.onFire(vm, now);
 },
 .CronJob => {
 const job: *bun.api.cron.CronJob = @alignCast(@fieldParentPtr("event_loop_timer", self));
-        _ = job.onTimerFire(vm);
+            _ = job.onTimerFire(vm);
 },
 .TimeoutObject => {
 const container: *TimeoutObject = @alignCast(@fieldParentPtr("event_loop_timer", self));
-        _ = container.internals.fire(now, vm);
+            _ = container.internals.fire(now, vm);
 },
 .ImmediateObject => {
 const container: *ImmediateObject = @alignCast(@fieldParentPtr("event_loop_timer", self));
-        _ = container.internals.fire(now, vm);
+            _ = container.internals.fire(now, vm);
 },
 .WTFTimer => {
 const container: *WTFTimer = @alignCast(@fieldParentPtr("event_loop_timer", self));
-        _ = container.fire(now, vm);
+            _ = container.fire(now, vm);
 },
 .StatWatcherScheduler => {
 const container: *StatWatcherScheduler = @alignCast(@fieldParentPtr("event_loop_timer", self));
-        _ = container.timerCallback();
+            _ = container.timerCallback();
 },
 .UpgradedDuplex => {
 const container: *uws.UpgradedDuplex = @alignCast(@fieldParentPtr("event_loop_timer", self));
-        _ = container.onTimeout();
+            _ = container.onTimeout();
 },
 .WindowsNamedPipe => {
 if (Environment.isWindows) {
-            const container: *uws.WindowsNamedPipe = @alignCast(@fieldParentPtr("event_loop_timer", self));
-            _ = container.onTimeout();
-        }
+                const container: *uws.WindowsNamedPipe = @alignCast(@fieldParentPtr("event_loop_timer", self));
+                _ = container.onTimeout();
+            }
 },
 .DNSResolver => {
 const container: *DNSResolver = @alignCast(@fieldParentPtr("event_loop_timer", self));
-        _ = container.checkTimeouts(now, vm);
+            _ = container.checkTimeouts(now, vm);
 },
 .SubprocessTimeout => {
 const container: *jsc.Subprocess = @alignCast(@fieldParentPtr("event_loop_timer", self));
-        _ = container.timeoutCallback();
+            _ = container.timeoutCallback();
 },
 .TimerCallback => {
 const container: *TimerCallback = @alignCast(@fieldParentPtr("event_loop_timer", self));
-        const cb = container.callback;
-        _ = cb(container);
+            const cb = container.callback;
+            _ = cb(container);
 },
 }
+        }
 }
 const FlagsOptPtr = ?*TimerObjectInternals.TimerObjectInternals.Flags;
 const ConstFlagsOptPtr = ?*const TimerObjectInternals.TimerObjectInternals.Flags;

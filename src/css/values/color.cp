@@ -2475,18 +2475,19 @@ pub const NumberOrPercentage = union(enum) {
 
 const RelativeComponentParser = struct {
     names: struct { []const u8, []const u8, []const u8 },
-    components: struct { f32, f32, f32, f32 },
+    components: [4]f32,
     types: struct { ChannelType, ChannelType, ChannelType },
 
-    pub fn new(color: anytype) RelativeComponentParser {
+    static fn new(color: auto): RelativeComponentParser {
+        const c = color.components();
         return RelativeComponentParser{
             .names = color.channels(),
-            .components = color.components(),
+            .components = [ c[0], c[1], c[2], c[3] ],
             .types = color.types(),
         };
     }
 
-    pub fn parseAngleOrNumber(input: *css.Parser, this: *const RelativeComponentParser) Result(css.color.AngleOrNumber) {
+    static fn parseAngleOrNumber(input: *css.Parser, this: *const RelativeComponentParser): Result(css.color.AngleOrNumber) {
         if (input.tryParse(
             RelativeComponentParser.parseIdent,
             .{
@@ -2518,7 +2519,7 @@ const RelativeComponentParser = struct {
         const Closure = struct {
             angle: Angle,
             parser: *const RelativeComponentParser,
-            pub fn tryParseFn(i: *css.Parser, t: *@This()) Result(Angle) {
+            static fn tryParseFn(i: *css.Parser, t: *@This()): Result(Angle) {
                 if (Calc(Angle).parseWith(i, t, @This().calcParseIdentFn).asValue()) |val| {
                     if (val == .value) {
                         return .{ .result = val.value.* };
@@ -2527,7 +2528,7 @@ const RelativeComponentParser = struct {
                 return .{ .err = i.newCustomError(css.ParserError.invalid_value) };
             }
 
-            pub fn calcParseIdentFn(t: *@This(), ident: []const u8) ?Calc(Angle) {
+            static fn calcParseIdentFn(t: *@This(), ident: []const u8): ?Calc(Angle) {
                 const value = t.parser.getIdent(ident, ChannelType{ .angle = true, .number = true }) orelse return null;
                 t.angle = .{ .deg = value };
                 return Calc(Angle){
@@ -2550,7 +2551,7 @@ const RelativeComponentParser = struct {
         return .{ .err = input.newErrorForNextToken() };
     }
 
-    pub fn parseNumberOrPercentage(input: *css.Parser, this: *const RelativeComponentParser) Result(NumberOrPercentage) {
+    static fn parseNumberOrPercentage(input: *css.Parser, this: *const RelativeComponentParser): Result(NumberOrPercentage) {
         if (input.tryParse(RelativeComponentParser.parseIdent, .{ this, ChannelType{ .percentage = true, .number = true } }).asValue()) |value| {
             return .{ .result = NumberOrPercentage{ .percentage = .{ .unit_value = value } } };
         }
@@ -2568,21 +2569,21 @@ const RelativeComponentParser = struct {
                 parser: *const RelativeComponentParser,
                 percentage: Percentage = .{ .v = 0 },
 
-                pub fn parsefn(i: *css.Parser, self: *@This()) Result(Percentage) {
-                    if (Calc(Percentage).parseWith(i, self, @This().calcparseident).asValue()) |calc_value| {
+                static fn parsefn(i: *css.Parser, c: *@This()): Result(Percentage) {
+                    if (Calc(Percentage).parseWith(i, c, @This().calcparseident).asValue()) |calc_value| {
                         if (calc_value == .value) return .{ .result = calc_value.value.* };
                     }
                     return .{ .err = i.newCustomError(css.ParserError.invalid_value) };
                 }
 
-                pub fn calcparseident(self: *@This(), ident: []const u8) ?Calc(Percentage) {
-                    const v = self.parser.getIdent(ident, ChannelType{ .percentage = true, .number = true }) orelse return null;
-                    self.percentage = .{ .v = v };
+                static fn calcparseident(c: *@This(), ident: []const u8): ?Calc(Percentage) {
+                    const v = c.parser.getIdent(ident, ChannelType{ .percentage = true, .number = true }) orelse return null;
+                    c.percentage = .{ .v = v };
                     // value variant is a *Percentage
                     // but we immediately dereference it and discard the pointer
                     // so using a field on this closure struct instead of making a gratuitous allocation
                     return .{
-                        .value = &self.percentage,
+                        .value = &c.percentage,
                     };
                 }
             };
@@ -2603,10 +2604,10 @@ const RelativeComponentParser = struct {
         return .{ .err = input.newErrorForNextToken() };
     }
 
-    pub fn parsePercentage(
+    static fn parsePercentage(
         input: *css.Parser,
         this: *const RelativeComponentParser,
-    ) Result(f32) {
+    ): Result(f32) {
         if (input.tryParse(RelativeComponentParser.parseIdent, .{ this, ChannelType{ .percentage = true } }).asValue()) |value| {
             return .{ .result = value };
         }
@@ -2614,7 +2615,7 @@ const RelativeComponentParser = struct {
         const Closure = struct { self: *const RelativeComponentParser, temp: Percentage = .{ .v = 0 } };
         let _closure = Closure{ .self = this };
         if (input.tryParse(struct {
-            pub fn parseFn(i: *css.Parser, closure: *Closure) Result(Percentage) {
+            static fn parseFn(i: *css.Parser, closure: *Closure): Result(Percentage) {
                 const calc_value = switch (Calc(Percentage).parseWith(i, closure, parseIdentFn)) {
                     .result => |v| v,
                     .err => return .{ .err = i.newCustomError(css.ParserError.invalid_value) },
@@ -2623,7 +2624,7 @@ const RelativeComponentParser = struct {
                 return .{ .err = i.newCustomError(css.ParserError.invalid_value) };
             }
 
-            pub fn parseIdentFn(closure: *Closure, ident: []const u8) ?Calc(Percentage) {
+            static fn parseIdentFn(closure: *Closure, ident: []const u8): ?Calc(Percentage) {
                 const v = closure.self.getIdent(ident, ChannelType{ .percentage = true }) orelse return null;
                 closure.temp = .{ .v = v };
                 return Calc(Percentage){ .value = &closure.temp };
@@ -2635,10 +2636,10 @@ const RelativeComponentParser = struct {
         return .{ .err = input.newErrorForNextToken() };
     }
 
-    pub fn parseNumber(
+    static fn parseNumber(
         input: *css.Parser,
         this: *const RelativeComponentParser,
-    ) Result(f32) {
+    ): Result(f32) {
         if (input.tryParse(
             RelativeComponentParser.parseIdent,
             .{ this, ChannelType{ .number = true } },
@@ -2656,11 +2657,11 @@ const RelativeComponentParser = struct {
         return .{ .err = input.newErrorForNextToken() };
     }
 
-    pub fn parseIdent(
+    static fn parseIdent(
         input: *css.Parser,
         this: *const RelativeComponentParser,
         allowed_types: ChannelType,
-    ) Result(f32) {
+    ): Result(f32) {
         const v = this.getIdent(
             switch (input.expectIdent()) {
                 .result => |v| v,
@@ -2671,17 +2672,17 @@ const RelativeComponentParser = struct {
         return .{ .result = v };
     }
 
-    pub fn parseCalc(
+    static fn parseCalc(
         input: *css.Parser,
         this: *const RelativeComponentParser,
         allowed_types: ChannelType,
-    ) Result(f32) {
+    ): Result(f32) {
         const Closure = struct {
             p: *const RelativeComponentParser,
             allowed_types: ChannelType,
 
-            pub fn parseIdentFn(self: *@This(), ident: []const u8) ?Calc(f32) {
-                const v = self.p.getIdent(ident, self.allowed_types) orelse return null;
+            static fn parseIdentFn(c: *@This(), ident: []const u8): ?Calc(f32) {
+                const v = c.p.getIdent(ident, c.allowed_types) orelse return null;
                 return .{ .number = v };
             }
         };
@@ -3150,14 +3151,14 @@ pub enum HueInterpolationMethod {
         b: *f32,
     ) {
         // https://drafts.csswg.org/css-color/#hue-interpolation
-        if (_.* == .specified) {
+        if (_ == .specified) {
             // a.* = ((a.* % 360.0) + 360.0) % 360.0;
             // b.* = ((b.* % 360.0) + 360.0) % 360.0;
             a.* = @mod((@mod(a.*, 360.0) + 360.0), 360.0);
             b.* = @mod((@mod(b.*, 360.0) + 360.0), 360.0);
         }
 
-        switch (_.*) {
+        switch (_) {
             .shorter => {
                 // https://www.w3.org/TR/css-color-4/#hue-shorter
                 const delta = b.* - a.*;

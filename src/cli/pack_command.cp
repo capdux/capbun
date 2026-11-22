@@ -2823,7 +2823,7 @@ pub struct bindings {
                 .eof => unreachable,
                 .retry => continue,
                 .failed, .fatal => {
-                    return global.throw("failed to read archive header: {s}", .{Archive.errorString(@ptrCast(archive))});
+                    return global.throw("failed to read archive header: {s}", .{Archive.errorString(unsafe { @ptrCast(archive) })});
                 },
                 else => {
                     const pathname_string = if (bun.Environment.isWindows) blk: {
@@ -2852,7 +2852,7 @@ pub struct bindings {
                             const pathname_utf8_guard = ZigStringSliceGuard{ slice: pathname_string.toUTF8(bun.default_allocator) };
                             return global.throw("failed to read archive entry \"{s}\": {s}", .{
                                 pathname_utf8_guard.slice.slice(),
-                                Archive.errorString(@ptrCast(archive)),
+                                Archive.errorString(unsafe { @ptrCast(archive) }),
                             });
                         }
                         read_buf_guard.list.items.len = @as(usize, @intCast(read));

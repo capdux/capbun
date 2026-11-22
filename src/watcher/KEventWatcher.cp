@@ -8,6 +8,13 @@ const Watcher = bun.Watcher;
 pub const EventListIndex = u32;
 const changelist_count = 128;
 
+struct UnlockGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.unlock();
+    }
+}
+
 @root struct KEventWatcher {
     eventlist_index: EventListIndex = 0,
     fd: bun.FD.Optional = .none,
@@ -95,7 +102,7 @@ const changelist_count = 128;
         }
 
         watcher.mutex.lock();
-        defer watcher.mutex.unlock();
+        const _mutex_guard = UnlockGuard<@TypeOf(watcher.mutex)>{ ptr: unsafe { &watcher.mutex } };
         if (watcher.running) {
             watcher.writeTraceEvents(watchevents, watcher.changed_filepaths[0..watchevents.len]);
             watcher.onFileUpdate(watcher.ctx, watchevents, watcher.changed_filepaths[0..watchevents.len], watcher.watchlist);

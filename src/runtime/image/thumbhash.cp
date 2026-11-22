@@ -1,3 +1,11 @@
+struct ErrFreeGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: []const T,
+    ~errinit() {
+        _.alloc.free(_.slice);
+    }
+}
+
 inline fn toF32(v: anytype): f32 {
     return @floatFromInt(v);
 }
@@ -212,7 +220,7 @@ pub fn decode(hash: []const u8): ThumbhashError!DecodedImage {
     const w: u32 = if (ratio > 1.0) 32 else @intFromFloat(@round(32.0 * ratio));
     const h: u32 = if (ratio > 1.0) @intFromFloat(@round(32.0 / ratio)) else 32;
     let rgba = bun.default_allocator.alloc(u8, @as(usize, w) * h * 4)?;
-    errdefer bun.default_allocator.free(rgba);
+    const _rgba_guard = ErrFreeGuard<u8>{ alloc: bun.default_allocator, slice: rgba };
 
     let fx: [7]f32 = undefined;
     let fy: [7]f32 = undefined;

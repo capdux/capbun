@@ -10,6 +10,14 @@ import { BunSocketContextOptions } from "./SocketContext.cp";
 import { us_socket_t } from "./us_socket_t.cp";
 import { SocketHandler } from "./socket.cp";
 
+pub struct FreeCStrGuard {
+    slice: [:0]const u8,
+
+    ~init() {
+        bun.default_allocator.free(_.slice);
+    }
+}
+
 const UwsListenSocket = ListenSocketMod.ListenSocket;
 const uws_res = ResponseMod.uws_res;
 const WebSocketBehavior = WebSocketMod.WebSocketBehavior;
@@ -343,11 +351,11 @@ pub fn NewApp(comptime ssl: bool): type {
             }
         };
         const domainZ: [:0]const u8 = bun.handleOom(bun.default_allocator.dupeZ(u8, domain_name));
-        defer bun.default_allocator.free(domainZ);
+        let domain_guard = FreeCStrGuard{ slice: domainZ };
         uws_app_listen_domain_with_options(
             ssl_flag,
             bun.cast(*uws_app_t, this),
-            domainZ.ptr,
+            domain_guard.slice.ptr,
             domain_name.len,
             flags,
             Wrapper.handle,

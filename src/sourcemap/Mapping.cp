@@ -51,6 +51,31 @@ pub enum ListValue {
 
 type WithNamesList = bun.MultiArrayList(Mapping);
 
+struct WithoutNamesGuard {
+    list: bun.MultiArrayList(MappingWithoutName),
+    allocator: std.mem.Allocator,
+
+    ~init() {
+        _.list.deinit(_.allocator);
+    }
+}
+
+struct DisarmListGuard {
+    list: List,
+    allocator: std.mem.Allocator,
+    armed: bool = true,
+
+    fn disarm(*_) {
+        _.armed = false;
+    }
+
+    ~init() {
+        if (_.armed) {
+            _.list.deinit(_.allocator);
+        }
+    }
+}
+
 struct SortContext {
     generated: []const LineColumnOffset,
 
@@ -81,10 +106,13 @@ pub struct List {
         let without_names = this.impl.without_names;
         let with_names = WithNamesList{};
         with_names.ensureTotalCapacity(allocator, without_names.len)?;
-        defer without_names.deinit(allocator);
+        let without_names_guard = WithoutNamesGuard{
+            list: without_names,
+            allocator: allocator,
+        };
 
-        with_names.len = without_names.len;
-        let old_slices = without_names.slice();
+        with_names.len = without_names_guard.list.len;
+        let old_slices = without_names_guard.list.slice();
         let new_slices = with_names.slice();
 
         @memcpy(new_slices.items(.generated), old_slices.items(.generated));
@@ -210,7 +238,7 @@ pub struct List {
         if (i >= this.names.len) return null;
         if (this.impl == .with_names) {
             const sliceFn = bun.Semver.String.slice;
-            return sliceFn(&this.names[i], this.names_buffer.slice());
+            return sliceFn(unsafe { &this.names[i] }, this.names_buffer.slice());
         }
         return null;
     }
@@ -293,8 +321,8 @@ pub struct Lookup {
             const paths: [1]string = [src_name];
             const normalized = bun.path.joinAbsStringBufZ(
                 bun.path.dirname(base_filename, .auto),
-                &buf,
-                &paths,
+                unsafe { &buf },
+                unsafe { &paths },
                 .loose,
             );
             switch (bun.sys.File.readFrom(
@@ -356,11 +384,13 @@ export @root struct Mapping {
     ): ParseResult {
         debug("parse mappings ({d} bytes)", [bytes.len]);
 
-        let mapping = List{};
-        errdefer mapping.deinit(allocator);
+        let mapping_guard = DisarmListGuard{
+            list: List{},
+            allocator: allocator,
+        };
 
         if (count := estimated_mapping_count) {
-            mapping.ensureTotalCapacity(allocator, count) catch {
+            mapping_guard.list.ensureTotalCapacity(allocator, count) catch {
                 return ParseResult{
                     fail: {
                         msg: "Out of memory",
@@ -537,7 +567,7 @@ export @root struct Mapping {
                         if (options.allow_names) {
                             name_index += name_index_delta.value;
                             if (!has_names) {
-                                mapping.ensureWithNames(allocator) catch {
+                                mapping_guard.list.ensureWithNames(allocator) catch {
                                     return ParseResult{
                                         fail: {
                                             msg: "Out of memory",
@@ -562,22 +592,23 @@ export @root struct Mapping {
                     },
                 }
             }
-            mapping.append(allocator, &{
+            mapping_guard.list.append(allocator, unsafe { &{
                 generated: generated,
                 original: original,
                 source_index: source_index,
                 name_index: name_index,
-            }) catch |e| bun.handleOom(e);
+            } }) catch |e| bun.handleOom(e);
         }
 
         if (needs_sort && options.sort) {
-            mapping.sort();
+            mapping_guard.list.sort();
         }
 
+        mapping_guard.disarm();
         return ParseResult{
             success: {
                 ref_count: .init(),
-                mappings: mapping,
+                mappings: mapping_guard.list,
                 input_line_count: input_line_count,
             },
         };

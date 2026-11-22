@@ -13,6 +13,14 @@ const VerticalPositionKeyword = css.css_values.position.VerticalPositionKeyword;
 const Position = css.css_values.position.Position;
 const Length = css.css_values.length.Length;
 const LengthPercentage = css.css_values.length.LengthPercentage;
+
+pub struct DeinitAllocGuard<T> {
+    ptr: *T!,
+    allocator: Allocator,
+    ~init() {
+        unsafe { _.ptr.deinit(_.allocator); }
+    }
+}
 const Percentage = css.css_values.percentage.Percentage;
 const NumberOrPercentage = css.css_values.percentage.NumberOrPercentage;
 
@@ -401,7 +409,8 @@ pub struct LinearGradient {
                 dest.allocator,
                 _.items.items.len,
             ) catch |e| bun.handleOom(e);
-            defer flipped_items.deinit(dest.allocator);
+            const flipped_guard = DeinitAllocGuard<@TypeOf(flipped_items)>{ ptr: unsafe { &flipped_items }, allocator: dest.allocator };
+            * = flipped_guard;
 
             let i: usize = _.items.items.len;
             while (i > 0) {
@@ -444,15 +453,15 @@ pub struct LinearGradient {
         }
     }
 
-    static fn isCompatible(_: *const @This(), browsers: css.targets.Browsers): bool {
-        for (*item of this.items.items) {
+    fn isCompatible(browsers: css.targets.Browsers): bool {
+        for (*item of _.items.items) {
             if (!item.isCompatible(browsers)) return false;
         }
         return true;
     }
 
-    static fn deepClone(_: *const @This(), allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+    fn deepClone(allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
     fn eql(other: *const LinearGradient): bool {
@@ -540,8 +549,8 @@ pub struct RadialGradient {
         serializeItems(LengthPercentage, &_.items, dest)?;
     }
 
-    static fn isCompatible(_: *const @This(), browsers: css.targets.Browsers): bool {
-        for (*item of this.items.items) {
+    fn isCompatible(browsers: css.targets.Browsers): bool {
+        for (*item of _.items.items) {
             if (!item.isCompatible(browsers)) return false;
         }
         return true;
@@ -563,8 +572,8 @@ pub struct RadialGradient {
         };
     }
 
-    static fn deepClone(_: *const @This(), allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+    fn deepClone(allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
     fn eql(other: *const RadialGradient): bool {
@@ -634,8 +643,8 @@ pub struct ConicGradient {
         return serializeItems(AnglePercentage, &_.items, dest)?;
     }
 
-    static fn isCompatible(_: *const @This(), browsers: css.targets.Browsers): bool {
-        for (*item of this.items.items) {
+    fn isCompatible(browsers: css.targets.Browsers): bool {
+        for (*item of _.items.items) {
             if (!item.isCompatible(browsers)) return false;
         }
         return true;
@@ -656,8 +665,8 @@ pub struct ConicGradient {
         };
     }
 
-    static fn deepClone(_: *const @This(), allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+    fn deepClone(allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
     fn eql(other: *const ConicGradient): bool {
@@ -665,110 +674,123 @@ pub struct ConicGradient {
     }
 }
 
+pub struct WebKitGradientFromTo {
+    p0: [2]f32,
+    p1: [2]f32,
+}
+
+/// A linear `-webkit-gradient()`.
+pub struct WebKitGradientLinear {
+    /// The starting point of the gradient.
+    @"from": WebKitGradientPoint,
+    /// The ending point of the gradient.
+    to: WebKitGradientPoint,
+    /// The color stops in the gradient.
+    stops: ArrayList(WebKitColorStop),
+
+    fn deepClone(allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), &_, allocator);
+    }
+
+    fn eql(other: *const @This()): bool {
+        return css.implementEql(@This(), &_, other);
+    }
+}
+
+/// A radial `-webkit-gradient()`.
+pub struct WebKitGradientRadial {
+    /// The starting point of the gradient.
+    @"from": WebKitGradientPoint,
+    /// The starting radius of the gradient.
+    r0: CSSNumber,
+    /// The ending point of the gradient.
+    to: WebKitGradientPoint,
+    /// The ending radius of the gradient.
+    r1: CSSNumber,
+    /// The color stops in the gradient.
+    stops: ArrayList(WebKitColorStop),
+
+    fn deepClone(allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), &_, allocator);
+    }
+
+    fn eql(other: *const @This()): bool {
+        return css.implementEql(@This(), &_, other);
+    }
+}
+
 /// A legacy `-webkit-gradient()`.
-pub const WebKitGradient = union(enum) {
+pub union(enum) WebKitGradient {
     /// A linear `-webkit-gradient()`.
-    linear: struct {
-        /// The starting point of the gradient.
-        from: WebKitGradientPoint,
-        /// The ending point of the gradient.
-        to: WebKitGradientPoint,
-        /// The color stops in the gradient.
-        stops: ArrayList(WebKitColorStop),
-
-        pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), this, allocator);
-        }
-
-        pub fn eql(this: *const @This(), other: *const @This()) bool {
-            return css.implementEql(@This(), this, other);
-        }
-    },
+    linear: WebKitGradientLinear,
     /// A radial `-webkit-gradient()`.
-    radial: struct {
-        /// The starting point of the gradient.
-        from: WebKitGradientPoint,
-        /// The starting radius of the gradient.
-        r0: CSSNumber,
-        /// The ending point of the gradient.
-        to: WebKitGradientPoint,
-        /// The ending radius of the gradient.
-        r1: CSSNumber,
-        /// The color stops in the gradient.
-        stops: ArrayList(WebKitColorStop),
+    radial: WebKitGradientRadial,
 
-        pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), this, allocator);
-        }
-
-        pub fn eql(this: *const @This(), other: *const @This()) bool {
-            return css.implementEql(@This(), this, other);
-        }
-    },
-
-    pub fn parse(input: *css.Parser) Result(WebKitGradient) {
+    static fn parse(input: *css.Parser): Result(WebKitGradient) {
         const location = input.currentSourceLocation();
         const ident = switch (input.expectIdent()) {
-            .result => |vv| vv,
-            .err => |e| return .{ .err = e },
+            .result vv => vv,
+            .err e => return .{ .err = e },
         };
-        if (input.expectComma().asErr()) |e| return .{ .err = e };
+        if (e := input.expectComma().asErr()) return .{ .err = e };
 
         // todo_stuff.match_ignore_ascii_case
         if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "linear")) {
             // todo_stuff.depth
-            const from = switch (WebKitGradientPoint.parse(input)) {
-                .result => |vv| vv,
-                .err => |e| return .{ .err = e },
+            const from_pt = switch (WebKitGradientPoint.parse(input)) {
+                .result vv => vv,
+                .err e => return .{ .err = e },
             };
-            if (input.expectComma().asErr()) |e| return .{ .err = e };
-            const to = switch (WebKitGradientPoint.parse(input)) {
-                .result => |vv| vv,
-                .err => |e| return .{ .err = e },
+            if (e := input.expectComma().asErr()) return .{ .err = e };
+            const to_pt = switch (WebKitGradientPoint.parse(input)) {
+                .result vv => vv,
+                .err e => return .{ .err = e },
             };
-            if (input.expectComma().asErr()) |e| return .{ .err = e };
+            if (e := input.expectComma().asErr()) return .{ .err = e };
             const stops = switch (input.parseCommaSeparated(WebKitColorStop, WebKitColorStop.parse)) {
-                .result => |vv| vv,
-                .err => |e| return .{ .err = e },
-            };
-            return .{ .result = WebKitGradient{ .linear = .{
-                .from = from,
-                .to = to,
-                .stops = stops,
-            } } };
-        } else if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "radial")) {
-            const from = switch (WebKitGradientPoint.parse(input)) {
-                .result => |vv| vv,
-                .err => |e| return .{ .err = e },
-            };
-            if (input.expectComma().asErr()) |e| return .{ .err = e };
-            const r0 = switch (CSSNumberFns.parse(input)) {
-                .result => |vv| vv,
-                .err => |e| return .{ .err = e },
-            };
-            if (input.expectComma().asErr()) |e| return .{ .err = e };
-            const to = switch (WebKitGradientPoint.parse(input)) {
-                .result => |vv| vv,
-                .err => |e| return .{ .err = e },
-            };
-            if (input.expectComma().asErr()) |e| return .{ .err = e };
-            const r1 = switch (CSSNumberFns.parse(input)) {
-                .result => |vv| vv,
-                .err => |e| return .{ .err = e },
-            };
-            if (input.expectComma().asErr()) |e| return .{ .err = e };
-            // todo_stuff.depth
-            const stops = switch (input.parseCommaSeparated(WebKitColorStop, WebKitColorStop.parse)) {
-                .result => |vv| vv,
-                .err => |e| return .{ .err = e },
+                .result vv => vv,
+                .err e => return .{ .err = e },
             };
             return .{ .result = WebKitGradient{
-                .radial = .{
-                    .from = from,
-                    .r0 = r0,
-                    .to = to,
-                    .r1 = r1,
-                    .stops = stops,
+                .linear = WebKitGradientLinear{
+                    @"from": from_pt,
+                    to: to_pt,
+                    stops: stops,
+                },
+            } };
+        } else if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "radial")) {
+            const from_pt = switch (WebKitGradientPoint.parse(input)) {
+                .result vv => vv,
+                .err e => return .{ .err = e },
+            };
+            if (e := input.expectComma().asErr()) return .{ .err = e };
+            const r0 = switch (CSSNumberFns.parse(input)) {
+                .result vv => vv,
+                .err e => return .{ .err = e },
+            };
+            if (e := input.expectComma().asErr()) return .{ .err = e };
+            const to_pt = switch (WebKitGradientPoint.parse(input)) {
+                .result vv => vv,
+                .err e => return .{ .err = e },
+            };
+            if (e := input.expectComma().asErr()) return .{ .err = e };
+            const r1 = switch (CSSNumberFns.parse(input)) {
+                .result vv => vv,
+                .err e => return .{ .err = e },
+            };
+            if (e := input.expectComma().asErr()) return .{ .err = e };
+            // todo_stuff.depth
+            const stops = switch (input.parseCommaSeparated(WebKitColorStop, WebKitColorStop.parse)) {
+                .result vv => vv,
+                .err e => return .{ .err = e },
+            };
+            return .{ .result = WebKitGradient{
+                .radial = WebKitGradientRadial{
+                    @"from": from_pt,
+                    r0: r0,
+                    to: to_pt,
+                    r1: r1,
+                    stops: stops,
                 },
             } };
         } else {
@@ -776,106 +798,107 @@ pub const WebKitGradient = union(enum) {
         }
     }
 
-    pub fn toCss(this: *const WebKitGradient, dest: *Printer) PrintErr!void {
-        switch (this.*) {
-            .linear => |*linear| {
-                try dest.writeStr("linear");
-                try dest.delim(',', false);
-                try linear.from.toCss(dest);
-                try dest.delim(',', false);
-                try linear.to.toCss(dest);
-                for (linear.stops.items) |*stop| {
-                    try dest.delim(',', false);
-                    try stop.toCss(dest);
+    fn toCss(dest: *Printer): PrintErr!void {
+        switch (_) {
+            .linear linear => {
+                dest.writeStr("linear")?;
+                dest.delim(',', false)?;
+                linear.@"from".toCss(dest)?;
+                dest.delim(',', false)?;
+                linear.to.toCss(dest)?;
+                for (*stop of linear.stops.items) {
+                    dest.delim(',', false)?;
+                    stop.toCss(dest)?;
                 }
             },
-            .radial => |*radial| {
-                try dest.writeStr("radial");
-                try dest.delim(',', false);
-                try radial.from.toCss(dest);
-                try dest.delim(',', false);
-                try CSSNumberFns.toCss(&radial.r0, dest);
-                try dest.delim(',', false);
-                try radial.to.toCss(dest);
-                try dest.delim(',', false);
-                try CSSNumberFns.toCss(&radial.r1, dest);
-                for (radial.stops.items) |*stop| {
-                    try dest.delim(',', false);
-                    try stop.toCss(dest);
+            .radial radial => {
+                dest.writeStr("radial")?;
+                dest.delim(',', false)?;
+                radial.@"from".toCss(dest)?;
+                dest.delim(',', false)?;
+                CSSNumberFns.toCss(&radial.r0, dest)?;
+                dest.delim(',', false)?;
+                radial.to.toCss(dest)?;
+                dest.delim(',', false)?;
+                CSSNumberFns.toCss(&radial.r1, dest)?;
+                for (*stop of radial.stops.items) {
+                    dest.delim(',', false)?;
+                    stop.toCss(dest)?;
                 }
             },
         }
     }
 
-    pub fn getFallback(this: *const @This(), allocator: Allocator, kind: css.ColorFallbackKind) WebKitGradient {
-        let stops: ArrayList(WebKitColorStop) = .{};
-        switch (this.*) {
-            .linear => |linear| {
-                stops = bun.handleOom(ArrayList(WebKitColorStop).initCapacity(allocator, linear.stops.items.len));
+    fn getFallback(allocator: Allocator, kind: css.ColorFallbackKind): WebKitGradient {
+        switch (_) {
+            .linear linear => {
+                let stops = bun.handleOom(ArrayList(WebKitColorStop).initCapacity(allocator, linear.stops.items.len));
                 stops.items.len = linear.stops.items.len;
-                for (stops.items, linear.stops.items) |*out, *in| {
-                    out.* = in.getFallback(allocator, kind);
+                let idx: usize = 0;
+                while (idx < stops.items.len) : (idx += 1) {
+                    stops.items[idx] = linear.stops.items[idx].getFallback(allocator, kind);
                 }
                 return WebKitGradient{
-                    .linear = .{
-                        .from = linear.from.deepClone(allocator),
-                        .to = linear.to.deepClone(allocator),
-                        .stops = stops,
+                    .linear = WebKitGradientLinear{
+                        @"from": linear.@"from".deepClone(allocator),
+                        to: linear.to.deepClone(allocator),
+                        stops: stops,
                     },
                 };
             },
-            .radial => |radial| {
-                stops = bun.handleOom(ArrayList(WebKitColorStop).initCapacity(allocator, radial.stops.items.len));
+            .radial radial => {
+                let stops = bun.handleOom(ArrayList(WebKitColorStop).initCapacity(allocator, radial.stops.items.len));
                 stops.items.len = radial.stops.items.len;
-                for (stops.items, radial.stops.items) |*out, *in| {
-                    out.* = in.getFallback(allocator, kind);
+                let idx: usize = 0;
+                while (idx < stops.items.len) : (idx += 1) {
+                    stops.items[idx] = radial.stops.items[idx].getFallback(allocator, kind);
                 }
                 return WebKitGradient{
-                    .radial = .{
-                        .from = radial.from.deepClone(allocator),
-                        .r0 = radial.r0,
-                        .to = radial.to.deepClone(allocator),
-                        .r1 = radial.r1,
-                        .stops = stops,
+                    .radial = WebKitGradientRadial{
+                        @"from": radial.@"from".deepClone(allocator),
+                        r0: radial.r0,
+                        to: radial.to.deepClone(allocator),
+                        r1: radial.r1,
+                        stops: stops,
                     },
                 };
             },
         }
     }
 
-    pub fn fromStandard(gradient: *const Gradient, allocator: Allocator) ?WebKitGradient {
+    static fn fromStandard(gradient: *const Gradient, allocator: Allocator): WebKitGradient? {
         switch (gradient.*) {
-            .linear => |*linear| {
+            .linear linear => {
                 // Convert from line direction to a from and to point, if possible.
-                const from: struct { f32, f32 }, const to: struct { f32, f32 } = switch (linear.direction) {
-                    .horizontal => |horizontal| switch (horizontal) {
-                        .left => .{ .{ 1.0, 0.0 }, .{ 0.0, 0.0 } },
-                        .right => .{ .{ 0.0, 0.0 }, .{ 1.0, 0.0 } },
+                const ft: WebKitGradientFromTo = switch (linear.direction) {
+                    .horizontal horizontal => switch (horizontal) {
+                        .left => WebKitGradientFromTo{ p0: [ 1.0, 0.0 ], p1: [ 0.0, 0.0 ] },
+                        .right => WebKitGradientFromTo{ p0: [ 0.0, 0.0 ], p1: [ 1.0, 0.0 ] },
                     },
-                    .vertical => |vertical| switch (vertical) {
-                        .top => .{ .{ 0.0, 1.0 }, .{ 0.0, 0.0 } },
-                        .bottom => .{ .{ 0.0, 0.0 }, .{ 0.0, 1.0 } },
+                    .vertical vertical => switch (vertical) {
+                        .top => WebKitGradientFromTo{ p0: [ 0.0, 1.0 ], p1: [ 0.0, 0.0 ] },
+                        .bottom => WebKitGradientFromTo{ p0: [ 0.0, 0.0 ], p1: [ 0.0, 1.0 ] },
                     },
-                    .corner => |corner| switch (corner.horizontal) {
+                    .corner corner => switch (corner.horizontal) {
                         .left => switch (corner.vertical) {
-                            .top => .{ .{ 1.0, 1.0 }, .{ 0.0, 0.0 } },
-                            .bottom => .{ .{ 1.0, 0.0 }, .{ 0.0, 1.0 } },
+                            .top => WebKitGradientFromTo{ p0: [ 1.0, 1.0 ], p1: [ 0.0, 0.0 ] },
+                            .bottom => WebKitGradientFromTo{ p0: [ 1.0, 0.0 ], p1: [ 0.0, 1.0 ] },
                         },
                         .right => switch (corner.vertical) {
-                            .top => .{ .{ 0.0, 1.0 }, .{ 1.0, 0.0 } },
-                            .bottom => .{ .{ 0.0, 0.0 }, .{ 1.0, 1.0 } },
+                            .top => WebKitGradientFromTo{ p0: [ 0.0, 1.0 ], p1: [ 1.0, 0.0 ] },
+                            .bottom => WebKitGradientFromTo{ p0: [ 0.0, 0.0 ], p1: [ 1.0, 1.0 ] },
                         },
                     },
-                    .angle => |angle| brk: {
+                    .angle angle => brk: {
                         const degrees = angle.toDegrees();
                         if (degrees == 0.0) {
-                            break :brk .{ .{ 0.0, 1.0 }, .{ 0.0, 0.0 } };
+                            break :brk WebKitGradientFromTo{ p0: [ 0.0, 1.0 ], p1: [ 0.0, 0.0 ] };
                         } else if (degrees == 90.0) {
-                            break :brk .{ .{ 0.0, 0.0 }, .{ 1.0, 0.0 } };
+                            break :brk WebKitGradientFromTo{ p0: [ 0.0, 0.0 ], p1: [ 1.0, 0.0 ] };
                         } else if (degrees == 180.0) {
-                            break :brk .{ .{ 0.0, 0.0 }, .{ 0.0, 1.0 } };
+                            break :brk WebKitGradientFromTo{ p0: [ 0.0, 0.0 ], p1: [ 0.0, 1.0 ] };
                         } else if (degrees == 270.0) {
-                            break :brk .{ .{ 1.0, 0.0 }, .{ 0.0, 0.0 } };
+                            break :brk WebKitGradientFromTo{ p0: [ 1.0, 0.0 ], p1: [ 0.0, 0.0 ] };
                         } else {
                             return null;
                         }
@@ -883,39 +906,39 @@ pub const WebKitGradient = union(enum) {
                 };
 
                 return WebKitGradient{
-                    .linear = .{
-                        .from = .{
-                            .x = .{ .number = .{ .percentage = .{ .v = from[0] } } },
-                            .y = .{ .number = .{ .percentage = .{ .v = from[1] } } },
+                    .linear = WebKitGradientLinear{
+                        @"from": .{
+                            .x = .{ .number = .{ .percentage = .{ .v = ft.p0[0] } } },
+                            .y = .{ .number = .{ .percentage = .{ .v = ft.p0[1] } } },
                         },
-                        .to = .{
-                            .x = .{ .number = .{ .percentage = .{ .v = to[0] } } },
-                            .y = .{ .number = .{ .percentage = .{ .v = to[1] } } },
+                        to: .{
+                            .x = .{ .number = .{ .percentage = .{ .v = ft.p1[0] } } },
+                            .y = .{ .number = .{ .percentage = .{ .v = ft.p1[1] } } },
                         },
-                        .stops = convertStopsToWebkit(allocator, &linear.items) orelse return null,
+                        stops: convertStopsToWebkit(allocator, &linear.items) ?? return null,
                     },
                 };
             },
-            .radial => |*radial| {
+            .radial radial => {
                 // Webkit radial gradients are always circles, not ellipses, and must be specified in pixels.
                 const radius = switch (radial.shape) {
-                    .circle => |*circle| switch (circle.*) {
-                        .radius => |r| if (r.toPx()) |px| px else return null,
+                    .circle circle => switch (circle) {
+                        .radius r => r.toPx() ?? return null,
                         else => return null,
                     },
                     else => return null,
                 };
 
-                const x = WebKitGradientPointComponent(HorizontalPositionKeyword).fromPosition(&radial.position.x, allocator) orelse return null;
-                const y = WebKitGradientPointComponent(VerticalPositionKeyword).fromPosition(&radial.position.y, allocator) orelse return null;
-                const point = WebKitGradientPoint{ .x = x, .y = y };
+                const x = WebKitGradientPointComponent(HorizontalPositionKeyword).fromPosition(&radial.position.x, allocator) ?? return null;
+                const y = WebKitGradientPointComponent(VerticalPositionKeyword).fromPosition(&radial.position.y, allocator) ?? return null;
+                const point = WebKitGradientPoint{ x: x, y: y };
                 return WebKitGradient{
-                    .radial = .{
-                        .from = point.deepClone(allocator),
-                        .r0 = 0.0,
-                        .to = point,
-                        .r1 = radius,
-                        .stops = convertStopsToWebkit(allocator, &radial.items) orelse return null,
+                    .radial = WebKitGradientRadial{
+                        @"from": point.deepClone(allocator),
+                        r0: 0.0,
+                        to: point,
+                        r1: radius,
+                        stops: convertStopsToWebkit(allocator, &radial.items) ?? return null,
                     },
                 };
             },
@@ -923,14 +946,14 @@ pub const WebKitGradient = union(enum) {
         }
     }
 
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+    fn deepClone(allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
-    pub fn eql(this: *const WebKitGradient, other: *const WebKitGradient) bool {
-        return css.implementEql(@This(), this, other);
+    fn eql(other: *const WebKitGradient): bool {
+        return css.implementEql(@This(), &_, other);
     }
-};
+}
 
 /// The direction of a CSS `linear-gradient()`.
 ///
@@ -1157,8 +1180,8 @@ pub struct WebKitGradientPoint {
         return css.implementEql(@This(), &_, other);
     }
 
-    static fn deepClone(_: *const @This(), allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+    fn deepClone(allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 }
 
@@ -1307,15 +1330,15 @@ pub struct WebKitColorStop {
         dest.writeChar(')')?;
     }
 
-    static fn getFallback(_: *const @This(), allocator: Allocator, kind: css.ColorFallbackKind): WebKitColorStop {
+    fn getFallback(allocator: Allocator, kind: css.ColorFallbackKind): WebKitColorStop {
         return WebKitColorStop{
-            color: this.color.getFallback(allocator, kind),
-            position: this.position,
+            color: _.color.getFallback(allocator, kind),
+            position: _.position,
         };
     }
 
-    static fn deepClone(_: *const @This(), allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+    fn deepClone(allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
     fn eql(other: *const WebKitColorStop): bool {

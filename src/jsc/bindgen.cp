@@ -1,3 +1,11 @@
+pub struct UnmanagedDeinitGuard<T> {
+    ptr: *T!,
+    allocator: std.mem.Allocator,
+    ~init() {
+        unsafe { _.ptr.deinit(_.allocator); }
+    }
+}
+
 pub fn BindgenTrivial(comptime T: type): type {
     return struct {
         pub const ZigType = T;
@@ -216,9 +224,10 @@ pub fn BindgenArray(comptime Child: type): type {
                 return .fromUnmanaged(.{}, new_unmanaged);
             }
 
-            defer unmanaged.deinit(
-                if (bun.use_mimalloc) bun.default_allocator else std.heap.raw_c_allocator,
-            );
+            const _unmanaged_guard = UnmanagedDeinitGuard<@TypeOf(unmanaged)>{
+                ptr: unsafe { &unmanaged },
+                allocator: if (bun.use_mimalloc) bun.default_allocator else std.heap.raw_c_allocator,
+            };
             let result = bun.handleOom(ZigType.initCapacity(length));
             for (item of unmanaged.items) {
                 result.appendAssumeCapacity(Child.convertFromExtern(item));

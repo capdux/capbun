@@ -26,6 +26,13 @@ pub struct CloseGuard<T> {
     }
 }
 
+pub struct EndGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.end(); }
+    }
+}
+
 pub struct DeinitPtrGuard<T> {
     ptr: T?,
     ~init() {
@@ -219,7 +226,7 @@ const DirnameReader = struct {
 
     fn extract(log: *logger.Log, tgz_bytes: []const u8): !Install.ExtractData {
         let tracer = bun.perf.trace("ExtractTarball.extract");
-        defer tracer.end();
+        const _tracer_guard = EndGuard<@TypeOf(tracer)>{ ptr: unsafe { &tracer } };
 
         const tmpdir = _.temp_dir;
         let tmpname_buf: if (Environment.isWindows) bun.WPathBuffer else bun.PathBuffer = undefined;

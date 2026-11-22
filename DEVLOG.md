@@ -1628,3 +1628,8 @@
 ## [2026-11-22 Wave #34] RAII 改造与 `unsafe {}` 经验
 - `JSPropertyIterator.cp`：`TopExceptionScope` 内部存在 `location == &bytes[0]` 地址自检断言，Guard 须持有 `*bun.jsc.TopExceptionScope` 指针而非按值拷贝，避免栈帧移动触发断言失败。
 - `calc.cp`：CP 表达 `void` 实参不可写 `{}`（会被降维为匿名结构体 `.{}`），须显式传 `@as(void, undefined)`；`css.ParserError.invalid_value` 不可写 `{ .invalid_value = {} }`；`pub enum` 中未写 `*_` 的只读方法 `toCss` 存在被 `cpc` 误生成 `*Enum` 可变接收者的问题（已提单 `task-bun-20261122-enum-readonly-method-mut-self`）。
+
+## [2026-11-22 Wave #35 & Wave #36] 全仓收官经验
+- `~errinit()` 上线后全面取代手写 `disarm()` 模式（`WindowsWatcher`, `HTMLScanner`, `IndexStringMap`, `defines`, `bunfig`, `multi_array_list`, `codec_bmp`, `thumbhash`, `ValkeyCommand`, `InternalSourceMap`, `FieldDescription`, `Signature`, `RowDescription`, `tcc`），显著降低漏撤防风险与代码膨胀。
+- `color.cp`：`RelativeComponentParser` 无状态工具方法与内部 `Closure` 回调须显式标注 `static fn`，且 `components` 字段改为 `[4]f32` 避免运行时下标访问匿名元组触发 `unable to resolve comptime value`。
+- `gradient.cp`：`WebKitGradient` 提取顶层 `WebKitGradientLinear`/`WebKitGradientRadial` 并采用纯 CP `pub union(enum)` 后，完整恢复全部成员方法 codegen。

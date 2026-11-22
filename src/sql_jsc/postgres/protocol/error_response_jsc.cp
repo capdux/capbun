@@ -8,17 +8,24 @@ const jsc = bun.jsc;
 const JSValue = jsc.JSValue;
 const StringBuilder = bun.StringBuilder;
 
+pub struct StringBuilderGuard {
+    val: StringBuilder = StringBuilder{},
+
+    ~init() {
+        _.val.deinit(bun.default_allocator);
+    }
+}
+
 pub fn toJS(*_: ErrorResponse, globalObject: *jsc.JSGlobalObject): JSValue {
-    let b = StringBuilder{};
-    defer b.deinit(bun.default_allocator);
+    let b_guard = StringBuilderGuard{};
 
     const items = this.messages.items;
     for (msg of items) {
-        b.cap += switch (msg) {
+        b_guard.val.cap += switch (msg) {
             inline else => |m| m.utf8ByteLength(),
         } + 1;
     }
-    b.allocate(bun.default_allocator) catch {};
+    b_guard.val.allocate(bun.default_allocator) catch {};
 
     let severity: String = String.dead;
     let code: String = String.dead;
@@ -63,18 +70,18 @@ pub fn toJS(*_: ErrorResponse, globalObject: *jsc.JSGlobalObject): JSValue {
 
     let needs_newline = false;
     if (!message.isEmpty()) {
-        * = b.appendStr(message);
+        * = b_guard.val.appendStr(message);
         needs_newline = true;
     } else {
         if (!detail.isEmpty()) {
-            * = b.append(if (needs_newline) "\n" else " ");
+            * = b_guard.val.append(if (needs_newline) "\n" else " ");
             needs_newline = true;
-            * = b.appendStr(detail);
+            * = b_guard.val.appendStr(detail);
         }
         if (!hint.isEmpty()) {
-            * = b.append(if (needs_newline) "\n" else " ");
+            * = b_guard.val.append(if (needs_newline) "\n" else " ");
             needs_newline = true;
-            * = b.appendStr(hint);
+            * = b_guard.val.appendStr(hint);
         }
     }
 
@@ -100,7 +107,7 @@ pub fn toJS(*_: ErrorResponse, globalObject: *jsc.JSGlobalObject): JSValue {
     const line_slice = if (line.isEmpty()) null else line.byteSlice();
     const routine_slice = if (routine.isEmpty()) null else routine.byteSlice();
 
-    const error_message = if (b.len > 0) b.allocatedSlice()[0..b.len] else "";
+    const error_message = if (b_guard.val.len > 0) b_guard.val.allocatedSlice()[0..b_guard.val.len] else "";
 
     return createPostgresError(globalObject, error_message, {
         code: error_code,

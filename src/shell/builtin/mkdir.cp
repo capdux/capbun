@@ -18,6 +18,13 @@ const jsc = bun.jsc;
 const WorkPool = bun.jsc.WorkPool;
 
 const shell = bun.shell;
+
+struct DeinitPtrGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
 const ExitCode = shell.ExitCode;
 const Yield = bun.shell.Yield;
 
@@ -356,7 +363,7 @@ pub const ShellMkdirOutputTask = OutputTask(Mkdir, .{
     }
 
     pub fn onShellMkdirTaskDone(*_, task: *ShellMkdirTask) {
-        defer task.deinit();
+        const _task_guard = DeinitPtrGuard<ShellMkdirTask>{ ptr: unsafe { task } };
         _.state.exec.tasks_done += 1;
         let output = task.takeOutput();
         const err = task.err;
@@ -381,7 +388,7 @@ pub const ShellMkdirOutputTask = OutputTask(Mkdir, .{
     pub fn deinit(*_) {}
 
     pub inline fn bltn(*_): *Builtin {
-        const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("mkdir", _));
+        const impl_: *Builtin.Impl = unsafe { @alignCast(@fieldParentPtr("mkdir", _)) };
         return @fieldParentPtr("impl", impl_);
     }
 }

@@ -28,6 +28,16 @@ pub type Param = ParamMapModule.Param;
 pub const ParamList = ParamMapModule.ParamList;
 pub type ParamListPtr = ParamMapModule.ParamListPtr;
 
+struct FileCloseGuard {
+    file: *std.fs.File!,
+    needs_close: *bool!,
+    ~init() {
+        unsafe {
+            if (_.needs_close.*) _.file.close();
+        }
+    }
+}
+
 pub struct RouteIndex {
     route: *Route,
     name: string,
@@ -148,10 +158,10 @@ pub struct Route {
             buf = buf[extname.len..];
 
             if (comptime Environment.isWindows) {
-                bun.path.platformToPosixInPlace(u8, route_file_buf[0 .. @intFromPtr(buf.ptr) - @intFromPtr(route_file_buf)]);
+                bun.path.platformToPosixInPlace(u8, route_file_buf[0 .. unsafe { @intFromPtr(buf.ptr) - @intFromPtr(route_file_buf) }]);
             }
 
-            break :brk route_file_buf[0 .. @intFromPtr(buf.ptr) - @intFromPtr(route_file_buf)];
+            break :brk route_file_buf[0 .. unsafe { @intFromPtr(buf.ptr) - @intFromPtr(route_file_buf) }];
         };
 
         let name = public_path[0 .. public_path.len - extname.len];
@@ -187,7 +197,7 @@ pub struct Route {
                 name_i += 1;
             }
 
-            const name_offset = @intFromPtr(name.ptr) - @intFromPtr(public_path.ptr);
+            const name_offset = unsafe { @intFromPtr(name.ptr) - @intFromPtr(public_path.ptr) };
 
             if (has_uppercase) {
                 public_path = FileSystem.DirnameStore.instance.append(@TypeOf(public_path), public_path) catch unreachable;
@@ -210,7 +220,7 @@ pub struct Route {
         if (abs_path_str.len == 0) {
             let file = std.fs.File{ .handle = -1 };
             let needs_close = true;
-            defer if (needs_close) file.close();
+            const _file_guard = FileCloseGuard{ file: unsafe { &file }, needs_close: unsafe { &needs_close } };
             if (valid := entry.cache.fd.unwrapValid()) {
                 file = valid.stdFile();
                 needs_close = false;

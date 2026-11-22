@@ -588,14 +588,14 @@ const backing_int = if (is_posix) c_int else u64;
         } else {
             // intCast fails if 'fd > 2^62'
             // possible with handleToNumber(GetCurrentProcess());
-            return @intCast(@intFromPtr(handle));
+            return @intCast(unsafe { @intFromPtr(handle) });
         }
     }
 
     fn numberToHandle(handle: HandleNumber): fd_t {
         if (os == .windows) {
             if (handle == 0) return std.os.windows.INVALID_HANDLE_VALUE;
-            return @ptrFromInt(handle);
+            return unsafe { @ptrFromInt(handle) };
         } else {
             return handle;
         }

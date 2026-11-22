@@ -6,6 +6,14 @@ import EncodeIntMod from "./EncodeInt.zig";
 const Data = DataMod.Data;
 const decodeLengthInt = EncodeIntMod.decodeLengthInt;
 
+pub struct DataGuard {
+    val: Data,
+
+    ~init() {
+        _.val.deinit();
+    }
+}
+
 pub fn NewReaderWrap(
     comptime Context: type,
     comptime markMessageStartFn_: anytype,
@@ -65,13 +73,12 @@ pub fn NewReaderWrap(
         }
 
         pub fn int(this, comptime Int: type) AnyMySQLError.Error!Int {
-            let data = this.read(@sizeOf(Int))?;
-            defer data.deinit();
+            let data_guard = DataGuard{ val: this.read(@sizeOf(Int))? };
             if (comptime Int == u8) {
-                return @as(Int, data.slice()[0]);
+                return @as(Int, data_guard.val.slice()[0]);
             }
             const size = @divExact(@typeInfo(Int).int.bits, 8);
-            return @as(Int, @bitCast(unsafe { data.slice()[0..size].* }));
+            return @as(Int, @bitCast(unsafe { data_guard.val.slice()[0..size].* }));
         }
 
         pub fn encodeLenString(this) AnyMySQLError.Error!Data {

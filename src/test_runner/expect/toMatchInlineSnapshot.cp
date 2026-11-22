@@ -2,7 +2,7 @@ pub fn toMatchInlineSnapshot(client: *Expect, globalThis: *JSGlobalObject, callF
     defer client.postMatch(globalThis);
     const thisValue = callFrame.this();
     const _arguments = callFrame.arguments_old(2);
-    const arguments: []const JSValue = _arguments.ptr[0.._arguments.len];
+    const arguments: []const JSValue = unsafe { _arguments.ptr[0.._arguments.len] };
 
     client.incrementExpectCallCounter();
 
@@ -43,7 +43,7 @@ pub fn toMatchInlineSnapshot(client: *Expect, globalThis: *JSGlobalObject, callF
     }
 
     let expected = expected_string.toSlice(default_allocator);
-    defer expected.deinit();
+    const _expected_guard = DeinitGuard<@TypeOf(expected)>{ ptr: unsafe { &expected } };
 
     const expected_slice: ([]const u8)? = if (has_expected) expected.slice() else null;
 
@@ -62,3 +62,9 @@ const JSValue = bun.jsc.JSValue;
 
 const Expect = bun.jsc.Expect.Expect;
 const getSignature = Expect.getSignature;
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}

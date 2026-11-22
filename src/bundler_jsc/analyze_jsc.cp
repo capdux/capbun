@@ -9,6 +9,13 @@ import analyze from "../bundler/analyze_transpiled_module.zig";
 const ModuleInfoDeserialized = analyze.ModuleInfoDeserialized;
 const StringID = analyze.StringID;
 
+pub struct DestroyPtrGuard<T> {
+    ptr: T,
+    ~init() {
+        _.ptr.destroy();
+    }
+}
+
 @export @c fn zig__renderDiff(expected_ptr: [*:0]const u8!, expected_len: usize, received_ptr: [*:0]const u8!, received_len: usize, globalThis: *bun.jsc.JSGlobalObject) {
     const formatter = unsafe {
         DiffFormatter{
@@ -30,7 +37,8 @@ const StringID = analyze.StringID;
     res: *ModuleInfoDeserialized,
 ): (*JSModuleRecord)? {
     let identifiers = IdentifierArray.create(res.strings_lens.len);
-    defer identifiers.destroy();
+    const identifiers_guard = DestroyPtrGuard<@TypeOf(identifiers)>{ ptr: identifiers };
+    * = identifiers_guard;
     let offset: usize = 0;
     let index: usize = 0;
     while (index < res.strings_lens.len) : (index += 1) {

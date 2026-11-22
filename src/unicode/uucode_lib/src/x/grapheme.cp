@@ -648,6 +648,21 @@ fn isExtendedPictographic(gb: types_x.GraphemeBreakNoControl): bool {
     return gb == .extended_pictographic || gb == .emoji_modifier_base;
 }
 
+struct CloseGuard<T> {
+    val: T,
+    ~init() {
+        _.val.close();
+    }
+}
+
+struct FreeGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: T,
+    ~init() {
+        _.alloc.free(_.slice);
+    }
+}
+
 fn testGraphemeBreakNoControl(getActualIsBreak: fn (cp1: u21, cp2: u21, state: *uucode.grapheme.BreakState) bool) !void {
 
     const trim = Ucd.trim;
@@ -657,10 +672,10 @@ fn testGraphemeBreakNoControl(getActualIsBreak: fn (cp1: u21, cp2: u21, state: *
     const file_path = "ucd/auxiliary/GraphemeBreakTest.txt";
 
     const file = std.fs.cwd().openFile(file_path, {})?;
-    defer file.close();
+    const _file_guard = CloseGuard<std.fs.File>{ val: file };
 
     const content = file.readToEndAlloc(allocator, 1024 * 1024 * 10)?;
-    defer allocator.free(content);
+    const _content_guard = FreeGuard<@TypeOf(content)>{ alloc: allocator, slice: content };
 
     let lines = std.mem.splitScalar(u8, content, '\n');
     let success = true;

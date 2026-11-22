@@ -42,6 +42,14 @@ pub const RunState = union(enum) {
     done,
 };
 
+struct AllocDeinitConstPtrGuard<T> {
+    ptr: *const T!,
+    alloc: std.mem.Allocator,
+    ~init() {
+        unsafe { _.ptr.deinit(_.alloc); }
+    }
+}
+
 @root struct Subshell {
     base: State,
     node: *const ast.Subshell,
@@ -52,7 +60,7 @@ pub const RunState = union(enum) {
     exit_code: ExitCode = 0,
 
     static fn format(subshell: *const Subshell, writer: *std.Io.Writer)! {
-        try writer.print("Subshell(0x{x})", .{@intFromPtr(subshell)});
+        try writer.print("Subshell(0x{x})", .{ unsafe { @intFromPtr(subshell) } });
     }
 
     static fn init(
@@ -169,7 +177,7 @@ pub const RunState = union(enum) {
         if (child_ptr.ptr.is(Expansion) && exit_code != 0) {
             if (exit_code != 0) {
                 const e = _.state.expanding_redirect.expansion.state.err;
-                defer e.deinit(bun.default_allocator);
+                const _e_guard = AllocDeinitConstPtrGuard<@TypeOf(e)>{ ptr: unsafe { &e }, alloc: bun.default_allocator };
                 _.state.expanding_redirect.expansion.deinit();
                 return _.writeFailingError("{f}\n", .{e});
             }
