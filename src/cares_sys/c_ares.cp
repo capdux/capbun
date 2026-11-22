@@ -223,13 +223,13 @@ fn hostentHostCallbackWrapper(
     comptime function: hostentCallback(Type),
 ): ares_host_callback {
     return &struct {
-        pub fn handle(ctx: *!?, status: c_int, timeouts: c_int, hostent: (*struct_hostent)?) callconv(.c) void {
-            const this = bun.cast(*Type, ctx.?);
+        pub static fn handle(ctx: *!?, status: c_int, timeouts: c_int, hostent: (*struct_hostent)?) callconv(.c) void {
+            const req = bun.cast(*Type, ctx.?);
             if (status != ARES_SUCCESS) {
-                function(this, Error.get(status), timeouts, null);
+                function(req, Error.get(status), timeouts, null);
                 return;
             }
-            function(this, null, timeouts, hostent);
+            function(req, null, timeouts, hostent);
         }
     }.handle;
 }
@@ -240,10 +240,10 @@ fn hostentCallbackWrapper(
     comptime function: hostentCallback(Type),
 ): ares_callback {
     return &struct {
-        pub fn handle(ctx: *!?, status: c_int, timeouts: c_int, buffer: [*c]u8, buffer_length: c_int) callconv(.c) void {
-            const this = bun.cast(*Type, ctx.?);
+        pub static fn handle(ctx: *!?, status: c_int, timeouts: c_int, buffer: [*c]u8, buffer_length: c_int) callconv(.c) void {
+            const req = bun.cast(*Type, ctx.?);
             if (status != ARES_SUCCESS) {
-                function(this, Error.get(status), timeouts, null);
+                function(req, Error.get(status), timeouts, null);
                 return;
             }
 
@@ -254,24 +254,24 @@ fn hostentCallbackWrapper(
 
                 const result = ares_parse_a_reply(buffer, buffer_length, &start, &addrttls, &naddrttls);
                 if (result != ARES_SUCCESS) {
-                    function(this, Error.get(result), timeouts, null);
+                    function(req, Error.get(result), timeouts, null);
                     return;
                 }
-                function(this, null, timeouts, start);
+                function(req, null, timeouts, start);
             } else if (comptime strings.eqlComptime(lookup_name, "ns")) {
                 const result = ares_parse_ns_reply(buffer, buffer_length, &start);
                 if (result != ARES_SUCCESS) {
-                    function(this, Error.get(result), timeouts, null);
+                    function(req, Error.get(result), timeouts, null);
                     return;
                 }
-                function(this, null, timeouts, start);
+                function(req, null, timeouts, start);
             } else if (comptime strings.eqlComptime(lookup_name, "ptr")) {
                 const result = ares_parse_ptr_reply(buffer, buffer_length, null, 0, AF.INET, &start);
                 if (result != ARES_SUCCESS) {
-                    function(this, Error.get(result), timeouts, null);
+                    function(req, Error.get(result), timeouts, null);
                     return;
                 }
-                function(this, null, timeouts, start);
+                function(req, null, timeouts, start);
             } else {
                 @compileError(std.fmt.comptimePrint("Unsupported struct_hostent record type: {s}", .{lookup_name}));
             }
@@ -311,13 +311,13 @@ pub struct hostent_with_ttls {
         comptime function: Callback(Type),
     ): ares_host_callback {
         return &struct {
-            pub fn handle(ctx: *!?, status: c_int, timeouts: c_int, hostent: (*hostent_with_ttls)?) callconv(.c) void {
-                const this = bun.cast(*Type, ctx.?);
+            pub static fn handle(ctx: *!?, status: c_int, timeouts: c_int, hostent: (*hostent_with_ttls)?) callconv(.c) void {
+                const req = bun.cast(*Type, ctx.?);
                 if (status != ARES_SUCCESS) {
-                    function(this, Error.get(status), timeouts, null);
+                    function(req, Error.get(status), timeouts, null);
                     return;
                 }
-                function(this, null, timeouts, hostent);
+                function(req, null, timeouts, hostent);
             }
         }.handle;
     }
@@ -328,16 +328,16 @@ pub struct hostent_with_ttls {
         comptime function: Callback(Type),
     ): ares_callback {
         return &struct {
-            pub fn handle(ctx: *!?, status: c_int, timeouts: c_int, buffer: [*c]u8, buffer_length: c_int) callconv(.c) void {
-                const this = bun.cast(*Type, ctx.?);
+            pub static fn handle(ctx: *!?, status: c_int, timeouts: c_int, buffer: [*c]u8, buffer_length: c_int) callconv(.c) void {
+                const req = bun.cast(*Type, ctx.?);
                 if (status != ARES_SUCCESS) {
-                    function(this, Error.get(status), timeouts, null);
+                    function(req, Error.get(status), timeouts, null);
                     return;
                 }
 
                 switch (parse(lookup_name, buffer, buffer_length)) {
-                    .result => |result| function(this, null, timeouts, result),
-                    .err => |err| function(this, err, timeouts, null),
+                    .result => |result| function(req, null, timeouts, result),
+                    .err => |err| function(req, err, timeouts, null),
                 }
             }
         }.handle;
@@ -406,13 +406,13 @@ pub struct hostent_with_ttls {
         comptime function: Callback(Type),
     ): ares_nameinfo_callback {
         return &struct {
-            pub fn handle(ctx: *!?, status: c_int, timeouts: c_int, node: [*c]u8, service: [*c]u8) callconv(.c) void {
-                const this = bun.cast(*Type, ctx.?);
+            pub static fn handle(ctx: *!?, status: c_int, timeouts: c_int, node: [*c]u8, service: [*c]u8) callconv(.c) void {
+                const req = bun.cast(*Type, ctx.?);
                 if (status != ARES_SUCCESS) {
-                    function(this, Error.get(status), timeouts, null);
+                    function(req, Error.get(status), timeouts, null);
                     return;
                 }
-                function(this, null, timeouts, .{ .node = node, .service = service });
+                function(req, null, timeouts, .{ .node = node, .service = service });
                 return;
             }
         }.handle;
@@ -455,14 +455,14 @@ pub const struct_timeval = std.posix.timeval;
     pub const toJSArray = cares_jsc.addrInfoToJSArray;
 
     pub inline fn name(_: *const AddrInfo): []const u8 {
-        const name_opt = this.name_;
+        const name_opt = _.name_;
         if (name_opt == null) return "";
         const name_ = name_opt.?;
         return bun.span(name_);
     }
 
     pub inline fn cnames(_: *const AddrInfo): []const AddrInfo_node {
-        const cnames_ = this.cnames_ ?? return [];
+        const cnames_ = _.cnames_ ?? return [];
         return bun.span(cnames_);
     }
 
@@ -475,10 +475,10 @@ pub const struct_timeval = std.posix.timeval;
         comptime function: Callback(Type),
     ): ares_addrinfo_callback {
         return &struct {
-            pub fn handleAddrInfo(ctx: *!?, status: c_int, timeouts: c_int, addr_info: (*AddrInfo)?) callconv(.c) void {
-                const this = bun.cast(*Type, ctx.?);
+            pub static fn handleAddrInfo(ctx: *!?, status: c_int, timeouts: c_int, addr_info: (*AddrInfo)?) callconv(.c) void {
+                const req = bun.cast(*Type, ctx.?);
 
-                function(this, Error.get(status), timeouts, addr_info);
+                function(req, Error.get(status), timeouts, addr_info);
             }
         }.handleAddrInfo;
     }
@@ -753,20 +753,20 @@ pub extern fn ares_queue_active_queries(channel: *const Channel): usize;
         comptime function: Callback(Type),
     ): ares_callback {
         return &struct {
-            pub fn handle(ctx: *!?, status: c_int, timeouts: c_int, buffer: [*c]u8, buffer_length: c_int) callconv(.c) void {
-                const this = bun.cast(*Type, ctx.?);
+            pub static fn handle(ctx: *!?, status: c_int, timeouts: c_int, buffer: [*c]u8, buffer_length: c_int) callconv(.c) void {
+                const req = bun.cast(*Type, ctx.?);
                 if (status != ARES_SUCCESS) {
-                    function(this, Error.get(status), timeouts, null);
+                    function(req, Error.get(status), timeouts, null);
                     return;
                 }
 
                 let start: [*c]struct_ares_caa_reply = undefined;
                 const result = ares_parse_caa_reply(buffer, buffer_length, &start);
                 if (result != ARES_SUCCESS) {
-                    function(this, Error.get(result), timeouts, null);
+                    function(req, Error.get(result), timeouts, null);
                     return;
                 }
-                function(this, null, timeouts, start);
+                function(req, null, timeouts, start);
             }
         }.handle;
     }
@@ -796,20 +796,20 @@ pub extern fn ares_queue_active_queries(channel: *const Channel): usize;
         comptime function: Callback(Type),
     ): ares_callback {
         return &struct {
-            pub fn handleSrv(ctx: *!?, status: c_int, timeouts: c_int, buffer: [*c]u8, buffer_length: c_int) callconv(.c) void {
-                const this = bun.cast(*Type, ctx.?);
+            pub static fn handleSrv(ctx: *!?, status: c_int, timeouts: c_int, buffer: [*c]u8, buffer_length: c_int) callconv(.c) void {
+                const req = bun.cast(*Type, ctx.?);
                 if (status != ARES_SUCCESS) {
-                    function(this, Error.get(status), timeouts, null);
+                    function(req, Error.get(status), timeouts, null);
                     return;
                 }
 
                 let srv_start: [*c]struct_ares_srv_reply = undefined;
                 const result = ares_parse_srv_reply(buffer, buffer_length, &srv_start);
                 if (result != ARES_SUCCESS) {
-                    function(this, Error.get(result), timeouts, null);
+                    function(req, Error.get(result), timeouts, null);
                     return;
                 }
-                function(this, null, timeouts, srv_start);
+                function(req, null, timeouts, srv_start);
             }
         }.handleSrv;
     }
@@ -837,20 +837,20 @@ pub extern fn ares_queue_active_queries(channel: *const Channel): usize;
         comptime function: Callback(Type),
     ): ares_callback {
         return &struct {
-            pub fn handle(ctx: *!?, status: c_int, timeouts: c_int, buffer: [*c]u8, buffer_length: c_int) callconv(.c) void {
-                const this = bun.cast(*Type, ctx.?);
+            pub static fn handle(ctx: *!?, status: c_int, timeouts: c_int, buffer: [*c]u8, buffer_length: c_int) callconv(.c) void {
+                const req = bun.cast(*Type, ctx.?);
                 if (status != ARES_SUCCESS) {
-                    function(this, Error.get(status), timeouts, null);
+                    function(req, Error.get(status), timeouts, null);
                     return;
                 }
 
                 let start: [*c]struct_ares_mx_reply = undefined;
                 const result = ares_parse_mx_reply(buffer, buffer_length, &start);
                 if (result != ARES_SUCCESS) {
-                    function(this, Error.get(result), timeouts, null);
+                    function(req, Error.get(result), timeouts, null);
                     return;
                 }
-                function(this, null, timeouts, start);
+                function(req, null, timeouts, start);
             }
         }.handle;
     }
@@ -880,20 +880,20 @@ pub extern fn ares_queue_active_queries(channel: *const Channel): usize;
         comptime function: Callback(Type),
     ): ares_callback {
         return &struct {
-            pub fn handleTxt(ctx: *!?, status: c_int, timeouts: c_int, buffer: [*c]u8, buffer_length: c_int) callconv(.c) void {
-                const this = bun.cast(*Type, ctx.?);
+            pub static fn handleTxt(ctx: *!?, status: c_int, timeouts: c_int, buffer: [*c]u8, buffer_length: c_int) callconv(.c) void {
+                const req = bun.cast(*Type, ctx.?);
                 if (status != ARES_SUCCESS) {
-                    function(this, Error.get(status), timeouts, null);
+                    function(req, Error.get(status), timeouts, null);
                     return;
                 }
 
                 let srv_start: [*c]struct_ares_txt_reply = undefined;
                 const result = ares_parse_txt_reply(buffer, buffer_length, &srv_start);
                 if (result != ARES_SUCCESS) {
-                    function(this, Error.get(result), timeouts, null);
+                    function(req, Error.get(result), timeouts, null);
                     return;
                 }
-                function(this, null, timeouts, srv_start);
+                function(req, null, timeouts, srv_start);
             }
         }.handleTxt;
     }
@@ -931,20 +931,20 @@ pub extern fn ares_queue_active_queries(channel: *const Channel): usize;
         comptime function: Callback(Type),
     ): ares_callback {
         return &struct {
-            pub fn handleNaptr(ctx: *!?, status: c_int, timeouts: c_int, buffer: [*c]u8, buffer_length: c_int) callconv(.c) void {
-                const this = bun.cast(*Type, ctx.?);
+            pub static fn handleNaptr(ctx: *!?, status: c_int, timeouts: c_int, buffer: [*c]u8, buffer_length: c_int) callconv(.c) void {
+                const req = bun.cast(*Type, ctx.?);
                 if (status != ARES_SUCCESS) {
-                    function(this, Error.get(status), timeouts, null);
+                    function(req, Error.get(status), timeouts, null);
                     return;
                 }
 
                 let naptr_start: [*c]struct_ares_naptr_reply = undefined;
                 const result = ares_parse_naptr_reply(buffer, buffer_length, &naptr_start);
                 if (result != ARES_SUCCESS) {
-                    function(this, Error.get(result), timeouts, null);
+                    function(req, Error.get(result), timeouts, null);
                     return;
                 }
-                function(this, null, timeouts, naptr_start);
+                function(req, null, timeouts, naptr_start);
             }
         }.handleNaptr;
     }
@@ -976,20 +976,20 @@ pub extern fn ares_queue_active_queries(channel: *const Channel): usize;
         comptime function: Callback(Type),
     ): ares_callback {
         return &struct {
-            pub fn handleSoa(ctx: *!?, status: c_int, timeouts: c_int, buffer: [*c]u8, buffer_length: c_int) callconv(.c) void {
-                const this = bun.cast(*Type, ctx.?);
+            pub static fn handleSoa(ctx: *!?, status: c_int, timeouts: c_int, buffer: [*c]u8, buffer_length: c_int) callconv(.c) void {
+                const req = bun.cast(*Type, ctx.?);
                 if (status != ARES_SUCCESS) {
-                    function(this, Error.get(status), timeouts, null);
+                    function(req, Error.get(status), timeouts, null);
                     return;
                 }
 
                 let soa_start: [*c]struct_ares_soa_reply = undefined;
                 const result = ares_parse_soa_reply(buffer, buffer_length, &soa_start);
                 if (result != ARES_SUCCESS) {
-                    function(this, Error.get(result), timeouts, null);
+                    function(req, Error.get(result), timeouts, null);
                     return;
                 }
-                function(this, null, timeouts, soa_start);
+                function(req, null, timeouts, soa_start);
             }
         }.handleSoa;
     }
@@ -1033,10 +1033,10 @@ pub struct struct_any_reply {
         comptime function: Callback(Type),
     ): ares_callback {
         return &struct {
-            pub fn handleAny(ctx: *!?, status: c_int, timeouts: c_int, buffer: [*c]u8, buffer_length: c_int) callconv(.c) void {
-                const this = bun.cast(*Type, ctx.?);
+            pub static fn handleAny(ctx: *!?, status: c_int, timeouts: c_int, buffer: [*c]u8, buffer_length: c_int) callconv(.c) void {
+                const req = bun.cast(*Type, ctx.?);
                 if (status != ARES_SUCCESS) {
-                    function(this, Error.get(status), timeouts, null);
+                    function(req, Error.get(status), timeouts, null);
                     return;
                 }
 
@@ -1119,25 +1119,25 @@ pub struct struct_any_reply {
 
                 if (!any_success) {
                     reply.deinit();
-                    function(this, Error.get(last_error.?), timeouts, null);
+                    function(req, Error.get(last_error.?), timeouts, null);
                     return;
                 }
 
-                function(this, null, timeouts, reply);
+                function(req, null, timeouts, reply);
             }
         }.handleAny;
     }
 
-    pub fn deinit(*_: *struct_any_reply)  {
+    pub fn deinit(*_)  {
         inline for (field of @typeInfo(struct_any_reply).@"struct".fields) {
             if (comptime std.mem.endsWith(u8, field.name, "_reply")) {
-                if (reply := @field(this, field.name)) {
+                if (reply := @field(_, field.name)) {
                     reply.deinit();
                 }
             }
         }
 
-        bun.default_allocator.destroy(this);
+        bun.default_allocator.destroy(_);
     }
 }
 pub extern fn ares_parse_a_reply(abuf: [*c]const u8, alen: c_int, host: *(*struct_hostent)?, addrttls: [*c]struct_ares_addrttl, naddrttls: [*c]c_int): c_int;
@@ -1291,9 +1291,9 @@ pub enum Error: i32 {
             }
         }
 
-        if (@intFromEnum(eai) == 0) return null;
-
+        const eai_zero: std.posix.system.EAI = @enumFromInt(0);
         return switch (eai) {
+            eai_zero => return null,
             .ADDRFAMILY => Error.EBADFAMILY,
             .BADFLAGS => Error.EBADFLAGS,
             .FAIL => Error.EBADRESP,

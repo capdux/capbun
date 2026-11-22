@@ -92,6 +92,7 @@ export @opaque struct uws_res {}
     fn uws_res_end_stream(ssl: i32, res: *uws_res, close_connection: bool);
     fn uws_res_prepare_for_sendfile(ssl: i32, res: *uws_res);
     fn uws_res_get_native_handle(ssl: i32, res: *uws_res): *bun.uws.Socket;
+    fn uws_res_get_remote_address_as_text(ssl: i32, res: *uws_res, dest: *[*]const u8!): usize;
     fn uws_res_on_data(ssl: i32, res: *uws_res, handler: ResDataHandler, optional_data: *!?);
     fn uws_res_upgrade(ssl: i32, res: *uws_res, data: *!?, key: [*c]const u8, kl: usize, proto: [*c]const u8, pl: usize, ext: [*c]const u8, el: usize, ws: (*bun.uws.WebSocketUpgradeContext)?): *bun.uws.Socket;
     fn uws_res_cork(ssl: i32, res: *uws_res, ctx: *!?, corker: ResCorkHandler);
@@ -99,8 +100,16 @@ export @opaque struct uws_res {}
 
 pub fn NewResponse(comptime ssl_flag: i32): type {
     return struct {
+        static inline fn castRes(res: *uws_res): *@This() {
+            return bun.cast(*@This(), res);
+        }
+
         inline fn downcast(*_): *uws_res {
             return bun.cast(*uws_res, _);
+        }
+
+        inline fn downcastSocket(*_): *bun.uws.us_socket_t {
+            return bun.cast(*bun.uws.us_socket_t, _);
         }
 
         fn end(*_, data: string, close_connection: bool) {
@@ -250,6 +259,12 @@ pub fn NewResponse(comptime ssl_flag: i32): type {
             uws_res_on_data(ssl_flag, _.downcast(), null, null);
         }
 
+        fn getRemoteAddressAsText(*_): string? {
+            let buf: [*]const u8! = undefined;
+            const size = uws_res_get_remote_address_as_text(ssl_flag, _.downcast(), &buf);
+            return if (size > 0) unsafe { buf[0..size] } else null;
+        }
+
         fn getRemoteAddress(*_, dest: []u8): string? {
             let ptr: [*c]const u8 = undefined;
             let port: i32 = undefined;
@@ -329,8 +344,8 @@ pub const Response = NewResponse;
 pub const ResponseTCP = NewResponse(0);
 pub const ResponseTLS = NewResponse(1);
 pub const H3Response = bun.uws.H3.Response;
-pub const ResponseTLSPtr = *ResponseTLS;
-pub const ResponseTCPPtr = *ResponseTCP;
+pub type ResponseTLSPtr = *ResponseTLS;
+pub type ResponseTCPPtr = *ResponseTCP;
 pub const H3ResponsePtr = *H3Response;
 
 export enum AnyResponse {

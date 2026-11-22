@@ -671,6 +671,8 @@ pub const uws_res = opaque {
 pub const ResWritableHandler = ?ResWritableHandlerFn;
 pub const ResVoidHandler = ?ResVoidHandlerFn;
 pub const ResDataHandler = ?ResDataHandlerFn;
+pub const ResponseTLSPtr = *ResponseTLS;
+pub const ResponseTCPPtr = *ResponseTCP;
 pub const ResWritableHandlerFn = @TypeOf((&_ResHandlerSigs.writable));
 pub const ResVoidHandlerFn = @TypeOf((&_ResHandlerSigs.void_cb));
 pub const ResDataHandlerFn = @TypeOf((&_ResHandlerSigs.data_cb));
@@ -679,9 +681,7 @@ pub const Response = NewResponse;
 pub const ResponseTCP = NewResponse(0);
 pub const ResponseTLS = NewResponse(1);
 pub const H3Response = bun.uws.H3.Response;
-pub const ResponseTLSPtr = *ResponseTLS;
-pub const ResponseTCPPtr = *ResponseTCP;
-pub const H3ResponsePtr = *H3Response;
+pub const H3ResponsePtr = (&H3Response);
 
 extern "c" fn uws_res_mark_wrote_content_length_header(ssl: i32, res: *uws_res) callconv(.c) void;
 
@@ -751,6 +751,8 @@ extern "c" fn uws_res_prepare_for_sendfile(ssl: i32, res: *uws_res) callconv(.c)
 
 extern "c" fn uws_res_get_native_handle(ssl: i32, res: *uws_res) callconv(.c) *bun.uws.Socket;
 
+extern "c" fn uws_res_get_remote_address_as_text(ssl: i32, res: *uws_res, dest: *[*]const u8) callconv(.c) usize;
+
 extern "c" fn uws_res_on_data(ssl: i32, res: *uws_res, handler: ResDataHandler, optional_data: ?*anyopaque) callconv(.c) void;
 
 extern "c" fn uws_res_upgrade(ssl: i32, res: *uws_res, data: ?*anyopaque, key: [*c]const u8, kl: usize, proto: [*c]const u8, pl: usize, ext: [*c]const u8, el: usize, ws: ?*bun.uws.WebSocketUpgradeContext) callconv(.c) *bun.uws.Socket;
@@ -760,8 +762,16 @@ extern "c" fn uws_res_cork(ssl: i32, res: *uws_res, ctx: ?*anyopaque, corker: Re
 pub fn NewResponse(comptime ssl_flag: i32) type {
         return struct {
 
+pub inline fn castRes(res: *uws_res) *@This() {
+            return bun.cast((&@This()), res);
+    }
+
 pub inline fn downcast(self: *@This()) *uws_res {
             return bun.cast(*uws_res, self);
+    }
+
+pub inline fn downcastSocket(self: *@This()) *bun.uws.us_socket_t {
+            return bun.cast((&bun.uws.us_socket_t), self);
     }
 
 pub fn end(self: *@This(), data: []const u8, close_connection: bool) void {
@@ -908,6 +918,16 @@ pub fn onData(self: *@This(), ud: anytype, comptime handler: anytype) void {
 
 pub fn clearOnData(self: *@This()) void {
             _ = uws_res_on_data(ssl_flag, self.downcast(), null, null);
+    }
+
+pub fn getRemoteAddressAsText(self: *@This()) ?[]const u8 {
+            var buf: [*]const u8 = undefined;
+            _ = &buf;
+            const size = uws_res_get_remote_address_as_text(ssl_flag, self.downcast(), (&buf));
+            return (if ((size > 0)) (blk: {
+            break :blk buf[0..size];
+
+}) else null);
     }
 
 pub fn getRemoteAddress(self: *@This(), dest: []u8) ?[]const u8 {

@@ -1690,3 +1690,8 @@
 - `return struct` 泛型工厂块现已接入新版 `cpc` 完整 lowering，内部无接收者的方法必须显式标注 `static fn`（否则注入 `self: @This()` 导致未使用参数或签名不匹配）。
 - 调用实参中的指针类型（如 `*HmrSocket`、`*[]u8`）在表达式上下文可能被解析为借用或切片，需通过顶层 `type Ptr = *T;` / `const SliceU8 = []u8;` 别名传递。
 - `wtf8ByteSequenceLengthWithInvalid` 的非法首字节 `else` 分支必须返回 `1` 而非 `0`，否则 `js_parser/lexer` 遇到 `0xEF 0xBF 0xBD`（U+FFFD）时会在续字节返回 `slice.len == 0 => -1` 误判 EOF。
+
+### [2026-11-23] Wave #66 技术要点（`return struct` 指针与 `*(T?)` lowering 适配）
+- `cpc` 将形参类型 `*(T?)` 错误降低为 `?*T`（指向 `T` 的可空指针）而非 `*?T`（指向可空 `T` 的指针），需通过模块顶层 `pub type OptT = T?;` 再声明 `*OptT` 绕过。
+- 大结构体方法若被 `ZigGeneratedClasses.zig` 通过 `@call(..., .{thisValue})` 传入指针调用（如 `Subprocess.memoryCost`），接收者必须声明为 `*_` 以生成 `*Subprocess` 形参，避免无接收者被降低为按值传递。
+- `return struct` 泛型工厂块内的 `bun.cast(*Wrapped, ptr)` 需改用成员类型别名 `pub type WrappedPtr = *Wrapped;`，避免 `*Wrapped` 在调用实参位被误解析为 `&Wrapped`。

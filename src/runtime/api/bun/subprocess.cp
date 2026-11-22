@@ -244,24 +244,24 @@ pub struct TestingAPIs {
     exited_due_to_maxbuf: MaxBuf.Kind? = null,
 
     pub fn resourceUsage(
-        client: *Subprocess,
+        *_,
         globalObject: *JSGlobalObject,
         _: *jsc.CallFrame,
     ): bun.JSError!JSValue {
-        return client.createResourceUsageObject(globalObject);
+        return _.createResourceUsageObject(globalObject);
     }
 
-    pub fn createResourceUsageObject(client: *Subprocess, globalObject: *JSGlobalObject): bun.JSError!JSValue {
+    pub fn createResourceUsageObject(*_, globalObject: *JSGlobalObject): bun.JSError!JSValue {
         return ResourceUsage.create(
             brk: {
-                if (client.pid_rusage != null) {
-                    break :brk &client.pid_rusage.?;
+                if (_.pid_rusage != null) {
+                    break :brk &_.pid_rusage.?;
                 }
 
                 if (Environment.isWindows) {
-                    if (client.process.poller == .uv) {
-                        client.pid_rusage = PosixSpawn.process.uv_getrusage(&client.process.poller.uv);
-                        break :brk &client.pid_rusage.?;
+                    if (_.process.poller == .uv) {
+                        _.pid_rusage = PosixSpawn.process.uv_getrusage(&_.process.poller.uv);
+                        break :brk &_.pid_rusage.?;
                     }
                 }
 
@@ -271,73 +271,73 @@ pub struct TestingAPIs {
         );
     }
 
-    pub fn hasExited(client: *const Subprocess): bool {
-        return client.process.hasExited();
+    pub fn hasExited(): bool {
+        return _.process.hasExited();
     }
 
-    pub fn computeHasPendingActivity(client: *const Subprocess): bool {
-        if (client.ipc_data != null && !client.ipc_data.?.close_event_sent) {
+    pub fn computeHasPendingActivity(): bool {
+        if (_.ipc_data != null && !_.ipc_data.?.close_event_sent) {
             return true;
         }
 
-        if (client.hasPendingActivityStdio()) {
+        if (_.hasPendingActivityStdio()) {
             return true;
         }
 
-        if (!client.process.hasExited()) {
+        if (!_.process.hasExited()) {
             return true;
         }
 
         return false;
     }
 
-    pub fn updateHasPendingActivity(client: *Subprocess) {
-        if (client.flags.is_sync) return;
+    pub fn updateHasPendingActivity(*_) {
+        if (_.flags.is_sync) return;
 
-        const has_pending = client.computeHasPendingActivity();
+        const has_pending = _.computeHasPendingActivity();
         if (comptime Environment.isDebug) {
             log("updateHasPendingActivity() -> {}", [has_pending]);
         }
 
         // Upgrade or downgrade the reference based on pending activity
         if (has_pending) {
-            client.this_value.upgrade(client.globalThis);
+            _.this_value.upgrade(_.globalThis);
         } else {
-            client.this_value.downgrade();
+            _.this_value.downgrade();
         }
     }
 
-    pub fn hasPendingActivityStdio(client: *const Subprocess): bool {
-        if (client.stdin.hasPendingActivity()) {
+    pub fn hasPendingActivityStdio(): bool {
+        if (_.stdin.hasPendingActivity()) {
             return true;
         }
 
-        if (client.stdout.hasPendingActivity() || client.stderr.hasPendingActivity()) {
+        if (_.stdout.hasPendingActivity() || _.stderr.hasPendingActivity()) {
             return true;
         }
 
         return false;
     }
 
-    fn onCloseIO(client: *Subprocess, kind: StdioKind) {
+    fn onCloseIO(*_, kind: StdioKind) {
         switch (kind) {
             .stdin => {
-                switch (client.stdin) {
+                switch (_.stdin) {
                     .pipe pipe => {
                         pipe.signal.clear();
                         pipe.deref();
-                        client.stdin = .ignore;
+                        _.stdin = .ignore;
                     },
                     .buffer => {
-                        client.stdin.buffer.source.detach();
-                        client.stdin.buffer.deref();
-                        client.stdin = .ignore;
+                        _.stdin.buffer.source.detach();
+                        _.stdin.buffer.deref();
+                        _.stdin = .ignore;
                     },
                     else => {},
                 }
             },
             inline .stdout, .stderr tag => {
-                const out: *Readable = &@field(client, @tagName(tag));
+                const out: *Readable = &@field(_, @tagName(tag));
                 switch (out.*) {
                     .pipe pipe => {
                         if (pipe.state == .done) {
@@ -353,18 +353,18 @@ pub struct TestingAPIs {
             },
         }
 
-        client.updateHasPendingActivity();
+        _.updateHasPendingActivity();
     }
 
-    pub fn jsRef(client: *Subprocess) {
-        if (client.flags.is_sync) return;
+    pub fn jsRef(*_) {
+        if (_.flags.is_sync) return;
 
-        if (client.flags.killed) return;
-        client.stdin.ref();
-        client.stdout.ref();
-        client.stderr.ref();
+        if (_.flags.killed) return;
+        _.stdin.ref();
+        _.stdout.ref();
+        _.stderr.ref();
 
-        for (item of client.stdio_pipes.items) {
+        for (item of _.stdio_pipes.items) {
             if (Environment.isWindows) {
                 if (item == .buffer) {
                     item.buffer.ref();
@@ -373,14 +373,14 @@ pub struct TestingAPIs {
         }
     }
 
-    pub fn jsUnref(client: *Subprocess) {
-        if (client.flags.is_sync) return;
+    pub fn jsUnref(*_) {
+        if (_.flags.is_sync) return;
 
-        client.stdin.unref();
-        client.stdout.unref();
-        client.stderr.unref();
+        _.stdin.unref();
+        _.stdout.unref();
+        _.stderr.unref();
 
-        for (item of client.stdio_pipes.items) {
+        for (item of _.stdio_pipes.items) {
             if (Environment.isWindows) {
                 if (item == .buffer) {
                     item.buffer.unref();
@@ -393,7 +393,7 @@ pub struct TestingAPIs {
         return globalObject.throw("Cannot construct Subprocess", {});
     }
 
-    pub fn getStderr(client: *Subprocess, globalThis: *JSGlobalObject): bun.JSError!JSValue {
+    pub static fn getStderr(client: *Subprocess, globalThis: *JSGlobalObject): bun.JSError!JSValue {
         if (client.terminal != null) {
             return JSValue.jsNull();
         }
@@ -401,7 +401,7 @@ pub struct TestingAPIs {
         return client.stderr.toJS(globalThis, client.hasExited());
     }
 
-    pub fn getStdin(client: *Subprocess, globalThis: *JSGlobalObject): bun.JSError!JSValue {
+    pub static fn getStdin(client: *Subprocess, globalThis: *JSGlobalObject): bun.JSError!JSValue {
         if (client.terminal != null) {
             return JSValue.jsNull();
         }
@@ -409,7 +409,7 @@ pub struct TestingAPIs {
         return client.stdin.toJS(globalThis, client);
     }
 
-    pub fn getStdout(client: *Subprocess, globalThis: *JSGlobalObject): bun.JSError!JSValue {
+    pub static fn getStdout(client: *Subprocess, globalThis: *JSGlobalObject): bun.JSError!JSValue {
         if (client.terminal != null) {
             return JSValue.jsNull();
         }
@@ -417,62 +417,62 @@ pub struct TestingAPIs {
         return client.stdout.toJS(globalThis, client.hasExited());
     }
 
-    pub fn getTerminal(client: *Subprocess, globalThis: *JSGlobalObject): JSValue {
+    pub static fn getTerminal(client: *Subprocess, globalThis: *JSGlobalObject): JSValue {
         if (terminal := client.terminal) {
             return terminal.toJS(globalThis);
         }
         return JSValue.js_undefined;
     }
 
-    pub fn asyncDispose(client: *Subprocess, global: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-        if (client.process.hasExited()) {
+    pub fn asyncDispose(*_, global: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
+        if (_.process.hasExited()) {
             return JSValue.js_undefined;
         }
 
         const this_jsvalue = callframe.@"this"();
         defer this_jsvalue.ensureStillAlive();
 
-        client.stdin.unref();
-        client.stdout.unref();
-        client.stderr.unref();
+        _.stdin.unref();
+        _.stdout.unref();
+        _.stderr.unref();
 
-        switch (client.tryKill(client.killSignal)) {
+        switch (_.tryKill(_.killSignal)) {
             .result => {},
             .@"err" e => {
                 return global.throwValue(e.toJS(global)?);
             },
         }
 
-        return client.getExited(this_jsvalue, global);
+        return _.getExited(this_jsvalue, global);
     }
 
-    pub fn setEventLoopTimerRefd(client: *Subprocess, refd: bool) {
-        if (client.event_loop_timer_refd == refd) return;
-        client.event_loop_timer_refd = refd;
+    pub fn setEventLoopTimerRefd(*_, refd: bool) {
+        if (_.event_loop_timer_refd == refd) return;
+        _.event_loop_timer_refd = refd;
         if (refd) {
-            client.globalThis.bunVM().timer.incrementTimerRef(1);
+            _.globalThis.bunVM().timer.incrementTimerRef(1);
         } else {
-            client.globalThis.bunVM().timer.incrementTimerRef(-1);
+            _.globalThis.bunVM().timer.incrementTimerRef(-1);
         }
     }
 
-    pub fn timeoutCallback(client: *Subprocess) {
-        client.setEventLoopTimerRefd(false);
-        if (client.event_loop_timer.state == .CANCELLED) return;
-        if (client.hasExited()) {
-            client.event_loop_timer.state = .CANCELLED;
+    pub fn timeoutCallback(*_) {
+        _.setEventLoopTimerRefd(false);
+        if (_.event_loop_timer.state == .CANCELLED) return;
+        if (_.hasExited()) {
+            _.event_loop_timer.state = .CANCELLED;
             return;
         }
-        client.event_loop_timer.state = .FIRED;
-        * = client.tryKill(client.killSignal);
+        _.event_loop_timer.state = .FIRED;
+        * = _.tryKill(_.killSignal);
     }
 
-    pub fn onMaxBuffer(client: *Subprocess, kind: MaxBuf.Kind) {
-        client.exited_due_to_maxbuf = kind;
-        * = client.tryKill(client.killSignal);
+    pub fn onMaxBuffer(*_, kind: MaxBuf.Kind) {
+        _.exited_due_to_maxbuf = kind;
+        * = _.tryKill(_.killSignal);
     }
 
-    pub fn kill(
+    pub static fn kill(
         client: *Subprocess,
         globalThis: *JSGlobalObject,
         callframe: *jsc.CallFrame,
@@ -494,15 +494,15 @@ pub struct TestingAPIs {
         return JSValue.js_undefined;
     }
 
-    pub fn hasKilled(client: *const Subprocess): bool {
-        return client.process.hasKilled();
+    pub fn hasKilled(): bool {
+        return _.process.hasKilled();
     }
 
-    pub fn tryKill(client: *Subprocess, sig: SignalCode): bun.sys.Maybe(void) {
-        if (client.hasExited()) {
+    pub fn tryKill(*_, sig: SignalCode): bun.sys.Maybe(void) {
+        if (_.hasExited()) {
             return .success;
         }
-        return client.process.kill(@intFromEnum(sig));
+        return _.process.kill(@intFromEnum(sig));
     }
 
     fn hasCalledGetter(*_, comptime getter: @Type(.enum_literal)): bool {
@@ -516,75 +516,75 @@ pub struct TestingAPIs {
         _.process.close();
     }
 
-    pub fn doRef(client: *Subprocess, _: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!JSValue {
-        client.jsRef();
+    pub fn doRef(*_, _: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!JSValue {
+        _.jsRef();
         return JSValue.js_undefined;
     }
 
-    pub fn doUnref(client: *Subprocess, _: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!JSValue {
-        client.jsUnref();
+    pub fn doUnref(*_, _: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!JSValue {
+        _.jsUnref();
         return JSValue.js_undefined;
     }
 
-    pub fn onStdinDestroyed(client: *Subprocess) {
-        const must_deref = client.flags.deref_on_stdin_destroyed;
-        client.flags.deref_on_stdin_destroyed = false;
-        const deref_guard = DerefGuard<Subprocess>{ ptr: if (must_deref) client else null };
+    pub fn onStdinDestroyed(*_) {
+        const must_deref = _.flags.deref_on_stdin_destroyed;
+        _.flags.deref_on_stdin_destroyed = false;
+        const deref_guard = DerefGuard<Subprocess>{ ptr: if (must_deref) _ else null };
 
-        client.flags.has_stdin_destructor_called = true;
-        client.weak_file_sink_stdin_ptr = null;
+        _.flags.has_stdin_destructor_called = true;
+        _.weak_file_sink_stdin_ptr = null;
 
-        if (!client.flags.finalized) {
-            client.updateHasPendingActivity();
+        if (!_.flags.finalized) {
+            _.updateHasPendingActivity();
         }
     }
 
-    pub fn doSend(client: *Subprocess, global: *JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSError!JSValue {
+    pub fn doSend(*_, global: *JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSError!JSValue {
         IPClog("Subprocess#doSend", {});
 
-        const target: IPC.Target = if (client.hasExited()) .subprocess_exited else .subprocess;
-        const data_ptr: (*IPC.SendQueue)? = if (client.ipc_data != null) &client.ipc_data.? else null;
+        const target: IPC.Target = if (_.hasExited()) .subprocess_exited else .subprocess;
+        const data_ptr: (*IPC.SendQueue)? = if (_.ipc_data != null) &_.ipc_data.? else null;
         return IPC.doSend(data_ptr, global, callFrame, target);
     }
 
-    pub fn disconnectIPC(client: *Subprocess, nextTick: bool) {
+    pub static fn disconnectIPC(client: *Subprocess, nextTick: bool) {
         if (ipc_data := client.ipc()) {
             ipc_data.closeSocketNextTick(nextTick);
         }
     }
 
-    pub fn disconnect(client: *Subprocess, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
+    pub static fn disconnect(client: *Subprocess, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
         * = globalThis;
         * = callframe;
         client.disconnectIPC(true);
         return JSValue.js_undefined;
     }
 
-    pub fn getConnected(client: *Subprocess, globalThis: *JSGlobalObject): JSValue {
+    pub static fn getConnected(client: *Subprocess, globalThis: *JSGlobalObject): JSValue {
         * = globalThis;
         const ipc_data = client.ipc();
         return JSValue.jsBoolean(ipc_data != null && ipc_data.?.isConnected());
     }
 
-    pub fn pid(client: *const Subprocess): i32 {
-        return i32(client.process.pid);
+    pub fn pid(): i32 {
+        return i32(_.process.pid);
     }
 
-    pub fn getPid(client: *Subprocess, _: *JSGlobalObject): JSValue {
-        return JSValue.jsNumber(client.pid());
+    pub fn getPid(*_, _: *JSGlobalObject): JSValue {
+        return JSValue.jsNumber(_.pid());
     }
 
-    pub fn getKilled(client: *Subprocess, _: *JSGlobalObject): JSValue {
-        return JSValue.jsBoolean(client.hasKilled());
+    pub fn getKilled(*_, _: *JSGlobalObject): JSValue {
+        return JSValue.jsBoolean(_.hasKilled());
     }
 
-    pub fn getStdio(client: *Subprocess, global: *JSGlobalObject): bun.JSError!JSValue {
+    pub fn getStdio(*_, global: *JSGlobalObject): bun.JSError!JSValue {
         const array = JSValue.createEmptyArray(global, 0)?;
         array.push(global, JSValue.jsNull())?;
         array.push(global, JSValue.jsNull())?;
         array.push(global, JSValue.jsNull())?;
 
-        for (item of client.stdio_pipes.items) {
+        for (item of _.stdio_pipes.items) {
             if (Environment.isWindows) {
                 if (item == .buffer) {
                     const fdno: usize = unsafe { @intFromPtr(item.buffer.fd().cast()) };
@@ -600,15 +600,15 @@ pub struct TestingAPIs {
         return array;
     }
 
-    pub fn memoryCost(client: *const Subprocess): usize {
+    fn memoryCost(*_): usize {
         return @sizeOf(@This()) +
-            client.process.memoryCost() +
-            client.stdin.memoryCost() +
-            client.stdout.memoryCost() +
-            client.stderr.memoryCost();
+            _.process.memoryCost() +
+            _.stdin.memoryCost() +
+            _.stdout.memoryCost() +
+            _.stderr.memoryCost();
     }
 
-    pub fn consumeExitedPromise(client: *Subprocess, this_jsvalue: JSValue, globalThis: *jsc.JSGlobalObject): JSValue? {
+    pub static fn consumeExitedPromise(client: *Subprocess, this_jsvalue: JSValue, globalThis: *jsc.JSGlobalObject): JSValue? {
         * = client;
         if (promise := jsc.Codegen.JSSubprocess.exitedPromiseGetCached(this_jsvalue)) {
             jsc.Codegen.JSSubprocess.exitedPromiseSetCached(this_jsvalue, globalThis, .zero);
@@ -617,7 +617,7 @@ pub struct TestingAPIs {
         return null;
     }
 
-    fn consumeOnExitCallback(this_jsvalue: JSValue, globalThis: *jsc.JSGlobalObject): JSValue? {
+    static fn consumeOnExitCallback(this_jsvalue: JSValue, globalThis: *jsc.JSGlobalObject): JSValue? {
         if (callback := jsc.Codegen.JSSubprocess.onExitCallbackGetCached(this_jsvalue)) {
             jsc.Codegen.JSSubprocess.onExitCallbackSetCached(this_jsvalue, globalThis, .zero);
             return callback;
@@ -625,7 +625,7 @@ pub struct TestingAPIs {
         return null;
     }
 
-    fn consumeOnDisconnectCallback(this_jsvalue: JSValue, globalThis: *jsc.JSGlobalObject): JSValue? {
+    static fn consumeOnDisconnectCallback(this_jsvalue: JSValue, globalThis: *jsc.JSGlobalObject): JSValue? {
         if (callback := jsc.Codegen.JSSubprocess.onDisconnectCallbackGetCached(this_jsvalue)) {
             jsc.Codegen.JSSubprocess.onDisconnectCallbackSetCached(this_jsvalue, globalThis, .zero);
             return callback;
@@ -633,7 +633,7 @@ pub struct TestingAPIs {
         return null;
     }
 
-    pub fn onProcessExit(client: *Subprocess, process: *Process, status: bun.spawn.Status, rusage: *const Rusage) {
+    pub static fn onProcessExit(client: *Subprocess, process: *Process, status: bun.spawn.Status, rusage: *const Rusage) {
         log("onProcessExit()", {});
         const this_jsvalue = client.this_value.tryGet() ?? .zero;
         const globalThis = client.globalThis;
@@ -807,21 +807,21 @@ pub struct TestingAPIs {
         _.stdio_pipes.clearAndFree(bun.default_allocator);
     }
 
-    fn deinit(client: *Subprocess) {
+    fn deinit(*_) {
         log("deinit", {});
-        bun.destroy(client);
+        bun.destroy(_);
     }
 
-    fn clearAbortSignal(client: *Subprocess) {
-        if (signal := client.abort_signal) {
-            client.abort_signal = null;
+    fn clearAbortSignal(*_) {
+        if (signal := _.abort_signal) {
+            _.abort_signal = null;
             signal.pendingActivityUnref();
-            signal.cleanNativeBindings(client);
+            signal.cleanNativeBindings(_);
             signal.unref();
         }
     }
 
-    @c pub fn finalize(client: *Subprocess) {
+    @c pub static fn finalize(client: *Subprocess) {
         log("finalize", {});
         client.this_value.finalize();
 
@@ -848,7 +848,7 @@ pub struct TestingAPIs {
         }
     }
 
-    pub fn getExited(
+    pub static fn getExited(
         client: *Subprocess,
         this_value: JSValue,
         globalThis: *JSGlobalObject,
@@ -877,20 +877,20 @@ pub struct TestingAPIs {
     }
 
     pub fn getExitCode(
-        client: *Subprocess,
+        *_,
         _: *JSGlobalObject,
     ): JSValue {
-        if (client.process.status == .exited) {
-            return jsc.JSValue.jsNumber(client.process.status.exited.code);
+        if (_.process.status == .exited) {
+            return jsc.JSValue.jsNumber(_.process.status.exited.code);
         }
         return jsc.JSValue.jsNull();
     }
 
     pub fn getSignalCode(
-        client: *Subprocess,
+        *_,
         global: *JSGlobalObject,
     ): JSValue {
-        if (signal := client.process.signalCode()) {
+        if (signal := _.process.signalCode()) {
             if (name := @call(.auto, @field(SignalCode, "name"), .{signal}))
                 return jsc.ZigString.init(name).toJS(global)
             else
@@ -900,7 +900,7 @@ pub struct TestingAPIs {
         return jsc.JSValue.jsNull();
     }
 
-    pub fn handleIPCMessage(
+    pub static fn handleIPCMessage(
         client: *Subprocess,
         message: IPC.DecodedIPCMessage,
         handle: JSValue,
@@ -934,10 +934,12 @@ pub struct TestingAPIs {
         }
     }
 
-    pub fn onAfterIPCClosed(client: *Subprocess) {
-        const this_jsvalue = client.this_value.tryGet() ?? .zero;
-        const globalThis = client.globalThis;
+    pub fn onAfterIPCClosed(*_) {
+        IPClog("Subprocess#handleIPCClose", {});
+        const this_jsvalue = _.this_value.tryGet() ?? .zero;
+        const globalThis = _.globalThis;
         defer this_jsvalue.ensureStillAlive();
+        _.updateHasPendingActivity();
 
         if (this_jsvalue != .zero) {
             jsc.Codegen.JSSubprocess.ipcCallbackSetCached(this_jsvalue, globalThis, .zero);
@@ -949,12 +951,16 @@ pub struct TestingAPIs {
         }
     }
 
-    pub fn ipc(client: *Subprocess): (*IPC.SendQueue)? {
-        if (client.ipc_data == null) return null;
-        return &client.ipc_data.?;
+    pub fn handleIPCClose(*_) {
+        _.onAfterIPCClosed();
     }
 
-    pub fn getGlobalThis(client: *Subprocess): (*jsc.JSGlobalObject)? {
-        return client.globalThis;
+    pub fn ipc(*_): (*IPC.SendQueue)? {
+        if (_.ipc_data == null) return null;
+        return &_.ipc_data.?;
+    }
+
+    pub fn getGlobalThis(*_): (*jsc.JSGlobalObject)? {
+        return _.globalThis;
     }
 }

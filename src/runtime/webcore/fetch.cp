@@ -105,6 +105,62 @@ pub struct FetchCleanupGuard {
     }
 }
 
+pub struct S3StreamWrapper {
+    promise: jsc.JSPromise.Strong,
+    url: ZigURL,
+    url_proxy_buffer: []const u8,
+    global: *jsc.JSGlobalObject,
+
+    const new = bun.TrivialNew(@This());
+
+    static fn resolve(result: s3.S3UploadResult, wrapper: *S3StreamWrapper!): bun.JSTerminated!void {
+        const global = wrapper.global;
+        defer bun.destroy(wrapper);
+        defer bun.default_allocator.free(wrapper.url_proxy_buffer);
+        switch (result) {
+            .success => {
+                const response = bun.new(Response, Response.init(
+                    Response.Init{
+                        method: .PUT,
+                        status_code: 200,
+                    },
+                    Body{
+                        value: .Empty,
+                    },
+                    bun.String.createAtomIfPossible(wrapper.url.href),
+                    false,
+                ));
+                const response_js = Response.makeMaybePooled(@as(*jsc.JSGlobalObject, global), response);
+                response_js.ensureStillAlive();
+                wrapper.promise.resolve(global, response_js)?;
+            },
+            .failure e => {
+                const response = bun.new(Response, Response.init(
+                    .{
+                        .method = .PUT,
+                        .status_code = 500,
+                        .status_text = bun.String.createAtomIfPossible(e.code),
+                    },
+                    .{
+                        .value = .{
+                            .InternalBlob = .{
+                                .bytes = std.array_list.Managed(u8).fromOwnedSlice(bun.default_allocator, bun.handleOom(bun.default_allocator.dupe(u8, e.message))),
+                                .was_string = true,
+                            },
+                        },
+                    },
+                    bun.String.createAtomIfPossible(wrapper.url.href),
+                    false,
+                ));
+
+                const response_js = Response.makeMaybePooled(@as(*jsc.JSGlobalObject, global), response);
+                response_js.ensureStillAlive();
+                wrapper.promise.resolve(global, response_js)?;
+            },
+        }
+    }
+}
+
 export const fetch_error_no_args = "fetch() expects a string but received no arguments.";
 export const fetch_error_blank_url = "fetch() URL must not be a blank string.";
 export const fetch_error_unexpected_body = "fetch() request with GET/HEAD/OPTIONS method cannot have body.";
@@ -839,6 +895,13 @@ fn fetchImpl(
     }
     if (globalThis.hasException()) return JSValue.zero;
 
+    if (url.protocol.len > 0) {
+        if (!(url.isHTTP() || url.isHTTPS() || url.isS3())) {
+            let e = globalThis.toTypeError(.INVALID_ARG_VALUE, "protocol must be http:, https: or s3:", .{});
+            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, e);
+        }
+    }
+
     if (!allow_get_body && !method.hasRequestBody() && body.hasBody() && !upgraded_connection) {
         let err = globalThis.toTypeError(.INVALID_ARG_VALUE, fetch_error_unexpected_body, .{});
         return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err);
@@ -852,8 +915,238 @@ fn fetchImpl(
         ) catch |e| bun.handleOom(e);
     }
 
+    let http_body = body;
+    if (body.isS3()) {
+        prepare_body: {
+            // is a S3 file we can use chunked here
+            const s3_stream_js = jsc.WebCore.ReadableStream.fromBlobCopyRef(
+                globalThis,
+                unsafe { &body.AnyBlob.Blob },
+                s3.MultiPartUploadOptions.DefaultPartSize,
+            )?;
+            const s3_stream_opt = jsc.WebCore.ReadableStream.fromJS(s3_stream_js, globalThis)?;
+            if (stream := s3_stream_opt) {
+                let old = body;
+                defer old.detach();
+                body = .{ .ReadableStream = jsc.WebCore.ReadableStream.Strong.init(stream, globalThis) };
+                break :prepare_body;
+            }
+            const rejected_value = JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, globalThis.createErrorInstance("Failed to start s3 stream", .{}));
+            body.detach();
+
+            return rejected_value;
+        }
+    }
+    if (body.needsToReadFile()) {
+        prepare_body: {
+            const opened_fd_res: bun.sys.Maybe(bun.FD) = switch (body.store().?.data.file.pathlike) {
+                .fd fd => bun.sys.dup(fd),
+                .path path => bun.sys.open(path.sliceZ(&globalThis.bunVM().nodeFS().sync_error_buf), if (Environment.isWindows) bun.O.RDONLY else bun.O.RDONLY | bun.O.NOCTTY, 0),
+            };
+
+            const opened_fd = switch (opened_fd_res) {
+                .@"err" e => {
+                    const rejected_value = JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, e.toJS(globalThis) catch return JSValue.zero);
+                    return rejected_value;
+                },
+                .result fd => fd,
+            };
+
+            if (proxy == null && bun.http.SendFile.isEligible(url)) {
+                use_sendfile: {
+                    const stat: bun.Stat = switch (bun.sys.fstat(opened_fd)) {
+                        .result result => result,
+                        // bail out for any reason
+                        .@"err" => break :use_sendfile,
+                    };
+
+                    if (Environment.isMac) {
+                        // macOS only supports regular files for sendfile()
+                        if (!bun.isRegularFile(stat.mode)) {
+                            break :use_sendfile;
+                        }
+                    }
+
+                    // if it's < 32 KB, it's not worth it
+                    if (stat.size < 32 * 1024) {
+                        break :use_sendfile;
+                    }
+
+                    const original_size = body.AnyBlob.Blob.size;
+                    const stat_size = @as(Blob.SizeType, @intCast(stat.size));
+                    const blob_size = if (bun.isRegularFile(stat.mode))
+                        stat_size
+                    else
+                        @min(original_size, stat_size);
+
+                    http_body = .{
+                        .Sendfile = .{
+                            .fd = opened_fd,
+                            .remain = body.AnyBlob.Blob.offset + original_size,
+                            .offset = body.AnyBlob.Blob.offset,
+                            .content_size = blob_size,
+                        },
+                    };
+
+                    if (bun.isRegularFile(stat.mode)) {
+                        http_body.Sendfile.offset = @min(http_body.Sendfile.offset, stat_size);
+                        http_body.Sendfile.remain = @min(@max(http_body.Sendfile.remain, http_body.Sendfile.offset), stat_size) -| http_body.Sendfile.offset;
+                    }
+                    body.detach();
+
+                    break :prepare_body;
+                }
+            }
+
+            // TODO: make this async + lazy
+            const res = jsc.Node.fs.NodeFS.readFile(
+                globalThis.bunVM().nodeFS(),
+                .{
+                    .encoding = .buffer,
+                    .path = .{ .fd = opened_fd },
+                    .offset = body.AnyBlob.Blob.offset,
+                    .max_size = body.AnyBlob.Blob.size,
+                },
+                .sync,
+            );
+
+            if (body.store().?.data.file.pathlike == .path) {
+                opened_fd.close();
+            }
+
+            switch (res) {
+                .@"err" e => {
+                    const rejected_value = JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, e.toJS(globalThis) catch return JSValue.zero);
+                    body.detach();
+
+                    return rejected_value;
+                },
+                .result result => {
+                    body.detach();
+                    body = .{ .AnyBlob = .fromOwnedSlice(allocator, unsafe { @constCast(result.slice()) }) };
+                    http_body = .{ .AnyBlob = body.AnyBlob };
+                },
+            }
+        }
+    }
+
+    if (url.isS3()) {
+        // get ENV config
+        let credentialsWithOptions = s3.S3CredentialsWithOptions{
+            credentials: globalThis.bunVM().transpiler.env.getS3Credentials(),
+            options: .{},
+            acl: null,
+            storage_class: null,
+        };
+        defer credentialsWithOptions.deinit();
+
+        if (options := options_object) {
+            const s3_opt_res = options.getTruthyComptime(globalThis, "s3")?;
+            if (s3_options := s3_opt_res) {
+                if (s3_options.isObject()) {
+                    s3_options.ensureStillAlive();
+                    credentialsWithOptions = s3.S3Credentials.getCredentialsWithOptions(credentialsWithOptions.credentials, .{}, s3_options, null, null, false, globalThis)?;
+                }
+            }
+        }
+
+        if (body == .ReadableStream) {
+            // we cannot direct stream to s3 we need to use multi part upload
+            defer body.ReadableStream.deinit();
+            if (method != .PUT && method != .POST) {
+                return jsc.JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, globalThis.createErrorInstance("Only POST and PUT do support body when using S3", .{}));
+            }
+            const promise = jsc.JSPromise.Strong.init(globalThis);
+
+            const s3_stream = S3StreamWrapper.new(.{
+                .url = url,
+                .url_proxy_buffer = url_proxy_buffer,
+                .promise = promise,
+                .global = globalThis,
+            });
+
+            const promise_value = promise.value();
+            const proxy_url = if (p := proxy) p.href else "";
+            * = bun.S3.uploadStream(
+                credentialsWithOptions.credentials.dupe(),
+                url.s3Path(),
+                body.ReadableStream.get(globalThis).?,
+                globalThis,
+                credentialsWithOptions.options,
+                credentialsWithOptions.acl,
+                credentialsWithOptions.storage_class,
+                if (h := headers) (h.getContentType()) else null,
+                if (h := headers) h.getContentDisposition() else null,
+                if (h := headers) h.getContentEncoding() else null,
+                proxy_url,
+                credentialsWithOptions.request_payer,
+                unsafe { @ptrCast(&S3StreamWrapper.resolve) },
+                s3_stream,
+            )?;
+            url = .{};
+            url_proxy_buffer = "";
+            return promise_value;
+        }
+        if (method == .POST) {
+            method = .PUT;
+        }
+
+        let result = credentialsWithOptions.credentials.signRequest(.{
+            .path = url.s3Path(),
+            .method = method,
+        }, false, null) catch sign_err => {
+            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, s3.getJSSignError(sign_err, globalThis));
+        };
+        defer result.deinit();
+        if (proxy_ := proxy) {
+            // proxy and url are in the same buffer lets replace it
+            const old_buffer = url_proxy_buffer;
+            defer allocator.free(old_buffer);
+            let buffer = bun.handleOom(allocator.alloc(u8, result.url.len + proxy_.href.len));
+            bun.copy(u8, buffer[0..result.url.len], result.url);
+            bun.copy(u8, buffer[proxy_.href.len..], proxy_.href);
+            url_proxy_buffer = buffer;
+
+            url = ZigURL.parse(url_proxy_buffer[0..result.url.len]);
+            proxy = ZigURL.parse(url_proxy_buffer[result.url.len..]);
+        } else {
+            // replace headers and url of the request
+            allocator.free(url_proxy_buffer);
+            url_proxy_buffer = result.url;
+            url = ZigURL.parse(result.url);
+            result.url = ""; // fetch now owns this
+        }
+
+        const content_type = if (h := headers) (h.getContentType()) else null;
+        let header_buffer: [s3.S3Credentials.SignResult.MAX_HEADERS + 1]picohttp.Header = undefined;
+
+        if (range_ := range) {
+            const _headers = result.mixWithHeader(&header_buffer, .{ .name = "range", .value = range_ });
+            setHeaders(&headers, _headers, allocator);
+        } else if (ct := content_type) {
+            if (ct.len > 0) {
+                const _headers = result.mixWithHeader(&header_buffer, .{ .name = "Content-Type", .value = ct });
+                setHeaders(&headers, _headers, allocator);
+            } else {
+                setHeaders(&headers, result.headers(), allocator);
+            }
+        } else {
+            setHeaders(&headers, result.headers(), allocator);
+        }
+    }
+
     let promise = JSPromise.Strong.init(globalThis);
     let promise_val = promise.value();
+
+    const initial_body_reference_count: if (Environment.isDebug) usize else u0 = brk: {
+        if (Environment.isDebug) {
+            if (store := body.store()) {
+                break :brk store.ref_count.load(.monotonic);
+            }
+        }
+
+        break :brk 0;
+    };
 
     * = FetchTasklet.queue(
         allocator,
@@ -862,7 +1155,7 @@ fn fetchImpl(
             .method = method,
             .url = url,
             .headers = headers ?? Headers { .allocator = allocator },
-            .body = body,
+            .body = http_body,
             .disable_keepalive = disable_keepalive,
             .disable_timeout = disable_timeout,
             .disable_decompression = disable_decompression,
@@ -886,10 +1179,22 @@ fn fetchImpl(
         promise,
     ) catch |e| bun.handleOom(e);
 
+    if (Environment.isDebug) {
+        if (store := body.store()) {
+            if (store.ref_count.load(.monotonic) == initial_body_reference_count) {
+                Output.panic("Expected body ref count to have incremented in FetchTasklet", .{});
+            }
+        }
+    }
+
     url = .{};
     headers = null;
     proxy_headers.val = null;
-    body = FetchTasklet.HTTPRequestBody.Empty;
+    if (body.store() != null) {
+        body.detach();
+    } else {
+        body = FetchTasklet.HTTPRequestBody.Empty;
+    }
     proxy = null;
     url_proxy_buffer = "";
     signal = null;
@@ -901,9 +1206,10 @@ fn fetchImpl(
     return promise_val;
 }
 
-fn setHeaders(headers: (*Headers)?, new_headers: []const picohttp.Header, allocator: std.mem.Allocator) {
+pub type OptHeaders = Headers?;
+fn setHeaders(headers: *OptHeaders, new_headers: []const picohttp.Header, allocator: std.mem.Allocator) {
     let old = headers.*;
-    headers.* = bun.handleOom(Headers.fromPicoHttpHeaders(new_headers, allocator));
+    headers.* = bun.handleOom(Headers.fromPicoHttpHeaders(unsafe { @constCast(new_headers) }, allocator));
     if (*h := old) {
         h.deinit();
     }

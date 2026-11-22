@@ -1481,6 +1481,14 @@ pub union(enum) BlobAny {
         };
     }
 
+    fn isS3(): bool {
+        return switch (_) {
+            .Blob => _.Blob.isS3(),
+            .WTFStringImpl => false,
+            .InternalBlob => false,
+        };
+    }
+
     fn slice(): []const u8 {
         switch (_) {
             .Blob(b) => return b.sharedView(),

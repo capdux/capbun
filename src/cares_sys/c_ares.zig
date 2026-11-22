@@ -252,10 +252,12 @@ else => {
 },
 }
             }
-            if ((@intFromEnum(eai) == 0)) {
-                return null;
-            }
+            const eai_zero: std.posix.system.EAI = @enumFromInt(0);
+            _ = &eai_zero;
             return (switch (eai) {
+eai_zero => {
+return null;
+},
 .ADDRFAMILY => Error.EBADFAMILY,
 .BADFLAGS => Error.EBADFLAGS,
 .FAIL => Error.EBADRESP,
@@ -362,12 +364,12 @@ pub fn hostCallbackWrapper(comptime Type: type, comptime function: Callback(Type
             return (&(struct {
 
 pub fn handle(ctx: ?*anyopaque, status: c_int, timeouts: c_int, hostent: ?*hostent_with_ttls) callconv(.c) void {
-            const this = bun.cast(*Type, ctx.?);
+            const req = bun.cast(*Type, ctx.?);
             if ((status != ARES_SUCCESS)) {
-                _ = function(this, Error.get(status), timeouts, null);
+                _ = function(req, Error.get(status), timeouts, null);
                 return;
             }
-            _ = function(this, null, timeouts, hostent);
+            _ = function(req, null, timeouts, hostent);
     }
 }).handle);
     }
@@ -376,17 +378,17 @@ pub fn callbackWrapper(comptime lookup_name: []const u8, comptime Type: type, co
             return (&(struct {
 
 pub fn handle(ctx: ?*anyopaque, status: c_int, timeouts: c_int, buffer: [*c]u8, buffer_length: c_int) callconv(.c) void {
-            const this = bun.cast(*Type, ctx.?);
+            const req = bun.cast(*Type, ctx.?);
             if ((status != ARES_SUCCESS)) {
-                _ = function(this, Error.get(status), timeouts, null);
+                _ = function(req, Error.get(status), timeouts, null);
                 return;
             }
             switch (parse(lookup_name, buffer, buffer_length)) {
 .result => |result| {
-_ = function(this, null, timeouts, result);
+_ = function(req, null, timeouts, result);
 },
 .err => |err| {
-_ = function(this, err, timeouts, null);
+_ = function(req, err, timeouts, null);
 },
 }
     }
@@ -460,12 +462,12 @@ pub fn CallbackWrapper(comptime Type: type, comptime function: Callback(Type)) a
             return (&(struct {
 
 pub fn handle(ctx: ?*anyopaque, status: c_int, timeouts: c_int, node: [*c]u8, service: [*c]u8) callconv(.c) void {
-            const this = bun.cast(*Type, ctx.?);
+            const req = bun.cast(*Type, ctx.?);
             if ((status != ARES_SUCCESS)) {
-                _ = function(this, Error.get(status), timeouts, null);
+                _ = function(req, Error.get(status), timeouts, null);
                 return;
             }
-            _ = function(this, null, timeouts, .{ .node = node, .service = service });
+            _ = function(req, null, timeouts, .{ .node = node, .service = service });
             return;
     }
 }).handle);
@@ -532,8 +534,8 @@ pub fn callbackWrapper(comptime Type: type, comptime function: Callback(Type)) a
             return (&(struct {
 
 pub fn handleAddrInfo(ctx: ?*anyopaque, status: c_int, timeouts: c_int, addr_info: ?*AddrInfo) callconv(.c) void {
-            const this = bun.cast(*Type, ctx.?);
-            _ = function(this, Error.get(status), timeouts, addr_info);
+            const req = bun.cast(*Type, ctx.?);
+            _ = function(req, Error.get(status), timeouts, addr_info);
     }
 }).handleAddrInfo);
     }
@@ -755,19 +757,19 @@ pub fn callbackWrapper(comptime _: []const u8, comptime Type: type, comptime fun
             return (&(struct {
 
 pub fn handle(ctx: ?*anyopaque, status: c_int, timeouts: c_int, buffer: [*c]u8, buffer_length: c_int) callconv(.c) void {
-            const this = bun.cast(*Type, ctx.?);
+            const req = bun.cast(*Type, ctx.?);
             if ((status != ARES_SUCCESS)) {
-                _ = function(this, Error.get(status), timeouts, null);
+                _ = function(req, Error.get(status), timeouts, null);
                 return;
             }
             var start: [*c]struct_ares_caa_reply = undefined;
             _ = &start;
             const result = ares_parse_caa_reply(buffer, buffer_length, (&start));
             if ((result != ARES_SUCCESS)) {
-                _ = function(this, Error.get(result), timeouts, null);
+                _ = function(req, Error.get(result), timeouts, null);
                 return;
             }
-            _ = function(this, null, timeouts, start);
+            _ = function(req, null, timeouts, start);
     }
 }).handle);
     }
@@ -794,19 +796,19 @@ pub fn callbackWrapper(comptime _: []const u8, comptime Type: type, comptime fun
             return (&(struct {
 
 pub fn handleSrv(ctx: ?*anyopaque, status: c_int, timeouts: c_int, buffer: [*c]u8, buffer_length: c_int) callconv(.c) void {
-            const this = bun.cast(*Type, ctx.?);
+            const req = bun.cast(*Type, ctx.?);
             if ((status != ARES_SUCCESS)) {
-                _ = function(this, Error.get(status), timeouts, null);
+                _ = function(req, Error.get(status), timeouts, null);
                 return;
             }
             var srv_start: [*c]struct_ares_srv_reply = undefined;
             _ = &srv_start;
             const result = ares_parse_srv_reply(buffer, buffer_length, (&srv_start));
             if ((result != ARES_SUCCESS)) {
-                _ = function(this, Error.get(result), timeouts, null);
+                _ = function(req, Error.get(result), timeouts, null);
                 return;
             }
-            _ = function(this, null, timeouts, srv_start);
+            _ = function(req, null, timeouts, srv_start);
     }
 }).handleSrv);
     }
@@ -831,19 +833,19 @@ pub fn callbackWrapper(comptime _: []const u8, comptime Type: type, comptime fun
             return (&(struct {
 
 pub fn handle(ctx: ?*anyopaque, status: c_int, timeouts: c_int, buffer: [*c]u8, buffer_length: c_int) callconv(.c) void {
-            const this = bun.cast(*Type, ctx.?);
+            const req = bun.cast(*Type, ctx.?);
             if ((status != ARES_SUCCESS)) {
-                _ = function(this, Error.get(status), timeouts, null);
+                _ = function(req, Error.get(status), timeouts, null);
                 return;
             }
             var start: [*c]struct_ares_mx_reply = undefined;
             _ = &start;
             const result = ares_parse_mx_reply(buffer, buffer_length, (&start));
             if ((result != ARES_SUCCESS)) {
-                _ = function(this, Error.get(result), timeouts, null);
+                _ = function(req, Error.get(result), timeouts, null);
                 return;
             }
-            _ = function(this, null, timeouts, start);
+            _ = function(req, null, timeouts, start);
     }
 }).handle);
     }
@@ -868,19 +870,19 @@ pub fn callbackWrapper(comptime _: []const u8, comptime Type: type, comptime fun
             return (&(struct {
 
 pub fn handleTxt(ctx: ?*anyopaque, status: c_int, timeouts: c_int, buffer: [*c]u8, buffer_length: c_int) callconv(.c) void {
-            const this = bun.cast(*Type, ctx.?);
+            const req = bun.cast(*Type, ctx.?);
             if ((status != ARES_SUCCESS)) {
-                _ = function(this, Error.get(status), timeouts, null);
+                _ = function(req, Error.get(status), timeouts, null);
                 return;
             }
             var srv_start: [*c]struct_ares_txt_reply = undefined;
             _ = &srv_start;
             const result = ares_parse_txt_reply(buffer, buffer_length, (&srv_start));
             if ((result != ARES_SUCCESS)) {
-                _ = function(this, Error.get(result), timeouts, null);
+                _ = function(req, Error.get(result), timeouts, null);
                 return;
             }
-            _ = function(this, null, timeouts, srv_start);
+            _ = function(req, null, timeouts, srv_start);
     }
 }).handleTxt);
     }
@@ -917,19 +919,19 @@ pub fn callbackWrapper(comptime _: []const u8, comptime Type: type, comptime fun
             return (&(struct {
 
 pub fn handleNaptr(ctx: ?*anyopaque, status: c_int, timeouts: c_int, buffer: [*c]u8, buffer_length: c_int) callconv(.c) void {
-            const this = bun.cast(*Type, ctx.?);
+            const req = bun.cast(*Type, ctx.?);
             if ((status != ARES_SUCCESS)) {
-                _ = function(this, Error.get(status), timeouts, null);
+                _ = function(req, Error.get(status), timeouts, null);
                 return;
             }
             var naptr_start: [*c]struct_ares_naptr_reply = undefined;
             _ = &naptr_start;
             const result = ares_parse_naptr_reply(buffer, buffer_length, (&naptr_start));
             if ((result != ARES_SUCCESS)) {
-                _ = function(this, Error.get(result), timeouts, null);
+                _ = function(req, Error.get(result), timeouts, null);
                 return;
             }
-            _ = function(this, null, timeouts, naptr_start);
+            _ = function(req, null, timeouts, naptr_start);
     }
 }).handleNaptr);
     }
@@ -958,19 +960,19 @@ pub fn callbackWrapper(comptime _: []const u8, comptime Type: type, comptime fun
             return (&(struct {
 
 pub fn handleSoa(ctx: ?*anyopaque, status: c_int, timeouts: c_int, buffer: [*c]u8, buffer_length: c_int) callconv(.c) void {
-            const this = bun.cast(*Type, ctx.?);
+            const req = bun.cast(*Type, ctx.?);
             if ((status != ARES_SUCCESS)) {
-                _ = function(this, Error.get(status), timeouts, null);
+                _ = function(req, Error.get(status), timeouts, null);
                 return;
             }
             var soa_start: [*c]struct_ares_soa_reply = undefined;
             _ = &soa_start;
             const result = ares_parse_soa_reply(buffer, buffer_length, (&soa_start));
             if ((result != ARES_SUCCESS)) {
-                _ = function(this, Error.get(result), timeouts, null);
+                _ = function(req, Error.get(result), timeouts, null);
                 return;
             }
-            _ = function(this, null, timeouts, soa_start);
+            _ = function(req, null, timeouts, soa_start);
     }
 }).handleSoa);
     }
@@ -1010,9 +1012,9 @@ pub fn callbackWrapper(comptime _: []const u8, comptime Type: type, comptime fun
             return (&(struct {
 
 pub fn handleAny(ctx: ?*anyopaque, status: c_int, timeouts: c_int, buffer: [*c]u8, buffer_length: c_int) callconv(.c) void {
-            const this = bun.cast(*Type, ctx.?);
+            const req = bun.cast(*Type, ctx.?);
             if ((status != ARES_SUCCESS)) {
-                _ = function(this, Error.get(status), timeouts, null);
+                _ = function(req, Error.get(status), timeouts, null);
                 return;
             }
             var any_success = false;
@@ -1091,10 +1093,10 @@ last_error = @intFromEnum(err);
             }
             if ((!any_success)) {
                 _ = reply.deinit();
-                _ = function(this, Error.get(last_error.?), timeouts, null);
+                _ = function(req, Error.get(last_error.?), timeouts, null);
                 return;
             }
-            _ = function(this, null, timeouts, reply);
+            _ = function(req, null, timeouts, reply);
     }
 }).handleAny);
     }
@@ -1203,69 +1205,69 @@ pub const ARES_EADDRGETNETWORKPARAMS = 23;
 pub const ARES_ECANCELLED = 24;
 pub const ARES_ESERVICE = 25;
 pub const ARES_ENOSERVER = 26;
-pub const ARES_FLAG_USEVC = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(0)) else @as(c_int, 0)));
-pub const ARES_FLAG_PRIMARY = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)));
-pub const ARES_FLAG_IGNTC = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(2)) else @as(c_int, 2)));
-pub const ARES_FLAG_NORECURSE = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(3)) else @as(c_int, 3)));
-pub const ARES_FLAG_STAYOPEN = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(4)) else @as(c_int, 4)));
-pub const ARES_FLAG_NOSEARCH = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(5)) else @as(c_int, 5)));
-pub const ARES_FLAG_NOALIASES = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(6)) else @as(c_int, 6)));
-pub const ARES_FLAG_NOCHECKRESP = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(7)) else @as(c_int, 7)));
-pub const ARES_FLAG_NO_DFLT_SVR = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(9)) else @as(c_int, 9)));
-pub const ARES_FLAG_EDNS = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(8)) else @as(c_int, 8)));
-pub const ARES_OPT_FLAGS = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(0)) else @as(c_int, 0)));
-pub const ARES_OPT_TIMEOUT = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)));
-pub const ARES_OPT_TRIES = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(2)) else @as(c_int, 2)));
-pub const ARES_OPT_NDOTS = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(3)) else @as(c_int, 3)));
-pub const ARES_OPT_UDP_PORT = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(4)) else @as(c_int, 4)));
-pub const ARES_OPT_TCP_PORT = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(5)) else @as(c_int, 5)));
-pub const ARES_OPT_SERVERS = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(6)) else @as(c_int, 6)));
-pub const ARES_OPT_DOMAINS = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(7)) else @as(c_int, 7)));
-pub const ARES_OPT_LOOKUPS = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(8)) else @as(c_int, 8)));
-pub const ARES_OPT_SOCK_STATE_CB = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(9)) else @as(c_int, 9)));
-pub const ARES_OPT_SORTLIST = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(10)) else @as(c_int, 10)));
-pub const ARES_OPT_SOCK_SNDBUF = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(11)) else @as(c_int, 11)));
-pub const ARES_OPT_SOCK_RCVBUF = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(12)) else @as(c_int, 12)));
-pub const ARES_OPT_TIMEOUTMS = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(13)) else @as(c_int, 13)));
-pub const ARES_OPT_ROTATE = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(14)) else @as(c_int, 14)));
-pub const ARES_OPT_EDNSPSZ = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(15)) else @as(c_int, 15)));
-pub const ARES_OPT_NOROTATE = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(16)) else @as(c_int, 16)));
-pub const ARES_OPT_RESOLVCONF = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(17)) else @as(c_int, 17)));
-pub const ARES_OPT_HOSTS_FILE = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(18)) else @as(c_int, 18)));
-pub const ARES_NI_NOFQDN = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(0)) else @as(c_int, 0)));
-pub const ARES_NI_NUMERICHOST = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)));
-pub const ARES_NI_NAMEREQD = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(2)) else @as(c_int, 2)));
-pub const ARES_NI_NUMERICSERV = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(3)) else @as(c_int, 3)));
-pub const ARES_NI_DGRAM = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(4)) else @as(c_int, 4)));
-pub const ARES_NI_TCP = (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(0)) else @as(c_int, 0));
+pub const ARES_FLAG_USEVC = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(c_int, @enumFromInt(0)) else @as(c_int, 0)));
+pub const ARES_FLAG_PRIMARY = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)));
+pub const ARES_FLAG_IGNTC = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(2)) == .int or @typeInfo(@TypeOf(2)) == .comptime_int)) @as(c_int, @enumFromInt(2)) else @as(c_int, 2)));
+pub const ARES_FLAG_NORECURSE = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(3)) == .int or @typeInfo(@TypeOf(3)) == .comptime_int)) @as(c_int, @enumFromInt(3)) else @as(c_int, 3)));
+pub const ARES_FLAG_STAYOPEN = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(4)) == .int or @typeInfo(@TypeOf(4)) == .comptime_int)) @as(c_int, @enumFromInt(4)) else @as(c_int, 4)));
+pub const ARES_FLAG_NOSEARCH = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(5)) == .int or @typeInfo(@TypeOf(5)) == .comptime_int)) @as(c_int, @enumFromInt(5)) else @as(c_int, 5)));
+pub const ARES_FLAG_NOALIASES = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(6)) == .int or @typeInfo(@TypeOf(6)) == .comptime_int)) @as(c_int, @enumFromInt(6)) else @as(c_int, 6)));
+pub const ARES_FLAG_NOCHECKRESP = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(7)) == .int or @typeInfo(@TypeOf(7)) == .comptime_int)) @as(c_int, @enumFromInt(7)) else @as(c_int, 7)));
+pub const ARES_FLAG_NO_DFLT_SVR = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(9)) == .int or @typeInfo(@TypeOf(9)) == .comptime_int)) @as(c_int, @enumFromInt(9)) else @as(c_int, 9)));
+pub const ARES_FLAG_EDNS = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(8)) == .int or @typeInfo(@TypeOf(8)) == .comptime_int)) @as(c_int, @enumFromInt(8)) else @as(c_int, 8)));
+pub const ARES_OPT_FLAGS = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(c_int, @enumFromInt(0)) else @as(c_int, 0)));
+pub const ARES_OPT_TIMEOUT = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)));
+pub const ARES_OPT_TRIES = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(2)) == .int or @typeInfo(@TypeOf(2)) == .comptime_int)) @as(c_int, @enumFromInt(2)) else @as(c_int, 2)));
+pub const ARES_OPT_NDOTS = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(3)) == .int or @typeInfo(@TypeOf(3)) == .comptime_int)) @as(c_int, @enumFromInt(3)) else @as(c_int, 3)));
+pub const ARES_OPT_UDP_PORT = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(4)) == .int or @typeInfo(@TypeOf(4)) == .comptime_int)) @as(c_int, @enumFromInt(4)) else @as(c_int, 4)));
+pub const ARES_OPT_TCP_PORT = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(5)) == .int or @typeInfo(@TypeOf(5)) == .comptime_int)) @as(c_int, @enumFromInt(5)) else @as(c_int, 5)));
+pub const ARES_OPT_SERVERS = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(6)) == .int or @typeInfo(@TypeOf(6)) == .comptime_int)) @as(c_int, @enumFromInt(6)) else @as(c_int, 6)));
+pub const ARES_OPT_DOMAINS = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(7)) == .int or @typeInfo(@TypeOf(7)) == .comptime_int)) @as(c_int, @enumFromInt(7)) else @as(c_int, 7)));
+pub const ARES_OPT_LOOKUPS = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(8)) == .int or @typeInfo(@TypeOf(8)) == .comptime_int)) @as(c_int, @enumFromInt(8)) else @as(c_int, 8)));
+pub const ARES_OPT_SOCK_STATE_CB = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(9)) == .int or @typeInfo(@TypeOf(9)) == .comptime_int)) @as(c_int, @enumFromInt(9)) else @as(c_int, 9)));
+pub const ARES_OPT_SORTLIST = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(10)) == .int or @typeInfo(@TypeOf(10)) == .comptime_int)) @as(c_int, @enumFromInt(10)) else @as(c_int, 10)));
+pub const ARES_OPT_SOCK_SNDBUF = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(11)) == .int or @typeInfo(@TypeOf(11)) == .comptime_int)) @as(c_int, @enumFromInt(11)) else @as(c_int, 11)));
+pub const ARES_OPT_SOCK_RCVBUF = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(12)) == .int or @typeInfo(@TypeOf(12)) == .comptime_int)) @as(c_int, @enumFromInt(12)) else @as(c_int, 12)));
+pub const ARES_OPT_TIMEOUTMS = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(13)) == .int or @typeInfo(@TypeOf(13)) == .comptime_int)) @as(c_int, @enumFromInt(13)) else @as(c_int, 13)));
+pub const ARES_OPT_ROTATE = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(14)) == .int or @typeInfo(@TypeOf(14)) == .comptime_int)) @as(c_int, @enumFromInt(14)) else @as(c_int, 14)));
+pub const ARES_OPT_EDNSPSZ = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(15)) == .int or @typeInfo(@TypeOf(15)) == .comptime_int)) @as(c_int, @enumFromInt(15)) else @as(c_int, 15)));
+pub const ARES_OPT_NOROTATE = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(16)) == .int or @typeInfo(@TypeOf(16)) == .comptime_int)) @as(c_int, @enumFromInt(16)) else @as(c_int, 16)));
+pub const ARES_OPT_RESOLVCONF = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(17)) == .int or @typeInfo(@TypeOf(17)) == .comptime_int)) @as(c_int, @enumFromInt(17)) else @as(c_int, 17)));
+pub const ARES_OPT_HOSTS_FILE = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(18)) == .int or @typeInfo(@TypeOf(18)) == .comptime_int)) @as(c_int, @enumFromInt(18)) else @as(c_int, 18)));
+pub const ARES_NI_NOFQDN = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(c_int, @enumFromInt(0)) else @as(c_int, 0)));
+pub const ARES_NI_NUMERICHOST = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)));
+pub const ARES_NI_NAMEREQD = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(2)) == .int or @typeInfo(@TypeOf(2)) == .comptime_int)) @as(c_int, @enumFromInt(2)) else @as(c_int, 2)));
+pub const ARES_NI_NUMERICSERV = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(3)) == .int or @typeInfo(@TypeOf(3)) == .comptime_int)) @as(c_int, @enumFromInt(3)) else @as(c_int, 3)));
+pub const ARES_NI_DGRAM = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(4)) == .int or @typeInfo(@TypeOf(4)) == .comptime_int)) @as(c_int, @enumFromInt(4)) else @as(c_int, 4)));
+pub const ARES_NI_TCP = (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(c_int, @enumFromInt(0)) else @as(c_int, 0));
 pub const ARES_NI_UDP = ARES_NI_DGRAM;
-pub const ARES_NI_SCTP = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(5)) else @as(c_int, 5)));
-pub const ARES_NI_DCCP = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(6)) else @as(c_int, 6)));
-pub const ARES_NI_NUMERICSCOPE = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(7)) else @as(c_int, 7)));
-pub const ARES_NI_LOOKUPHOST = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(8)) else @as(c_int, 8)));
-pub const ARES_NI_LOOKUPSERVICE = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(9)) else @as(c_int, 9)));
-pub const ARES_NI_IDN = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(10)) else @as(c_int, 10)));
-pub const ARES_NI_IDN_ALLOW_UNASSIGNED = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(11)) else @as(c_int, 11)));
-pub const ARES_NI_IDN_USE_STD3_ASCII_RULES = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(12)) else @as(c_int, 12)));
-pub const ARES_AI_CANONNAME = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(0)) else @as(c_int, 0)));
-pub const ARES_AI_NUMERICHOST = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)));
-pub const ARES_AI_PASSIVE = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(2)) else @as(c_int, 2)));
-pub const ARES_AI_NUMERICSERV = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(3)) else @as(c_int, 3)));
-pub const ARES_AI_V4MAPPED = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(4)) else @as(c_int, 4)));
-pub const ARES_AI_ALL = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(5)) else @as(c_int, 5)));
-pub const ARES_AI_ADDRCONFIG = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(6)) else @as(c_int, 6)));
-pub const ARES_AI_NOSORT = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(7)) else @as(c_int, 7)));
-pub const ARES_AI_ENVHOSTS = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(8)) else @as(c_int, 8)));
-pub const ARES_AI_IDN = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(10)) else @as(c_int, 10)));
-pub const ARES_AI_IDN_ALLOW_UNASSIGNED = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(11)) else @as(c_int, 11)));
-pub const ARES_AI_IDN_USE_STD3_ASCII_RULES = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(12)) else @as(c_int, 12)));
-pub const ARES_AI_CANONIDN = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(13)) else @as(c_int, 13)));
+pub const ARES_NI_SCTP = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(5)) == .int or @typeInfo(@TypeOf(5)) == .comptime_int)) @as(c_int, @enumFromInt(5)) else @as(c_int, 5)));
+pub const ARES_NI_DCCP = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(6)) == .int or @typeInfo(@TypeOf(6)) == .comptime_int)) @as(c_int, @enumFromInt(6)) else @as(c_int, 6)));
+pub const ARES_NI_NUMERICSCOPE = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(7)) == .int or @typeInfo(@TypeOf(7)) == .comptime_int)) @as(c_int, @enumFromInt(7)) else @as(c_int, 7)));
+pub const ARES_NI_LOOKUPHOST = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(8)) == .int or @typeInfo(@TypeOf(8)) == .comptime_int)) @as(c_int, @enumFromInt(8)) else @as(c_int, 8)));
+pub const ARES_NI_LOOKUPSERVICE = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(9)) == .int or @typeInfo(@TypeOf(9)) == .comptime_int)) @as(c_int, @enumFromInt(9)) else @as(c_int, 9)));
+pub const ARES_NI_IDN = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(10)) == .int or @typeInfo(@TypeOf(10)) == .comptime_int)) @as(c_int, @enumFromInt(10)) else @as(c_int, 10)));
+pub const ARES_NI_IDN_ALLOW_UNASSIGNED = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(11)) == .int or @typeInfo(@TypeOf(11)) == .comptime_int)) @as(c_int, @enumFromInt(11)) else @as(c_int, 11)));
+pub const ARES_NI_IDN_USE_STD3_ASCII_RULES = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(12)) == .int or @typeInfo(@TypeOf(12)) == .comptime_int)) @as(c_int, @enumFromInt(12)) else @as(c_int, 12)));
+pub const ARES_AI_CANONNAME = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(c_int, @enumFromInt(0)) else @as(c_int, 0)));
+pub const ARES_AI_NUMERICHOST = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)));
+pub const ARES_AI_PASSIVE = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(2)) == .int or @typeInfo(@TypeOf(2)) == .comptime_int)) @as(c_int, @enumFromInt(2)) else @as(c_int, 2)));
+pub const ARES_AI_NUMERICSERV = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(3)) == .int or @typeInfo(@TypeOf(3)) == .comptime_int)) @as(c_int, @enumFromInt(3)) else @as(c_int, 3)));
+pub const ARES_AI_V4MAPPED = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(4)) == .int or @typeInfo(@TypeOf(4)) == .comptime_int)) @as(c_int, @enumFromInt(4)) else @as(c_int, 4)));
+pub const ARES_AI_ALL = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(5)) == .int or @typeInfo(@TypeOf(5)) == .comptime_int)) @as(c_int, @enumFromInt(5)) else @as(c_int, 5)));
+pub const ARES_AI_ADDRCONFIG = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(6)) == .int or @typeInfo(@TypeOf(6)) == .comptime_int)) @as(c_int, @enumFromInt(6)) else @as(c_int, 6)));
+pub const ARES_AI_NOSORT = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(7)) == .int or @typeInfo(@TypeOf(7)) == .comptime_int)) @as(c_int, @enumFromInt(7)) else @as(c_int, 7)));
+pub const ARES_AI_ENVHOSTS = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(8)) == .int or @typeInfo(@TypeOf(8)) == .comptime_int)) @as(c_int, @enumFromInt(8)) else @as(c_int, 8)));
+pub const ARES_AI_IDN = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(10)) == .int or @typeInfo(@TypeOf(10)) == .comptime_int)) @as(c_int, @enumFromInt(10)) else @as(c_int, 10)));
+pub const ARES_AI_IDN_ALLOW_UNASSIGNED = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(11)) == .int or @typeInfo(@TypeOf(11)) == .comptime_int)) @as(c_int, @enumFromInt(11)) else @as(c_int, 11)));
+pub const ARES_AI_IDN_USE_STD3_ASCII_RULES = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(12)) == .int or @typeInfo(@TypeOf(12)) == .comptime_int)) @as(c_int, @enumFromInt(12)) else @as(c_int, 12)));
+pub const ARES_AI_CANONIDN = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(13)) == .int or @typeInfo(@TypeOf(13)) == .comptime_int)) @as(c_int, @enumFromInt(13)) else @as(c_int, 13)));
 pub const ARES_AI_MASK = ((((((ARES_AI_CANONNAME | ARES_AI_NUMERICHOST) | ARES_AI_PASSIVE) | ARES_AI_NUMERICSERV) | ARES_AI_V4MAPPED) | ARES_AI_ALL) | ARES_AI_ADDRCONFIG);
-pub const ARES_GETSOCK_MAXNUM = (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(16)) else @as(c_int, 16));
-pub const ARES_LIB_INIT_NONE = (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(0)) else @as(c_int, 0));
-pub const ARES_LIB_INIT_WIN32 = cp_shl((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(0)) else @as(c_int, 0)));
+pub const ARES_GETSOCK_MAXNUM = (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(16)) == .int or @typeInfo(@TypeOf(16)) == .comptime_int)) @as(c_int, @enumFromInt(16)) else @as(c_int, 16));
+pub const ARES_LIB_INIT_NONE = (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(c_int, @enumFromInt(0)) else @as(c_int, 0));
+pub const ARES_LIB_INIT_WIN32 = cp_shl((if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(c_int, @enumFromInt(0)) else @as(c_int, 0)));
 pub const ARES_LIB_INIT_ALL = ARES_LIB_INIT_WIN32;
-pub const ARES_SOCKET_BAD = (if (bun.Environment.isWindows) std.os.windows.ws2_32.INVALID_SOCKET else (0 - (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1))));
+pub const ARES_SOCKET_BAD = (if (bun.Environment.isWindows) std.os.windows.ws2_32.INVALID_SOCKET else (0 - (if (@typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1))));
 pub const ares_socket_typedef = "";
 pub const ares_addrinfo_cname = AddrInfo_cname;
 pub const ares_addrinfo_node = AddrInfo_node;
@@ -1334,12 +1336,12 @@ pub fn hostentHostCallbackWrapper(comptime Type: type, comptime function: hosten
         return (&(struct {
 
 pub fn handle(ctx: ?*anyopaque, status: c_int, timeouts: c_int, hostent: ?*struct_hostent) callconv(.c) void {
-            const this = bun.cast(*Type, ctx.?);
+            const req = bun.cast(*Type, ctx.?);
             if ((status != ARES_SUCCESS)) {
-                _ = function(this, Error.get(status), timeouts, null);
+                _ = function(req, Error.get(status), timeouts, null);
                 return;
             }
-            _ = function(this, null, timeouts, hostent);
+            _ = function(req, null, timeouts, hostent);
     }
 }).handle);
 }
@@ -1348,9 +1350,9 @@ pub fn hostentCallbackWrapper(comptime lookup_name: []const u8, comptime Type: t
         return (&(struct {
 
 pub fn handle(ctx: ?*anyopaque, status: c_int, timeouts: c_int, buffer: [*c]u8, buffer_length: c_int) callconv(.c) void {
-            const this = bun.cast(*Type, ctx.?);
+            const req = bun.cast(*Type, ctx.?);
             if ((status != ARES_SUCCESS)) {
-                _ = function(this, Error.get(status), timeouts, null);
+                _ = function(req, Error.get(status), timeouts, null);
                 return;
             }
             var start: [*c]struct_hostent = undefined;
@@ -1362,26 +1364,26 @@ pub fn handle(ctx: ?*anyopaque, status: c_int, timeouts: c_int, buffer: [*c]u8, 
                 _ = &naddrttls;
                 const result = ares_parse_a_reply(buffer, buffer_length, (&start), (&addrttls), (&naddrttls));
                 if ((result != ARES_SUCCESS)) {
-                    _ = function(this, Error.get(result), timeouts, null);
+                    _ = function(req, Error.get(result), timeouts, null);
                     return;
                 }
-                _ = function(this, null, timeouts, start);
+                _ = function(req, null, timeouts, start);
             } else {
                 if (comptime strings.eqlComptime(lookup_name, "ns")) {
                     const result = ares_parse_ns_reply(buffer, buffer_length, (&start));
                     if ((result != ARES_SUCCESS)) {
-                        _ = function(this, Error.get(result), timeouts, null);
+                        _ = function(req, Error.get(result), timeouts, null);
                         return;
                     }
-                    _ = function(this, null, timeouts, start);
+                    _ = function(req, null, timeouts, start);
                 } else {
                     if (comptime strings.eqlComptime(lookup_name, "ptr")) {
                         const result = ares_parse_ptr_reply(buffer, buffer_length, null, 0, AF.INET, (&start));
                         if ((result != ARES_SUCCESS)) {
-                            _ = function(this, Error.get(result), timeouts, null);
+                            _ = function(req, Error.get(result), timeouts, null);
                             return;
                         }
-                        _ = function(this, null, timeouts, start);
+                        _ = function(req, null, timeouts, start);
                     } else {
                         _ = @compileError(std.fmt.comptimePrint("Unsupported struct_hostent record type: {s}", .{ lookup_name }));
                     }
@@ -1523,11 +1525,11 @@ pub extern "c" fn ares_inet_ntop(af: c_int, src: ?*const void, dst: [*]u8, size:
 pub extern "c" fn ares_inet_pton(af: c_int, src: [*c]const u8, dst: ?*anyopaque) callconv(.c) c_int;
 
 pub inline fn ARES_GETSOCK_READABLE(bits: anytype, num: anytype) @TypeOf(bits & (@as(c_int, 1) << num)) {
-        return (bits & cp_shl((if (comptime @typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), num));
+        return (bits & cp_shl((if (comptime @typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), num));
 }
 
 pub inline fn ARES_GETSOCK_WRITABLE(bits: anytype, num: anytype) @TypeOf(bits & (@as(c_int, 1) << (num + ARES_GETSOCK_MAXNUM))) {
-        return (bits & cp_shl((if (comptime @typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (num + ARES_GETSOCK_MAXNUM)));
+        return (bits & cp_shl((if (comptime @typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_int, @enumFromInt(1)) else @as(c_int, 1)), (num + ARES_GETSOCK_MAXNUM)));
 }
 
 pub fn getSockaddr(addr: []const u8, port: u16, sa: *std.posix.sockaddr) c_int {

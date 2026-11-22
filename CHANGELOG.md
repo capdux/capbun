@@ -2145,3 +2145,6 @@
 
 ### [2026-11-23] Wave #65（全仓 1280 模块普查与首轮语义一致性修复）
 - 修复 `unicode.cp`、`yaml.cp`、`types.cp`、`InitError.cp`、`http.cp`、`fetch.cp`、`Version.cp`、`FrameworkRouter.cp`、`DevServer.cp`、`expect.cp`、`owned.cp`、`macho.cp`、`sys.cp`、`Futex.cp` 共 14 个模块的语义边界、符号可见性及与新版 `cpc` 的适配，通过 `bun run zig:check`（5/5）及 `bun bd test`（8/8 + `does propagate type for Blob`）。
+
+### [2026-11-23] Wave #66（补全 `fetch`/`Blob`/`Response`/`copy_file`/`c_ares`/`subprocess`/`streams` 核心逻辑）
+- 补全 `fetch.cp`（`needsToReadFile`/`isS3`/协议校验）、`Blob.cp`（`BlobAny.isS3`）、`uws_sys/Response.cp`、`blob/copy_file.cp`（`CopyFileWindows`）、`cares_sys/c_ares.cp`、`subprocess.cp`（IPC 关闭与接收者纯化）及 `streams.cp`（`WrappedPtr`），通过 `bun run zig:check`（5/5）及 `bun bd test`（8/8 + `serve.test.ts` `Content-Type` 2/2）。

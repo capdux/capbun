@@ -596,23 +596,24 @@ pub const IntoArray = ResultIntoArray;
 pub const Pending = ResultPending;
 
 struct SignalVTableFunctions<Wrapped> {
+    pub type WrappedPtr = *Wrapped;
     static fn onClose(ptr: *!, e: sys.Error?) {
         if (comptime !@hasDecl(Wrapped, "onClose"))
-            Wrapped.close(bun.cast(*Wrapped, ptr), e)
+            Wrapped.close(bun.cast(WrappedPtr, ptr), e)
         else
-            Wrapped.onClose(bun.cast(*Wrapped, ptr), e);
+            Wrapped.onClose(bun.cast(WrappedPtr, ptr), e);
     }
     static fn onReady(ptr: *!, amount: Blob.SizeType?, offset: Blob.SizeType?) {
         if (comptime !@hasDecl(Wrapped, "onReady"))
-            Wrapped.ready(bun.cast(*Wrapped, ptr), amount, offset)
+            Wrapped.ready(bun.cast(WrappedPtr, ptr), amount, offset)
         else
-            Wrapped.onReady(bun.cast(*Wrapped, ptr), amount, offset);
+            Wrapped.onReady(bun.cast(WrappedPtr, ptr), amount, offset);
     }
     static fn onStart(ptr: *!) {
         if (comptime !@hasDecl(Wrapped, "onStart"))
-            Wrapped.start(bun.cast(*Wrapped, ptr))
+            Wrapped.start(bun.cast(WrappedPtr, ptr))
         else
-            Wrapped.onStart(bun.cast(*Wrapped, ptr));
+            Wrapped.onStart(bun.cast(WrappedPtr, ptr));
     }
 }
 

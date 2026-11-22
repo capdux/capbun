@@ -567,3 +567,15 @@
   - `src/bake/FrameworkRouter.cp`（`pub static fn initEmpty`）、`src/bake/DevServer.cp`（`HmrSocketPtr` 与 `static fn handle`）、`src/test_runner/expect.cp`（转义与 `static`）、`src/ptr/owned.cp`（补全 `pub`）、`src/exe_format/macho.cp`（`@intCast` 溢出检查）、`src/sys/sys.cp`（`i64` `fallocate`）、`src/threading/Futex.cp`（Darwin `.FAULT => {}`）。
 - 验证：`bun run zig:check` 5/5 通过（23s），`29181.test.ts` + `bun-file.test.ts` 8/8 通过（460 expect），`serve.test.ts` `does propagate type for Blob` 通过。
 - 推导下一阶段 Wave #66：根据普查结果补全 `fetch.cp`（`needsToReadFile`/`SendFile`/`isS3`/协议校验）、`c_ares.cp`、`uws_sys/Response.cp` 与 `blob/copy_file.cp` 遗漏核心逻辑。
+
+## [2026-11-23] Wave #66：补全 `fetch` / `Blob` / `Response` / `copy_file` / `c_ares` / `subprocess` / `streams` 核心逻辑与回归验证
+- 根据 `temp/full_census.txt` 普查清单与 `serve.test.ts` 回归定位，补全 7 个模块的生产逻辑与接收者/类型适配：
+  - `src/runtime/webcore/fetch.cp`（补全协议校验、`body.isS3()`、`body.needsToReadFile()`/`SendFile`/`NodeFS.readFile`、`url.isS3()`、`S3StreamWrapper`、`body.detach()` 及 `OptHeaders`/`@constCast` 适配）；
+  - `src/runtime/webcore/Blob.cp`（补全 `BlobAny.isS3()`）；
+  - `src/uws_sys/Response.cp`（补全 `castRes`/`downcastSocket`/`getRemoteAddressAsText` 与 `pub type` 指针别名）；
+  - `src/runtime/webcore/blob/copy_file.cp`（补全 `CopyFileWindows` 全套方法）；
+  - `src/cares_sys/c_ares.cp`（补全 `Error.initEAI` `eai_zero => return null`、11 处 `static` 回调与 `this` -> `req`）；
+  - `src/runtime/api/bun/subprocess.cp`（补全 `handleIPCClose(*_)`、`onAfterIPCClosed(*_)`、`memoryCost(*_)`、`static` 与接收者纯化）；
+  - `src/runtime/webcore/streams.cp`（`SignalVTableFunctions.WrappedPtr` 适配新版 `cpc` `return struct` lowering）。
+- 验证：`bun run zig:check` 5/5 通过（25s）；`bun bd test test/regression/issue/29181.test.ts test/js/bun/util/bun-file.test.ts` 8/8 通过（460 expect）；`bun bd test test/js/bun/http/serve.test.ts -t "propagates content-type|does propagate type for Blob"` 2/2 通过（此前失败的 `Bun.file()` `fetch` body 读取已修复）。
+- 推导下一阶段 Wave #67：按“1 路 `bun bd test` 分批回归 + 1 路完整性补全”并行推进——执行 `temp/test_plan.txt` Batch 1（174 个测试文件），同时准备补全 `Blob.cp`（`doReadFromS3`/`S3BlobDownloadTask`/`onStructuredClone*`）、`Terminal.cp`（Windows `makeLibUVOwned`）与 `json.cp`（恢复 `json_.zig` 原始备份与 `expectPrintedJSON`）。

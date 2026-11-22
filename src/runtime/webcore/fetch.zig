@@ -74,6 +74,14 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+const Message = struct { __cp_no_message_sentinel: void = {} };
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
@@ -209,6 +217,38 @@ pub fn __cp_deinit(self: *FetchCleanupGuard) void {
     }
 };
 
+pub const S3StreamWrapper = struct {
+    promise: jsc.JSPromise.Strong,
+    url: ZigURL,
+    url_proxy_buffer: []const u8,
+    global: *jsc.JSGlobalObject,
+
+pub fn resolve(result: s3.S3UploadResult, wrapper: *S3StreamWrapper) bun.JSTerminated!void {
+            const global = wrapper.global;
+            defer {
+            _ = bun.destroy(wrapper);
+            }
+            defer {
+            _ = bun.default_allocator.free(wrapper.url_proxy_buffer);
+            }
+            switch (result) {
+.success => {
+const response = bun.new(Response, Response.init(Response.Init{ .method = .PUT, .status_code = 200 }, Body{ .value = .Empty }, bun.String.createAtomIfPossible(wrapper.url.href), false));
+            const response_js = Response.makeMaybePooled(@as(*jsc.JSGlobalObject, @ptrCast(@alignCast(global))), response);
+            _ = response_js.ensureStillAlive();
+            _ = try wrapper.promise.resolve(global, response_js);
+},
+.failure => |e| {
+const response = bun.new(Response, Response.init(.{ .method = .PUT, .status_code = 500, .status_text = bun.String.createAtomIfPossible(e.code) }, .{ .value = .{ .InternalBlob = .{ .bytes = std.array_list.Managed(u8).fromOwnedSlice(bun.default_allocator, bun.handleOom(bun.default_allocator.dupe(u8, e.message))), .was_string = true } } }, bun.String.createAtomIfPossible(wrapper.url.href), false));
+            const response_js = Response.makeMaybePooled(@as(*jsc.JSGlobalObject, @ptrCast(@alignCast(global))), response);
+            _ = response_js.ensureStillAlive();
+            _ = try wrapper.promise.resolve(global, response_js);
+},
+}
+    }
+    const new = bun.TrivialNew(@This());
+};
+
 pub const StringOrURL = struct {
     
 pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; return self_ptr; }
@@ -227,6 +267,7 @@ pub fn fromJS(value: JSValue, globalThis: *JSGlobalObject) JSError!?String {
 };
 
 const JSTypeErrorEnum = std.enums.EnumArray(JSType, string);
+pub const OptHeaders = ?Headers;
 const FetchRedirect = http.FetchRedirect;
 const Headers = http.Headers;
 const JSGlobalObject = jsc.JSGlobalObject;
@@ -1109,6 +1150,13 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
         if (globalThis.hasException()) {
             return JSValue.zero;
         }
+        if ((url.protocol.len > 0)) {
+            if ((!((url.isHTTP() or url.isHTTPS()) or url.isS3()))) {
+                var e = globalThis.toTypeError(.INVALID_ARG_VALUE, "protocol must be http:, https: or s3:", .{});
+                _ = &e;
+                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, e);
+            }
+        }
         if (((((!allow_get_body) and (!method.hasRequestBody())) and body.hasBody()) and (!upgraded_connection))) {
             var err = globalThis.toTypeError(.INVALID_ARG_VALUE, fetch_error_unexpected_body, .{});
             _ = &err;
@@ -1117,15 +1165,211 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
         if ((((headers == null) and body.hasBody()) and body.hasContentTypeFromUser())) {
             headers = (blk_catch_13: { break :blk_catch_13 ((Headers.from(null, allocator, .{ .body = body.getAnyBlob() })) catch |e| { _ = &e; break :blk_catch_13 bun.handleOom(e); }); });
         }
+        var http_body = body;
+        _ = &http_body;
+        if (body.isS3()) {
+            _ = prepare_body: {
+            const s3_stream_js = try jsc.WebCore.ReadableStream.fromBlobCopyRef(globalThis, (blk: {
+            break :blk (&body.AnyBlob.Blob);
+
+}), s3.MultiPartUploadOptions.DefaultPartSize);
+            const s3_stream_opt = try jsc.WebCore.ReadableStream.fromJS(s3_stream_js, globalThis);
+            if (s3_stream_opt) |stream| {
+                _ = &stream;
+                var old = body;
+                _ = &old;
+                defer {
+                _ = old.detach();
+                }
+                body = .{ .ReadableStream = jsc.WebCore.ReadableStream.Strong.init(stream, globalThis) };
+                break :prepare_body;
+            }
+            const rejected_value = JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, globalThis.createErrorInstance("Failed to start s3 stream", .{}));
+            _ = body.detach();
+            return rejected_value;
+};
+        }
+        if (body.needsToReadFile()) {
+            _ = prepare_body: {
+            const opened_fd_res: bun.sys.Maybe(bun.FD) = (switch ((body.store()).?.data.file.pathlike) {
+.fd => |fd| bun.sys.dup(fd),
+.path => |path| bun.sys.open(path.sliceZ((&globalThis.bunVM().nodeFS().sync_error_buf)), (if (Environment.isWindows) bun.O.RDONLY else (bun.O.RDONLY | bun.O.NOCTTY)), 0),
+});
+            const opened_fd = (switch (opened_fd_res) {
+.@"err" => |e| {
+{
+                const rejected_value = JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_14: { break :blk_catch_14 ((e.toJS(globalThis)) catch |__ce_14| { _ = &__ce_14; return JSValue.zero; }); }));
+                return rejected_value;
+            }
+},
+.result => |fd| fd,
+});
+            if (((proxy == null) and bun.http.SendFile.isEligible(url))) {
+                _ = use_sendfile: {
+                const stat: bun.Stat = (switch (bun.sys.fstat(opened_fd)) {
+.result => |result| result,
+.@"err" => break :use_sendfile,
+});
+                if (Environment.isMac) {
+                    if ((!bun.isRegularFile(stat.mode))) {
+                        break :use_sendfile;
+                    }
+                }
+                if ((stat.size < (32 * 1024))) {
+                    break :use_sendfile;
+                }
+                const original_size = body.AnyBlob.Blob.size;
+                const stat_size = @as(Blob.SizeType, @intCast(stat.size));
+                const blob_size = (if (bun.isRegularFile(stat.mode)) stat_size else @min(original_size, stat_size));
+                http_body = .{ .Sendfile = .{ .fd = opened_fd, .remain = (body.AnyBlob.Blob.offset + original_size), .offset = body.AnyBlob.Blob.offset, .content_size = blob_size } };
+                if (bun.isRegularFile(stat.mode)) {
+                    http_body.Sendfile.offset = @min(http_body.Sendfile.offset, stat_size);
+                    http_body.Sendfile.remain = (@min(@max(http_body.Sendfile.remain, http_body.Sendfile.offset), stat_size) -| http_body.Sendfile.offset);
+                }
+                _ = body.detach();
+                break :prepare_body;
+};
+            }
+            const res = jsc.Node.fs.NodeFS.readFile(globalThis.bunVM().nodeFS(), .{ .encoding = .buffer, .path = .{ .fd = opened_fd }, .offset = body.AnyBlob.Blob.offset, .max_size = body.AnyBlob.Blob.size }, .sync);
+            if (((body.store()).?.data.file.pathlike == .path)) {
+                _ = opened_fd.close();
+            }
+            break :prepare_body (switch (res) {
+.@"err" => |e| {
+{
+                const rejected_value = JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_15: { break :blk_catch_15 ((e.toJS(globalThis)) catch |__ce_15| { _ = &__ce_15; return JSValue.zero; }); }));
+                _ = body.detach();
+                return rejected_value;
+            }
+},
+.result => |result| {
+{
+                _ = body.detach();
+                body = .{ .AnyBlob = .fromOwnedSlice(allocator, (blk: {
+                break :blk @constCast(result.slice());
+
+})) };
+                http_body = .{ .AnyBlob = body.AnyBlob };
+            }
+},
+});
+
+};
+        }
+        if (url.isS3()) {
+            var credentialsWithOptions = s3.S3CredentialsWithOptions{ .credentials = globalThis.bunVM().transpiler.env.getS3Credentials(), .options = .{}, .acl = null, .storage_class = null };
+            _ = &credentialsWithOptions;
+            defer {
+            _ = credentialsWithOptions.deinit();
+            }
+            if (options_object) |options| {
+                _ = &options;
+                const s3_opt_res = try options.getTruthyComptime(globalThis, "s3");
+                if (s3_opt_res) |s3_options| {
+                    _ = &s3_options;
+                    if (s3_options.isObject()) {
+                        _ = s3_options.ensureStillAlive();
+                        credentialsWithOptions = try s3.S3Credentials.getCredentialsWithOptions(credentialsWithOptions.credentials, .{}, s3_options, null, null, false, globalThis);
+                    }
+                }
+            }
+            if ((body == .ReadableStream)) {
+                defer {
+                _ = body.ReadableStream.deinit();
+                }
+                if (((method != .PUT) and (method != .POST))) {
+                    return jsc.JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, globalThis.createErrorInstance("Only POST and PUT do support body when using S3", .{}));
+                }
+                const promise = jsc.JSPromise.Strong.init(globalThis);
+                const s3_stream = S3StreamWrapper.new(.{ .url = url, .url_proxy_buffer = url_proxy_buffer, .promise = promise, .global = globalThis });
+                const promise_value = promise.value();
+                const proxy_url = (if (proxy) |p| p.href else "");
+                _ = try bun.S3.uploadStream(credentialsWithOptions.credentials.dupe(), url.s3Path(), (body.ReadableStream.get(globalThis)).?, globalThis, credentialsWithOptions.options, credentialsWithOptions.acl, credentialsWithOptions.storage_class, (if (headers) |h| h.getContentType() else null), (if (headers) |h| h.getContentDisposition() else null), (if (headers) |h| h.getContentEncoding() else null), proxy_url, credentialsWithOptions.request_payer, (blk: {
+                break :blk @ptrCast((&S3StreamWrapper.resolve));
+
+}), s3_stream);
+                url = .{};
+                url_proxy_buffer = "";
+                return promise_value;
+            }
+            if ((method == .POST)) {
+                method = .PUT;
+            }
+            var result = (blk_catch_16: { break :blk_catch_16 ((credentialsWithOptions.credentials.signRequest(.{ .path = url.s3Path(), .method = method }, false, null)) catch |sign_err| { _ = &sign_err; return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, s3.getJSSignError(sign_err, globalThis)); }); });
+            _ = &result;
+            defer {
+            _ = result.deinit();
+            }
+            if (proxy) |proxy_| {
+                _ = &proxy_;
+                const old_buffer = url_proxy_buffer;
+                defer {
+                _ = allocator.free(old_buffer);
+                }
+                var buffer = bun.handleOom(allocator.alloc(u8, (result.url.len + proxy_.href.len)));
+                _ = &buffer;
+                _ = bun.copy(u8, buffer[0..result.url.len], result.url);
+                _ = bun.copy(u8, buffer[proxy_.href.len..], proxy_.href);
+                url_proxy_buffer = buffer;
+                url = ZigURL.parse(url_proxy_buffer[0..result.url.len]);
+                proxy = ZigURL.parse(url_proxy_buffer[result.url.len..]);
+            } else {
+                _ = allocator.free(url_proxy_buffer);
+                url_proxy_buffer = result.url;
+                url = ZigURL.parse(result.url);
+                result.url = "";
+            }
+            const content_type = (if (headers) |h| h.getContentType() else null);
+            var header_buffer: [s3.S3Credentials.SignResult.MAX_HEADERS + 1]picohttp.Header = undefined;
+            _ = &header_buffer;
+            if (range) |range_| {
+                _ = &range_;
+                const _headers = result.mixWithHeader((&header_buffer), .{ .name = "range", .value = range_ });
+                _ = setHeaders((&headers), _headers, allocator);
+            } else {
+                if (content_type) |ct| {
+                    _ = &ct;
+                    if ((ct.len > 0)) {
+                        const _headers = result.mixWithHeader((&header_buffer), .{ .name = "Content-Type", .value = ct });
+                        _ = setHeaders((&headers), _headers, allocator);
+                    } else {
+                        _ = setHeaders((&headers), result.headers(), allocator);
+                    }
+                } else {
+                    _ = setHeaders((&headers), result.headers(), allocator);
+                }
+            }
+        }
         var promise = JSPromise.Strong.init(globalThis);
         _ = &promise;
         var promise_val = promise.value();
         _ = &promise_val;
-        _ = (blk_catch_14: { break :blk_catch_14 ((FetchTasklet.queue(allocator, globalThis, (&.{ .method = method, .url = url, .headers = ((headers) orelse (Headers{ .allocator = allocator })), .body = body, .disable_keepalive = disable_keepalive, .disable_timeout = disable_timeout, .disable_decompression = disable_decompression, .reject_unauthorized = reject_unauthorized, .redirect_type = redirect_type, .verbose = verbose, .proxy = proxy, .proxy_headers = proxy_headers.val, .url_proxy_buffer = url_proxy_buffer, .signal = signal, .globalThis = globalThis, .ssl_config = ssl_config, .hostname = hostname, .upgraded_connection = upgraded_connection, .force_http2 = force_http2, .force_http3 = force_http3, .force_http1 = force_http1, .check_server_identity = (if (check_server_identity.isEmptyOrUndefinedOrNull()) .empty else .create(check_server_identity, globalThis)), .unix_socket_path = unix_socket_path }), promise)) catch |e| { _ = &e; break :blk_catch_14 bun.handleOom(e); }); });
+        const initial_body_reference_count: if (Environment.isDebug) usize else u0 = brk: {
+        if (Environment.isDebug) {
+            if (body.store()) |store| {
+                _ = &store;
+                break :brk store.ref_count.load(.monotonic);
+            }
+        }
+        break :brk 0;
+};
+        _ = (blk_catch_17: { break :blk_catch_17 ((FetchTasklet.queue(allocator, globalThis, (&.{ .method = method, .url = url, .headers = ((headers) orelse (Headers{ .allocator = allocator })), .body = http_body, .disable_keepalive = disable_keepalive, .disable_timeout = disable_timeout, .disable_decompression = disable_decompression, .reject_unauthorized = reject_unauthorized, .redirect_type = redirect_type, .verbose = verbose, .proxy = proxy, .proxy_headers = proxy_headers.val, .url_proxy_buffer = url_proxy_buffer, .signal = signal, .globalThis = globalThis, .ssl_config = ssl_config, .hostname = hostname, .upgraded_connection = upgraded_connection, .force_http2 = force_http2, .force_http3 = force_http3, .force_http1 = force_http1, .check_server_identity = (if (check_server_identity.isEmptyOrUndefinedOrNull()) .empty else .create(check_server_identity, globalThis)), .unix_socket_path = unix_socket_path }), promise)) catch |e| { _ = &e; break :blk_catch_17 bun.handleOom(e); }); });
+        if (Environment.isDebug) {
+            if (body.store()) |store| {
+                _ = &store;
+                if ((store.ref_count.load(.monotonic) == initial_body_reference_count)) {
+                    _ = Output.panic("Expected body ref count to have incremented in FetchTasklet", .{});
+                }
+            }
+        }
         url = .{};
         headers = null;
         proxy_headers.val = null;
-        body = FetchTasklet.HTTPRequestBody.Empty;
+        if ((body.store() != null)) {
+            _ = body.detach();
+        } else {
+            body = FetchTasklet.HTTPRequestBody.Empty;
+        }
         proxy = null;
         url_proxy_buffer = "";
         signal = null;
@@ -1136,10 +1380,13 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
         return promise_val;
 }
 
-pub fn setHeaders(headers: ?*Headers, new_headers: []const picohttp.Header, allocator: std.mem.Allocator) void {
+pub fn setHeaders(headers: *OptHeaders, new_headers: []const picohttp.Header, allocator: std.mem.Allocator) void {
         var old = headers.*;
         _ = &old;
-        headers.* = bun.handleOom(Headers.fromPicoHttpHeaders(new_headers, allocator));
+        headers.* = bun.handleOom(Headers.fromPicoHttpHeaders((blk: {
+        break :blk @constCast(new_headers);
+
+}), allocator));
         if (old) |*h| {
             _ = &h;
             _ = (h.*).deinit();

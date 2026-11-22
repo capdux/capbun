@@ -744,6 +744,14 @@ pub fn hasContentTypeFromUser(self: BlobAny) bool {
 });
     }
 
+pub fn isS3(self: BlobAny) bool {
+            return (switch (self) {
+.Blob => self.Blob.isS3(),
+.WTFStringImpl => false,
+.InternalBlob => false,
+});
+    }
+
 pub fn slice(self: *const BlobAny) []const u8 {
             switch (self.*) {
 .Blob => |b| {

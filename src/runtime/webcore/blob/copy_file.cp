@@ -732,6 +732,244 @@ export class CopyFileWindows {
     read_write_loop: CopyFileWindowsReadWriteLoop;
 
     pub const ReadWriteLoop = CopyFileWindowsReadWriteLoop;
+    pub const new = bun.TrivialNew(@This());
+
+    pub static fn init(
+        destination_file_store: *Store,
+        source_file_store: *Store,
+        event_loop: *EventLoop,
+        mkdirp_if_not_exists: bool,
+        size_: SizeType,
+        destination_mode: Mode?,
+    ): jsc.JSValue {
+        destination_file_store.ref();
+        source_file_store.ref();
+        const result = CopyFileWindows.new(.{
+            .destination_file_store = destination_file_store,
+            .source_file_store = source_file_store,
+            .promise = JSPromise.Strong.init(event_loop.global),
+            .io_request = std.mem.zeroes(libuv.fs_t),
+            .event_loop = event_loop,
+            .mkdirp_if_not_exists = mkdirp_if_not_exists,
+            .destination_mode = destination_mode,
+            .size = size_,
+        });
+        const promise = result.promise.value();
+
+        // On error, this function might free the CopyFileWindows struct.
+        // So we can no longer reference it beyond this point.
+        result.copyfile();
+
+        return promise;
+    }
+
+    static fn preparePathlike(pathlike: *jsc.Node.PathOrFileDescriptor!, must_close: *bool!, is_reading: bool): sys.Maybe(FD) {
+        if (unsafe { pathlike.* == .path }) {
+            const fd = switch (sys.openatWindowsT(
+                u8,
+                invalid_fd,
+                pathlike.path.slice(),
+                if (is_reading) O.RDONLY else O.WRONLY | O.CREAT,
+                0,
+            )) {
+                .result res => res.makeLibUVOwned() catch {
+                    res.close();
+                    return .{
+                        .err = .{
+                            .errno = @as(c_int, @intCast(@intFromEnum(sys.SystemErrno.EMFILE))),
+                            .syscall = .open,
+                            .path = pathlike.path.slice(),
+                        },
+                    };
+                },
+                .err e => {
+                    return .{
+                        .err = e,
+                    };
+                },
+            };
+            unsafe {
+                must_close.* = true;
+            }
+            return .{ .result = fd };
+        } else {
+            return .{ .result = pathlike.fd };
+        }
+    }
+
+    fn prepareReadWriteLoop(*_) {
+        _.read_write_loop.destination_fd = switch (preparePathlike(&_.destination_file_store.data.file.pathlike, &_.read_write_loop.must_close_destination_fd, false)) {
+            .result fd => fd,
+            .err e => {
+                if (_.mkdirp_if_not_exists && e.getErrno() == .NOENT) {
+                    _.mkdirp();
+                    return;
+                }
+                _.throw(e);
+                return;
+            },
+        };
+
+        _.read_write_loop.source_fd = switch (preparePathlike(&_.source_file_store.data.file.pathlike, &_.read_write_loop.must_close_source_fd, true)) {
+            .result fd => fd,
+            .err e => {
+                _.throw(e);
+                return;
+            },
+        };
+
+        switch (_.read_write_loop.start(_)) {
+            .err e => {
+                _.throw(e);
+                return;
+            },
+            .result => {
+                _.event_loop.refConcurrently();
+            },
+        }
+    }
+
+    fn copyfile(*_) {
+        if (bun.feature_flag.BUN_FEATURE_FLAG_DISABLE_UV_FS_COPYFILE.get()) {
+            _.prepareReadWriteLoop();
+            return;
+        }
+
+        let pathbuf1: bun.PathBuffer = undefined;
+        let pathbuf2: bun.PathBuffer = undefined;
+        let destination_file_store = &_.destination_file_store.data.file;
+        let source_file_store = &_.source_file_store.data.file;
+
+        const new_path: [:0]const u8 = brk: {
+            switch (destination_file_store.pathlike) {
+                .path => {
+                    break :brk destination_file_store.pathlike.path.sliceZ(&pathbuf1);
+                },
+                .fd fd => {
+                    switch (sys.File.from(fd).kind()) {
+                        .err e => {
+                            _.throw(e);
+                            return;
+                        },
+                        .result kind => {
+                            switch (kind) {
+                                .directory => {
+                                    _.throw(sys.Error.fromCode(.ISDIR, .open));
+                                    return;
+                                },
+                                .character_device => {
+                                    _.prepareReadWriteLoop();
+                                    return;
+                                },
+                                else => {
+                                    const out = bun.getFdPath(fd, &pathbuf1) catch {
+                                        _.prepareReadWriteLoop();
+                                        return;
+                                    };
+                                    pathbuf1[out.len] = 0;
+                                    break :brk pathbuf1[0..out.len :0];
+                                },
+                            }
+                        },
+                    }
+                },
+            }
+        };
+        const old_path: [:0]const u8 = brk: {
+            switch (source_file_store.pathlike) {
+                .path => {
+                    break :brk source_file_store.pathlike.path.sliceZ(&pathbuf2);
+                },
+                .fd fd => {
+                    switch (sys.File.from(fd).kind()) {
+                        .err e => {
+                            _.throw(e);
+                            return;
+                        },
+                        .result kind => {
+                            switch (kind) {
+                                .directory => {
+                                    _.throw(sys.Error.fromCode(.ISDIR, .open));
+                                    return;
+                                },
+                                .character_device => {
+                                    _.prepareReadWriteLoop();
+                                    return;
+                                },
+                                else => {
+                                    const out = bun.getFdPath(fd, &pathbuf2) catch {
+                                        _.prepareReadWriteLoop();
+                                        return;
+                                    };
+                                    pathbuf2[out.len] = 0;
+                                    break :brk pathbuf2[0..out.len :0];
+                                },
+                            }
+                        },
+                    }
+                },
+            }
+        };
+        const loop = _.event_loop.virtual_machine.event_loop_handle.?;
+        _.io_request.data = unsafe { @ptrCast(_) };
+
+        const rc = libuv.uv_fs_copyfile(
+            loop,
+            &_.io_request,
+            old_path,
+            new_path,
+            0,
+            &onCopyFile,
+        );
+
+        if (errno := rc.errno()) {
+            _.throw(.{
+                .errno = if (errno == @intFromEnum(sys.SystemErrno.EPERM))
+                    @as(c_int, @intCast(@intFromEnum(sys.SystemErrno.ENOENT)))
+                else
+                    errno,
+                .syscall = .copyfile,
+                .path = old_path,
+            });
+            return;
+        }
+        _.event_loop.refConcurrently();
+    }
+
+    @c static fn onCopyFile(req: *libuv.fs_t) {
+        let parent: *CopyFileWindows = @fieldParentPtr("io_request", req);
+        assert(req.data == unsafe { @as(*!?, @ptrCast(parent)) });
+
+        let event_loop = parent.event_loop;
+        event_loop.unrefConcurrently();
+        const rc = req.result;
+
+        sys.syslog("uv_fs_copyfile() = {f}", .{rc});
+        if (errno := rc.errEnum()) {
+            if (parent.mkdirp_if_not_exists && errno == .NOENT) {
+                req.deinit();
+                parent.mkdirp();
+                return;
+            } else {
+                let e = sys.Error.fromCode(
+                    if (errno == .PERM) .NOENT else errno,
+                    .copyfile,
+                );
+                const destination = &parent.destination_file_store.data.file;
+
+                if (destination.pathlike == .path) {
+                    e = e.withPath(destination.pathlike.path.slice());
+                } else if (destination.pathlike == .fd) {
+                    e = e.withFd(destination.pathlike.fd);
+                }
+
+                parent.throw(e);
+            }
+            return;
+        }
+
+        parent.onComplete(req.statbuf.size);
+    }
 
     pub fn onReadWriteLoopComplete(*_) {
         this.event_loop.unrefConcurrently();
@@ -832,6 +1070,46 @@ export class CopyFileWindows {
         this.promise.deinit();
         this.io_request.deinit();
         destroy(this);
+    }
+
+    fn mkdirp(*_) {
+        sys.syslog("mkdirp", .{});
+        _.mkdirp_if_not_exists = false;
+        let destination = &_.destination_file_store.data.file;
+        if (destination.pathlike != .path) {
+            _.throw(.{
+                .errno = @as(c_int, @intCast(@intFromEnum(sys.SystemErrno.EINVAL))),
+                .syscall = .mkdir,
+            });
+            return;
+        }
+
+        _.event_loop.refConcurrently();
+        jsc.Node.fs.Async.AsyncMkdirp.new(.{
+            .completion = unsafe { @ptrCast(&onMkdirpCompleteConcurrent) },
+            .completion_ctx = _,
+            .path = bun.Dirname.dirname(u8, destination.pathlike.path.slice()) ?? destination.pathlike.path.slice(),
+        }).schedule();
+    }
+
+    fn onMkdirpComplete(*_) {
+        _.event_loop.unrefConcurrently();
+
+        if (e := bun.take(&_.err)) {
+            _.throw(e);
+            let e2 = e;
+            e2.deinit();
+            return;
+        }
+
+        _.copyfile();
+    }
+
+    fn onMkdirpCompleteConcurrent(*_, err_: sys.Maybe(void)) {
+        sys.syslog("mkdirp complete", .{});
+        assert(_.err == null);
+        _.err = if (err_ == .err) err_.err else null;
+        _.event_loop.enqueueTaskConcurrent(ConcurrentTask.create(ManagedTask.New(CopyFileWindows, onMkdirpComplete).init(_)));
     }
 }
 

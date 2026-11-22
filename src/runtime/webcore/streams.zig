@@ -193,7 +193,7 @@ pub fn fromJSWithTag(globalThis: *JSGlobalObject, value: JSValue, comptime tag: 
                 _ = &as_uint8array;
                 var stream = false;
                 _ = &stream;
-                var chunk_size: Blob.SizeType = (if (comptime @typeInfo(Blob.SizeType) == .@"enum") @as(Blob.SizeType, @enumFromInt(0)) else @as(Blob.SizeType, 0));
+                var chunk_size: Blob.SizeType = (if (comptime @typeInfo(Blob.SizeType) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(Blob.SizeType, @enumFromInt(0)) else @as(Blob.SizeType, 0));
                 _ = &chunk_size;
                 var empty = true;
                 _ = &empty;
@@ -223,7 +223,7 @@ pub fn fromJSWithTag(globalThis: *JSGlobalObject, value: JSValue, comptime tag: 
                 }
             } else {
                 if (comptime (tag == .FileSink)) {
-                    var chunk_size: Blob.SizeType = (if (comptime @typeInfo(Blob.SizeType) == .@"enum") @as(Blob.SizeType, @enumFromInt(0)) else @as(Blob.SizeType, 0));
+                    var chunk_size: Blob.SizeType = (if (comptime @typeInfo(Blob.SizeType) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(Blob.SizeType, @enumFromInt(0)) else @as(Blob.SizeType, 0));
                     _ = &chunk_size;
                     if (try value.fastGet(globalThis, .highWaterMark)) |chunkSize| {
                         _ = &chunkSize;
@@ -256,7 +256,7 @@ pub fn fromJSWithTag(globalThis: *JSGlobalObject, value: JSValue, comptime tag: 
                     if (comptime ((((tag == .NetworkSink) or (tag == .HTTPSResponseSink)) or (tag == .HTTPResponseSink)) or (tag == .H3ResponseSink))) {
                         var empty = true;
                         _ = &empty;
-                        var chunk_size: Blob.SizeType = (if (comptime @typeInfo(Blob.SizeType) == .@"enum") @as(Blob.SizeType, @enumFromInt(2048)) else @as(Blob.SizeType, 2048));
+                        var chunk_size: Blob.SizeType = (if (comptime @typeInfo(Blob.SizeType) == .@"enum" and (@typeInfo(@TypeOf(2048)) == .int or @typeInfo(@TypeOf(2048)) == .comptime_int)) @as(Blob.SizeType, @enumFromInt(2048)) else @as(Blob.SizeType, 2048));
                         _ = &chunk_size;
                         if (try value.fastGet(globalThis, .highWaterMark)) |chunkSize| {
                             _ = &chunkSize;
@@ -720,27 +720,28 @@ pub fn SignalVTableFunctions(comptime Wrapped: type) type {
 
 pub fn onClose(ptr: *anyopaque, e: ?sys.Error) void {
                 if (comptime (!@hasDecl(Wrapped, "onClose"))) {
-                    _ = Wrapped.close(bun.cast(*Wrapped, ptr), e);
+                    _ = Wrapped.close(bun.cast(WrappedPtr, ptr), e);
                 } else {
-                    _ = Wrapped.onClose(bun.cast(*Wrapped, ptr), e);
+                    _ = Wrapped.onClose(bun.cast(WrappedPtr, ptr), e);
                 }
         }
 
 pub fn onReady(ptr: *anyopaque, amount: ?Blob.SizeType, offset: ?Blob.SizeType) void {
                 if (comptime (!@hasDecl(Wrapped, "onReady"))) {
-                    _ = Wrapped.ready(bun.cast(*Wrapped, ptr), amount, offset);
+                    _ = Wrapped.ready(bun.cast(WrappedPtr, ptr), amount, offset);
                 } else {
-                    _ = Wrapped.onReady(bun.cast(*Wrapped, ptr), amount, offset);
+                    _ = Wrapped.onReady(bun.cast(WrappedPtr, ptr), amount, offset);
                 }
         }
 
 pub fn onStart(ptr: *anyopaque) void {
                 if (comptime (!@hasDecl(Wrapped, "onStart"))) {
-                    _ = Wrapped.start(bun.cast(*Wrapped, ptr));
+                    _ = Wrapped.start(bun.cast(WrappedPtr, ptr));
                 } else {
-                    _ = Wrapped.onStart(bun.cast(*Wrapped, ptr));
+                    _ = Wrapped.onStart(bun.cast(WrappedPtr, ptr));
                 }
         }
+        pub const WrappedPtr = *Wrapped;
     };
 }
 
@@ -1277,7 +1278,7 @@ pub fn onWritable(self: *@This(), write_offset: u64, _: *UWSResponse) bool {
             }
             var total_written: u64 = 0;
             _ = &total_written;
-            const to_write = @min(@as(Blob.SizeType, @truncate(write_offset)), (if (comptime @typeInfo(Blob.SizeType) == .@"enum") @as(Blob.SizeType, @enumFromInt((self.buffer.len - 1))) else @as(Blob.SizeType, (self.buffer.len - 1))));
+            const to_write = @min(@as(Blob.SizeType, @truncate(write_offset)), (if (comptime @typeInfo(Blob.SizeType) == .@"enum" and (@typeInfo(@TypeOf((self.buffer.len - 1))) == .int or @typeInfo(@TypeOf((self.buffer.len - 1))) == .comptime_int)) @as(Blob.SizeType, @enumFromInt((self.buffer.len - 1))) else @as(Blob.SizeType, (self.buffer.len - 1))));
             const chunk = self.readableSlice()[to_write..];
             if ((chunk.len == 0)) {
                 if (self.done) {
