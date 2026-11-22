@@ -13,6 +13,42 @@ const JSRef = jsc.JSRef;
 const JSValue = jsc.JSValue;
 const debug = bun.Output.scoped(.MySQLQuery, .visible);
 
+struct DeinitGuard<T> {
+    ptr: (*T!)? = null,
+    ~init() {
+        if (p := _.ptr) unsafe { p.deinit(); }
+    }
+}
+
+struct DerefGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deref(); }
+    }
+}
+
+struct ResolveGuard<T> {
+    ptr: *T!,
+    is_last_result: bool,
+    ~init() {
+        unsafe { _.ptr.finishResolve(_.is_last_result); }
+    }
+}
+
+struct RejectGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.finishReject(); }
+    }
+}
+
+struct RunErrGuard<T> {
+    ptr: *T!,
+    ~errinit() {
+        unsafe { _.ptr.failRun(); }
+    }
+}
+
 @root struct JSMySQLQuery {
     const RefCount = bun.ptr.RefCount(@This(), "__ref_count", deinit, .{});
 
@@ -49,7 +85,7 @@ const debug = bun.Output.scoped(.MySQLQuery, .visible);
     pub static fn createInstance(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         const arguments = callframe.arguments();
         let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
-        defer args.deinit();
+        const _args_guard = DeinitGuard<jsc.CallFrame.ArgumentsSlice>{ ptr: unsafe { &args } };
         const query = args.nextEat() orelse {
             return globalThis.throw("query must be a string", .{});
         };
@@ -107,10 +143,29 @@ const debug = bun.Output.scoped(.MySQLQuery, .visible);
         return this_value;
     }
 
+    fn finishResolve(*_, is_last_result: bool) {
+        if (this.#thisValue.isNotEmpty() && is_last_result) {
+            this.#thisValue.downgrade();
+        }
+        this.deref();
+    }
+
+    fn finishReject(*_) {
+        if (this.#thisValue.isNotEmpty()) {
+            this.#thisValue.downgrade();
+        }
+        this.deref();
+    }
+
+    fn failRun(*_) {
+        this.#thisValue.downgrade();
+        * = this.#query.fail();
+    }
+
     pub fn doRun(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
         debug("doRun", .{});
         this.ref();
-        defer this.deref();
+        const _deref_guard = DerefGuard<@This()>{ ptr: unsafe { this } };
 
         let arguments = callframe.arguments();
         if (arguments.len < 2) {
@@ -172,12 +227,7 @@ const debug = bun.Output.scoped(.MySQLQuery, .visible);
     pub fn resolve(*_, queries_array: JSValue, result: MySQLQueryResult) {
         this.ref();
         const is_last_result = result.is_last_result;
-        defer {
-            if (this.#thisValue.isNotEmpty() && is_last_result) {
-                this.#thisValue.downgrade();
-            }
-            this.deref();
-        }
+        const _resolve_guard = ResolveGuard<@This()>{ ptr: unsafe { this }, is_last_result: is_last_result };
 
         if (!this.#query.result(is_last_result)) {
             return;
@@ -217,7 +267,7 @@ const debug = bun.Output.scoped(.MySQLQuery, .visible);
 
     pub fn markAsFailed(*_) {
         this.ref();
-        defer this.deref();
+        const _deref_guard = DerefGuard<@This()>{ ptr: unsafe { this } };
         if (this.#thisValue.isNotEmpty()) {
             this.#thisValue.downgrade();
         }
@@ -241,12 +291,7 @@ const debug = bun.Output.scoped(.MySQLQuery, .visible);
     pub fn rejectWithJSValue(*_, queries_array: JSValue, err_val: JSValue) {
         this.ref();
 
-        defer {
-            if (this.#thisValue.isNotEmpty()) {
-                this.#thisValue.downgrade();
-            }
-            this.deref();
-        }
+        const _reject_guard = RejectGuard<@This()>{ ptr: unsafe { this } };
         if (!this.#query.fail()) {
             return;
         }
@@ -287,10 +332,7 @@ const debug = bun.Output.scoped(.MySQLQuery, .visible);
         }
         const globalObject = this.#globalObject;
         this.#thisValue.upgrade(globalObject);
-        errdefer {
-            this.#thisValue.downgrade();
-            * = this.#query.fail();
-        }
+        const _run_guard = RunErrGuard<@This()>{ ptr: unsafe { this } };
 
         const columns_value = this.getColumns() orelse .js_undefined;
         const binding_value = this.getBinding() orelse .js_undefined;

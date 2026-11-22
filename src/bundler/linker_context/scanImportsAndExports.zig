@@ -101,6 +101,23 @@ pub fn __cp_deinit(self: *ExportStarCtxDeinitGuard) void {
     }
 };
 
+pub fn EndGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    _ = p.end();
+                    self.ptr = null;
+                }
+        }
+    };
+}
+
 pub const DependencyWrapper = struct {
     linker: *LinkerContext,
     flags: []JSMeta.Flags,
@@ -348,9 +365,13 @@ const Ref = bun.bundle_v2.js_ast.Ref;
 pub fn scanImportsAndExports(client: *LinkerContext) ScanImportsAndExportsError!void {
         var outer_trace = bun.perf.trace("Bundler.scanImportsAndExports");
         _ = &outer_trace;
-        defer {
-        _ = outer_trace.end();
-        }
+        var _outer_trace_guard = EndGuard(@TypeOf(outer_trace)){ .ptr = (blk: {
+        break :blk (&outer_trace);
+
+}) };
+        _ = &_outer_trace_guard;
+        var ___outer_trace_guard_moved = false; _ = &___outer_trace_guard_moved;
+        defer if (!___outer_trace_guard_moved) { ___outer_trace_guard_moved = true; const __T = @TypeOf(_outer_trace_guard); if (@typeInfo(__T) == .optional) { if (_outer_trace_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _outer_trace_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _outer_trace_guard; _drop_val.__cp_deinit(); } };
         const reachable = client.graph.reachable_files;
         const output_format = client.options.output_format;
         {
@@ -375,9 +396,13 @@ pub fn scanImportsAndExports(client: *LinkerContext) ScanImportsAndExportsError!
                 _ = &source_index_;
                 var trace = bun.perf.trace("Bundler.FigureOutCommonJS");
                 _ = &trace;
-                defer {
-                _ = trace.end();
-                }
+                var _trace_guard = EndGuard(@TypeOf(trace)){ .ptr = (blk: {
+                break :blk (&trace);
+
+}) };
+                _ = &_trace_guard;
+                var ___trace_guard_moved = false; _ = &___trace_guard_moved;
+                defer if (!___trace_guard_moved) { ___trace_guard_moved = true; const __T = @TypeOf(_trace_guard); if (@typeInfo(__T) == .optional) { if (_trace_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _trace_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _trace_guard; _drop_val.__cp_deinit(); } };
                 const id = source_index_.get();
                 if ((!(id < import_records_list.len))) {
                     continue;
@@ -484,9 +509,13 @@ else => {
             {
                 var trace = bun.perf.trace("Bundler.WrapDependencies");
                 _ = &trace;
-                defer {
-                _ = trace.end();
-                }
+                var _trace_guard = EndGuard(@TypeOf(trace)){ .ptr = (blk: {
+                break :blk (&trace);
+
+}) };
+                _ = &_trace_guard;
+                var ___trace_guard_moved = false; _ = &___trace_guard_moved;
+                defer if (!___trace_guard_moved) { ___trace_guard_moved = true; const __T = @TypeOf(_trace_guard); if (@typeInfo(__T) == .optional) { if (_trace_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _trace_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _trace_guard; _drop_val.__cp_deinit(); } };
                 var dependency_wrapper = DependencyWrapper{ .linker = client, .flags = flags, .import_records = import_records_list, .exports_kind = exports_kind, .entry_point_kinds = entry_point_kinds, .export_star_map = std.AutoHashMap(u32, void).init(client.allocator()), .export_star_records = export_star_import_records, .output_format = output_format };
                 _ = &dependency_wrapper;
                 var export_star_map_guard = DeinitGuard(std.AutoHashMap(u32, void)){ .ptr = (blk: {
@@ -529,9 +558,13 @@ else => {
                 defer if (!__export_star_ctx_guard_moved) { __export_star_ctx_guard_moved = true; const __T = @TypeOf(export_star_ctx_guard); if (@typeInfo(__T) == .optional) { if (export_star_ctx_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { export_star_ctx_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = export_star_ctx_guard; _drop_val.__cp_deinit(); } };
                 var trace = bun.perf.trace("Bundler.ResolveExportStarStatements");
                 _ = &trace;
-                defer {
-                _ = trace.end();
-                }
+                var _trace_guard = EndGuard(@TypeOf(trace)){ .ptr = (blk: {
+                break :blk (&trace);
+
+}) };
+                _ = &_trace_guard;
+                var ___trace_guard_moved = false; _ = &___trace_guard_moved;
+                defer if (!___trace_guard_moved) { ___trace_guard_moved = true; const __T = @TypeOf(_trace_guard); if (@typeInfo(__T) == .optional) { if (_trace_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _trace_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _trace_guard; _drop_val.__cp_deinit(); } };
                 var resolved_exports: []ResolvedExports = client.graph.@"meta".items(.resolved_exports);
                 _ = &resolved_exports;
                 var resolved_export_stars: []ExportData = client.graph.@"meta".items(.resolved_export_star);
@@ -564,9 +597,13 @@ else => {
                 _ = client.cycle_detector.clearRetainingCapacity();
                 var trace = bun.perf.trace("Bundler.MatchImportsWithExports");
                 _ = &trace;
-                defer {
-                _ = trace.end();
-                }
+                var _trace_guard = EndGuard(@TypeOf(trace)){ .ptr = (blk: {
+                break :blk (&trace);
+
+}) };
+                _ = &_trace_guard;
+                var ___trace_guard_moved = false; _ = &___trace_guard_moved;
+                defer if (!___trace_guard_moved) { ___trace_guard_moved = true; const __T = @TypeOf(_trace_guard); if (@typeInfo(__T) == .optional) { if (_trace_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _trace_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _trace_guard; _drop_val.__cp_deinit(); } };
                 const wrapper_part_indices = client.graph.@"meta".items(.wrapper_part_index);
                 const imports_to_bind = client.graph.@"meta".items(.imports_to_bind);
                 for (cp_iter_slice(reachable)) |source_index_| {
@@ -609,9 +646,13 @@ else => {
         {
             var trace = bun.perf.trace("Bundler.BindImportsToExports");
             _ = &trace;
-            defer {
-            _ = trace.end();
-            }
+            var _trace_guard = EndGuard(@TypeOf(trace)){ .ptr = (blk: {
+            break :blk (&trace);
+
+}) };
+            _ = &_trace_guard;
+            var ___trace_guard_moved = false; _ = &___trace_guard_moved;
+            defer if (!___trace_guard_moved) { ___trace_guard_moved = true; const __T = @TypeOf(_trace_guard); if (@typeInfo(__T) == .optional) { if (_trace_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _trace_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _trace_guard; _drop_val.__cp_deinit(); } };
             var runtime_export_symbol_ref: Ref = Ref.None;
             _ = &runtime_export_symbol_ref;
             var entry_point_kinds: []EntryPoint.Kind = client.graph.files.items(.entry_point_kind);

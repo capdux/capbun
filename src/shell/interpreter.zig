@@ -62,7 +62,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .array and @typeInfo(@typeInfo(__T).pointer.child).array.child == u8)) { return val[0..]; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const Braces = @import("../shell_parser/braces.zig");
 pub const RefCountedStr = @import("./RefCountedStr.zig");
@@ -96,6 +96,42 @@ pub const ReadChunkAction = enum {
     pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
+
+pub const InterpreterRootDerefGuard = struct {
+    interp: *Interpreter,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *InterpreterRootDerefGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = self.interp.#derefRootShellAndIOIfNeeded(true);
+    }
+};
+
+pub const PendingActivityGuard = struct {
+    flag: *std.atomic.Value(u32),
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *PendingActivityGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = Interpreter.decrPendingActivityFlag(self.flag);
+    }
+};
+
+pub fn OutputTaskDeinitGuard(comptime TaskT: type) type {
+    return struct {
+        task: *TaskT,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.task.output.deinit();
+                _ = bun.destroy(self.task);
+        }
+    };
+}
 
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
@@ -793,9 +829,10 @@ pub fn runFromJS(self: *Interpreter, globalThis: *JSGlobalObject, callframe: *js
             _ = &callframe;
             if (self.setupIOBeforeRun().asErr()) |e| {
                 _ = &e;
-                defer {
-                _ = self.#derefRootShellAndIOIfNeeded(true);
-                }
+                var _root_guard = InterpreterRootDerefGuard{ .interp = self };
+                _ = &_root_guard;
+                var ___root_guard_moved = false; _ = &___root_guard_moved;
+                defer if (!___root_guard_moved) { ___root_guard_moved = true; const __T = @TypeOf(_root_guard); if (@typeInfo(__T) == .optional) { if (_root_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _root_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _root_guard; _drop_val.__cp_deinit(); } };
                 const shellerr = bun.shell.ShellErr.newSys(e);
                 return try throwShellErr((&shellerr), .{ .js = globalThis.bunVM().event_loop });
             }
@@ -851,9 +888,10 @@ pub fn finish(self: *Interpreter, exit_code: ExitCode) Yield {
             break :blk @intFromPtr(self);
 
 }), exit_code });
-            defer {
-            _ = Interpreter.decrPendingActivityFlag((&self.has_pending_activity));
-            }
+            var _pending_guard = PendingActivityGuard{ .flag = (&self.has_pending_activity) };
+            _ = &_pending_guard;
+            var ___pending_guard_moved = false; _ = &___pending_guard_moved;
+            defer if (!___pending_guard_moved) { ___pending_guard_moved = true; const __T = @TypeOf(_pending_guard); if (@typeInfo(__T) == .optional) { if (_pending_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _pending_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _pending_guard; _drop_val.__cp_deinit(); } };
             if ((self.event_loop == .js)) {
                 self.exit_code = exit_code;
                 const this_jsvalue = self.this_jsvalue;
@@ -1886,84 +1924,99 @@ pub fn throwShellErr(e: *const bun.shell.ShellErr, event_loop: jsc.EventLoopHand
 
 pub fn OutputTask(comptime Parent: type, comptime vtable: anytype) type {
         return struct {
-        parent: *Parent,
-        output: OutputSrc,
-        state: enum {
+    parent: *Parent,
+    output: OutputSrc,
+    state: enum {
             waiting_write_err,
             waiting_write_out,
             done,
         },
 
-        pub fn deinit(this: *@This()) Yield {
-            if (comptime bun.Environment.allow_assert) assert(this.state == .done);
-            log("OutputTask({s}, 0x{x}) deinit", .{ @typeName(Parent), @intFromPtr(this) });
-            defer bun.destroy(this);
-            defer this.output.deinit();
-            return vtable.onDone(this.parent);
-        }
+pub fn deinit(self: *@This()) Yield {
+            if (comptime bun.Environment.allow_assert) {
+                _ = assert((self.state == .done));
+            }
+            _ = log("OutputTask({s}, 0x{x}) deinit", .{ @typeName(Parent), @intFromPtr(self) });
+            var _task_guard = OutputTaskDeinitGuard(@This()){ .task = self };
+            _ = &_task_guard;
+            var ___task_guard_moved = false; _ = &___task_guard_moved;
+            defer if (!___task_guard_moved) { ___task_guard_moved = true; const __T = @TypeOf(_task_guard); if (@typeInfo(__T) == .optional) { if (_task_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _task_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _task_guard; _drop_val.__cp_deinit(); } };
+            return vtable.onDone(self.parent);
+    }
 
-        pub fn start(this: *@This(), errbuf: OutputTaskErrBuf) Yield {
-            log("OutputTask({s}, 0x{x}) start errbuf={s}", .{ @typeName(Parent), @intFromPtr(this), if (errbuf != null) errbuf.?[0..@min(128, errbuf.?.len)] else "null" });
-            this.state = .waiting_write_err;
-            if (errbuf != null) {
+pub fn start(self: *@This(), errbuf: OutputTaskErrBuf) Yield {
+            _ = log("OutputTask({s}, 0x{x}) start errbuf={s}", .{ @typeName(Parent), @intFromPtr(self), (if ((errbuf != null)) errbuf.?[0..@min(128, errbuf.?.len)] else "null") });
+            self.state = .waiting_write_err;
+            if ((errbuf != null)) {
                 const e = errbuf.?;
-                const y_err = vtable.writeErr(this.parent, this, e);
-                if (y_err != null) return y_err.?;
-                return this.next();
+                const y_err = vtable.writeErr(self.parent, self, e);
+                if ((y_err != null)) {
+                    return y_err.?;
+                }
+                return self.next();
             }
-            this.state = .waiting_write_out;
-            const y_out = vtable.writeOut(this.parent, this, &this.output);
-            if (y_out != null) return y_out.?;
-            vtable.onWriteOut(this.parent);
-            this.state = .done;
-            return this.deinit();
-        }
+            self.state = .waiting_write_out;
+            const y_out = vtable.writeOut(self.parent, self, (&self.output));
+            if ((y_out != null)) {
+                return y_out.?;
+            }
+            _ = vtable.onWriteOut(self.parent);
+            self.state = .done;
+            return self.deinit();
+    }
 
-        pub fn next(this: *@This()) Yield {
-            switch (this.state) {
-                .waiting_write_err => {
-                    vtable.onWriteErr(this.parent);
-                    this.state = .waiting_write_out;
-                    const y_out = vtable.writeOut(this.parent, this, &this.output);
-                    if (y_out != null) return y_out.?;
-                    vtable.onWriteOut(this.parent);
-                    this.state = .done;
-                    return this.deinit();
-                },
-                .waiting_write_out => {
-                    vtable.onWriteOut(this.parent);
-                    this.state = .done;
-                    return this.deinit();
-                },
-                .done => @panic("Invalid state"),
+pub fn next(self: *@This()) Yield {
+            switch (self.state) {
+.waiting_write_err => {
+_ = vtable.onWriteErr(self.parent);
+            self.state = .waiting_write_out;
+            const y_out = vtable.writeOut(self.parent, self, (&self.output));
+            if ((y_out != null)) {
+                return y_out.?;
             }
-        }
+            _ = vtable.onWriteOut(self.parent);
+            self.state = .done;
+            return self.deinit();
+},
+.waiting_write_out => {
+_ = vtable.onWriteOut(self.parent);
+            self.state = .done;
+            return self.deinit();
+},
+.done => {
+_ = @panic("Invalid state");
+},
+}
+    }
 
-        pub fn onIOWriterChunk(this: *@This(), _: usize, e: OutputTaskSysErr) Yield {
-            log("OutputTask({s}, 0x{x}) onIOWriterChunk", .{ @typeName(Parent), @intFromPtr(this) });
-            if (e != null) {
-                e.?.deref();
+pub fn onIOWriterChunk(self: *@This(), _: usize, e: OutputTaskSysErr) Yield {
+            _ = log("OutputTask({s}, 0x{x}) onIOWriterChunk", .{ @typeName(Parent), @intFromPtr(self) });
+            if ((e != null)) {
+                _ = e.?.deref();
             }
-
-            switch (this.state) {
-                .waiting_write_err => {
-                    vtable.onWriteErr(this.parent);
-                    this.state = .waiting_write_out;
-                    const y_out = vtable.writeOut(this.parent, this, &this.output);
-                    if (y_out != null) return y_out.?;
-                    vtable.onWriteOut(this.parent);
-                    this.state = .done;
-                    return this.deinit();
-                },
-                .waiting_write_out => {
-                    vtable.onWriteOut(this.parent);
-                    this.state = .done;
-                    return this.deinit();
-                },
-                .done => @panic("Invalid state"),
+            switch (self.state) {
+.waiting_write_err => {
+_ = vtable.onWriteErr(self.parent);
+            self.state = .waiting_write_out;
+            const y_out = vtable.writeOut(self.parent, self, (&self.output));
+            if ((y_out != null)) {
+                return y_out.?;
             }
-        }
-    };
+            _ = vtable.onWriteOut(self.parent);
+            self.state = .done;
+            return self.deinit();
+},
+.waiting_write_out => {
+_ = vtable.onWriteOut(self.parent);
+            self.state = .done;
+            return self.deinit();
+},
+.done => {
+_ = @panic("Invalid state");
+},
+}
+    }
+};
 }
 
 pub fn unsupportedFlag(comptime name: []const u8) []const u8 {

@@ -135,7 +135,7 @@ pub fn parse(input: *css.Parser) Result(@This()) {
             return css.enum_property_util.parse(@This(), input);
     }
 
-pub fn toCss(self: *RoundingStrategy, dest: *Printer) PrintErr!void {
+pub fn toCss(self: RoundingStrategy, dest: *Printer) PrintErr!void {
             return dest.writeStr(self.asStr());
     }
 
@@ -164,7 +164,7 @@ pub fn parse(input: *css.Parser) Result(@This()) {
             return css.enum_property_util.parse(@This(), input);
     }
 
-pub fn toCss(self: *Constant, dest: *Printer) PrintErr!void {
+pub fn toCss(self: Constant, dest: *Printer) PrintErr!void {
             return dest.writeStr(self.asStr());
     }
 
@@ -1694,7 +1694,7 @@ pub fn toCss(self: *const @This(), dest: *css.Printer) css.PrintErr!void {
 {
                 _ = try dest.writeStr("round(");
                 if ((rnd.strategy != RoundingStrategy.default())) {
-                    _ = try dest.writeStr(rnd.strategy.asStr());
+                    _ = try rnd.strategy.toCss(dest);
                     _ = try dest.delim(44, false);
                 }
                 _ = try (if (@typeInfo(@TypeOf(rnd)) == .@"enum") @intFromEnum(rnd) else rnd.value).toCss(dest);

@@ -8,24 +8,31 @@ const js = jsc.Codegen.JSBlockList;
 const SocketAddress = bun.jsc.GeneratedClassesList.SocketAddress;
 const sockaddr = SocketAddress.sockaddr;
 
+struct MutexGuard {
+    m: *bun.Mutex!,
+    ~init() {
+        _.m.unlock();
+    }
+}
+
 pub const Rule = union(enum) {
     addr: sockaddr,
     range: struct { start: sockaddr, end: sockaddr },
     subnet: struct { network: sockaddr, prefix: u8 },
 };
 
-const StructuredCloneWriter = struct {
-    ctx: *!,
-    impl: fn (*!, ptr: [*]const u8, len: u32) callconv(jsc.conv) void,
+struct StructuredCloneWriter<WriteBytesFn> {
+    ctx: *!;
+    impl: WriteBytesFn;
 
     pub const Writer = std.Io.GenericWriter(@This(), @This().Error, write);
     pub const Error = error{};
-
-    fn write(this: StructuredCloneWriter, bytes: []const u8): @This().Error!usize {
-        this.impl(this.ctx, bytes.ptr, @as(u32, @truncate(bytes.len)));
+    fn write(bytes: []const u8): @This().Error!usize {
+        @call(.auto, _.impl, .{ _.ctx, bytes.ptr, @as(u32, @truncate(bytes.len)) });
         return bytes.len;
     }
-};
+    fn writer(): Writer { return Writer{ context: _ }; }
+}
 
 fn _compare(l: *const sockaddr, r: *const sockaddr): std.math.Order? {
     if (l_4 := l.as_v4()) {
@@ -105,7 +112,7 @@ fn _compare_ipv6(l: *const sockaddr.in6, r: *const sockaddr.in6): std.math.Order
         }
 
         _.mutex.lock();
-        defer _.mutex.unlock();
+        const _guard = MutexGuard{ m: unsafe { &_.mutex } };
         _.da_rules.insert(0, Rule{ addr: address })?;
         * = _.estimated_size.fetchAdd(@sizeOf(Rule), .monotonic);
         return jsc.JSValue.js_undefined;
@@ -141,7 +148,7 @@ fn _compare_ipv6(l: *const sockaddr.in6, r: *const sockaddr.in6): std.math.Order
             }
         }
         _.mutex.lock();
-        defer _.mutex.unlock();
+        const _guard = MutexGuard{ m: unsafe { &_.mutex } };
         _.da_rules.insert(0, Rule{ range: { start: start, end: end } })?;
         * = _.estimated_size.fetchAdd(@sizeOf(Rule), .monotonic);
         return jsc.JSValue.js_undefined;
@@ -169,7 +176,7 @@ fn _compare_ipv6(l: *const sockaddr.in6, r: *const sockaddr.in6): std.math.Order
             prefix = @intCast(validators.validateInt32(globalThis, prefix_js, "prefix", {}, 0, 128)?);
         }
         _.mutex.lock();
-        defer _.mutex.unlock();
+        const _guard = MutexGuard{ m: unsafe { &_.mutex } };
         _.da_rules.insert(0, Rule{ subnet: { network: network, prefix: prefix } })?;
         * = _.estimated_size.fetchAdd(@sizeOf(Rule), .monotonic);
         return jsc.JSValue.js_undefined;
@@ -195,7 +202,7 @@ fn _compare_ipv6(l: *const sockaddr.in6, r: *const sockaddr.in6): std.math.Order
         }
         const address = &addr_val;
         _.mutex.lock();
-        defer _.mutex.unlock();
+        const _guard = MutexGuard{ m: unsafe { &_.mutex } };
         for (*item of _.da_rules.items) {
             switch (item) {
                 .addr => |*a| {
@@ -243,7 +250,7 @@ fn _compare_ipv6(l: *const sockaddr.in6, r: *const sockaddr.in6): std.math.Order
         let array = jsc.JSArray.createEmpty(globalThis, 0)?;
 
         _.mutex.lock();
-        defer _.mutex.unlock();
+        const _guard = MutexGuard{ m: unsafe { &_.mutex } };
         const ADDR_LEN = SocketAddress.inet.INET6_ADDRSTRLEN;
         for (*rule of _.da_rules.items) {
             switch (rule) {
@@ -268,14 +275,15 @@ fn _compare_ipv6(l: *const sockaddr.in6, r: *const sockaddr.in6): std.math.Order
     pub fn onStructuredCloneSerialize(*_, globalThis: *jsc.JSGlobalObject, ctx: *!, writeBytes: anytype) {
         std.mem.doNotOptimizeAway(globalThis);
         _.mutex.lock();
-        defer _.mutex.unlock();
+        const _guard = MutexGuard{ m: unsafe { &_.mutex } };
         _.ref();
-        const writer = StructuredCloneWriter.Writer{ context: { ctx: ctx, impl: writeBytes } };
-        writer.writeInt(usize, @intFromPtr(_), .little) catch {};
+        const writer_ctx = StructuredCloneWriter<@TypeOf(writeBytes)>{ ctx: ctx, impl: writeBytes };
+        const writer = writer_ctx.writer();
+        unsafe { writer.writeInt(usize, @intFromPtr(_), .little) catch {}; }
     }
 
     pub static fn onStructuredCloneDeserialize(globalThis: *jsc.JSGlobalObject, ptr: *[*]u8, end: [*]u8): bun.JSError!jsc.JSValue {
-        const total_length: usize = @intFromPtr(end) - @intFromPtr(ptr.*);
+        const total_length: usize = unsafe { @intFromPtr(end) - @intFromPtr(ptr.*) };
         let buffer_stream = std.io.fixedBufferStream(unsafe { ptr.*[0..total_length] });
         const reader = buffer_stream.reader();
 
@@ -284,7 +292,7 @@ fn _compare_ipv6(l: *const sockaddr.in6, r: *const sockaddr.in6): std.math.Order
         // Advance the pointer by the number of bytes consumed
         unsafe { ptr.* = ptr.* + buffer_stream.pos; }
 
-        const block_list: *BlockList = @ptrFromInt(int);
+        const block_list: *BlockList = unsafe { @ptrFromInt(int) };
         // A single SerializedScriptValue can be deserialized multiple times
         // (e.g. BroadcastChannel fan-out), so each wrapper must own its own ref
         // instead of adopting the one taken in serialize. The serialize ref is

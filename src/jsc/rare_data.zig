@@ -87,6 +87,17 @@ pub const StdinFdType = enum(i32) {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
+pub const MutexGuard = struct {
+    m: *bun.Mutex,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *MutexGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = self.m.unlock();
+    }
+};
+
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         ptr: ?*T = null,
@@ -255,9 +266,13 @@ pub fn clean(self: *AWSSignatureCache) void {
 
 pub fn get(self: *AWSSignatureCache, numeric_day: u64, key: []const u8) ?[]const u8 {
             _ = self.lock.lock();
-            defer {
-            _ = self.lock.unlock();
-            }
+            var _guard = MutexGuard{ .m = (blk: {
+            break :blk (&self.lock);
+
+}) };
+            _ = &_guard;
+            var ___guard_moved = false; _ = &___guard_moved;
+            defer if (!___guard_moved) { ___guard_moved = true; const __T = @TypeOf(_guard); if (@typeInfo(__T) == .optional) { if (_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard; _drop_val.__cp_deinit(); } };
             if ((self.date == 0)) {
                 return null;
             }
@@ -272,9 +287,13 @@ pub fn get(self: *AWSSignatureCache, numeric_day: u64, key: []const u8) ?[]const
 
 pub fn set(self: *AWSSignatureCache, numeric_day: u64, key: []const u8, value: [DIGESTED_HMAC_256_LEN]u8) void {
             _ = self.lock.lock();
-            defer {
-            _ = self.lock.unlock();
-            }
+            var _guard = MutexGuard{ .m = (blk: {
+            break :blk (&self.lock);
+
+}) };
+            _ = &_guard;
+            var ___guard_moved = false; _ = &___guard_moved;
+            defer if (!___guard_moved) { ___guard_moved = true; const __T = @TypeOf(_guard); if (@typeInfo(__T) == .optional) { if (_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard; _drop_val.__cp_deinit(); } };
             if ((self.date == 0)) {
                 self.cache = bun.StringArrayHashMap([DIGESTED_HMAC_256_LEN]u8).init(bun.default_allocator);
             } else {
@@ -453,17 +472,25 @@ pub fn pipeReadBuffer(self: *RareData) *PipeReadBuffer {
 
 pub fn addListeningSocketForWatchMode(self: *RareData, socket: bun.FD) void {
         _ = self.listening_sockets_for_watch_mode_lock.lock();
-        defer {
-        _ = self.listening_sockets_for_watch_mode_lock.unlock();
-        }
+        var _guard = MutexGuard{ .m = (blk: {
+        break :blk (&self.listening_sockets_for_watch_mode_lock);
+
+}) };
+        _ = &_guard;
+        var ___guard_moved = false; _ = &___guard_moved;
+        defer if (!___guard_moved) { ___guard_moved = true; const __T = @TypeOf(_guard); if (@typeInfo(__T) == .optional) { if (_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard; _drop_val.__cp_deinit(); } };
         _ = (blk_catch_0: { break :blk_catch_0 ((self.listening_sockets_for_watch_mode.append(bun.default_allocator, socket)) catch |__ce_0| { _ = &__ce_0;  }); });
 }
 
 pub fn removeListeningSocketForWatchMode(self: *RareData, socket: bun.FD) void {
         _ = self.listening_sockets_for_watch_mode_lock.lock();
-        defer {
-        _ = self.listening_sockets_for_watch_mode_lock.unlock();
-        }
+        var _guard = MutexGuard{ .m = (blk: {
+        break :blk (&self.listening_sockets_for_watch_mode_lock);
+
+}) };
+        _ = &_guard;
+        var ___guard_moved = false; _ = &___guard_moved;
+        defer if (!___guard_moved) { ___guard_moved = true; const __T = @TypeOf(_guard); if (@typeInfo(__T) == .optional) { if (_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard; _drop_val.__cp_deinit(); } };
         if (std.mem.indexOfScalar(bun.FD, self.listening_sockets_for_watch_mode.items, socket)) |i| {
             _ = &i;
             _ = self.listening_sockets_for_watch_mode.swapRemove(i);
@@ -472,9 +499,13 @@ pub fn removeListeningSocketForWatchMode(self: *RareData, socket: bun.FD) void {
 
 pub fn closeAllListenSocketsForWatchMode(self: *RareData) void {
         _ = self.listening_sockets_for_watch_mode_lock.lock();
-        defer {
-        _ = self.listening_sockets_for_watch_mode_lock.unlock();
-        }
+        var _guard = MutexGuard{ .m = (blk: {
+        break :blk (&self.listening_sockets_for_watch_mode_lock);
+
+}) };
+        _ = &_guard;
+        var ___guard_moved = false; _ = &___guard_moved;
+        defer if (!___guard_moved) { ___guard_moved = true; const __T = @TypeOf(_guard); if (@typeInfo(__T) == .optional) { if (_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard; _drop_val.__cp_deinit(); } };
         for (self.listening_sockets_for_watch_mode.items) |socket| {
             _ = &socket;
             _ = socket.close();

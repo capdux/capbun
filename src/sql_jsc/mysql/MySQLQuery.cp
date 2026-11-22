@@ -14,6 +14,48 @@ const JSGlobalObject = bun.jsc.JSGlobalObject;
 const JSValue = bun.jsc.JSValue;
 const debug = bun.Output.scoped(.MySQLQuery, .visible);
 
+struct DeinitGuard<T> {
+    ptr: (*T!)? = null,
+    ~init() {
+        if (p := _.ptr) unsafe { p.deinit(); }
+    }
+}
+
+struct OptDeinitGuard<T> {
+    val: T? = null,
+    ~init() {
+        if (v := _.val) {
+            let s = v;
+            s.deinit();
+        }
+    }
+}
+
+struct ErrDeinitGuard<T> {
+    ptr: (*T!)? = null,
+    ~errinit() {
+        if (p := _.ptr) unsafe { p.deinit(); }
+    }
+}
+
+struct DerefGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deref(); }
+    }
+}
+
+struct ParamsErrGuard {
+    params: []Value,
+    count: u32 = 0,
+    ~errinit() {
+        for (idx of 0.._.count) {
+            _.params[idx].deinit(bun.default_allocator);
+        }
+        bun.default_allocator.free(_.params);
+    }
+}
+
 @packed(u8) pub struct QueryFlags {
     bigint: bool = false,
     simple: bool = false,
@@ -49,12 +91,7 @@ fn BindAndExecuteCtx(comptime WriterType: type): type {
 
         let i: u32 = 0;
         let params = bun.default_allocator.alloc(Value, execute.param_types.len)?;
-        errdefer {
-            for (idx of 0..i) {
-                params[idx].deinit(bun.default_allocator);
-            }
-            bun.default_allocator.free(params);
-        }
+        let _params_guard = ParamsErrGuard{ params: params };
         while (js_value := iter.next()?) {
             if (i >= params.len) {
                 return err.WrongNumberOfParametersProvided;
@@ -68,6 +105,7 @@ fn BindAndExecuteCtx(comptime WriterType: type): type {
                 roots,
             )?;
             i += 1;
+            _params_guard.count = i;
         }
 
         if (iter.anyFailed()) {
@@ -109,7 +147,7 @@ fn BindAndExecuteCtx(comptime WriterType: type): type {
             new_params_bind_flag: statement.execution_flags.need_to_send_params,
             iteration_count: 1,
         };
-        defer execute.deinit();
+        const _exec_guard = DeinitGuard<PreparedStatement.Execute>{ ptr: unsafe { &execute } };
         this.bind(&execute, globalObject, binding_value, columns_value, roots)?;
         let packet = writer.start(0)?;
         execute.write(writer)?;
@@ -124,7 +162,7 @@ fn BindAndExecuteCtx(comptime WriterType: type): type {
             return;
         }
         let query_str = this.#query.toUTF8(bun.default_allocator);
-        defer query_str.deinit();
+        const _query_guard = DeinitGuard<bun.ZigString.Slice>{ ptr: unsafe { &query_str } };
         const writer = connection.getWriter();
         if (this.#statement == null) {
             const stmt = bun.new(MySQLStatement, {
@@ -145,24 +183,18 @@ fn BindAndExecuteCtx(comptime WriterType: type): type {
         columns_value: JSValue,
         binding_value: JSValue,
     ): void! {
-        let query_str: bun.ZigString.Slice? = null;
-        defer {
-            if (str := query_str) {
-                let s = str;
-                s.deinit();
-            }
-        }
+        let _query_guard = OptDeinitGuard<bun.ZigString.Slice>{};
 
         if (this.#statement == null) {
             const query = this.#query.toUTF8(bun.default_allocator);
-            query_str = query;
+            _query_guard.val = query;
             let signature = Signature.generate(globalObject, query.slice(), binding_value, columns_value) catch |e| {
                 if (!globalObject.hasException()) {
                     return globalObject.throwValue(AnyMySQLError.mysqlErrorToJS(globalObject, "failed to generate signature", @errorCast(e)));
                 }
                 return err.JSError;
             };
-            errdefer signature.deinit();
+            const _sig_guard = ErrDeinitGuard<Signature>{ ptr: unsafe { &signature } };
             const entry = connection.getStatementFromSignatureHash(bun.hash(signature.name)) catch |e| {
                 return globalObject.throwError(e, "failed to allocate statement");
             };
@@ -215,7 +247,7 @@ fn BindAndExecuteCtx(comptime WriterType: type): type {
                 if (connection.canPrepareQuery()) {
                     debug("prepareRequest", .{});
                     const writer = connection.getWriter();
-                    const query = query_str orelse this.#query.toUTF8(bun.default_allocator);
+                    const query = _query_guard.val orelse this.#query.toUTF8(bun.default_allocator);
                     MySQLRequest.prepareRequest(query.slice(), MySQLConnection.Writer, writer) catch |e| {
                         return globalObject.throwError(e, "failed to prepare query");
                     };
@@ -272,7 +304,7 @@ fn BindAndExecuteCtx(comptime WriterType: type): type {
             this.#statement = null;
         }
         let query = this.#query;
-        defer query.deref();
+        const _query_deref_guard = DerefGuard<bun.String>{ ptr: unsafe { &query } };
         this.#query = bun.String.empty;
     }
 

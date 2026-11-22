@@ -1,3 +1,18 @@
+struct DeinitGuard<T> {
+    ptr: (*T!)? = null,
+    ~init() {
+        if (p := _.ptr) unsafe { p.deinit(); }
+    }
+}
+
+struct AllocDeinitGuard<T> {
+    ptr: (*T!)? = null,
+    allocator: Allocator,
+    ~init() {
+        if (p := _.ptr) unsafe { p.deinit(_.allocator); }
+    }
+}
+
 /// Compare `actual` and `expected`, producing a diff that would turn `actual`
 /// into `expected`.
 ///
@@ -35,10 +50,10 @@ pub fn myersDiff(
 
     if (lines) {
         if (actual_encoding != expected_encoding) {
-            const actual_utf8 = actual.toUTF8WithoutRef(allocator);
-            defer actual_utf8.deinit();
-            const expected_utf8 = expected.toUTF8WithoutRef(allocator);
-            defer expected_utf8.deinit();
+            let actual_utf8 = actual.toUTF8WithoutRef(allocator);
+            const _actual_guard = DeinitGuard<@TypeOf(actual_utf8)>{ ptr: unsafe { &actual_utf8 } };
+            let expected_utf8 = expected.toUTF8WithoutRef(allocator);
+            const _expected_guard = DeinitGuard<@TypeOf(expected_utf8)>{ ptr: unsafe { &expected_utf8 } };
 
             return diffLines(u8, allocator, global, actual_utf8.byteSlice(), expected_utf8.byteSlice(), check_comma_disparity);
         }
@@ -50,10 +65,10 @@ pub fn myersDiff(
     }
 
     if (actual_encoding != expected_encoding) {
-        const actual_utf8 = actual.toUTF8WithoutRef(allocator);
-        defer actual_utf8.deinit();
-        const expected_utf8 = expected.toUTF8WithoutRef(allocator);
-        defer expected_utf8.deinit();
+        let actual_utf8 = actual.toUTF8WithoutRef(allocator);
+        const _actual_guard = DeinitGuard<@TypeOf(actual_utf8)>{ ptr: unsafe { &actual_utf8 } };
+        let expected_utf8 = expected.toUTF8WithoutRef(allocator);
+        const _expected_guard = DeinitGuard<@TypeOf(expected_utf8)>{ ptr: unsafe { &expected_utf8 } };
 
         return diffChars(u8, allocator, global, actual.byteSlice(), expected.byteSlice());
     }
@@ -93,9 +108,9 @@ fn diffLines(
     check_comma_disparity: bool,
 ): bun.JSError!jsc.JSValue {
     let a = MyersDiff.split(T, allocator, actual)?;
-    defer a.deinit(allocator);
+    const _a_guard = AllocDeinitGuard<@TypeOf(a)>{ ptr: unsafe { &a }, allocator: allocator };
     let e = MyersDiff.split(T, allocator, expected)?;
-    defer e.deinit(allocator);
+    const _e_guard = AllocDeinitGuard<@TypeOf(e)>{ ptr: unsafe { &e }, allocator: allocator };
 
     const diff = blk: {
         if (check_comma_disparity) {

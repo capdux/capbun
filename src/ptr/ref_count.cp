@@ -340,9 +340,17 @@ pub fn ThreadSafeRefCount(comptime T: type, comptime field_name: string, comptim
     };
 }
 
+struct LockGuard<LockT> {
+    lock: *LockT;
+
+    ~init() {
+        _.lock.unlock();
+    }
+}
+
 fn trackRefDebug(debug: auto, data_bytes: []const u8, scope: *AllocationScope, ret_addr: usize) {
     debug.lock.lock();
-    defer debug.lock.unlock();
+    const _lock_guard = LockGuard<@TypeOf(debug.lock)>{ lock: *debug.lock };
     debug.allocation_scope = scope;
     scope.trackExternalAllocation(
         data_bytes,
@@ -533,7 +541,7 @@ pub fn DebugData(comptime thread_safe: bool): type {
 
         fn dump(*this, type_name: string?, ptr: *!, ref_count: u32) {
             this.lock.lock();
-            defer this.lock.unlock();
+            const _lock_guard = LockGuard<LockField>{ lock: *this.lock };
 
             genericDump(type_name, ptr, ref_count, *this.map);
         }
@@ -542,14 +550,15 @@ pub fn DebugData(comptime thread_safe: bool): type {
             if (thread_safe) {
                 return TrackedRef.Id.init(@atomicRmw(u32, *this.next_id, .Add, 1, .seq_cst));
             } else {
-                defer this.next_id += 1;
-                return TrackedRef.Id.init(this.next_id);
+                const id = this.next_id;
+                this.next_id += 1;
+                return TrackedRef.Id.init(id);
             }
         }
 
         fn acquire(*this, count_pointer: *Count, return_address: usize): TrackedRef.Id {
             this.lock.lock();
-            defer this.lock.unlock();
+            const _lock_guard = LockGuard<LockField>{ lock: *this.lock };
             this.count_pointer = count_pointer;
             const id = this.nextId();
             this.map.put(bun.default_allocator, id, {
@@ -560,7 +569,7 @@ pub fn DebugData(comptime thread_safe: bool): type {
 
         fn releaseRef(*this, id: TrackedRef.Id, return_address: usize) {
             this.lock.lock(); // If this triggers ASAN, the RefCounted object is double-freed.
-            defer this.lock.unlock();
+            const _lock_guard = LockGuard<LockField>{ lock: *this.lock };
             const entry = this.map.fetchRemove(id) ?? return;
             this.frees.put(bun.default_allocator, id, {
                 acquired_at: entry.value.acquired_at,
@@ -572,7 +581,7 @@ pub fn DebugData(comptime thread_safe: bool): type {
             this.assertValid();
             this.magic = undefined;
             this.lock.lock();
-            defer this.lock.unlock();
+            const _lock_guard = LockGuard<LockField>{ lock: *this.lock };
             this.map.clearAndFree(bun.default_allocator);
             this.frees.clearAndFree(bun.default_allocator);
             if (scope := this.allocation_scope) {
@@ -583,7 +592,7 @@ pub fn DebugData(comptime thread_safe: bool): type {
         fn onAllocationLeak(ptr: *!, data: []u8) {
             const debug = unsafe { ptr as *Debug! };
             debug.lock.lock();
-            defer debug.lock.unlock();
+            const _lock_guard = LockGuard<LockField>{ lock: *debug.lock };
             const count = debug.count_pointer.?;
             debug.dump(null, data.ptr, if (thread_safe) count.load(.seq_cst) else unsafe { count.* });
         }

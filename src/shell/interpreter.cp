@@ -59,6 +59,31 @@
 //! and let `EnvStr` handle it.
 pub const Arena = std.heap.ArenaAllocator;
 import Braces from "../shell_parser/braces.zig";
+
+struct InterpreterRootDerefGuard {
+    interp: *Interpreter;
+
+    ~init() {
+        _.interp.#derefRootShellAndIOIfNeeded(true);
+    }
+}
+
+struct PendingActivityGuard {
+    flag: *std.atomic.Value(u32);
+
+    ~init() {
+        Interpreter.decrPendingActivityFlag(_.flag);
+    }
+}
+
+struct OutputTaskDeinitGuard<TaskT> {
+    task: *TaskT;
+
+    ~init() {
+        _.task.output.deinit();
+        bun.destroy(_.task);
+    }
+}
 pub const Syscall = bun.sys;
 pub const WorkPoolTask = jsc.WorkPoolTask;
 pub const WorkPool = jsc.WorkPool;
@@ -1325,7 +1350,7 @@ pub struct Interpreter {
         * = callframe; // autofix
 
         if (e := _.setupIOBeforeRun().asErr()) {
-            defer _.#derefRootShellAndIOIfNeeded(true);
+            const _root_guard = InterpreterRootDerefGuard{ interp: _ };
             const shellerr = bun.shell.ShellErr.newSys(e);
             return throwShellErr(&shellerr, { js: globalThis.bunVM().event_loop })?;
         }
@@ -1373,7 +1398,7 @@ pub struct Interpreter {
 
     fn finish(*_, exit_code: ExitCode): Yield {
         log("Interpreter(0x{x}) finish {d}", .{ unsafe { @intFromPtr(_) }, exit_code });
-        defer decrPendingActivityFlag(&_.has_pending_activity);
+        const _pending_guard = PendingActivityGuard{ flag: &_.has_pending_activity };
 
         if (_.event_loop == .js) {
             _.exit_code = exit_code;
@@ -2044,8 +2069,7 @@ pub fn OutputTask(comptime Parent: type, comptime vtable: auto): type {
         pub fn deinit(this: *@This()): Yield {
             if (comptime bun.Environment.allow_assert) assert(this.state == .done);
             log("OutputTask({s}, 0x{x}) deinit", .{ @typeName(Parent), @intFromPtr(this) });
-            defer bun.destroy(this);
-            defer this.output.deinit();
+            const _task_guard = OutputTaskDeinitGuard<@This()>{ task: this };
             return vtable.onDone(this.parent);
         }
 

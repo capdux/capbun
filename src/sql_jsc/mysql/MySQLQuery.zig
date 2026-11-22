@@ -60,7 +60,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const AnyMySQLError = @import("../../sql/mysql/protocol/AnyMySQLError.zig");
 pub const MySQLConnection = @import("./JSMySQLConnection.zig");
@@ -73,6 +73,95 @@ const QueryBindingIterator = @import("../../sql_jsc/shared/QueryBindingIterator.
 const SQLQueryResultMode = @import("../../sql/shared/SQLQueryResultMode.zig").SQLQueryResultMode;
 const Status = @import("../../sql/mysql/QueryStatus.zig").Status;
 const Value = @import("../../sql/mysql/MySQLTypes.zig").Value;
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T = null,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    {
+                        _ = p.deinit();
+                    }
+                }
+        }
+    };
+}
+
+pub fn OptDeinitGuard(comptime T: type) type {
+    return struct {
+        val: ?T = null,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.val) |v| {
+                    _ = &v;
+                    var s = v;
+                    _ = &s;
+                    _ = s.deinit();
+                }
+        }
+    };
+}
+
+pub fn ErrDeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T = null,
+        __cp_errdropped: bool = false,
+
+pub fn __cp_errdeinit(self: *@This()) void {
+            if (self.__cp_errdropped) return;
+            self.__cp_errdropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    {
+                        _ = p.deinit();
+                    }
+                }
+        }
+    };
+}
+
+pub fn DerefGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.deref();
+                }
+        }
+    };
+}
+
+pub const ParamsErrGuard = struct {
+    params: []Value,
+    count: u32 = 0,
+    __cp_errdropped: bool = false,
+
+pub fn __cp_errdeinit(self: *ParamsErrGuard) void {
+        if (self.__cp_errdropped) return;
+        self.__cp_errdropped = true;
+            {
+                var idx: i32 = 0;
+                _ = &idx;
+                const __end_0 = self.count;
+                while (idx < __end_0) : (idx += 1) {
+                    _ = self.params[@as(usize, @intCast(idx))].deinit(bun.default_allocator);
+                }
+            }
+            _ = bun.default_allocator.free(self.params);
+    }
+};
+
 pub const QueryFlags = packed struct(u8) {
     bigint: bool = false,
     simple: bool = false,
@@ -95,19 +184,10 @@ pub fn bind(self: *MySQLQuery, execute: *PreparedStatement.Execute, globalObject
         _ = &i;
         var params = try bun.default_allocator.alloc(Value, execute.param_types.len);
         _ = &params;
-        errdefer {
-        {
-            {
-                var idx: i32 = 0;
-                _ = &idx;
-                const __end_0 = i;
-                while (idx < __end_0) : (idx += 1) {
-                    _ = params[@as(usize, @intCast(idx))].deinit(bun.default_allocator);
-                }
-            }
-            _ = bun.default_allocator.free(params);
-        }
-        }
+        var _params_guard = ParamsErrGuard{ .params = params };
+        _ = &_params_guard;
+        var ___params_guard_moved = false; _ = &___params_guard_moved;
+        errdefer if (!___params_guard_moved) { ___params_guard_moved = true; const __T = @TypeOf(_params_guard); if (@typeInfo(__T) == .optional) { if (_params_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { __cp_opt_v.__cp_errdeinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_errdeinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_errdeinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { _params_guard.__cp_errdeinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_errdeinit")) { var _drop_val = _params_guard; _drop_val.__cp_errdeinit(); } };
         while (try iter.next()) |js_value| {
             if ((i >= params.len)) {
                 return error.WrongNumberOfParametersProvided;
@@ -115,6 +195,7 @@ pub fn bind(self: *MySQLQuery, execute: *PreparedStatement.Execute, globalObject
             const param = execute.param_types[@as(usize, @intCast(i))];
             params[cp_cast_int(usize, i)] = try Value.fromJS(js_value, globalObject, param.@"type", param.flags.UNSIGNED, roots);
             i = (i + 1);
+            _params_guard.count = i;
         }
         if (iter.anyFailed()) {
             return error.InvalidQueryBinding;
@@ -141,9 +222,13 @@ pub fn bindAndExecute(self: *MySQLQuery, writer: anytype, statement: *MySQLState
 pub fn bindAndExecuteImpl(self: *MySQLQuery, writer: anytype, statement: *MySQLStatement, globalObject: *JSGlobalObject, binding_value: JSValue, columns_value: JSValue, roots: *bun.jsc.MarkedArgumentBuffer) AnyMySQLError.Error!void {
         var execute = PreparedStatement.Execute{ .statement_id = statement.statement_id, .param_types = statement.signature.fields, .new_params_bind_flag = statement.execution_flags.need_to_send_params, .iteration_count = 1 };
         _ = &execute;
-        defer {
-        _ = execute.deinit();
-        }
+        var _exec_guard = DeinitGuard(PreparedStatement.Execute){ .ptr = (blk: {
+        break :blk (&execute);
+
+}) };
+        _ = &_exec_guard;
+        var ___exec_guard_moved = false; _ = &___exec_guard_moved;
+        defer if (!___exec_guard_moved) { ___exec_guard_moved = true; const __T = @TypeOf(_exec_guard); if (@typeInfo(__T) == .optional) { if (_exec_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _exec_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _exec_guard; _drop_val.__cp_deinit(); } };
         _ = try self.bind((&execute), globalObject, binding_value, columns_value, roots);
         var packet = try writer.start(0);
         _ = &packet;
@@ -160,9 +245,13 @@ pub fn runSimpleQuery(self: *MySQLQuery, connection: *MySQLConnection) !void {
         }
         var query_str = self.#query.toUTF8(bun.default_allocator);
         _ = &query_str;
-        defer {
-        _ = query_str.deinit();
-        }
+        var _query_guard = DeinitGuard(bun.ZigString.Slice){ .ptr = (blk: {
+        break :blk (&query_str);
+
+}) };
+        _ = &_query_guard;
+        var ___query_guard_moved = false; _ = &___query_guard_moved;
+        defer if (!___query_guard_moved) { ___query_guard_moved = true; const __T = @TypeOf(_query_guard); if (@typeInfo(__T) == .optional) { if (_query_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _query_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _query_guard; _drop_val.__cp_deinit(); } };
         const writer = connection.getWriter();
         if ((self.#statement == null)) {
             const stmt = bun.new(MySQLStatement, .{ .signature = Signature.empty(), .status = .parsing, .ref_count = .initExactRefs(1) });
@@ -173,29 +262,25 @@ pub fn runSimpleQuery(self: *MySQLQuery, connection: *MySQLConnection) !void {
 }
 
 pub fn runPreparedQuery(self: *MySQLQuery, connection: *MySQLConnection, globalObject: *JSGlobalObject, columns_value: JSValue, binding_value: JSValue) !void {
-        var query_str: ?bun.ZigString.Slice = null;
-        _ = &query_str;
-        defer {
-        {
-            if (query_str) |str| {
-                _ = &str;
-                var s = str;
-                _ = &s;
-                _ = s.deinit();
-            }
-        }
-        }
+        var _query_guard = OptDeinitGuard(bun.ZigString.Slice){  };
+        _ = &_query_guard;
+        var ___query_guard_moved = false; _ = &___query_guard_moved;
+        defer if (!___query_guard_moved) { ___query_guard_moved = true; const __T = @TypeOf(_query_guard); if (@typeInfo(__T) == .optional) { if (_query_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _query_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _query_guard; _drop_val.__cp_deinit(); } };
         if ((self.#statement == null)) {
             const query = self.#query.toUTF8(bun.default_allocator);
-            query_str = query;
+            _query_guard.val = query;
             var signature = (blk_catch_0: { break :blk_catch_0 ((Signature.generate(globalObject, query.slice(), binding_value, columns_value)) catch |e| { _ = &e; if ((!globalObject.hasException())) {
                 return globalObject.throwValue(AnyMySQLError.mysqlErrorToJS(globalObject, "failed to generate signature", @errorCast(e)));
             }
             return error.JSError; }); });
             _ = &signature;
-            errdefer {
-            _ = signature.deinit();
-            }
+            var _sig_guard = ErrDeinitGuard(Signature){ .ptr = (blk: {
+            break :blk (&signature);
+
+}) };
+            _ = &_sig_guard;
+            var ___sig_guard_moved = false; _ = &___sig_guard_moved;
+            errdefer if (!___sig_guard_moved) { ___sig_guard_moved = true; const __T = @TypeOf(_sig_guard); if (@typeInfo(__T) == .optional) { if (_sig_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { __cp_opt_v.__cp_errdeinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_errdeinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_errdeinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { _sig_guard.__cp_errdeinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_errdeinit")) { var _drop_val = _sig_guard; _drop_val.__cp_errdeinit(); } };
             const entry = (blk_catch_1: { break :blk_catch_1 ((connection.getStatementFromSignatureHash(bun.hash((if (@typeInfo(@TypeOf(signature)) == .@"enum" or @typeInfo(@TypeOf(signature)) == .@"union") @tagName(signature) else signature.name)))) catch |e| { _ = &e; return globalObject.throwError(e, "failed to allocate statement"); }); });
             if (entry.found_existing) {
                 const existing_stmt = (blk: {
@@ -243,7 +328,7 @@ _ = debug("parsing", .{});
 if (connection.canPrepareQuery()) {
             _ = debug("prepareRequest", .{});
             const writer = connection.getWriter();
-            const query = ((query_str) orelse (self.#query.toUTF8(bun.default_allocator)));
+            const query = ((_query_guard.val) orelse (self.#query.toUTF8(bun.default_allocator)));
             _ = (blk_catch_3: { break :blk_catch_3 ((MySQLRequest.prepareRequest(query.slice(), MySQLConnection.Writer, writer)) catch |e| { _ = &e; return globalObject.throwError(e, "failed to prepare query"); }); });
             stmt.status = .parsing;
         }
@@ -292,9 +377,13 @@ pub fn cleanup(self: *MySQLQuery) void {
         }
         var query = self.#query;
         _ = &query;
-        defer {
-        _ = query.deref();
-        }
+        var _query_deref_guard = DerefGuard(bun.String){ .ptr = (blk: {
+        break :blk (&query);
+
+}) };
+        _ = &_query_deref_guard;
+        var ___query_deref_guard_moved = false; _ = &___query_deref_guard_moved;
+        defer if (!___query_deref_guard_moved) { ___query_deref_guard_moved = true; const __T = @TypeOf(_query_deref_guard); if (@typeInfo(__T) == .optional) { if (_query_deref_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _query_deref_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _query_deref_guard; _drop_val.__cp_deinit(); } };
         self.#query = bun.String.empty;
 }
 

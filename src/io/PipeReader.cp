@@ -10,6 +10,27 @@ const Async = bun.Async;
 const jsc = bun.jsc;
 const uv = bun.windows.libuv;
 
+struct HandleCloseGuard {
+    handle: *PollOrFd!,
+    ~init() {
+        _.handle.close(null, {});
+    }
+}
+
+struct ClearBufGuard {
+    buf: *std.array_list.Managed(u8)!,
+    ~init() {
+        _.buf.clearRetainingCapacity();
+    }
+}
+
+struct WindowsReadGuard {
+    reader: *WindowsBufferedReader!,
+    ~init() {
+        _.reader.continueFileReadIfNotPaused();
+    }
+}
+
 // This is a runtime type instead of comptime due to bugs in Zig.
 // https://github.com/ziglang/zig/issues/18664
 const BufferedReaderVTable = struct {
@@ -83,7 +104,7 @@ const BufferedReaderVTable = struct {
 };
 
 const PosixBufferedReader = struct {
-    handle: PollOrFd = .{ .closed = {} },
+    handle: PollOrFd = .closed,
     _buffer: std.array_list.Managed(u8) = std.array_list.Managed(u8).init(bun.default_allocator),
     _offset: usize = 0,
     vtable: BufferedReaderVTable,
@@ -137,7 +158,7 @@ const PosixBufferedReader = struct {
         };
         other.buffer().* = std.array_list.Managed(u8).init(bun.default_allocator);
         other.flags.is_done = true;
-        other.handle = .{ .closed = {} };
+        other.handle = .closed;
         other._offset = 0;
         MaxBuf.transferToPipereader(&other.maxbuf, &to.maxbuf);
         to.handle.setOwner(to);
@@ -214,7 +235,7 @@ const PosixBufferedReader = struct {
 
     pub fn finalBuffer(this: *PosixBufferedReader) *std.array_list.Managed(u8) {
         if (this.flags.memfd and this.handle == .fd) {
-            defer this.handle.close(null, {});
+            const _handle_guard = HandleCloseGuard{ handle: unsafe { &this.handle } };
             _ = bun.sys.File.readToEndWithArrayList(.{ .handle = this.handle.fd }, this.buffer(), .unknown_size).unwrap() catch |err| {
                 bun.Output.debugWarn("error reading from memfd\n{}", .{err});
                 return this.buffer();
@@ -313,9 +334,7 @@ const PosixBufferedReader = struct {
         }
         this.registerPoll();
 
-        return .{
-            .result = {},
-        };
+        return .success;
     }
 
     pub fn startFileOffset(this: *PosixBufferedReader, fd: bun.FD, poll: bool, offset: usize) bun.sys.Maybe(void) {
@@ -418,7 +437,7 @@ const PosixBufferedReader = struct {
         return false;
     }
 
-    fn wrapReadFn(comptime func: fn (bun.FD, []u8) bun.sys.Maybe(usize)) fn (bun.FD, []u8, usize) bun.sys.Maybe(usize) {
+    static fn wrapReadFn(comptime func: fn (bun.FD, []u8) bun.sys.Maybe(usize)) fn (bun.FD, []u8, usize) bun.sys.Maybe(usize) {
         return struct {
             pub fn call(fd: bun.FD, buf: []u8, offset: usize) bun.sys.Maybe(usize) {
                 _ = offset;
@@ -662,9 +681,7 @@ const PosixBufferedReader = struct {
 
                     if (parent.vtable.isStreamingEnabled()) {
                         if (resizable_buffer.items.len > 128_000) {
-                            defer {
-                                resizable_buffer.clearRetainingCapacity();
-                            }
+                            const _clear_guard = ClearBufGuard{ buf: resizable_buffer };
                             if (!parent.vtable.onReadChunk(resizable_buffer.items, .progress)) {
                                 return;
                             }
@@ -752,17 +769,17 @@ pub const WindowsBufferedReader = struct {
 
     pub fn init(comptime Type: type) WindowsBufferedReader {
         const fns = struct {
-            fn onReadChunk(this: *!, chunk: []const u8, hasMore: ReadState) bool {
-                return Type.onReadChunk(@as(*Type, @ptrCast(@alignCast(this))), chunk, hasMore);
+            static fn onReadChunk(ptr: *!, chunk: []const u8, hasMore: ReadState): bool {
+                return Type.onReadChunk(@as(*Type, ptr), chunk, hasMore);
             }
-            fn onReaderDone(this: *!) void {
-                return Type.onReaderDone(@as(*Type, @ptrCast(@alignCast(this))));
+            static fn onReaderDone(ptr: *!) {
+                return Type.onReaderDone(@as(*Type, ptr));
             }
-            fn onReaderError(this: *!, err: bun.sys.Error) void {
-                return Type.onReaderError(@as(*Type, @ptrCast(@alignCast(this))), err);
+            static fn onReaderError(ptr: *!, err_val: bun.sys.Error) {
+                return Type.onReaderError(@as(*Type, ptr), err_val);
             }
-            fn loop(this: *!) *Async.Loop {
-                return Type.loop(@as(*Type, @ptrCast(@alignCast(this))));
+            static fn loop(ptr: *!): *Async.Loop {
+                return Type.loop(@as(*Type, ptr));
             }
         };
         return .{
@@ -775,8 +792,33 @@ pub const WindowsBufferedReader = struct {
         };
     }
 
-    pub inline fn isDone(this: *WindowsBufferedReader) bool {
+    pub fn isDone(this: *WindowsBufferedReader) bool {
         return this.flags.is_done or this.flags.received_eof or this.flags.closed_without_reporting;
+    }
+
+    fn continueFileReadIfNotPaused(this: *WindowsBufferedReader) void {
+        if (!this.flags.is_paused) {
+            if (this.source) |source| {
+                if (source == .file) {
+                    const file_ptr = source.file;
+
+                    if (file_ptr.canStart()) {
+                        source.setData(this);
+                        file_ptr.prepare();
+                        const buf = this.getReadBufferWithStableMemoryAddress(64 * 1024);
+                        file_ptr.iov = uv.uv_buf_t.init(buf);
+                        this.flags.has_inflight_read = true;
+
+                        if (uv.uv_fs_read(this.vtable.loop(this.parent), &file_ptr.fs, file_ptr.file, @ptrCast(&file_ptr.iov), 1, if (this.flags.use_pread) @intCast(this._offset) else -1, onFileRead).toError(.write)) |err| {
+                            file_ptr.complete(false);
+                            this.flags.has_inflight_read = false;
+                            this.flags.is_paused = true;
+                            this.onRead(.{ .err = err }, "", .progress);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     pub fn from(to: *WindowsBufferedReader, other: anytype, parent: anytype) void {
@@ -1030,30 +1072,7 @@ pub const WindowsBufferedReader = struct {
                     this.onRead(.{ .err = err }, "", .progress);
                     return;
                 }
-                defer {
-                    if (!this.flags.is_paused) {
-                        if (this.source) |source| {
-                            if (source == .file) {
-                                const file_ptr = source.file;
-
-                                if (file_ptr.canStart()) {
-                                    source.setData(this);
-                                    file_ptr.prepare();
-                                    const buf = this.getReadBufferWithStableMemoryAddress(64 * 1024);
-                                    file_ptr.iov = uv.uv_buf_t.init(buf);
-                                    this.flags.has_inflight_read = true;
-
-                                    if (uv.uv_fs_read(this.vtable.loop(this.parent), &file_ptr.fs, file_ptr.file, @ptrCast(&file_ptr.iov), 1, if (this.flags.use_pread) @intCast(this._offset) else -1, onFileRead).toError(.write)) |err| {
-                                        file_ptr.complete(false);
-                                        this.flags.has_inflight_read = false;
-                                        this.flags.is_paused = true;
-                                        this.onRead(.{ .err = err }, "", .progress);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                const _read_guard = WindowsReadGuard{ reader: this };
 
                 const len: usize = @intCast(nread_int);
                 this._offset += len;

@@ -4,502 +4,590 @@
 const std = @import("std");
 const string = []const u8;
 
+pub fn CpResult(comptime __T: type, comptime __E: type) type {
+    return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
+}
+const __CpErr = struct {
+    code: i32 = 0,
+    msg: []const u8 = "",
+    cause: ?*const anyopaque = null,
+    cause_type_id: u64 = 0,
+    pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
+    pub fn init(__cp_code: i32, __cp_msg: []const u8) __CpErr { return __CpErr{ .code = __cp_code, .msg = __cp_msg }; }
+    pub fn with_cause(__cp_self: __CpErr, __cp_cause: anytype) __CpErr { const __CpCType = @TypeOf(__cp_cause); var __cp_ptr: ?*const anyopaque = null; var __cp_tid: u64 = 0; if (comptime @typeInfo(__CpCType) == .pointer) { __cp_ptr = @ptrCast(__cp_cause); const __CpChild = @typeInfo(__CpCType).pointer.child; if (comptime @hasDecl(__CpChild, "__TYPE_ID")) { __cp_tid = __CpChild.__TYPE_ID; } } else if (comptime (@typeInfo(__CpCType) == .@"struct" or @typeInfo(__CpCType) == .@"union") and @hasField(__CpCType, "ptr")) { __cp_ptr = @ptrCast(__cp_cause.ptr); if (comptime @hasField(__CpCType, "vtable")) { __cp_tid = __cp_cause.vtable.__type_id; } } else if (comptime @typeInfo(__CpCType) == .optional) { if (__cp_cause) |__cp_c| return __cp_self.with_cause(__cp_c); } else { if (comptime @hasDecl(__CpCType, "__TYPE_ID")) { __cp_tid = __CpCType.__TYPE_ID; } __cp_ptr = @ptrCast(&__cp_cause); } return __CpErr{ .code = __cp_self.code, .msg = __cp_self.msg, .cause = __cp_ptr, .cause_type_id = __cp_tid }; }
+    pub fn downcast(__cp_self: __CpErr, comptime __CpTarget: type) ?*const __CpTarget {
+        if (__cp_self.cause) |__cp_c| {
+            if (comptime @hasDecl(__CpTarget, "__TYPE_ID")) {
+                if (__cp_self.cause_type_id != 0 and __cp_self.cause_type_id != __CpTarget.__TYPE_ID) {
+                    return null;
+                }
+            }
+            return @ptrCast(@alignCast(__cp_c));
+        }
+        return null;
+    }
+};
+pub const Err = __CpErr;
+pub const Error = __CpErr;
+fn is_cp_result(comptime __T: type) bool {
+    return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
+}
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
+fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
+fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
+fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
+fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
+fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == __CpErr) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return __CpErr{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return __CpErr{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return __CpErr{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return __CpErr.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return __CpErr.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return __CpErr{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
+fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+const Message = struct { __cp_no_message_sentinel: void = {} };
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
+
 pub const bun = @import("bun");
+pub const FormatterGuard = struct {
+    fmt: *jsc.ConsoleObject.Formatter,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *FormatterGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = self.fmt.deinit();
+    }
+};
+
+pub const StdioCapture = struct {
+    buf: *bun.ByteList,
+};
+
+pub const StdioDup2 = struct {
+    out: bun.jsc.Subprocess.StdioKind,
+    to: bun.jsc.Subprocess.StdioKind,
+};
+
+pub const StdioToSpawnOptsError = union(enum) {
+    stdin_used_as_out: void,
+    out_used_as_stdin: void,
+    blob_used_as_out: void,
+    uv_pipe: bun.sys.E,
+
+pub fn toStr(self: *const StdioToSpawnOptsError) []const u8 {
+            return (switch (self.*) {
+.stdin_used_as_out => "Stdin cannot be used for stdout or stderr",
+.out_used_as_stdin => "Stdout and stderr cannot be used for stdin",
+.blob_used_as_out => "Blobs are immutable, and cannot be used for stdout/stderr",
+.uv_pipe => @panic("TODO"),
+});
+    }
+
+pub fn throwJS(self: StdioToSpawnOptsError, globalThis: *jsc.JSGlobalObject) bun.JSError {
+            return globalThis.throw("{s}", .{ self.toStr() });
+    }
+};
+
+pub const StdioResult = union(enum) {
+    result: bun.spawn.SpawnOptions.Stdio,
+    @"err": StdioToSpawnOptsError,
+};
+
 pub const Stdio = union(enum) {
-    inherit,
-    capture: struct { buf: *bun.ByteList },
-    ignore,
+    inherit: void,
+    capture: StdioCapture,
+    ignore: void,
     fd: bun.FD,
-    dup2: struct {
-        out: bun.jsc.Subprocess.StdioKind,
-        to: bun.jsc.Subprocess.StdioKind,
-    },
+    dup2: StdioDup2,
     path: jsc.Node.PathLike,
     blob: jsc.WebCore.Blob.Any,
     array_buffer: jsc.ArrayBuffer.Strong,
     memfd: bun.FD,
-    pipe,
-    ipc,
+    pipe: void,
+    ipc: void,
     readable_stream: jsc.WebCore.ReadableStream,
 
-    const log = bun.sys.syslog;
-
-    pub const Result = union(enum) {
-        result: bun.spawn.SpawnOptions.Stdio,
-        err: ToSpawnOptsError,
-    };
-
-    pub fn ResultT(comptime T: type) type {
-        return union(enum) {
-            result: T,
-            err: ToSpawnOptsError,
-        };
+pub fn byteSlice(self: *const Stdio) []const u8 {
+            return (switch (self.*) {
+.capture => self.capture.buf.slice(),
+.array_buffer => self.array_buffer.array_buffer.byteSlice(),
+.blob => self.blob.slice(),
+else => "",
+});
     }
 
-    pub const ToSpawnOptsError = union(enum) {
-        stdin_used_as_out,
-        out_used_as_stdin,
-        blob_used_as_out,
-        uv_pipe: bun.sys.E,
+pub fn deinit(self: *Stdio) void {
+            switch (self.*) {
+.array_buffer => {
+_ = self.array_buffer.deinit();
+},
+.blob => {
+_ = self.blob.detach();
+},
+.memfd => |fd| {
+_ = fd.close();
+},
+.readable_stream => {
 
-        pub fn toStr(this: *const @This()) []const u8 {
-            return switch (this.*) {
-                .stdin_used_as_out => "Stdin cannot be used for stdout or stderr",
-                .out_used_as_stdin => "Stdout and stderr cannot be used for stdin",
-                .blob_used_as_out => "Blobs are immutable, and cannot be used for stdout/stderr",
-                .uv_pipe => @panic("TODO"),
-            };
-        }
+},
+else => {
 
-        pub fn throwJS(this: *const @This(), globalThis: *jsc.JSGlobalObject) bun.JSError {
-            return globalThis.throw("{s}", .{this.toStr()});
-        }
-    };
-
-    pub fn byteSlice(this: *const Stdio) []const u8 {
-        return switch (this.*) {
-            .capture => this.capture.buf.slice(),
-            .array_buffer => this.array_buffer.array_buffer.byteSlice(),
-            .blob => this.blob.slice(),
-            else => &[_]u8{},
-        };
+},
+}
     }
 
-    pub fn deinit(this: *Stdio) void {
-        switch (this.*) {
-            .array_buffer => |*array_buffer| {
-                array_buffer.deinit();
-            },
-            .blob => |*blob| {
-                blob.detach();
-            },
-            .memfd => |fd| {
-                fd.close();
-            },
-            .readable_stream => {
-                // ReadableStream cleanup is handled by the subprocess
-            },
-            else => {},
-        }
+pub fn canUseMemfd(self: Stdio, is_sync: bool, has_max_buffer: bool) bool {
+            if (comptime (!Environment.isLinux)) {
+                return false;
+            }
+            return (switch (self) {
+.blob => (!self.blob.needsToReadFile()),
+.memfd, .array_buffer => true,
+.pipe => (is_sync and (!has_max_buffer)),
+else => false,
+});
     }
 
-    pub fn canUseMemfd(this: *const @This(), is_sync: bool, has_max_buffer: bool) bool {
-        if (comptime !Environment.isLinux) {
-            return false;
-        }
-
-        return switch (this.*) {
-            .blob => !this.blob.needsToReadFile(),
-            .memfd, .array_buffer => true,
-            .pipe => is_sync and !has_max_buffer,
-            else => false,
-        };
-    }
-
-    pub fn useMemfd(this: *@This(), index: u32) bool {
-        if (comptime !Environment.isLinux) {
-            return false;
-        }
-        if (!bun.sys.canUseMemfd()) return false;
-        const label = switch (index) {
-            0 => "spawn_stdio_stdin",
-            1 => "spawn_stdio_stdout",
-            2 => "spawn_stdio_stderr",
-            else => "spawn_stdio_memory_file",
-        };
-
-        const fd = bun.sys.memfd_create(label, .cross_process).unwrap() catch return false;
-
-        var remain = this.byteSlice();
-
-        if (remain.len > 0)
-            // Hint at the size of the file
-            _ = bun.sys.ftruncate(fd, @intCast(remain.len));
-
-        // Dump all the bytes in there
-        var written: isize = 0;
-        while (remain.len > 0) {
-            switch (bun.sys.pwrite(fd, remain, written)) {
-                .err => |err| {
-                    if (err.getErrno() == .AGAIN) {
-                        continue;
-                    }
-
-                    Output.debugWarn("Failed to write to memfd: {s}", .{@tagName(err.getErrno())});
-                    fd.close();
+pub fn useMemfd(self: *Stdio, index: u32) bool {
+            if (comptime (!Environment.isLinux)) {
+                return false;
+            }
+            if ((!bun.sys.canUseMemfd())) {
+                return false;
+            }
+            const label = (switch (index) {
+0 => "spawn_stdio_stdin",
+1 => "spawn_stdio_stdout",
+2 => "spawn_stdio_stderr",
+else => "spawn_stdio_memory_file",
+});
+            const fd = (blk_catch_0: { break :blk_catch_0 ((bun.sys.memfd_create(label, .cross_process).unwrap()) catch |__ce_0| { _ = &__ce_0; return false; }); });
+            var remain = self.byteSlice();
+            _ = &remain;
+            if ((remain.len > 0)) {
+                _ = bun.sys.ftruncate(fd, @intCast(remain.len));
+            }
+            var written: isize = 0;
+            _ = &written;
+            while ((remain.len > 0)) {
+                switch (bun.sys.pwrite(fd, remain, written)) {
+.err => |e| {
+if ((e.getErrno() == .AGAIN)) {
+                    continue;
+                }
+                _ = Output.debugWarn("Failed to write to memfd: {s}", .{ @tagName(e.getErrno()) });
+                _ = fd.close();
+                return false;
+},
+.result => |result| {
+if ((result == 0)) {
+                    _ = Output.debugWarn("Failed to write to memfd: EOF", .{});
+                    _ = fd.close();
                     return false;
-                },
-                .result => |result| {
-                    if (result == 0) {
-                        Output.debugWarn("Failed to write to memfd: EOF", .{});
-                        fd.close();
-                        return false;
-                    }
-                    written += @intCast(result);
-                    remain = remain[result..];
-                },
+                }
+                written = (written + @as(isize, @intCast(result)));
+                remain = remain[result..];
+},
+}
             }
-        }
+            switch (self.*) {
+.array_buffer => {
+_ = self.array_buffer.deinit();
+},
+.blob => {
+_ = self.blob.detach();
+},
+else => {
 
-        switch (this.*) {
-            .array_buffer => this.array_buffer.deinit(),
-            .blob => this.blob.detach(),
-            else => {},
-        }
-
-        this.* = .{ .memfd = fd };
-        return true;
+},
+}
+            self.* = Stdio{ .memfd = fd };
+            return true;
     }
 
-    fn toPosix(
-        stdio: *@This(),
-        i: i32,
-    ) Result {
-        return .{
-            .result = switch (stdio.*) {
-                .blob => |blob| brk: {
-                    const fd = bun.FD.Stdio.fromInt(i).?.fd();
-                    if (blob.needsToReadFile()) {
-                        if (blob.store()) |store| {
-                            if (store.data.file.pathlike == .fd) {
-                                if (store.data.file.pathlike.fd == fd) {
-                                    break :brk .{ .inherit = {} };
-                                }
-
-                                if (store.data.file.pathlike.fd.stdioTag()) |tag| switch (tag) {
-                                    .std_in => {
-                                        if (i == 1 or i == 2) {
-                                            return .{ .err = .stdin_used_as_out };
-                                        }
-                                    },
-                                    .std_out, .std_err => {
-                                        if (i == 0) {
-                                            return .{ .err = .out_used_as_stdin };
-                                        }
-                                    },
-                                };
-
-                                break :brk .{ .pipe = store.data.file.pathlike.fd };
-                            }
-
-                            break :brk .{ .path = store.data.file.pathlike.path.slice() };
+pub fn toPosix(self: *Stdio, i: i32) Result {
+            return Result{ .result = (switch (self.*) {
+.blob => |blob| brk: {
+            const expected_fd = (bun.FD.Stdio.fromInt(i)).?.fd();
+            if (blob.needsToReadFile()) {
+                if (blob.store()) |store| {
+                    _ = &store;
+                    if ((store.data.file.pathlike == .fd)) {
+                        if ((store.data.file.pathlike.fd == expected_fd)) {
+                            break :brk SpawnStdio.inherit;
                         }
-                    }
-
-                    if (i == 1 or i == 2) {
-                        return .{ .err = .blob_used_as_out };
-                    }
-
-                    break :brk .{ .buffer = {} };
-                },
-                .dup2 => .{ .dup2 = .{ .out = stdio.dup2.out, .to = stdio.dup2.to } },
-                .capture, .pipe, .array_buffer, .readable_stream => .{ .buffer = {} },
-                .ipc => .{ .ipc = {} },
-                .fd => |fd| .{ .pipe = fd },
-                .memfd => |fd| .{ .pipe = fd },
-                .path => |pathlike| .{ .path = pathlike.slice() },
-                .inherit => .{ .inherit = {} },
-                .ignore => .{ .ignore = {} },
-            },
-        };
-    }
-
-    fn toWindows(
-        stdio: *@This(),
-        i: i32,
-    ) Result {
-        return .{
-            .result = switch (stdio.*) {
-                .blob => |blob| brk: {
-                    const fd = bun.FD.Stdio.fromInt(i).?.fd();
-                    if (blob.needsToReadFile()) {
-                        if (blob.store()) |store| {
-                            if (store.data.file.pathlike == .fd) {
-                                if (store.data.file.pathlike.fd == fd) {
-                                    break :brk .{ .inherit = {} };
-                                }
-
-                                if (store.data.file.pathlike.fd.stdioTag()) |tag| switch (tag) {
-                                    .std_in => {
-                                        if (i == 1 or i == 2) {
-                                            return .{ .err = .stdin_used_as_out };
-                                        }
-                                    },
-                                    .std_out, .std_err => {
-                                        if (i == 0) {
-                                            return .{ .err = .out_used_as_stdin };
-                                        }
-                                    },
-                                };
-
-                                break :brk .{ .pipe = store.data.file.pathlike.fd };
+                        if (store.data.file.pathlike.fd.stdioTag()) |tag| {
+                            _ = &tag;
+                            switch (tag) {
+.std_in => {
+if (((i == 1) or (i == 2))) {
+                                return Result{ .@"err" = .stdin_used_as_out };
                             }
-
-                            break :brk .{ .path = store.data.file.pathlike.path.slice() };
+},
+.std_out, .std_err => {
+if ((i == 0)) {
+                                return Result{ .@"err" = .out_used_as_stdin };
+                            }
+},
+}
                         }
+                        break :brk SpawnStdio{ .pipe = store.data.file.pathlike.fd };
                     }
+                    break :brk SpawnStdio{ .path = store.data.file.pathlike.path.slice() };
+                }
+            }
+            if (((i == 1) or (i == 2))) {
+                return Result{ .@"err" = .blob_used_as_out };
+            }
+            break :brk SpawnStdio.buffer;
+},
+.dup2 => SpawnStdio{ .dup2 = .{ .out = self.dup2.out, .to = self.dup2.to } },
+.capture, .pipe, .array_buffer, .readable_stream => SpawnStdio.buffer,
+.ipc => SpawnStdio.ipc,
+.fd => |fd| SpawnStdio{ .pipe = fd },
+.memfd => |fd| SpawnStdio{ .pipe = fd },
+.path => |pathlike| SpawnStdio{ .path = pathlike.slice() },
+.inherit => SpawnStdio.inherit,
+.ignore => SpawnStdio.ignore,
+}) };
+    }
 
-                    if (i == 1 or i == 2) {
-                        return .{ .err = .blob_used_as_out };
+pub fn toWindows(self: *Stdio, i: i32) Result {
+            return Result{ .result = (switch (self.*) {
+.blob => |blob| brk: {
+            const expected_fd = (bun.FD.Stdio.fromInt(i)).?.fd();
+            if (blob.needsToReadFile()) {
+                if (blob.store()) |store| {
+                    _ = &store;
+                    if ((store.data.file.pathlike == .fd)) {
+                        if ((store.data.file.pathlike.fd == expected_fd)) {
+                            break :brk SpawnStdio.inherit;
+                        }
+                        if (store.data.file.pathlike.fd.stdioTag()) |tag| {
+                            _ = &tag;
+                            switch (tag) {
+.std_in => {
+if (((i == 1) or (i == 2))) {
+                                return Result{ .@"err" = .stdin_used_as_out };
+                            }
+},
+.std_out, .std_err => {
+if ((i == 0)) {
+                                return Result{ .@"err" = .out_used_as_stdin };
+                            }
+},
+}
+                        }
+                        break :brk SpawnStdio{ .pipe = store.data.file.pathlike.fd };
                     }
-
-                    break :brk .{ .buffer = createZeroedPipe() };
-                },
-                .ipc => .{ .ipc = createZeroedPipe() },
-                .capture, .pipe, .array_buffer, .readable_stream => .{ .buffer = createZeroedPipe() },
-                .fd => |fd| .{ .pipe = fd },
-                .dup2 => .{ .dup2 = .{ .out = stdio.dup2.out, .to = stdio.dup2.to } },
-                .path => |pathlike| .{ .path = pathlike.slice() },
-                .inherit => .{ .inherit = {} },
-                .ignore => .{ .ignore = {} },
-
-                .memfd => @panic("This should never happen"),
-            },
-        };
-    }
-
-    pub fn toSync(this: *@This(), i: u32) void {
-        // Piping an empty stdin doesn't make sense
-        if (i == 0 and this.* == .pipe) {
-            this.* = .{ .ignore = {} };
-        }
-    }
-
-    /// On windows this function allocate memory ensure that .deinit() is called or ownership is passed for all *uv.Pipe
-    pub fn asSpawnOption(
-        stdio: *@This(),
-        i: i32,
-    ) Stdio.Result {
-        if (comptime Environment.isWindows) {
-            return stdio.toWindows(i);
-        } else {
-            return stdio.toPosix(i);
-        }
-    }
-
-    pub fn isPiped(self: Stdio) bool {
-        return switch (self) {
-            .capture, .array_buffer, .blob, .pipe, .readable_stream => true,
-            .ipc => Environment.isWindows,
-            else => false,
-        };
-    }
-
-    fn extractBodyValue(out_stdio: *Stdio, globalThis: *jsc.JSGlobalObject, i: i32, body: *jsc.WebCore.Body.Value, is_sync: bool) bun.JSError!void {
-        body.toBlobIfPossible();
-
-        if (body.tryUseAsAnyBlob()) |blob| {
-            return out_stdio.extractBlob(globalThis, blob, i);
-        }
-
-        switch (body.*) {
-            .Null, .Empty => {
-                out_stdio.* = .{ .ignore = {} };
-                return;
-            },
-            .Used => {
-                return globalThis.ERR(.BODY_ALREADY_USED, "Body already used", .{}).throw();
-            },
-            .Error => {
-                return globalThis.throwValue(body.Error.toJS(globalThis));
-            },
-
-            .Blob, .WTFStringImpl, .InternalBlob => unreachable, // handled above.
-            .Locked => {
-                if (is_sync) {
-                    return globalThis.throwInvalidArguments("ReadableStream cannot be used in sync mode", .{});
+                    break :brk SpawnStdio{ .path = store.data.file.pathlike.path.slice() };
                 }
-
-                switch (i) {
-                    0 => {},
-                    1 => {
-                        return globalThis.throwInvalidArguments("ReadableStream cannot be used for stdout yet. For now, do .stdout", .{});
-                    },
-                    2 => {
-                        return globalThis.throwInvalidArguments("ReadableStream cannot be used for stderr yet. For now, do .stderr", .{});
-                    },
-                    else => unreachable,
-                }
-
-                const stream_value = try body.toReadableStream(globalThis);
-
-                const stream = (try jsc.WebCore.ReadableStream.fromJS(stream_value, globalThis)) orelse return globalThis.throwInvalidArguments("Failed to create ReadableStream", .{});
-
-                if (stream.isDisturbed(globalThis)) {
-                    return globalThis.ERR(.BODY_ALREADY_USED, "ReadableStream has already been used", .{}).throw();
-                }
-
-                out_stdio.* = .{ .readable_stream = stream };
-            },
-        }
-
-        return;
+            }
+            if (((i == 1) or (i == 2))) {
+                return Result{ .@"err" = .blob_used_as_out };
+            }
+            break :brk SpawnStdio{ .buffer = createZeroedPipe() };
+},
+.ipc => SpawnStdio{ .ipc = createZeroedPipe() },
+.capture, .pipe, .array_buffer, .readable_stream => SpawnStdio{ .buffer = createZeroedPipe() },
+.fd => |fd| SpawnStdio{ .pipe = fd },
+.dup2 => SpawnStdio{ .dup2 = .{ .out = self.dup2.out, .to = self.dup2.to } },
+.path => |pathlike| SpawnStdio{ .path = pathlike.slice() },
+.inherit => SpawnStdio.inherit,
+.ignore => SpawnStdio.ignore,
+.memfd => @panic("This should never happen"),
+}) };
     }
 
-    pub fn extract(out_stdio: *Stdio, globalThis: *jsc.JSGlobalObject, i: i32, value: JSValue, is_sync: bool) bun.JSError!void {
-        if (value == .zero) return;
-        if (value.isUndefined()) return;
-        if (value.isNull()) {
-            out_stdio.* = Stdio{ .ignore = {} };
-            return;
-        }
+pub fn toSync(self: *Stdio, i: u32) void {
+            if (((i == 0) and (self.* == .pipe))) {
+                self.* = .ignore;
+            }
+    }
 
-        if (value.isString()) {
-            const str = try value.getZigString(globalThis);
-            if (str.eqlComptime("inherit")) {
-                out_stdio.* = Stdio{ .inherit = {} };
-            } else if (str.eqlComptime("ignore")) {
-                out_stdio.* = Stdio{ .ignore = {} };
-            } else if (str.eqlComptime("pipe") or str.eqlComptime("overlapped")) {
-                out_stdio.* = Stdio{ .pipe = {} };
-            } else if (str.eqlComptime("ipc")) {
-                out_stdio.* = Stdio{ .ipc = {} };
+pub fn asSpawnOption(self: *Stdio, i: i32) Stdio.Result {
+            if (comptime Environment.isWindows) {
+                return self.toWindows(i);
             } else {
-                return globalThis.throwInvalidArguments("stdio must be an array of 'inherit', 'pipe', 'ignore', Bun.file(pathOrFd), number, or null", .{});
+                return self.toPosix(i);
             }
-            return;
-        } else if (value.isNumber()) {
-            const fd = value.asFileDescriptor();
-            const file_fd = fd.uv();
-            if (file_fd < 0) {
-                return globalThis.throwInvalidArguments("file descriptor must be a positive integer", .{});
-            }
+    }
 
-            if (file_fd >= std.math.maxInt(i32)) {
-                var formatter = jsc.ConsoleObject.Formatter{ .globalThis = globalThis };
-                defer formatter.deinit();
-                return globalThis.throwInvalidArguments("file descriptor must be a valid integer, received: {f}", .{value.toFmt(&formatter)});
-            }
+pub fn isPiped(self: Stdio) bool {
+            return (switch (self) {
+.capture, .array_buffer, .blob, .pipe, .readable_stream => true,
+.ipc => Environment.isWindows,
+else => false,
+});
+    }
 
-            if (fd.stdioTag()) |tag| switch (tag) {
-                .std_in => {
-                    if (i == 1 or i == 2) {
-                        return globalThis.throwInvalidArguments("stdin cannot be used for stdout or stderr", .{});
-                    }
-
-                    out_stdio.* = Stdio{ .inherit = {} };
-                    return;
-                },
-                .std_out, .std_err => {
-                    if (i == 0) {
-                        return globalThis.throwInvalidArguments("stdout and stderr cannot be used for stdin", .{});
-                    }
-                    if (i == 1 and tag == .std_out) {
-                        out_stdio.* = .{ .inherit = {} };
-                        return;
-                    } else if (i == 2 and tag == .std_err) {
-                        out_stdio.* = .{ .inherit = {} };
-                        return;
-                    }
-                },
-            };
-
-            out_stdio.* = Stdio{ .fd = fd };
-            return;
-        } else if (value.as(jsc.WebCore.Blob)) |blob| {
-            return out_stdio.extractBlob(globalThis, .{ .Blob = blob.dupe() }, i);
-        } else if (value.as(jsc.WebCore.Request)) |req| {
-            return extractBodyValue(out_stdio, globalThis, i, req.getBodyValue(), is_sync);
-        } else if (value.as(jsc.WebCore.Response)) |res| {
-            return extractBodyValue(out_stdio, globalThis, i, res.getBodyValue(), is_sync);
-        }
-
-        if (try jsc.WebCore.ReadableStream.fromJS(value, globalThis)) |stream_| {
-            var stream = stream_;
-            if (stream.toAnyBlob(globalThis)) |blob| {
+pub fn extractBodyValue(out_stdio: *Stdio, globalThis: *jsc.JSGlobalObject, i: i32, body: *jsc.WebCore.Body.Value, is_sync: bool) bun.JSError!void {
+            _ = body.toBlobIfPossible();
+            if (body.tryUseAsAnyBlob()) |blob| {
+                _ = &blob;
                 return out_stdio.extractBlob(globalThis, blob, i);
             }
-
-            const name: []const u8 = switch (i) {
-                0 => "stdin",
-                1 => "stdout",
-                2 => "stderr",
-                else => unreachable,
-            };
-
-            if (is_sync) {
-                return globalThis.throwInvalidArguments("'{s}' ReadableStream cannot be used in sync mode", .{name});
+            switch (body.*) {
+.Null, .Empty => {
+out_stdio.* = .ignore;
+            return;
+},
+.Used => {
+return globalThis.ERR(.BODY_ALREADY_USED, "Body already used", .{}).throw();
+},
+.Error => {
+return globalThis.throwValue(body.Error.toJS(globalThis));
+},
+.Blob, .WTFStringImpl, .InternalBlob => {
+_ = unreachable;
+},
+.Locked => {
+if (is_sync) {
+                return globalThis.throwInvalidArguments("ReadableStream cannot be used in sync mode", .{});
             }
+            switch (i) {
+0 => {
 
+},
+1 => {
+return globalThis.throwInvalidArguments("ReadableStream cannot be used for stdout yet. For now, do .stdout", .{});
+},
+2 => {
+return globalThis.throwInvalidArguments("ReadableStream cannot be used for stderr yet. For now, do .stderr", .{});
+},
+else => {
+_ = unreachable;
+},
+}
+            const stream_value = try body.toReadableStream(globalThis);
+            const stream = ((try jsc.WebCore.ReadableStream.fromJS(stream_value, globalThis)) orelse { return globalThis.throwInvalidArguments("Failed to create ReadableStream", .{}); });
             if (stream.isDisturbed(globalThis)) {
-                return globalThis.ERR(.INVALID_STATE, "'{s}' ReadableStream has already been used", .{name}).throw();
+                return globalThis.ERR(.BODY_ALREADY_USED, "ReadableStream has already been used", .{}).throw();
             }
             out_stdio.* = .{ .readable_stream = stream };
+},
+}
             return;
-        }
-
-        if (value.asArrayBuffer(globalThis)) |array_buffer| {
-            // Change in Bun v1.0.34: don't throw for empty ArrayBuffer
-            if (array_buffer.byteSlice().len == 0) {
-                out_stdio.* = .{ .ignore = {} };
-                return;
-            }
-
-            out_stdio.* = .{
-                .array_buffer = jsc.ArrayBuffer.Strong{
-                    .array_buffer = array_buffer,
-                    .held = .create(array_buffer.value, globalThis),
-                },
-            };
-            return;
-        }
-
-        return globalThis.throwInvalidArguments("stdio must be an array of 'inherit', 'ignore', or null", .{});
     }
 
-    pub fn extractBlob(stdio: *Stdio, globalThis: *jsc.JSGlobalObject, blob: jsc.WebCore.Blob.Any, i: i32) bun.JSError!void {
-        const fd = bun.FD.Stdio.fromInt(i).?.fd();
-
-        if (blob.needsToReadFile()) {
-            if (blob.store()) |store| {
-                if (store.data.file.pathlike == .fd) {
-                    if (store.data.file.pathlike.fd == fd) {
-                        stdio.* = .inherit;
+pub fn extract(out_stdio: *Stdio, globalThis: *jsc.JSGlobalObject, i: i32, value: JSValue, is_sync: bool) bun.JSError!void {
+            if ((value == .zero)) {
+                return;
+            }
+            if (value.isUndefined()) {
+                return;
+            }
+            if (value.isNull()) {
+                out_stdio.* = .ignore;
+                return;
+            }
+            if (value.isString()) {
+                const str = try value.getZigString(globalThis);
+                if (str.eqlComptime("inherit")) {
+                    out_stdio.* = .inherit;
+                } else {
+                    if (str.eqlComptime("ignore")) {
+                        out_stdio.* = .ignore;
                     } else {
-                        // TODO: is this supposed to be `store.data.file.pathlike.fd`?
-                        if (bun.FD.Stdio.fromInt(i)) |tag| switch (tag) {
-                            .std_in,
-                            => if (i == 1 or i == 2) {
-                                return globalThis.throwInvalidArguments("stdin cannot be used for stdout or stderr", .{});
-                            },
-                            .std_out,
-                            .std_err,
-                            => if (i == 0) {
-                                return globalThis.throwInvalidArguments("stdout and stderr cannot be used for stdin", .{});
-                            },
-                        };
-
-                        stdio.* = .{ .fd = store.data.file.pathlike.fd };
+                        if ((str.eqlComptime("pipe") or str.eqlComptime("overlapped"))) {
+                            out_stdio.* = .pipe;
+                        } else {
+                            if (str.eqlComptime("ipc")) {
+                                out_stdio.* = .ipc;
+                            } else {
+                                return globalThis.throwInvalidArguments("stdio must be an array of 'inherit', 'pipe', 'ignore', Bun.file(pathOrFd), number, or null", .{});
+                            }
+                        }
                     }
+                }
+                return;
+            } else {
+                if (value.isNumber()) {
+                    const fd = value.asFileDescriptor();
+                    const file_fd = fd.uv();
+                    if ((file_fd < 0)) {
+                        return globalThis.throwInvalidArguments("file descriptor must be a positive integer", .{});
+                    }
+                    if ((file_fd >= std.math.maxInt(i32))) {
+                        var formatter = jsc.ConsoleObject.Formatter{ .globalThis = globalThis };
+                        _ = &formatter;
+                        var _guard = FormatterGuard{ .fmt = (blk: {
+                        break :blk (&formatter);
 
+}) };
+                        _ = &_guard;
+                        var ___guard_moved = false; _ = &___guard_moved;
+                        defer if (!___guard_moved) { ___guard_moved = true; const __T = @TypeOf(_guard); if (@typeInfo(__T) == .optional) { if (_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard; _drop_val.__cp_deinit(); } };
+                        return globalThis.throwInvalidArguments("file descriptor must be a valid integer, received: {f}", .{ value.toFmt((blk: {
+                        break :blk (&formatter);
+
+})) });
+                    }
+                    if (fd.stdioTag()) |tag| {
+                        _ = &tag;
+                        switch (tag) {
+.std_in => {
+if (((i == 1) or (i == 2))) {
+                            return globalThis.throwInvalidArguments("stdin cannot be used for stdout or stderr", .{});
+                        }
+                        out_stdio.* = .inherit;
+                        return;
+},
+.std_out, .std_err => {
+if ((i == 0)) {
+                            return globalThis.throwInvalidArguments("stdout and stderr cannot be used for stdin", .{});
+                        }
+                        if (((i == 1) and (tag == .std_out))) {
+                            out_stdio.* = .inherit;
+                            return;
+                        } else {
+                            if (((i == 2) and (tag == .std_err))) {
+                                out_stdio.* = .inherit;
+                                return;
+                            }
+                        }
+},
+}
+                    }
+                    out_stdio.* = Stdio{ .fd = fd };
+                    return;
+                } else {
+                    if (value.as(jsc.WebCore.Blob)) |blob| {
+                        _ = &blob;
+                        return out_stdio.extractBlob(globalThis, .{ .Blob = blob.dupe() }, i);
+                    } else {
+                        if (value.as(jsc.WebCore.Request)) |req| {
+                            _ = &req;
+                            return extractBodyValue(out_stdio, globalThis, i, req.getBodyValue(), is_sync);
+                        } else {
+                            if (value.as(jsc.WebCore.Response)) |res| {
+                                _ = &res;
+                                return extractBodyValue(out_stdio, globalThis, i, res.getBodyValue(), is_sync);
+                            }
+                        }
+                    }
+                }
+            }
+            if (try jsc.WebCore.ReadableStream.fromJS(value, globalThis)) |stream_| {
+                _ = &stream_;
+                var stream = stream_;
+                _ = &stream;
+                if (stream.toAnyBlob(globalThis)) |blob| {
+                    _ = &blob;
+                    return out_stdio.extractBlob(globalThis, blob, i);
+                }
+                const name: []const u8 = (switch (i) {
+0 => "stdin",
+1 => "stdout",
+2 => "stderr",
+else => unreachable,
+});
+                if (is_sync) {
+                    return globalThis.throwInvalidArguments("'{s}' ReadableStream cannot be used in sync mode", .{ name });
+                }
+                if (stream.isDisturbed(globalThis)) {
+                    return globalThis.ERR(.INVALID_STATE, "'{s}' ReadableStream has already been used", .{ name }).throw();
+                }
+                out_stdio.* = .{ .readable_stream = stream };
+                return;
+            }
+            if (value.asArrayBuffer(globalThis)) |array_buffer| {
+                _ = &array_buffer;
+                if ((array_buffer.byteSlice().len == 0)) {
+                    out_stdio.* = .ignore;
                     return;
                 }
-
-                stdio.* = .{ .path = store.data.file.pathlike.path };
+                out_stdio.* = .{ .array_buffer = jsc.ArrayBuffer.Strong{ .array_buffer = array_buffer, .held = .create((if (@typeInfo(@TypeOf(array_buffer)) == .@"enum") @intFromEnum(array_buffer) else array_buffer.value), globalThis) } };
                 return;
             }
-        }
-
-        if (i == 1 or i == 2) {
-            return globalThis.throwInvalidArguments("Blobs are immutable, and cannot be used for stdout/stderr", .{});
-        }
-
-        // Instead of writing an empty blob, lets just make it /dev/null
-        if (blob.fastSize() == 0) {
-            stdio.* = .{ .ignore = {} };
-            return;
-        }
-
-        stdio.* = .{ .blob = blob };
-        return;
+            return globalThis.throwInvalidArguments("stdio must be an array of 'inherit', 'ignore', or null", .{});
     }
+
+pub fn extractBlob(stdio: *Stdio, globalThis: *jsc.JSGlobalObject, blob: jsc.WebCore.Blob.Any, i: i32) bun.JSError!void {
+            const fd = (bun.FD.Stdio.fromInt(i)).?.fd();
+            if (blob.needsToReadFile()) {
+                if (blob.store()) |store| {
+                    _ = &store;
+                    if ((store.data.file.pathlike == .fd)) {
+                        if ((store.data.file.pathlike.fd == fd)) {
+                            stdio.* = .inherit;
+                        } else {
+                            if (bun.FD.Stdio.fromInt(i)) |tag| {
+                                _ = &tag;
+                                switch (tag) {
+.std_in => {
+_ = (if (((i == 1) or (i == 2))) ({
+                                return globalThis.throwInvalidArguments("stdin cannot be used for stdout or stderr", .{});
+}) else null);
+},
+.std_out, .std_err => {
+_ = (if ((i == 0)) ({
+                                return globalThis.throwInvalidArguments("stdout and stderr cannot be used for stdin", .{});
+}) else null);
+},
+}
+                            }
+                            stdio.* = .{ .fd = store.data.file.pathlike.fd };
+                        }
+                        return;
+                    }
+                    stdio.* = .{ .path = store.data.file.pathlike.path };
+                    return;
+                }
+            }
+            if (((i == 1) or (i == 2))) {
+                return globalThis.throwInvalidArguments("Blobs are immutable, and cannot be used for stdout/stderr", .{});
+            }
+            if ((blob.fastSize() == 0)) {
+                stdio.* = .ignore;
+                return;
+            }
+            stdio.* = .{ .blob = blob };
+            return;
+    }
+    const log = bun.sys.syslog;
+    const Result = StdioResult;
+    const ResultT = StdioResultT;
+    const ToSpawnOptsError = StdioToSpawnOptsError;
+    const SpawnStdio = bun.spawn.SpawnOptions.Stdio;
 };
+
 const Environment = bun.Environment;
 const Output = bun.Output;
 const uv = bun.windows.libuv;
 const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
+
+pub fn StdioResultT(comptime T: type) type {
+        return union(enum) {
+    result: T,
+    err: StdioToSpawnOptsError,
+};
+}
 
 pub fn createZeroedPipe() *uv.Pipe {
         return bun.new(uv.Pipe, std.mem.zeroes(uv.Pipe));

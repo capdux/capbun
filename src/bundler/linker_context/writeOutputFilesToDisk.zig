@@ -126,6 +126,22 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub fn EndGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    _ = p.end();
+                }
+        }
+    };
+}
+
 const string = []const u8;
 const MaybeByteSlice = ?[]const u8;
 const Loader = bun.Loader;
@@ -150,9 +166,13 @@ pub const ParseTask = bun.bundle_v2.ParseTask;
 pub fn writeOutputFilesToDisk(c: *LinkerContext, root_path: []const u8, chunks: []Chunk, output_files: *OutputFileListBuilder, standalone_chunk_contents: ?[]const MaybeByteSlice) !void {
         var trace = bun.perf.trace("Bundler.writeOutputFilesToDisk");
         _ = &trace;
-        defer {
-        _ = trace.end();
-        }
+        var _trace_guard = EndGuard(@TypeOf(trace)){ .ptr = (blk: {
+        break :blk (&trace);
+
+}) };
+        _ = &_trace_guard;
+        var ___trace_guard_moved = false; _ = &___trace_guard_moved;
+        defer if (!___trace_guard_moved) { ___trace_guard_moved = true; const __T = @TypeOf(_trace_guard); if (@typeInfo(__T) == .optional) { if (_trace_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _trace_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _trace_guard; _drop_val.__cp_deinit(); } };
         var root_dir = (blk_catch_0: { break :blk_catch_0 ((std.fs.cwd().makeOpenPath(root_path, .{})) catch |e| { _ = &e; if ((e == error.NotDir)) {
             _ = ((c.log.addErrorFmt(null, Logger.Loc.Empty, bun.default_allocator, "Failed to create output directory {f} is a file. Please choose a different outdir or delete {f}", .{ bun.fmt.quote(root_path), bun.fmt.quote(root_path) })) catch unreachable);
         } else {
@@ -199,9 +219,13 @@ pub fn writeOutputFilesToDisk(c: *LinkerContext, root_path: []const u8, chunks: 
             }
             var trace2 = bun.perf.trace("Bundler.writeChunkToDisk");
             _ = &trace2;
-            defer {
-            _ = trace2.end();
-            }
+            var _trace2_guard = EndGuard(@TypeOf(trace2)){ .ptr = (blk: {
+            break :blk (&trace2);
+
+}) };
+            _ = &_trace2_guard;
+            var ___trace2_guard_moved = false; _ = &___trace2_guard_moved;
+            defer if (!___trace2_guard_moved) { ___trace2_guard_moved = true; const __T = @TypeOf(_trace2_guard); if (@typeInfo(__T) == .optional) { if (_trace2_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _trace2_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _trace2_guard; _drop_val.__cp_deinit(); } };
             defer {
             _ = max_heap_allocator.reset();
             }

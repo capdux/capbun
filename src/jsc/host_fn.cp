@@ -82,7 +82,7 @@ fn debugExceptionAssertion(globalThis: *JSGlobalObject, value: JSValue, comptime
         if (value != .zero) {
             if (globalThis.hasException()) {
                 let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis };
-                defer formatter.deinit();
+                const _fmt_guard = DeinitGuard<jsc.ConsoleObject.Formatter>{ ptr: unsafe { &formatter } };
                 bun.Output.err(
                     "Assertion failed",
                     "Native function returned a non-zero JSValue while an exception is pending\n\n    fn: {s}\n value: {f}\n",
@@ -127,7 +127,7 @@ pub fn toJSHostCall(
 ): JSValue {
     let scope: jsc.ExceptionValidationScope = undefined;
     scope.init(globalThis, src);
-    defer scope.deinit();
+    const _scope_guard = DeinitGuard<jsc.ExceptionValidationScope>{ ptr: unsafe { &scope } };
 
     const returned = @as(JSValue ! HostFnError, @call(.auto, function, args));
     const normal = returned catch |e| {
@@ -149,7 +149,7 @@ pub fn fromJSHostCall(
 ): JSValue ! JSErrorSet {
     let scope: jsc.ExceptionValidationScope = undefined;
     scope.init(globalThis, src);
-    defer scope.deinit();
+    const _scope_guard = DeinitGuard<jsc.ExceptionValidationScope>{ ptr: unsafe { &scope } };
 
     const value = @call(.auto, function, args);
     if (@TypeOf(value) != JSValue) @compileError("fromJSHostCall only supports JSValue");
@@ -170,7 +170,7 @@ pub fn fromJSHostCallGeneric(
 ): GenericRetType(function) ! JSErrorSet {
     let scope: jsc.TopExceptionScope = undefined;
     scope.init(globalThis, src);
-    defer scope.deinit();
+    const _scope_guard = DeinitGuard<jsc.TopExceptionScope>{ ptr: unsafe { &scope } };
 
     const result = @call(.auto, function, args);
     if (@TypeOf(result) == JSValue) @compileError("fromJSHostCallGeneric does not support JSValue");
@@ -659,15 +659,8 @@ pub fn wrapInstanceMethod(
                 }
             }
 
-            defer iter.deinit();
-
-            defer {
-                if (comptime has_exception_ref) {
-                    if (exception_value[0] != null) {
-                        globalThis.throwValue(exception_value[0].?.value());
-                    }
-                }
-            }
+            const _iter_guard = DeinitGuard<jsc.CallFrame.ArgumentsSlice>{ ptr: unsafe { &iter } };
+            const _exc_guard = ExceptionThrowGuard{ has_ref: has_exception_ref, exc: unsafe { &exception_value }, global: globalThis };
 
             return @call(bun.callmod_inline, @field(Container, name), args);
         }
@@ -805,7 +798,7 @@ pub fn wrapStaticMethod(
                 }
             }
 
-            defer iter.deinit();
+            const _iter_guard = DeinitGuard<jsc.CallFrame.ArgumentsSlice>{ ptr: unsafe { &iter } };
 
             return @call(bun.callmod_inline, @field(Container, name), args);
         }
@@ -813,6 +806,29 @@ pub fn wrapStaticMethod(
 }
 
 type string = []const u8;
+
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+struct ExceptionThrowGuard {
+    has_ref: bool,
+    exc: *[1]jsc.C.JSValueRef!,
+    global: *JSGlobalObject!,
+    ~init() {
+        if (_.has_ref) {
+            unsafe {
+                if (_.exc.*[0] != null) {
+                    const _thrown = _.global.throwValue(_.exc.*[0].?.value());
+                    if (_thrown == error.JSError) {}
+                }
+            }
+        }
+    }
+}
 
 import bun from "bun";
 const Environment = bun.Environment;

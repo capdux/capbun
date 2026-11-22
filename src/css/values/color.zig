@@ -80,6 +80,14 @@ fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
     }
     return val >> shift;
 }
+const Message = struct { __cp_no_message_sentinel: void = {} };
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const css = @import("../css_parser.zig");
@@ -294,6 +302,638 @@ pub fn Type(comptime space: ConvertTo) type {
 .PredefinedColor => PredefinedColor,
 });
     }
+};
+
+pub const CssColorDeinitGuard = struct {
+    color: CssColor,
+    allocator: Allocator,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *CssColorDeinitGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = self.color.deinit(self.allocator);
+    }
+};
+
+pub const CssColorLightDark = struct {
+    light: *CssColor,
+    dark: *CssColor,
+
+pub fn takeLightFreeDark(self: *const CssColorLightDark, allocator: Allocator) *CssColor {
+            const ret = self.light;
+            {
+                _ = self.dark.deinit(allocator);
+            }
+            _ = allocator.destroy(self.dark);
+            return ret;
+    }
+
+pub fn takeDarkFreeLight(self: *const CssColorLightDark, allocator: Allocator) *CssColor {
+            const ret = self.dark;
+            {
+                _ = self.light.deinit(allocator);
+            }
+            _ = allocator.destroy(self.light);
+            return ret;
+    }
+
+pub fn __generateHash() void {
+    }
+};
+
+pub const CssColor = union(enum) {
+    current_color: void,
+    rgba: RGBA,
+    lab: *LABColor,
+    predefined: *PredefinedColor,
+    float: *FloatColor,
+    light_dark: CssColorLightDark,
+    system: SystemColor,
+
+pub fn isCompatible(self: CssColor, browsers: css.targets.Browsers) bool {
+            return (switch (self) {
+.current_color, .rgba, .float => true,
+.lab => |lab| (switch ((blk: {
+            break :blk lab.*;
+
+})) {
+.lab, .lch => css.Feature.isCompatible(.lab_colors, browsers),
+.oklab, .oklch => css.Feature.isCompatible(.oklab_colors, browsers),
+}),
+.predefined => |predefined| (switch ((blk: {
+            break :blk predefined.*;
+
+})) {
+.display_p3 => css.Feature.isCompatible(.p3_colors, browsers),
+else => css.Feature.isCompatible(.color_function, browsers),
+}),
+.light_dark => |ld| ((css.Feature.isCompatible(.light_dark, browsers) and ld.light.isCompatible(browsers)) and ld.dark.isCompatible(browsers)),
+.system => |system| system.isCompatible(browsers),
+});
+    }
+
+pub fn toCss(self: CssColor, dest: *Printer) PrintErr!void {
+            switch (self) {
+.current_color => {
+_ = try dest.writeStr("currentColor");
+},
+.rgba => |color| {
+if ((color.alpha == 255)) {
+                const hex: u32 = ((cp_shl((if (comptime @typeInfo(@TypeOf(color.red)) == .@"enum") cp_cast_int(u32, @intFromEnum(color.red)) else cp_cast_int(u32, color.red)), 16) | cp_shl((if (comptime @typeInfo(@TypeOf(color.green)) == .@"enum") cp_cast_int(u32, @intFromEnum(color.green)) else cp_cast_int(u32, color.green)), 8)) | (if (comptime @typeInfo(@TypeOf(color.blue)) == .@"enum") cp_cast_int(u32, @intFromEnum(color.blue)) else cp_cast_int(u32, color.blue)));
+                if (shortColorName(hex)) |name| {
+                    _ = &name;
+                    return dest.writeStr(name);
+                }
+                const compact = compactHex(hex);
+                if ((hex == expandHex(compact))) {
+                    _ = try dest.writeFmt("#{x:0>3}", .{ compact });
+                } else {
+                    _ = try dest.writeFmt("#{x:0>6}", .{ hex });
+                }
+            } else {
+                if (dest.targets.shouldCompileSame(.hex_alpha_colors)) {
+                    if (((((dest.minify and (color.red == 0)) and (color.green == 0)) and (color.blue == 0)) and (color.alpha == 0))) {
+                        return dest.writeStr("transparent");
+                    } else {
+                        _ = try dest.writeFmt("rgba({d}", .{ color.red });
+                        _ = try dest.delim(44, false);
+                        _ = try dest.writeFmt("{d}", .{ color.green });
+                        _ = try dest.delim(44, false);
+                        _ = try dest.writeFmt("{d}", .{ color.blue });
+                        _ = try dest.delim(44, false);
+                        var rounded_alpha = (@round((color.alphaF32() * 100.0)) / 100.0);
+                        _ = &rounded_alpha;
+                        const clamped = (if (comptime @typeInfo(@TypeOf(bun.intFromFloat(u8, @min(@max(@round((rounded_alpha * 255.0)), 0.0), 255.0)))) == .@"enum") cp_cast_int(u8, @intFromEnum(bun.intFromFloat(u8, @min(@max(@round((rounded_alpha * 255.0)), 0.0), 255.0)))) else cp_cast_int(u8, bun.intFromFloat(u8, @min(@max(@round((rounded_alpha * 255.0)), 0.0), 255.0))));
+                        if ((clamped != color.alpha)) {
+                            rounded_alpha = (@round((color.alphaF32() * 1000.0)) / 1000.0);
+                        }
+                        _ = try CSSNumberFns.toCss((&rounded_alpha), dest);
+                        _ = try dest.writeChar(41);
+                        return;
+                    }
+                }
+                const hex: u32 = (((cp_shl((if (comptime @typeInfo(@TypeOf(color.red)) == .@"enum") cp_cast_int(u32, @intFromEnum(color.red)) else cp_cast_int(u32, color.red)), 24) | cp_shl((if (comptime @typeInfo(@TypeOf(color.green)) == .@"enum") cp_cast_int(u32, @intFromEnum(color.green)) else cp_cast_int(u32, color.green)), 16)) | cp_shl((if (comptime @typeInfo(@TypeOf(color.blue)) == .@"enum") cp_cast_int(u32, @intFromEnum(color.blue)) else cp_cast_int(u32, color.blue)), 8)) | (if (comptime @typeInfo(@TypeOf(color.alpha)) == .@"enum") cp_cast_int(u32, @intFromEnum(color.alpha)) else cp_cast_int(u32, color.alpha)));
+                const compact = compactHex(hex);
+                if ((hex == expandHex(compact))) {
+                    _ = try dest.writeFmt("#{x:0>4}", .{ compact });
+                } else {
+                    _ = try dest.writeFmt("#{x:0>8}", .{ hex });
+                }
+            }
+            return;
+},
+.lab => |_lab| {
+return (switch ((blk: {
+            break :blk _lab.*;
+
+})) {
+.lab => |lab| writeComponents("lab", lab.l, lab.a, lab.b, lab.alpha, dest),
+.lch => |lch| writeComponents("lch", lch.l, lch.c, lch.h, lch.alpha, dest),
+.oklab => |oklab| writeComponents("oklab", oklab.l, oklab.a, oklab.b, oklab.alpha, dest),
+.oklch => |oklch| writeComponents("oklch", oklch.l, oklch.c, oklch.h, oklch.alpha, dest),
+});
+},
+.predefined => |predefined| {
+return writePredefined(predefined, dest);
+},
+.float => |float| {
+const srgb = SRGB.fromFloatColor(float);
+            const as_css_color = srgb.intoCssColor(dest.allocator);
+            var _guard = CssColorDeinitGuard{ .color = as_css_color, .allocator = dest.allocator };
+            _ = &_guard;
+            var ___guard_moved = false; _ = &___guard_moved;
+            defer if (!___guard_moved) { ___guard_moved = true; const __T = @TypeOf(_guard); if (@typeInfo(__T) == .optional) { if (_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard; _drop_val.__cp_deinit(); } };
+            _ = try as_css_color.toCss(dest);
+},
+.light_dark => |ld| {
+if ((!dest.targets.isCompatible(css.compat.Feature.light_dark))) {
+                _ = try dest.writeStr("var(--buncss-light");
+                _ = try dest.delim(44, false);
+                _ = try ld.light.toCss(dest);
+                _ = try dest.writeChar(41);
+                _ = try dest.whitespace();
+                _ = try dest.writeStr("var(--buncss-dark");
+                _ = try dest.delim(44, false);
+                _ = try ld.dark.toCss(dest);
+                return dest.writeChar(41);
+            }
+            _ = try dest.writeStr("light-dark(");
+            _ = try ld.light.toCss(dest);
+            _ = try dest.delim(44, false);
+            _ = try ld.dark.toCss(dest);
+            return dest.writeChar(41);
+},
+.system => |system| {
+return system.toCss(dest);
+},
+}
+    }
+
+pub fn parse(input: *css.Parser) ParseResult {
+            const location = input.currentSourceLocation();
+            const token = (switch (input.next()) {
+.result => |vv| vv,
+.err => |e| {
+return ParseResult{ .@"err" = e };
+},
+});
+            if (((token.* == .unrestrictedhash) or (token.* == .idhash))) {
+                const v = (if ((token.* == .unrestrictedhash)) token.unrestrictedhash else token.idhash);
+                if (css.color.parseHashColor(v)) |_t1| {
+                    _ = &_t1;
+                    const r = _t1[0];
+                    const g = _t1[1];
+                    const b = _t1[2];
+                    const a = _t1[3];
+                    return ParseResult{ .result = CssColor{ .rgba = RGBA.new(r, g, b, a) } };
+                } else {
+                    return ParseResult{ .@"err" = location.newUnexpectedTokenError(token.*) };
+                }
+            }
+            switch (token.*) {
+.ident => |value| {
+if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(value, "currentcolor")) {
+                return ParseResult{ .result = .current_color };
+            } else {
+                if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(value, "transparent")) {
+                    return ParseResult{ .result = CssColor{ .rgba = RGBA.transparent() } };
+                } else {
+                    if (css.color.parseNamedColor(value)) |_t2| {
+                        _ = &_t2;
+                        const r = _t2[0];
+                        const g = _t2[1];
+                        const b = _t2[2];
+                        return ParseResult{ .result = CssColor{ .rgba = RGBA.new(r, g, b, 255.0) } };
+                    } else {
+                        if (css.parse_utility.parseString(input.allocator(), SystemColor, value, SystemColor.parse).asValue()) |system_color| {
+                            _ = &system_color;
+                            return ParseResult{ .result = CssColor{ .system = system_color } };
+                        } else {
+                            return ParseResult{ .@"err" = location.newUnexpectedTokenError(token.*) };
+                        }
+                    }
+                }
+            }
+},
+.function => |name| {
+return parseColorFunction(location, name, input);
+},
+else => {
+return ParseResult{ .@"err" = location.newUnexpectedTokenError(token.*) };
+},
+}
+    }
+
+pub fn deinit(self: CssColor, allocator: Allocator) void {
+            switch (self) {
+.current_color => {
+
+},
+.rgba => {
+
+},
+.lab => {
+_ = allocator.destroy(self.lab);
+},
+.predefined => {
+_ = allocator.destroy(self.predefined);
+},
+.float => {
+_ = allocator.destroy(self.float);
+},
+.light_dark => {
+_ = self.light_dark.light.deinit(allocator);
+            _ = self.light_dark.dark.deinit(allocator);
+            _ = allocator.destroy(self.light_dark.light);
+            _ = allocator.destroy(self.light_dark.dark);
+},
+.system => {
+
+},
+}
+    }
+
+pub fn deepClone(self: CssColor, allocator: Allocator) CssColor {
+            return (switch (self) {
+.current_color => .current_color,
+.rgba => |rgba| CssColor{ .rgba = rgba },
+.lab => |lab| CssColor{ .lab = bun.create(allocator, LABColor, (blk: {
+            break :blk lab.*;
+
+})) },
+.predefined => |pre| CssColor{ .predefined = bun.create(allocator, PredefinedColor, (blk: {
+            break :blk pre.*;
+
+})) },
+.float => |float| CssColor{ .float = bun.create(allocator, FloatColor, (blk: {
+            break :blk float.*;
+
+})) },
+.light_dark => CssColor{ .light_dark = CssColorLightDark{ .light = bun.create(allocator, CssColor, self.light_dark.light.deepClone(allocator)), .dark = bun.create(allocator, CssColor, self.light_dark.dark.deepClone(allocator)) } },
+.system => |sys| CssColor{ .system = sys },
+});
+    }
+
+pub fn toLightDark(self: CssColor, allocator: Allocator) CssColor {
+            return (switch (self) {
+.light_dark => self.deepClone(allocator),
+else => CssColor{ .light_dark = CssColorLightDark{ .light = bun.create(allocator, CssColor, self.deepClone(allocator)), .dark = bun.create(allocator, CssColor, self.deepClone(allocator)) } },
+});
+    }
+
+pub fn interpolate(self: CssColor, allocator: Allocator, comptime T: type, p1_: f32, other: *const CssColor, p2_: f32, method: HueInterpolationMethod) ?CssColor {
+            var p1 = p1_;
+            _ = &p1;
+            var p2 = p2_;
+            _ = &p2;
+            if (((self == .current_color) or (other.* == .current_color))) {
+                return null;
+            }
+            if (((self == .light_dark) or (other.* == .light_dark))) {
+                const this_light_dark = self.toLightDark(allocator);
+                const other_light_dark = other.toLightDark(allocator);
+                const al = this_light_dark.light_dark.light;
+                const ad = this_light_dark.light_dark.dark;
+                const bl = other_light_dark.light_dark.light;
+                const bd = other_light_dark.light_dark.dark;
+                if (al.interpolate(allocator, T, p1, bl, p2, method)) |l_res| {
+                    _ = &l_res;
+                    if (ad.interpolate(allocator, T, p1, bd, p2, method)) |d_res| {
+                        _ = &d_res;
+                        return CssColor{ .light_dark = CssColorLightDark{ .light = bun.create(allocator, CssColor, l_res), .dark = bun.create(allocator, CssColor, d_res) } };
+                    } else {
+                        return null;
+                    }
+                } else {
+                    return null;
+                }
+            }
+            const converted_first = (switch (checkColorConverted(T, (blk: {
+            break :blk (&self);
+
+}))) {
+.result => |v| v,
+.err => {
+return null;
+},
+});
+            const converted_second = (switch (checkColorConverted(T, other)) {
+.result => |v| v,
+.err => {
+return null;
+},
+});
+            var first_color: T = undefined;
+            _ = &first_color;
+            if (T.tryFromCssColor((blk: {
+            break :blk (&self);
+
+}))) |c| {
+                _ = &c;
+                first_color = c;
+            } else {
+                return null;
+            }
+            var second_color: T = undefined;
+            _ = &second_color;
+            if (T.tryFromCssColor(other)) |c| {
+                _ = &c;
+                second_color = c;
+            } else {
+                return null;
+            }
+            if ((converted_first and (!first_color.inGamut()))) {
+                first_color = mapGamut(T, first_color);
+            }
+            if ((converted_second and (!second_color.inGamut()))) {
+                second_color = mapGamut(T, second_color);
+            }
+            if (converted_first) {
+                _ = first_color.adjustPowerlessComponents();
+            }
+            if (converted_second) {
+                _ = second_color.adjustPowerlessComponents();
+            }
+            _ = first_color.fillMissingComponents((blk: {
+            break :blk (&second_color);
+
+}));
+            _ = second_color.fillMissingComponents((blk: {
+            break :blk (&first_color);
+
+}));
+            _ = first_color.adjustHue((blk: {
+            break :blk (&second_color);
+
+}), method);
+            _ = first_color.premultiply();
+            _ = second_color.premultiply();
+            var alpha_multiplier = (p1 + p2);
+            _ = &alpha_multiplier;
+            if ((alpha_multiplier != 1.0)) {
+                p1 = (p1 / alpha_multiplier);
+                p2 = (p2 / alpha_multiplier);
+                if ((alpha_multiplier > 1.0)) {
+                    alpha_multiplier = 1.0;
+                }
+            }
+            var result_color = first_color.interpolate(p1, (blk: {
+            break :blk (&second_color);
+
+}), p2);
+            _ = &result_color;
+            _ = result_color.unpremultiply(alpha_multiplier);
+            return result_color.intoCssColor(allocator);
+    }
+
+pub fn lightDarkOwned(allocator: Allocator, light: CssColor, dark: CssColor) CssColor {
+            return CssColor{ .light_dark = CssColorLightDark{ .light = bun.create(allocator, CssColor, light), .dark = bun.create(allocator, CssColor, dark) } };
+    }
+
+pub fn getFallback(self: CssColor, allocator: Allocator, kind: ColorFallbackKind) CssColor {
+            if ((self == .rgba)) {
+                return self.deepClone(allocator);
+            }
+            const kind_bits = kind.asBits();
+            if ((kind_bits == ColorFallbackKind.RGB.asBits())) {
+                return (self.toRGB(allocator)).?;
+            }
+            if ((kind_bits == ColorFallbackKind.P3.asBits())) {
+                return (self.toP3(allocator)).?;
+            }
+            if ((kind_bits == ColorFallbackKind.LAB.asBits())) {
+                return (self.toLAB(allocator)).?;
+            }
+            _ = bun.unreachablePanic("Expected RGBA, P3, LAB fallback. This is a bug in Bun.", .{});
+    }
+
+pub fn getFallbacks(self: *CssColor, allocator: Allocator, targets: css.targets.Targets) css.SmallList(CssColor, 2) {
+            const fallbacks = self.getNecessaryFallbacks(targets);
+            const SmallCssColorList = css.SmallList(CssColor, 2);
+            _ = &SmallCssColorList;
+            var res = SmallCssColorList{  };
+            _ = &res;
+            if (fallbacks.rgb) {
+                _ = res.appendAssumeCapacity((self.toRGB(allocator)).?);
+            }
+            if (fallbacks.p3) {
+                _ = res.appendAssumeCapacity((self.toP3(allocator)).?);
+            }
+            if (fallbacks.lab) {
+                const foo = (self.toLAB(allocator)).?;
+                self.* = foo;
+            }
+            return res;
+    }
+
+pub fn getNecessaryFallbacks(self: CssColor, targets: css.targets.Targets) ColorFallbackKind {
+            const fallbacks = self.getPossibleFallbacks(targets);
+            return fallbacks.difference(fallbacks.highest());
+    }
+
+pub fn getPossibleFallbacks(self: CssColor, targets: css.targets.Targets) ColorFallbackKind {
+            var fallbacks = (switch (self) {
+.current_color, .rgba, .float, .system => {
+return ColorFallbackKind{  };
+},
+.lab => |lab| brk: {
+            const lv = (blk: {
+            break :blk lab.*;
+
+});
+            if (((lv == .lab) or ((lv == .lch) and targets.shouldCompileSame(.lab_colors)))) {
+                break :brk ColorFallbackKind.andBelow(.{ .lab = true });
+            }
+            if (((lv == .oklab) or ((lv == .oklch) and targets.shouldCompileSame(.oklab_colors)))) {
+                break :brk ColorFallbackKind.andBelow(.{ .oklab = true });
+            }
+            return ColorFallbackKind{  };
+},
+.predefined => |predefined| brk: {
+            if ((((blk: {
+            break :blk predefined.*;
+
+}) == .display_p3) and targets.shouldCompileSame(.p3_colors))) {
+                break :brk ColorFallbackKind.andBelow(.{ .p3 = true });
+            }
+            if (targets.shouldCompileSame(.color_function)) {
+                break :brk ColorFallbackKind.andBelow(.{ .lab = true });
+            }
+            return ColorFallbackKind{  };
+},
+.light_dark => |ld| {
+return bun.bits.@"or"(ColorFallbackKind, ld.light.getPossibleFallbacks(targets), ld.dark.getPossibleFallbacks(targets));
+},
+});
+            _ = &fallbacks;
+            if (fallbacks.oklab) {
+                if ((!targets.shouldCompileSame(.oklab_colors))) {
+                    fallbacks = fallbacks.difference(ColorFallbackKind.andBelow(.{ .lab = true }));
+                }
+            }
+            if (fallbacks.lab) {
+                if ((!targets.shouldCompileSame(.lab_colors))) {
+                    fallbacks = fallbacks.difference(ColorFallbackKind.andBelow(.{ .p3 = true }));
+                } else {
+                    if (((targets.browsers != null) and css.compat.Feature.isPartiallyCompatible(css.compat.Feature.lab_colors, targets.browsers.?))) {
+                        fallbacks.p3 = false;
+                    }
+                }
+            }
+            if (fallbacks.p3) {
+                if ((!targets.shouldCompileSame(.p3_colors))) {
+                    fallbacks.rgb = false;
+                } else {
+                    if (((fallbacks.highest() != ColorFallbackKind.P3) and ((targets.browsers == null) or (!css.compat.Feature.isPartiallyCompatible(css.compat.Feature.p3_colors, targets.browsers.?))))) {
+                        fallbacks.p3 = false;
+                    }
+                }
+            }
+            return fallbacks;
+    }
+
+pub fn default() @This() {
+            return CssColor{ .rgba = RGBA.transparent() };
+    }
+
+pub fn eql(self: CssColor, other: *const This) bool {
+            if ((@intFromEnum(self) != @intFromEnum(other.*))) {
+                return false;
+            }
+            return (switch (self) {
+.current_color => true,
+.rgba => std.meta.eql(self.rgba, other.rgba),
+.lab => std.meta.eql((blk: {
+            break :blk self.lab.*;
+
+}), (blk: {
+            break :blk other.lab.*;
+
+})),
+.predefined => std.meta.eql((blk: {
+            break :blk self.predefined.*;
+
+}), (blk: {
+            break :blk other.predefined.*;
+
+})),
+.float => std.meta.eql((blk: {
+            break :blk self.float.*;
+
+}), (blk: {
+            break :blk other.float.*;
+
+})),
+.light_dark => (self.light_dark.light.eql(other.light_dark.light) and self.light_dark.dark.eql(other.light_dark.dark)),
+.system => (self.system == other.system),
+});
+    }
+
+pub fn hash(self: CssColor, hasher: *std.hash.Wyhash) void {
+            return css.implementHash(@This(), (blk: {
+            break :blk (&self);
+
+}), hasher);
+    }
+
+pub fn toRGB(self: CssColor, allocator: Allocator) ?CssColor {
+            if ((self == .light_dark)) {
+                if (self.light_dark.light.toRGB(allocator)) |l| {
+                    _ = &l;
+                    if (self.light_dark.dark.toRGB(allocator)) |d| {
+                        _ = &d;
+                        return CssColor{ .light_dark = CssColorLightDark{ .light = bun.create(allocator, CssColor, l), .dark = bun.create(allocator, CssColor, d) } };
+                    } else {
+                        return null;
+                    }
+                } else {
+                    return null;
+                }
+            }
+            if (RGBA.tryFromCssColor((blk: {
+            break :blk (&self);
+
+}))) |c| {
+                _ = &c;
+                return CssColor{ .rgba = c };
+            } else {
+                return null;
+            }
+    }
+
+pub fn toP3(self: CssColor, allocator: Allocator) ?CssColor {
+            return (switch (self) {
+.light_dark => |ld| blk: {
+            var light: CssColor = undefined;
+            _ = &light;
+            if (ld.light.toP3(allocator)) |l| {
+                _ = &l;
+                light = l;
+            } else {
+                break :blk null;
+            }
+            var dark: CssColor = undefined;
+            _ = &dark;
+            if (ld.dark.toP3(allocator)) |d| {
+                _ = &d;
+                dark = d;
+            } else {
+                break :blk null;
+            }
+            break :blk CssColor{ .light_dark = CssColorLightDark{ .light = bun.create(allocator, CssColor, light), .dark = bun.create(allocator, CssColor, dark) } };
+},
+else => {
+if (P3.tryFromCssColor((blk: {
+            break :blk (&self);
+
+}))) |c| {
+                _ = &c;
+                return CssColor{ .predefined = bun.create(allocator, PredefinedColor, PredefinedColor{ .display_p3 = c }) };
+            } else {
+                return null;
+            }
+},
+});
+    }
+
+pub fn toLAB(self: CssColor, allocator: Allocator) ?CssColor {
+            return (switch (self) {
+.light_dark => |ld| blk: {
+            var light: CssColor = undefined;
+            _ = &light;
+            if (ld.light.toLAB(allocator)) |l| {
+                _ = &l;
+                light = l;
+            } else {
+                break :blk null;
+            }
+            var dark: CssColor = undefined;
+            _ = &dark;
+            if (ld.dark.toLAB(allocator)) |d| {
+                _ = &d;
+                dark = d;
+            } else {
+                break :blk null;
+            }
+            break :blk CssColor{ .light_dark = CssColorLightDark{ .light = bun.create(allocator, CssColor, light), .dark = bun.create(allocator, CssColor, dark) } };
+},
+else => {
+if (LAB.tryFromCssColor((blk: {
+            break :blk (&self);
+
+}))) |c| {
+                _ = &c;
+                return CssColor{ .lab = bun.create(allocator, LABColor, LABColor{ .lab = c }) };
+            } else {
+                return null;
+            }
+},
+});
+    }
+    const This = @This();
+    pub const jsFunctionColor = @import("../../css_jsc/color_js.zig").jsFunctionColor;
+    pub const ParseResult = Result(CssColor);
 };
 
 pub const RGBA = struct {
@@ -953,14 +1593,20 @@ return .{ .err = e };
 pub fn parseFrom(self: *ComponentParser, from_val: CssColor, input: *css.Parser, comptime T: type, comptime C: type, comptime func: anytype, args_: anytype) Result(C) {
             if ((from_val == .light_dark)) {
                 const state = input.state();
-                const light = (switch (self.parseFrom(from_val.light_dark.light.*, input, T, C, func, args_)) {
+                const light = (switch (self.parseFrom((blk: {
+                break :blk from_val.light_dark.light.*;
+
+}), input, T, C, func, args_)) {
 .result => |vv| vv,
 .err => |e| {
 return .{ .err = e };
 },
 });
                 _ = input.reset((&state));
-                const dark = (switch (self.parseFrom(from_val.light_dark.dark.*, input, T, C, func, args_)) {
+                const dark = (switch (self.parseFrom((blk: {
+                break :blk from_val.light_dark.dark.*;
+
+}), input, T, C, func, args_)) {
 .result => |vv| vv,
 .err => |e| {
 return .{ .err = e };
@@ -1614,596 +2260,6 @@ const Calc = css.css_values.calc.Calc;
 const Angle = css.css_values.angle.Angle;
 const Printer = css.Printer;
 const PrintErr = css.PrintErr;
-pub const CssColor = union(enum) {
-    /// The `currentColor` keyword.
-    current_color,
-    /// A value in the RGB color space, including values parsed as hex colors, or the `rgb()`, `hsl()`, and `hwb()` functions.
-    rgba: RGBA,
-    /// A value in a LAB color space, including the `lab()`, `lch()`, `oklab()`, and `oklch()` functions.
-    lab: *LABColor,
-    /// A value in a predefined color space, e.g. `display-p3`.
-    predefined: *PredefinedColor,
-    /// A floating point representation of an RGB, HSL, or HWB color when it contains `none` components.
-    float: *FloatColor,
-    /// The `light-dark()` function.
-    light_dark: struct {
-        // TODO: why box the two fields separately? why not one allocation?
-        light: *CssColor,
-        dark: *CssColor,
-
-        pub fn takeLightFreeDark(this: *const @This(), allocator: Allocator) *CssColor {
-            const ret = this.light;
-            this.dark.deinit(allocator);
-            allocator.destroy(this.dark);
-            return ret;
-        }
-
-        pub fn takeDarkFreeLight(this: *const @This(), allocator: Allocator) *CssColor {
-            const ret = this.dark;
-            this.light.deinit(allocator);
-            allocator.destroy(this.light);
-            return ret;
-        }
-
-        pub fn __generateHash() void {}
-    },
-    /// A system color keyword.
-    system: SystemColor,
-
-    const This = @This();
-
-    pub const jsFunctionColor = @import("../../css_jsc/color_js.zig").jsFunctionColor;
-
-    pub fn isCompatible(this: *const CssColor, browsers: css.targets.Browsers) bool {
-        return switch (this.*) {
-            .current_color, .rgba, .float => true,
-            .lab => |lab| switch (lab.*) {
-                .lab, .lch => css.Feature.isCompatible(.lab_colors, browsers),
-                .oklab, .oklch => css.Feature.isCompatible(.oklab_colors, browsers),
-            },
-            .predefined => |predefined| switch (predefined.*) {
-                .display_p3 => css.Feature.isCompatible(.p3_colors, browsers),
-                else => css.Feature.isCompatible(.color_function, browsers),
-            },
-            .light_dark => |light_dark| css.Feature.isCompatible(.light_dark, browsers) and
-                light_dark.light.isCompatible(browsers) and
-                light_dark.dark.isCompatible(browsers),
-            .system => |system| system.isCompatible(browsers),
-        };
-    }
-
-    pub fn toCss(
-        this: *const This,
-        dest: *Printer,
-    ) PrintErr!void {
-        switch (this.*) {
-            .current_color => try dest.writeStr("currentColor"),
-            .rgba => |*color| {
-                if (color.alpha == 255) {
-                    const hex: u32 = (@as(u32, color.red) << 16) | (@as(u32, color.green) << 8) | @as(u32, color.blue);
-                    if (shortColorName(hex)) |name| return dest.writeStr(name);
-
-                    const compact = compactHex(hex);
-                    if (hex == expandHex(compact)) {
-                        try dest.writeFmt("#{x:0>3}", .{compact});
-                    } else {
-                        try dest.writeFmt("#{x:0>6}", .{hex});
-                    }
-                } else {
-                    // If the #rrggbbaa syntax is not supported by the browser targets, output rgba()
-                    if (dest.targets.shouldCompileSame(.hex_alpha_colors)) {
-                        // If the browser doesn't support `#rrggbbaa` color syntax, it is converted to `transparent` when compressed(minify = true).
-                        // https://www.w3.org/TR/css-color-4/#transparent-black
-                        if (dest.minify and color.red == 0 and color.green == 0 and color.blue == 0 and color.alpha == 0) {
-                            return dest.writeStr("transparent");
-                        } else {
-                            try dest.writeFmt("rgba({d}", .{color.red});
-                            try dest.delim(',', false);
-                            try dest.writeFmt("{d}", .{color.green});
-                            try dest.delim(',', false);
-                            try dest.writeFmt("{d}", .{color.blue});
-                            try dest.delim(',', false);
-
-                            // Try first with two decimal places, then with three.
-                            var rounded_alpha = @round(color.alphaF32() * 100.0) / 100.0;
-                            const clamped: u8 = bun.intFromFloat(u8, @min(
-                                @max(
-                                    @round(rounded_alpha * 255.0),
-                                    0.0,
-                                ),
-                                255.0,
-                            ));
-                            if (clamped != color.alpha) {
-                                rounded_alpha = @round(color.alphaF32() * 1000.0) / 1000.0;
-                            }
-
-                            try CSSNumberFns.toCss(&rounded_alpha, dest);
-                            try dest.writeChar(')');
-                            return;
-                        }
-                    }
-
-                    const hex: u32 = (@as(u32, color.red) << 24) |
-                        (@as(u32, color.green) << 16) |
-                        (@as(u32, color.blue) << 8) |
-                        (@as(u32, color.alpha));
-                    const compact = compactHex(hex);
-                    if (hex == expandHex(compact)) {
-                        try dest.writeFmt("#{x:0>4}", .{compact});
-                    } else {
-                        try dest.writeFmt("#{x:0>8}", .{hex});
-                    }
-                }
-                return;
-            },
-            .lab => |_lab| {
-                return switch (_lab.*) {
-                    .lab => |*lab| writeComponents(
-                        "lab",
-                        lab.l,
-                        lab.a,
-                        lab.b,
-                        lab.alpha,
-                        dest,
-                    ),
-                    .lch => |*lch| writeComponents(
-                        "lch",
-                        lch.l,
-                        lch.c,
-                        lch.h,
-                        lch.alpha,
-                        dest,
-                    ),
-                    .oklab => |*oklab| writeComponents(
-                        "oklab",
-                        oklab.l,
-                        oklab.a,
-                        oklab.b,
-                        oklab.alpha,
-                        dest,
-                    ),
-                    .oklch => |*oklch| writeComponents(
-                        "oklch",
-                        oklch.l,
-                        oklch.c,
-                        oklch.h,
-                        oklch.alpha,
-                        dest,
-                    ),
-                };
-            },
-            .predefined => |predefined| return writePredefined(predefined, dest),
-            .float => |*float| {
-                // Serialize as hex.
-                const srgb = SRGB.fromFloatColor(float.*);
-                const as_css_color = srgb.intoCssColor(dest.allocator);
-                defer as_css_color.deinit(dest.allocator);
-                try as_css_color.toCss(dest);
-            },
-            .light_dark => |*light_dark| {
-                if (!dest.targets.isCompatible(css.compat.Feature.light_dark)) {
-                    try dest.writeStr("var(--buncss-light");
-                    try dest.delim(',', false);
-                    try light_dark.light.toCss(dest);
-                    try dest.writeChar(')');
-                    try dest.whitespace();
-                    try dest.writeStr("var(--buncss-dark");
-                    try dest.delim(',', false);
-                    try light_dark.dark.toCss(dest);
-                    return dest.writeChar(')');
-                }
-
-                try dest.writeStr("light-dark(");
-                try light_dark.light.toCss(dest);
-                try dest.delim(',', false);
-                try light_dark.dark.toCss(dest);
-                return dest.writeChar(')');
-            },
-            .system => |*system| return system.toCss(dest),
-        }
-    }
-
-    pub const ParseResult = Result(CssColor);
-    pub fn parse(input: *css.Parser) ParseResult {
-        const location = input.currentSourceLocation();
-        const token = switch (input.next()) {
-            .result => |vv| vv,
-            .err => |e| return .{ .err = e },
-        };
-
-        switch (token.*) {
-            .unrestrictedhash, .idhash => |v| {
-                const _t1 = css.color.parseHashColor(v) orelse return .{ .err = location.newUnexpectedTokenError(token.*) }; const r = _t1[0]; const g = _t1[1]; const b = _t1[2]; const a = _t1[3];
-                return .{ .result = .{
-                    .rgba = RGBA.new(r, g, b, a),
-                } };
-            },
-            .ident => |value| {
-                if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(value, "currentcolor")) {
-                    return .{ .result = .current_color };
-                } else if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(value, "transparent")) {
-                    return .{ .result = .{
-                        .rgba = RGBA.transparent(),
-                    } };
-                } else {
-                    if (css.color.parseNamedColor(value)) |named| {
-                        const _t2 = named; const r = _t2[0]; const g = _t2[1]; const b = _t2[2];
-                        return .{ .result = .{ .rgba = RGBA.new(r, g, b, 255.0) } };
-                        // } else if (SystemColor.parseString(value)) |system_color| {
-                    } else if (css.parse_utility.parseString(input.allocator(), SystemColor, value, SystemColor.parse).asValue()) |system_color| {
-                        return .{ .result = .{ .system = system_color } };
-                    } else return .{ .err = location.newUnexpectedTokenError(token.*) };
-                }
-            },
-            .function => |name| return parseColorFunction(location, name, input),
-            else => return .{
-                .err = location.newUnexpectedTokenError(token.*),
-            },
-        }
-    }
-
-    pub fn deinit(this: CssColor, allocator: Allocator) void {
-        switch (this) {
-            .current_color => {},
-            .rgba => {},
-            .lab => {
-                allocator.destroy(this.lab);
-            },
-            .predefined => {
-                allocator.destroy(this.predefined);
-            },
-            .float => {
-                allocator.destroy(this.float);
-            },
-            .light_dark => {
-                this.light_dark.light.deinit(allocator);
-                this.light_dark.dark.deinit(allocator);
-                allocator.destroy(this.light_dark.light);
-                allocator.destroy(this.light_dark.dark);
-            },
-            .system => {},
-        }
-    }
-
-    pub fn deepClone(this: *const CssColor, allocator: Allocator) CssColor {
-        return switch (this.*) {
-            .current_color => .current_color,
-            .rgba => |rgba| CssColor{ .rgba = rgba },
-            .lab => |lab| CssColor{ .lab = bun.create(allocator, LABColor, lab.*) },
-            .predefined => |pre| CssColor{ .predefined = bun.create(allocator, PredefinedColor, pre.*) },
-            .float => |float| CssColor{ .float = bun.create(allocator, FloatColor, float.*) },
-            .light_dark => CssColor{
-                .light_dark = .{
-                    .light = bun.create(allocator, CssColor, this.light_dark.light.deepClone(allocator)),
-                    .dark = bun.create(allocator, CssColor, this.light_dark.dark.deepClone(allocator)),
-                },
-            },
-            .system => |sys| CssColor{ .system = sys },
-        };
-    }
-
-    pub fn toLightDark(this: *const CssColor, allocator: Allocator) CssColor {
-        return switch (this.*) {
-            .light_dark => this.deepClone(allocator),
-            else => .{
-                .light_dark = .{
-                    .light = bun.create(allocator, CssColor, this.deepClone(allocator)),
-                    .dark = bun.create(allocator, CssColor, this.deepClone(allocator)),
-                },
-            },
-        };
-    }
-
-    /// Mixes this color with another color, including the specified amount of each.
-    /// Implemented according to the [`color-mix()`](https://www.w3.org/TR/css-color-5/#color-mix) function.
-    // PERF: these little allocations feel bad
-    pub fn interpolate(
-        this: *const CssColor,
-        allocator: Allocator,
-        comptime T: type,
-        p1_: f32,
-        other: *const CssColor,
-        p2_: f32,
-        method: HueInterpolationMethod,
-    ) ?CssColor {
-        var p1 = p1_;
-        var p2 = p2_;
-
-        if (this.* == .current_color or other.* == .current_color) {
-            return null;
-        }
-
-        if (this.* == .light_dark or other.* == .light_dark) {
-            const this_light_dark = this.toLightDark(allocator);
-            const other_light_dark = other.toLightDark(allocator);
-
-            const al = this_light_dark.light_dark.light;
-            const ad = this_light_dark.light_dark.dark;
-
-            const bl = other_light_dark.light_dark.light;
-            const bd = other_light_dark.light_dark.dark;
-
-            return .{
-                .light_dark = .{
-                    .light = bun.create(
-                        allocator,
-                        CssColor,
-                        al.interpolate(allocator, T, p1, bl, p2, method) orelse return null,
-                    ),
-                    .dark = bun.create(
-                        allocator,
-                        CssColor,
-                        ad.interpolate(allocator, T, p1, bd, p2, method) orelse return null,
-                    ),
-                },
-            };
-        }
-
-        const check_converted = struct {
-            fn run(color: *const CssColor) css.Result(bool) {
-                bun.debugAssert(color.* != .light_dark and color.* != .current_color);
-                return switch (color.*) {
-                    .rgba => .{ .result = T == RGBA },
-                    .lab => |lab| .{ .result = switch (lab.*) {
-                        .lab => T == LAB,
-                        .lch => T == LCH,
-                        .oklab => T == OKLAB,
-                        .oklch => T == OKLCH,
-                    } },
-                    .predefined => |pre| .{ .result = switch (pre.*) {
-                        .srgb => T == SRGB,
-                        .srgb_linear => T == SRGBLinear,
-                        .display_p3 => T == P3,
-                        .a98 => T == A98,
-                        .prophoto => T == ProPhoto,
-                        .rec2020 => T == Rec2020,
-                        .xyz_d50 => T == XYZd50,
-                        .xyz_d65 => T == XYZd65,
-                    } },
-                    .float => |f| .{ .result = switch (f.*) {
-                        .rgb => T == SRGB,
-                        .hsl => T == HSL,
-                        .hwb => T == HWB,
-                    } },
-                    // System colors cannot be converted to specific color spaces at parse time
-                    .system => .{ .err = css.ParseError(css.ParserError){
-                        .kind = .{ .custom = .{ .unexpected_value = .{
-                            .expected = "convertible color",
-                            .received = "system color",
-                        } } },
-                        .location = css.SourceLocation{ .line = 0, .column = 0 },
-                    } },
-                    // We checked these above
-                    .light_dark, .current_color => unreachable,
-                };
-            }
-        };
-
-        const converted_first = switch (check_converted.run(this)) {
-            .result => |v| v,
-            .err => return null,
-        };
-        const converted_second = switch (check_converted.run(other)) {
-            .result => |v| v,
-            .err => return null,
-        };
-
-        // https://drafts.csswg.org/css-color-5/#color-mix-result
-        var first_color = T.tryFromCssColor(this) orelse return null;
-        var second_color = T.tryFromCssColor(other) orelse return null;
-
-        if (converted_first and !first_color.inGamut()) {
-            first_color = mapGamut(T, first_color);
-        }
-
-        if (converted_second and !second_color.inGamut()) {
-            second_color = mapGamut(T, second_color);
-        }
-
-        // https://www.w3.org/TR/css-color-4/#powerless
-        if (converted_first) {
-            first_color.adjustPowerlessComponents();
-        }
-
-        if (converted_second) {
-            second_color.adjustPowerlessComponents();
-        }
-
-        // https://drafts.csswg.org/css-color-4/#interpolation-missing
-        first_color.fillMissingComponents(&second_color);
-        second_color.fillMissingComponents(&first_color);
-
-        // https://www.w3.org/TR/css-color-4/#hue-interpolation
-        first_color.adjustHue(&second_color, method);
-
-        // https://www.w3.org/TR/css-color-4/#interpolation-alpha
-        first_color.premultiply();
-        second_color.premultiply();
-
-        // https://drafts.csswg.org/css-color-5/#color-mix-percent-norm
-        var alpha_multiplier = p1 + p2;
-        if (alpha_multiplier != 1.0) {
-            p1 = p1 / alpha_multiplier;
-            p2 = p2 / alpha_multiplier;
-            if (alpha_multiplier > 1.0) {
-                alpha_multiplier = 1.0;
-            }
-        }
-
-        var result_color = first_color.interpolate(p1, &second_color, p2);
-
-        result_color.unpremultiply(alpha_multiplier);
-
-        return result_color.intoCssColor(allocator);
-    }
-
-    pub fn lightDarkOwned(allocator: Allocator, light: CssColor, dark: CssColor) CssColor {
-        return CssColor{
-            .light_dark = .{
-                .light = bun.create(allocator, CssColor, light),
-                .dark = bun.create(allocator, CssColor, dark),
-            },
-        };
-    }
-
-    pub fn getFallback(this: *const @This(), allocator: Allocator, kind: ColorFallbackKind) CssColor {
-        if (this.* == .rgba) return this.deepClone(allocator);
-
-        return switch (kind.asBits()) {
-            ColorFallbackKind.RGB.asBits() => this.toRGB(allocator).?,
-            ColorFallbackKind.P3.asBits() => this.toP3(allocator).?,
-            ColorFallbackKind.LAB.asBits() => this.toLAB(allocator).?,
-            else => bun.unreachablePanic("Expected RGBA, P3, LAB fallback. This is a bug in Bun.", .{}),
-        };
-    }
-
-    pub fn getFallbacks(this: *@This(), allocator: Allocator, targets: css.targets.Targets) css.SmallList(CssColor, 2) {
-        const fallbacks = this.getNecessaryFallbacks(targets);
-
-        var res = css.SmallList(CssColor, 2){};
-
-        if (fallbacks.rgb) {
-            res.appendAssumeCapacity(this.toRGB(allocator).?);
-        }
-
-        if (fallbacks.p3) {
-            res.appendAssumeCapacity(this.toP3(allocator).?);
-        }
-
-        if (fallbacks.lab) {
-            const foo = this.toLAB(allocator).?;
-            this.* = foo;
-        }
-
-        return res;
-    }
-
-    /// Returns the color fallback types needed for the given browser targets.
-    pub fn getNecessaryFallbacks(this: *const @This(), targets: css.targets.Targets) ColorFallbackKind {
-        // Get the full set of possible fallbacks, and remove the highest one, which
-        // will replace the original declaration. The remaining fallbacks need to be added.
-        const fallbacks = this.getPossibleFallbacks(targets);
-        return fallbacks.difference(fallbacks.highest());
-    }
-
-    pub fn getPossibleFallbacks(this: *const @This(), targets: css.targets.Targets) ColorFallbackKind {
-        // Fallbacks occur in levels: Oklab -> Lab -> P3 -> RGB. We start with all levels
-        // below and including the authored color space, and remove the ones that aren't
-        // compatible with our browser targets.
-        var fallbacks = switch (this.*) {
-            .current_color, .rgba, .float, .system => return ColorFallbackKind{},
-            .lab => |lab| brk: {
-                if (lab.* == .lab or lab.* == .lch and targets.shouldCompileSame(.lab_colors))
-                    break :brk ColorFallbackKind.andBelow(.{ .lab = true });
-                if (lab.* == .oklab or lab.* == .oklch and targets.shouldCompileSame(.oklab_colors))
-                    break :brk ColorFallbackKind.andBelow(.{ .oklab = true });
-                return ColorFallbackKind{};
-            },
-            .predefined => |predefined| brk: {
-                if (predefined.* == .display_p3 and targets.shouldCompileSame(.p3_colors)) break :brk ColorFallbackKind.andBelow(.{ .p3 = true });
-                if (targets.shouldCompileSame(.color_function)) break :brk ColorFallbackKind.andBelow(.{ .lab = true });
-                return ColorFallbackKind{};
-            },
-            .light_dark => |*ld| {
-                return bun.bits.@"or"(ColorFallbackKind, ld.light.getPossibleFallbacks(targets), ld.dark.getPossibleFallbacks(targets));
-            },
-        };
-
-        if (fallbacks.oklab) {
-            if (!targets.shouldCompileSame(.oklab_colors)) {
-                fallbacks = fallbacks.difference(ColorFallbackKind.andBelow(.{ .lab = true }));
-            }
-        }
-
-        if (fallbacks.lab) {
-            if (!targets.shouldCompileSame(.lab_colors)) {
-                fallbacks = fallbacks.difference(ColorFallbackKind.andBelow(.{ .p3 = true }));
-            } else if (targets.browsers != null and css.compat.Feature.isPartiallyCompatible(css.compat.Feature.lab_colors, targets.browsers.?)) {
-                // We don't need P3 if Lab is supported by some of our targets.
-                // No browser implements Lab but not P3.
-                fallbacks.p3 = false;
-            }
-        }
-
-        if (fallbacks.p3) {
-            if (!targets.shouldCompileSame(.p3_colors)) {
-                fallbacks.rgb = false;
-            } else if (fallbacks.highest() != ColorFallbackKind.P3 and
-                (targets.browsers == null or !css.compat.Feature.isPartiallyCompatible(css.compat.Feature.p3_colors, targets.browsers.?)))
-            {
-                // Remove P3 if it isn't supported by any targets, and wasn't the
-                // original authored color.
-                fallbacks.p3 = false;
-            }
-        }
-
-        return fallbacks;
-    }
-
-    pub fn default() @This() {
-        return .{ .rgba = RGBA.transparent() };
-    }
-
-    pub fn eql(this: *const This, other: *const This) bool {
-        if (@intFromEnum(this.*) != @intFromEnum(other.*)) return false;
-
-        return switch (this.*) {
-            .current_color => true,
-            .rgba => std.meta.eql(this.rgba, other.rgba),
-            .lab => std.meta.eql(this.lab.*, other.lab.*),
-            .predefined => std.meta.eql(this.predefined.*, other.predefined.*),
-            .float => std.meta.eql(this.float.*, other.float.*),
-            .light_dark => this.light_dark.light.eql(other.light_dark.light) and this.light_dark.dark.eql(other.light_dark.dark),
-            .system => this.system == other.system,
-        };
-    }
-
-    pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
-        return css.implementHash(@This(), this, hasher);
-    }
-
-    pub fn toRGB(this: *const @This(), allocator: Allocator) ?CssColor {
-        if (this.* == .light_dark) {
-            return CssColor{ .light_dark = .{
-                .light = bun.create(allocator, CssColor, this.light_dark.light.toRGB(allocator) orelse return null),
-                .dark = bun.create(allocator, CssColor, this.light_dark.dark.toRGB(allocator) orelse return null),
-            } };
-        }
-        return CssColor{ .rgba = RGBA.tryFromCssColor(this) orelse return null };
-    }
-
-    pub fn toP3(this: *const @This(), allocator: Allocator) ?CssColor {
-        return switch (this.*) {
-            .light_dark => |ld| blk: {
-                const light = ld.light.toP3(allocator) orelse break :blk null;
-                const dark = ld.dark.toP3(allocator) orelse break :blk null;
-                break :blk .{
-                    .light_dark = .{
-                        .light = bun.create(allocator, CssColor, light),
-                        .dark = bun.create(allocator, CssColor, dark),
-                    },
-                };
-            },
-            else => return .{ .predefined = bun.create(allocator, PredefinedColor, .{ .display_p3 = P3.tryFromCssColor(this) orelse return null }) },
-        };
-    }
-
-    pub fn toLAB(this: *const @This(), allocator: Allocator) ?CssColor {
-        return switch (this.*) {
-            .light_dark => |ld| blk: {
-                const light = ld.light.toLAB(allocator) orelse break :blk null;
-                const dark = ld.dark.toLAB(allocator) orelse break :blk null;
-                break :blk .{
-                    .light_dark = .{
-                        .light = bun.create(allocator, CssColor, light),
-                        .dark = bun.create(allocator, CssColor, dark),
-                    },
-                };
-            },
-            else => .{ .lab = bun.create(allocator, LABColor, .{ .lab = LAB.tryFromCssColor(this) orelse return null }) },
-        };
-    }
-};
 pub const LABColor = union(enum) {
     lab: LAB,
     lch: LCH,
@@ -2579,6 +2635,49 @@ pub fn clip(color_val: *const T) T {
             return result;
     }
 };
+}
+
+pub fn checkColorConverted(comptime T: type, color: *const CssColor) css.Result(bool) {
+        const Res = css.Result(bool);
+        _ = &Res;
+        const ParseErr = css.ParseError(css.ParserError);
+        _ = &ParseErr;
+        _ = bun.debugAssert(((color.* != .light_dark) and (color.* != .current_color)));
+        return (switch (color.*) {
+.rgba => Res{ .result = (T == RGBA) },
+.lab => |lab| Res{ .result = (switch ((blk: {
+        break :blk lab.*;
+
+})) {
+.lab => (T == LAB),
+.lch => (T == LCH),
+.oklab => (T == OKLAB),
+.oklch => (T == OKLCH),
+}) },
+.predefined => |pre| Res{ .result = (switch ((blk: {
+        break :blk pre.*;
+
+})) {
+.srgb => (T == SRGB),
+.srgb_linear => (T == SRGBLinear),
+.display_p3 => (T == P3),
+.a98 => (T == A98),
+.prophoto => (T == ProPhoto),
+.rec2020 => (T == Rec2020),
+.xyz_d50 => (T == XYZd50),
+.xyz_d65 => (T == XYZd65),
+}) },
+.float => |f| Res{ .result = (switch ((blk: {
+        break :blk f.*;
+
+})) {
+.rgb => (T == SRGB),
+.hsl => (T == HSL),
+.hwb => (T == HWB),
+}) },
+.system => Res{ .@"err" = ParseErr{ .kind = .{ .custom = .{ .unexpected_value = .{ .expected = "convertible color", .received = "system color" } } }, .location = css.SourceLocation{ .line = 0, .column = 0 } } },
+.light_dark, .current_color => unreachable,
+});
 }
 
 pub fn parseColorFunction(location: css.SourceLocation, function: []const u8, input: *css.Parser) Result(CssColor) {

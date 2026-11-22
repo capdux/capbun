@@ -4,7 +4,98 @@
 const std = @import("std");
 const string = []const u8;
 
+pub fn CpResult(comptime __T: type, comptime __E: type) type {
+    return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
+}
+const __CpErr = struct {
+    code: i32 = 0,
+    msg: []const u8 = "",
+    cause: ?*const anyopaque = null,
+    cause_type_id: u64 = 0,
+    pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
+    pub fn init(__cp_code: i32, __cp_msg: []const u8) __CpErr { return __CpErr{ .code = __cp_code, .msg = __cp_msg }; }
+    pub fn with_cause(__cp_self: __CpErr, __cp_cause: anytype) __CpErr { const __CpCType = @TypeOf(__cp_cause); var __cp_ptr: ?*const anyopaque = null; var __cp_tid: u64 = 0; if (comptime @typeInfo(__CpCType) == .pointer) { __cp_ptr = @ptrCast(__cp_cause); const __CpChild = @typeInfo(__CpCType).pointer.child; if (comptime @hasDecl(__CpChild, "__TYPE_ID")) { __cp_tid = __CpChild.__TYPE_ID; } } else if (comptime (@typeInfo(__CpCType) == .@"struct" or @typeInfo(__CpCType) == .@"union") and @hasField(__CpCType, "ptr")) { __cp_ptr = @ptrCast(__cp_cause.ptr); if (comptime @hasField(__CpCType, "vtable")) { __cp_tid = __cp_cause.vtable.__type_id; } } else if (comptime @typeInfo(__CpCType) == .optional) { if (__cp_cause) |__cp_c| return __cp_self.with_cause(__cp_c); } else { if (comptime @hasDecl(__CpCType, "__TYPE_ID")) { __cp_tid = __CpCType.__TYPE_ID; } __cp_ptr = @ptrCast(&__cp_cause); } return __CpErr{ .code = __cp_self.code, .msg = __cp_self.msg, .cause = __cp_ptr, .cause_type_id = __cp_tid }; }
+    pub fn downcast(__cp_self: __CpErr, comptime __CpTarget: type) ?*const __CpTarget {
+        if (__cp_self.cause) |__cp_c| {
+            if (comptime @hasDecl(__CpTarget, "__TYPE_ID")) {
+                if (__cp_self.cause_type_id != 0 and __cp_self.cause_type_id != __CpTarget.__TYPE_ID) {
+                    return null;
+                }
+            }
+            return @ptrCast(@alignCast(__cp_c));
+        }
+        return null;
+    }
+};
+pub const Err = __CpErr;
+pub const Error = __CpErr;
+fn is_cp_result(comptime __T: type) bool {
+    return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
+}
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
+fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
+fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
+fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
+fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
+fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == __CpErr) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return __CpErr{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return __CpErr{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return __CpErr{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return __CpErr.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return __CpErr.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return __CpErr{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
+fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
+
 pub const bun = @import("bun");
+pub const HandleCloseGuard = struct {
+    handle: *PollOrFd,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *HandleCloseGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = self.handle.close(null, .{});
+    }
+};
+
+pub const ClearBufGuard = struct {
+    buf: *std.array_list.Managed(u8),
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *ClearBufGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = self.buf.clearRetainingCapacity();
+    }
+};
+
+pub const WindowsReadGuard = struct {
+    reader: *WindowsBufferedReader,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *WindowsReadGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = self.reader.continueFileReadIfNotPaused();
+    }
+};
+
 const MaxBuf = @import("./MaxBuf.zig");
 const Source = @import("./source.zig").Source;
 const FileType = @import("./pipes.zig").FileType;
@@ -25,7 +116,7 @@ pub fn eventLoop(self: @This()) jsc.EventLoopHandle {
             return self.fns.eventLoop(self.parent);
     }
 
-pub fn loop(self: @This()) *Async.Loop {
+pub fn loop(self: *const @This()) *Async.Loop {
             return self.fns.loop(self.parent);
     }
 
@@ -79,7 +170,7 @@ pub fn onReaderError(self: @This(), err: bun.sys.Error) void {
     };
 };
 const PosixBufferedReader = struct {
-    handle: PollOrFd = .{ .closed = {} },
+    handle: PollOrFd = .closed,
     _buffer: std.array_list.Managed(u8) = std.array_list.Managed(u8).init(bun.default_allocator),
     _offset: usize = 0,
     vtable: BufferedReaderVTable,
@@ -87,622 +178,618 @@ const PosixBufferedReader = struct {
     count: usize = 0,
     maxbuf: ?*MaxBuf = null,
 
-    const Flags = packed struct(u16) {
-        is_done: bool = false,
-        pollable: bool = false,
-        nonblocking: bool = false,
-        socket: bool = false,
-        received_eof: bool = false,
-        closed_without_reporting: bool = false,
-        close_handle: bool = true,
-        memfd: bool = false,
-        use_pread: bool = false,
-        is_paused: bool = false,
-        _: u6 = 0,
-    };
-
-    pub fn init(comptime Type: type) PosixBufferedReader {
-        return .{
-            .vtable = BufferedReaderVTable.init(Type),
-        };
+pub fn init(comptime Type: type) PosixBufferedReader {
+            return .{ .vtable = BufferedReaderVTable.init(Type) };
     }
 
-    pub fn updateRef(this: *const PosixBufferedReader, value: bool) void {
-        const poll = this.handle.getPoll() orelse return;
-        poll.setKeepingProcessAlive(this.vtable.eventLoop(), value);
+pub fn updateRef(self: *const @This(), value: bool) void {
+            const poll = ((self.handle.getPoll()) orelse { return; });
+            _ = poll.setKeepingProcessAlive(self.vtable.eventLoop(), value);
     }
 
-    pub inline fn isDone(this: *const PosixBufferedReader) bool {
-        return this.flags.is_done or this.flags.received_eof or this.flags.closed_without_reporting;
+pub inline fn isDone(self: *const @This()) bool {
+            return ((self.flags.is_done or self.flags.received_eof) or self.flags.closed_without_reporting);
     }
 
-    pub fn memoryCost(this: *const PosixBufferedReader) usize {
-        return @sizeOf(@This()) + this._buffer.capacity;
+pub fn memoryCost(self: *const @This()) usize {
+            return (@sizeOf(@This()) + self._buffer.capacity);
     }
 
-    pub fn from(to: *@This(), other: *PosixBufferedReader, parent_: *anyopaque) void {
-        to.* = .{
-            .handle = other.handle,
-            ._buffer = other.buffer().*,
-            ._offset = other._offset,
-            .flags = other.flags,
-            .vtable = .{
-                .fns = to.vtable.fns,
-                .parent = parent_,
-            },
-        };
-        other.buffer().* = std.array_list.Managed(u8).init(bun.default_allocator);
-        other.flags.is_done = true;
-        other.handle = .{ .closed = {} };
-        other._offset = 0;
-        MaxBuf.transferToPipereader(&other.maxbuf, &to.maxbuf);
-        to.handle.setOwner(to);
+pub fn from(to: *@This(), other: *PosixBufferedReader, parent_: *anyopaque) void {
+            to.* = .{ .handle = other.handle, ._buffer = (other.buffer()).*, ._offset = other._offset, .flags = other.flags, .vtable = .{ .fns = to.vtable.fns, .parent = parent_ } };
+            (other.buffer()).* = std.array_list.Managed(u8).init(bun.default_allocator);
+            other.flags.is_done = true;
+            other.handle = .closed;
+            other._offset = 0;
+            _ = MaxBuf.transferToPipereader((&other.maxbuf), (&to.maxbuf));
+            _ = to.handle.setOwner(to);
     }
 
-    pub fn setParent(this: *PosixBufferedReader, parent_: *anyopaque) void {
-        this.vtable.parent = parent_;
-        this.handle.setOwner(this);
+pub fn setParent(self: *@This(), parent_: *anyopaque) void {
+            self.vtable.parent = parent_;
+            _ = self.handle.setOwner(self);
     }
 
-    pub fn startMemfd(this: *PosixBufferedReader, fd: bun.FD) void {
-        this.flags.memfd = true;
-        this.handle = .{ .fd = fd };
+pub fn startMemfd(self: *@This(), fd: bun.FD) void {
+            self.flags.memfd = true;
+            self.handle = .{ .fd = fd };
     }
 
-    pub fn getFileType(this: *const PosixBufferedReader) FileType {
-        const flags = this.flags;
-        if (flags.socket) {
-            return .socket;
-        }
-
-        if (flags.pollable) {
-            if (flags.nonblocking) {
-                return .nonblocking_pipe;
+pub fn getFileType(self: *const @This()) FileType {
+            const flags = self.flags;
+            if (flags.socket) {
+                return .socket;
             }
-
-            return .pipe;
-        }
-
-        return .file;
-    }
-
-    pub fn close(this: *PosixBufferedReader) void {
-        this.closeHandle();
-    }
-
-    fn closeWithoutReporting(this: *PosixBufferedReader) void {
-        if (this.getFd() != bun.invalid_fd) {
-            bun.assert(!this.flags.closed_without_reporting);
-            this.flags.closed_without_reporting = true;
-            if (this.flags.close_handle) this.handle.close(this, {});
-        }
-    }
-
-    pub fn getFd(this: *PosixBufferedReader) bun.FD {
-        return this.handle.getFd();
-    }
-
-    pub fn pause(this: *PosixBufferedReader) void {
-        if (this.flags.is_paused) return;
-        this.flags.is_paused = true;
-
-        if (this.handle == .poll) {
-            if (this.handle.poll.isRegistered()) {
-                _ = this.handle.poll.unregister(this.loop(), false);
-            }
-        }
-    }
-
-    pub fn unpause(this: *PosixBufferedReader) void {
-        if (!this.flags.is_paused) return;
-        this.flags.is_paused = false;
-    }
-
-    pub fn takeBuffer(this: *PosixBufferedReader) std.array_list.Managed(u8) {
-        const out = this._buffer;
-        this._buffer = std.array_list.Managed(u8).init(out.allocator);
-        return out;
-    }
-
-    pub fn buffer(this: *PosixBufferedReader) *std.array_list.Managed(u8) {
-        return &this._buffer;
-    }
-
-    pub fn finalBuffer(this: *PosixBufferedReader) *std.array_list.Managed(u8) {
-        if (this.flags.memfd and this.handle == .fd) {
-            defer this.handle.close(null, {});
-            _ = bun.sys.File.readToEndWithArrayList(.{ .handle = this.handle.fd }, this.buffer(), .unknown_size).unwrap() catch |err| {
-                bun.Output.debugWarn("error reading from memfd\n{}", .{err});
-                return this.buffer();
-            };
-        }
-
-        return this.buffer();
-    }
-
-    pub fn disableKeepingProcessAlive(this: *@This(), event_loop_ctx: anytype) void {
-        _ = event_loop_ctx;
-        this.updateRef(false);
-    }
-
-    pub fn enableKeepingProcessAlive(this: *@This(), event_loop_ctx: anytype) void {
-        _ = event_loop_ctx;
-        this.updateRef(true);
-    }
-
-    fn finish(this: *PosixBufferedReader) void {
-        if (this.handle != .closed or this.flags.closed_without_reporting) {
-            if (this.flags.close_handle) this.closeHandle();
-            return;
-        }
-
-        bun.assert(!this.flags.is_done);
-        this.flags.is_done = true;
-        this._buffer.shrinkAndFree(this._buffer.items.len);
-    }
-
-    fn closeHandle(this: *PosixBufferedReader) void {
-        if (this.flags.closed_without_reporting) {
-            this.flags.closed_without_reporting = false;
-            this.done();
-            return;
-        }
-
-        if (this.flags.close_handle) this.handle.close(this, done);
-    }
-
-    pub fn done(this: *PosixBufferedReader) void {
-        if (this.handle != .closed and this.flags.close_handle) {
-            this.closeHandle();
-            return;
-        } else if (this.flags.closed_without_reporting) {
-            this.flags.closed_without_reporting = false;
-        }
-        this.finish();
-        this.vtable.onReaderDone();
-    }
-
-    pub fn deinit(this: *PosixBufferedReader) void {
-        MaxBuf.removeFromPipereader(&this.maxbuf);
-        this.buffer().clearAndFree();
-        this.closeWithoutReporting();
-    }
-
-    pub fn onError(this: *PosixBufferedReader, err: bun.sys.Error) void {
-        this.vtable.onReaderError(err);
-    }
-
-    pub fn registerPoll(this: *PosixBufferedReader) void {
-        const poll = this.handle.getPoll() orelse brk: {
-            if (this.handle == .fd and this.flags.pollable) {
-                const fd = this.handle.fd;
-                this.handle = .{ .poll = Async.FilePoll.init(this.eventLoop(), fd, .{}, @This(), this) };
-                break :brk this.handle.poll;
-            }
-
-            return;
-        };
-        poll.owner.set(this);
-
-        if (!poll.flags.contains(.was_ever_registered))
-            poll.enableKeepingProcessAlive(this.eventLoop());
-
-        switch (poll.registerWithFd(this.loop(), .readable, .dispatch, poll.fd)) {
-            .err => |err| {
-                this.onError(err);
-            },
-            .result => {},
-        }
-    }
-
-    pub fn start(this: *PosixBufferedReader, fd: bun.FD, is_pollable: bool) bun.sys.Maybe(void) {
-        if (!is_pollable) {
-            this.buffer().clearRetainingCapacity();
-            this.flags.is_done = false;
-            this.handle.close(null, {});
-            this.handle = .{ .fd = fd };
-            return .success;
-        }
-        this.flags.pollable = true;
-        if (this.getFd() != fd) {
-            this.handle = .{ .fd = fd };
-        }
-        this.registerPoll();
-
-        return .{
-            .result = {},
-        };
-    }
-
-    pub fn startFileOffset(this: *PosixBufferedReader, fd: bun.FD, poll: bool, offset: usize) bun.sys.Maybe(void) {
-        this._offset = offset;
-        this.flags.use_pread = true;
-        return this.start(fd, poll);
-    }
-
-    pub fn hasPendingRead(this: *const PosixBufferedReader) bool {
-        return this.handle == .poll and this.handle.poll.isRegistered();
-    }
-
-    pub fn watch(this: *PosixBufferedReader) void {
-        if (this.flags.pollable) {
-            this.registerPoll();
-        }
-    }
-
-    pub fn hasPendingActivity(this: *const PosixBufferedReader) bool {
-        return switch (this.handle) {
-            .poll => |poll| poll.isActive(),
-            .fd => true,
-            else => false,
-        };
-    }
-
-    pub fn loop(this: *const PosixBufferedReader) *Async.Loop {
-        return this.vtable.loop();
-    }
-
-    pub fn eventLoop(this: *const PosixBufferedReader) jsc.EventLoopHandle {
-        return this.vtable.eventLoop();
-    }
-
-    pub fn read(this: *PosixBufferedReader) void {
-        if (this.flags.is_paused) {
-            return;
-        }
-
-        const buf = this.buffer();
-        const fd = this.getFd();
-
-        switch (this.getFileType()) {
-            .nonblocking_pipe => {
-                readPipe(this, buf, fd, 0, false);
-                return;
-            },
-            .file => {
-                readFile(this, buf, fd, 0, false);
-                return;
-            },
-            .socket => {
-                readSocket(this, buf, fd, 0, false);
-                return;
-            },
-            .pipe => {
-                switch (bun.isReadable(fd)) {
-                    .ready => {
-                        readFromBlockingPipeWithoutBlocking(this, buf, fd, 0, false);
-                    },
-                    .hup => {
-                        readFromBlockingPipeWithoutBlocking(this, buf, fd, 0, true);
-                    },
-                    .not_ready => {
-                        this.registerPoll();
-                    },
+            if (flags.pollable) {
+                if (flags.nonblocking) {
+                    return .nonblocking_pipe;
                 }
-            },
-        }
-    }
-
-    pub fn onPoll(parent: *PosixBufferedReader, size_hint: isize, received_hup: bool) void {
-        const resizable_buffer = parent.buffer();
-        const fd = parent.getFd();
-        bun.sys.syslog("onPoll({f}) = {d}", .{ fd, size_hint });
-
-        switch (parent.getFileType()) {
-            .nonblocking_pipe => {
-                readPipe(parent, resizable_buffer, fd, size_hint, received_hup);
-            },
-            .file => {
-                readFile(parent, resizable_buffer, fd, size_hint, received_hup);
-            },
-            .socket => {
-                readSocket(parent, resizable_buffer, fd, size_hint, received_hup);
-            },
-            .pipe => {
-                readFromBlockingPipeWithoutBlocking(parent, resizable_buffer, fd, size_hint, received_hup);
-            },
-        }
-    }
-
-    inline fn drainChunk(parent: *PosixBufferedReader, chunk: []const u8, hasMore: ReadState) bool {
-        if (parent.vtable.isStreamingEnabled()) {
-            if (chunk.len > 0) {
-                return parent.vtable.onReadChunk(chunk, hasMore);
+                return .pipe;
             }
-        }
-
-        return false;
+            return .file;
     }
 
-    fn wrapReadFn(comptime func: *const fn(bun.FD, []u8) bun.sys.Maybe(usize)) *const fn(bun.FD, []u8, usize) bun.sys.Maybe(usize) {
-        return struct {
-            pub fn call(fd: bun.FD, buf: []u8, offset: usize) bun.sys.Maybe(usize) {
-                _ = offset;
-                return func(fd, buf);
+pub fn close(self: *@This()) void {
+            _ = self.closeHandle();
+    }
+
+pub fn closeWithoutReporting(self: *@This()) void {
+            if ((self.getFd() != bun.invalid_fd)) {
+                _ = bun.assert((!self.flags.closed_without_reporting));
+                self.flags.closed_without_reporting = true;
+                if (self.flags.close_handle) {
+                    _ = self.handle.close(self, .{});
+                }
             }
-        }.call;
     }
 
-    fn readFile(parent: *PosixBufferedReader, resizable_buffer: *std.array_list.Managed(u8), fd: bun.FD, size_hint: isize, received_hup: bool) void {
-        const preadFn = struct {
-            pub fn call(fd1: bun.FD, buf: []u8, offset: usize) bun.sys.Maybe(usize) {
-                return bun.sys.pread(fd1, buf, @intCast(offset));
+pub fn getFd(self: *@This()) bun.FD {
+            return self.handle.getFd();
+    }
+
+pub fn pause(self: *@This()) void {
+            if (self.flags.is_paused) {
+                return;
             }
-        }.call;
-        if (parent.flags.use_pread) {
-            return readWithFn(parent, resizable_buffer, fd, size_hint, received_hup, .file, preadFn);
-        } else {
-            return readWithFn(parent, resizable_buffer, fd, size_hint, received_hup, .file, wrapReadFn(bun.sys.read));
-        }
+            self.flags.is_paused = true;
+            if ((self.handle == .poll)) {
+                if (self.handle.poll.isRegistered()) {
+                    _ = self.handle.poll.unregister(self.loop(), false);
+                }
+            }
     }
 
-    fn readSocket(parent: *PosixBufferedReader, resizable_buffer: *std.array_list.Managed(u8), fd: bun.FD, size_hint: isize, received_hup: bool) void {
-        return readWithFn(parent, resizable_buffer, fd, size_hint, received_hup, .socket, wrapReadFn(bun.sys.recvNonBlock));
+pub fn unpause(self: *@This()) void {
+            if ((!self.flags.is_paused)) {
+                return;
+            }
+            self.flags.is_paused = false;
     }
 
-    fn readPipe(parent: *PosixBufferedReader, resizable_buffer: *std.array_list.Managed(u8), fd: bun.FD, size_hint: isize, received_hup: bool) void {
-        return readWithFn(parent, resizable_buffer, fd, size_hint, received_hup, .nonblocking_pipe, wrapReadFn(bun.sys.readNonblocking));
+pub fn takeBuffer(self: *@This()) std.array_list.Managed(u8) {
+            const out = self._buffer;
+            self._buffer = std.array_list.Managed(u8).init(out.allocator);
+            return out;
     }
 
-    fn readBlockingPipe(parent: *PosixBufferedReader, resizable_buffer: *std.array_list.Managed(u8), fd: bun.FD, _: isize, received_hup_initially: bool) void {
-        var received_hup = received_hup_initially;
-        while (true) {
+pub fn buffer(self: *@This()) *std.array_list.Managed(u8) {
+            return (&self._buffer);
+    }
+
+pub fn finalBuffer(self: *@This()) *std.array_list.Managed(u8) {
+            if ((self.flags.memfd and (self.handle == .fd))) {
+                var _handle_guard = HandleCloseGuard{ .handle = (blk: {
+                break :blk (&self.handle);
+
+}) };
+                _ = &_handle_guard;
+                var ___handle_guard_moved = false; _ = &___handle_guard_moved;
+                defer if (!___handle_guard_moved) { ___handle_guard_moved = true; const __T = @TypeOf(_handle_guard); if (@typeInfo(__T) == .optional) { if (_handle_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _handle_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _handle_guard; _drop_val.__cp_deinit(); } };
+                _ = (blk_catch_0: { break :blk_catch_0 ((bun.sys.File.readToEndWithArrayList(.{ .handle = self.handle.fd }, self.buffer(), .unknown_size).unwrap()) catch |err| { _ = &err; _ = bun.Output.debugWarn("error reading from memfd\n{}", .{ err });
+                return self.buffer(); }); });
+            }
+            return self.buffer();
+    }
+
+pub fn disableKeepingProcessAlive(self: *@This(), event_loop_ctx: anytype) void {
+            _ = &event_loop_ctx;
+            _ = self.updateRef(false);
+    }
+
+pub fn enableKeepingProcessAlive(self: *@This(), event_loop_ctx: anytype) void {
+            _ = &event_loop_ctx;
+            _ = self.updateRef(true);
+    }
+
+pub fn finish(self: *@This()) void {
+            if (((self.handle != .closed) or self.flags.closed_without_reporting)) {
+                if (self.flags.close_handle) {
+                    _ = self.closeHandle();
+                }
+                return;
+            }
+            _ = bun.assert((!self.flags.is_done));
+            self.flags.is_done = true;
+            _ = self._buffer.shrinkAndFree(self._buffer.items.len);
+    }
+
+pub fn closeHandle(self: *@This()) void {
+            if (self.flags.closed_without_reporting) {
+                self.flags.closed_without_reporting = false;
+                _ = self.done();
+                return;
+            }
+            if (self.flags.close_handle) {
+                _ = self.handle.close(self, done);
+            }
+    }
+
+pub fn done(self: *@This()) void {
+            if (((self.handle != .closed) and self.flags.close_handle)) {
+                _ = self.closeHandle();
+                return;
+            } else {
+                if (self.flags.closed_without_reporting) {
+                    self.flags.closed_without_reporting = false;
+                }
+            }
+            _ = self.finish();
+            _ = self.vtable.onReaderDone();
+    }
+
+pub fn deinit(self: *@This()) void {
+            _ = MaxBuf.removeFromPipereader((&self.maxbuf));
+            _ = self.buffer().clearAndFree();
+            _ = self.closeWithoutReporting();
+    }
+
+pub fn onError(self: *@This(), err: bun.sys.Error) void {
+            _ = self.vtable.onReaderError(err);
+    }
+
+pub fn registerPoll(self: *@This()) void {
+            const poll = ((self.handle.getPoll()) orelse (brk: {
+            if (((self.handle == .fd) and self.flags.pollable)) {
+                const fd = self.handle.fd;
+                self.handle = .{ .poll = Async.FilePoll.init(self.eventLoop(), fd, .{}, @This(), self) };
+                break :brk self.handle.poll;
+            }
+            return;
+}));
+            _ = poll.owner.set(self);
+            if ((!poll.flags.contains(.was_ever_registered))) {
+                _ = poll.enableKeepingProcessAlive(self.eventLoop());
+            }
+            switch (poll.registerWithFd(self.loop(), .readable, .dispatch, poll.fd)) {
+.err => |err| {
+_ = self.onError(err);
+},
+.result => {
+
+},
+}
+    }
+
+pub fn start(self: *@This(), fd: bun.FD, is_pollable: bool) bun.sys.Maybe(void) {
+            if ((!is_pollable)) {
+                _ = self.buffer().clearRetainingCapacity();
+                self.flags.is_done = false;
+                _ = self.handle.close(null, .{});
+                self.handle = .{ .fd = fd };
+                return .success;
+            }
+            self.flags.pollable = true;
+            if ((self.getFd() != fd)) {
+                self.handle = .{ .fd = fd };
+            }
+            _ = self.registerPoll();
+            return .success;
+    }
+
+pub fn startFileOffset(self: *@This(), fd: bun.FD, poll: bool, offset: usize) bun.sys.Maybe(void) {
+            self._offset = offset;
+            self.flags.use_pread = true;
+            return self.start(fd, poll);
+    }
+
+pub fn hasPendingRead(self: *const @This()) bool {
+            return ((self.handle == .poll) and self.handle.poll.isRegistered());
+    }
+
+pub fn watch(self: *@This()) void {
+            if (self.flags.pollable) {
+                _ = self.registerPoll();
+            }
+    }
+
+pub fn hasPendingActivity(self: *const @This()) bool {
+            return (switch (self.handle) {
+.poll => |poll| poll.isActive(),
+.fd => true,
+else => false,
+});
+    }
+
+pub fn loop(self: *const @This()) *Async.Loop {
+            return self.vtable.loop();
+    }
+
+pub fn eventLoop(self: *const @This()) jsc.EventLoopHandle {
+            return self.vtable.eventLoop();
+    }
+
+pub fn read(self: *@This()) void {
+            if (self.flags.is_paused) {
+                return;
+            }
+            const buf = self.buffer();
+            const fd = self.getFd();
+            switch (self.getFileType()) {
+.nonblocking_pipe => {
+_ = readPipe(self, buf, fd, 0, false);
+            return;
+},
+.file => {
+_ = readFile(self, buf, fd, 0, false);
+            return;
+},
+.socket => {
+_ = readSocket(self, buf, fd, 0, false);
+            return;
+},
+.pipe => {
+switch (bun.isReadable(fd)) {
+.ready => {
+_ = readFromBlockingPipeWithoutBlocking(self, buf, fd, 0, false);
+},
+.hup => {
+_ = readFromBlockingPipeWithoutBlocking(self, buf, fd, 0, true);
+},
+.not_ready => {
+_ = self.registerPoll();
+},
+}
+},
+}
+    }
+
+pub fn onPoll(parent: *PosixBufferedReader, size_hint: isize, received_hup: bool) void {
+            const resizable_buffer = parent.buffer();
+            const fd = parent.getFd();
+            _ = bun.sys.syslog("onPoll({f}) = {d}", .{ fd, size_hint });
+            switch (parent.getFileType()) {
+.nonblocking_pipe => {
+_ = readPipe(parent, resizable_buffer, fd, size_hint, received_hup);
+},
+.file => {
+_ = readFile(parent, resizable_buffer, fd, size_hint, received_hup);
+},
+.socket => {
+_ = readSocket(parent, resizable_buffer, fd, size_hint, received_hup);
+},
+.pipe => {
+_ = readFromBlockingPipeWithoutBlocking(parent, resizable_buffer, fd, size_hint, received_hup);
+},
+}
+    }
+
+pub inline fn drainChunk(parent: *PosixBufferedReader, chunk: []const u8, hasMore: ReadState) bool {
+            if (parent.vtable.isStreamingEnabled()) {
+                if ((chunk.len > 0)) {
+                    return parent.vtable.onReadChunk(chunk, hasMore);
+                }
+            }
+            return false;
+    }
+
+pub fn wrapReadFn(comptime func: *const fn (bun.FD, []u8) bun.sys.Maybe(usize)) *const fn (bun.FD, []u8, usize) bun.sys.Maybe(usize) {
+            return (struct {
+
+pub fn call(fd: bun.FD, buf: []u8, offset: usize) bun.sys.Maybe(usize) {
+            _ = &offset;
+            return func(fd, buf);
+    }
+}).call;
+    }
+
+pub fn readFile(parent: *PosixBufferedReader, resizable_buffer: *std.array_list.Managed(u8), fd: bun.FD, size_hint: isize, received_hup: bool) void {
+            const preadFn = (struct {
+
+pub fn call(fd1: bun.FD, buf: []u8, offset: usize) bun.sys.Maybe(usize) {
+            return bun.sys.pread(fd1, buf, @intCast(offset));
+    }
+}).call;
+            if (parent.flags.use_pread) {
+                return readWithFn(parent, resizable_buffer, fd, size_hint, received_hup, .file, preadFn);
+            } else {
+                return readWithFn(parent, resizable_buffer, fd, size_hint, received_hup, .file, wrapReadFn(bun.sys.read));
+            }
+    }
+
+pub fn readSocket(parent: *PosixBufferedReader, resizable_buffer: *std.array_list.Managed(u8), fd: bun.FD, size_hint: isize, received_hup: bool) void {
+            return readWithFn(parent, resizable_buffer, fd, size_hint, received_hup, .socket, wrapReadFn(bun.sys.recvNonBlock));
+    }
+
+pub fn readPipe(parent: *PosixBufferedReader, resizable_buffer: *std.array_list.Managed(u8), fd: bun.FD, size_hint: isize, received_hup: bool) void {
+            return readWithFn(parent, resizable_buffer, fd, size_hint, received_hup, .nonblocking_pipe, wrapReadFn(bun.sys.readNonblocking));
+    }
+
+pub fn readBlockingPipe(parent: *PosixBufferedReader, resizable_buffer: *std.array_list.Managed(u8), fd: bun.FD, _: isize, received_hup_initially: bool) void {
+            var received_hup = received_hup_initially;
+            _ = &received_hup;
+            while (true) {
+                const streaming = parent.vtable.isStreamingEnabled();
+                var got_retry = false;
+                _ = &got_retry;
+                if ((resizable_buffer.capacity == 0)) {
+                    const stack_buffer = parent.vtable.eventLoop().pipeReadBuffer();
+                    switch (bun.sys.readNonblocking(fd, stack_buffer)) {
+.result => |bytes_read| {
+if (parent.maxbuf) |l| {
+                        _ = &l;
+                        _ = l.onReadBytes(bytes_read);
+                    }
+                    if ((bytes_read == 0)) {
+                        _ = parent.closeWithoutReporting();
+                        if ((!parent.flags.is_done)) {
+                            _ = parent.done();
+                        }
+                        return;
+                    }
+                    if (streaming) {
+                        _ = parent.vtable.onReadChunk(stack_buffer[0..bytes_read], (if ((received_hup and (bytes_read < stack_buffer.len))) .eof else .progress));
+                    } else {
+                        _ = bun.handleOom(resizable_buffer.appendSlice(stack_buffer[0..bytes_read]));
+                    }
+},
+.err => |err| {
+if ((!err.isRetry())) {
+                        _ = parent.onError(err);
+                        return;
+                    }
+                    got_retry = true;
+},
+}
+                } else {
+                    _ = bun.handleOom(resizable_buffer.ensureUnusedCapacity((16 * 1024)));
+                    var buf: []u8 = resizable_buffer.unusedCapacitySlice();
+                    _ = &buf;
+                    switch (bun.sys.readNonblocking(fd, buf)) {
+.result => |bytes_read| {
+if (parent.maxbuf) |l| {
+                        _ = &l;
+                        _ = l.onReadBytes(bytes_read);
+                    }
+                    parent._offset = (parent._offset + bytes_read);
+                    resizable_buffer.items.len = (resizable_buffer.items.len + bytes_read);
+                    if ((bytes_read == 0)) {
+                        _ = parent.closeWithoutReporting();
+                        if ((!parent.flags.is_done)) {
+                            _ = parent.done();
+                        }
+                        return;
+                    }
+                    if (streaming) {
+                        if ((!parent.vtable.onReadChunk(buf[0..bytes_read], (if ((received_hup and (bytes_read < buf.len))) .eof else .progress)))) {
+                            return;
+                        }
+                    }
+},
+.err => |err| {
+if ((!err.isRetry())) {
+                        _ = parent.onError(err);
+                        return;
+                    }
+                    got_retry = true;
+},
+}
+                }
+                if ((!received_hup)) {
+                    _ = parent.registerPoll();
+                    return;
+                }
+                if (got_retry) {
+                    _ = parent.registerPoll();
+                    return;
+                }
+                switch (bun.isReadable(fd)) {
+.hup => {
+
+},
+.ready => {
+received_hup = false;
+},
+.not_ready => {
+_ = parent.registerPoll();
+                return;
+},
+}
+            }
+    }
+
+pub fn readWithFn(parent: *PosixBufferedReader, resizable_buffer: *std.array_list.Managed(u8), fd: bun.FD, size_hint: isize, received_hup: bool, comptime file_type: FileType, comptime sys_fn: *const fn (bun.FD, []u8, usize) bun.sys.Maybe(usize)) void {
+            _ = &size_hint;
             const streaming = parent.vtable.isStreamingEnabled();
-            var got_retry = false;
-
-            if (resizable_buffer.capacity == 0) {
+            if (streaming) {
                 const stack_buffer = parent.vtable.eventLoop().pipeReadBuffer();
-
-                switch (bun.sys.readNonblocking(fd, stack_buffer)) {
-                    .result => |bytes_read| {
-                        if (parent.maxbuf) |l| l.onReadBytes(bytes_read);
-
-                        if (bytes_read == 0) {
-                            parent.closeWithoutReporting();
-                            if (!parent.flags.is_done)
-                                parent.done();
+                while ((resizable_buffer.capacity == 0)) {
+                    const stack_buffer_cutoff = (stack_buffer.len / 2);
+                    var stack_buffer_head = stack_buffer;
+                    _ = &stack_buffer_head;
+                    while ((stack_buffer_head.len > (16 * 1024))) {
+                        var buf = stack_buffer_head;
+                        _ = &buf;
+                        switch (sys_fn(fd, buf, parent._offset)) {
+.result => |bytes_read| {
+if (parent.maxbuf) |l| {
+                            _ = &l;
+                            _ = l.onReadBytes(bytes_read);
+                        }
+                        parent._offset = (parent._offset + bytes_read);
+                        buf = stack_buffer_head[0..bytes_read];
+                        stack_buffer_head = stack_buffer_head[bytes_read..];
+                        if ((bytes_read == 0)) {
+                            _ = parent.closeWithoutReporting();
+                            if ((stack_buffer[0..(stack_buffer.len - stack_buffer_head.len)].len > 0)) {
+                                _ = parent.vtable.onReadChunk(stack_buffer[0..(stack_buffer.len - stack_buffer_head.len)], .eof);
+                            }
+                            if ((!parent.flags.is_done)) {
+                                _ = parent.done();
+                            }
                             return;
                         }
-
-                        if (streaming) {
-                            _ = parent.vtable.onReadChunk(stack_buffer[0..bytes_read], if (received_hup and bytes_read < stack_buffer.len) .eof else .progress);
-                        } else {
-                            bun.handleOom(resizable_buffer.appendSlice(stack_buffer[0..bytes_read]));
+                        if ((stack_buffer_head.len < stack_buffer_cutoff)) {
+                            if ((!parent.vtable.onReadChunk(stack_buffer[0..(stack_buffer.len - stack_buffer_head.len)], (if (received_hup) .eof else .progress)))) {
+                                return;
+                            }
+                            stack_buffer_head = stack_buffer;
                         }
-                    },
-                    .err => |err| {
-                        if (!err.isRetry()) {
-                            parent.onError(err);
+},
+.err => |err| {
+if (err.isRetry()) {
+                            if (comptime (file_type == .file)) {
+                                _ = bun.Output.debugWarn("Received EAGAIN while reading from a file. This is a bug.", .{});
+                            } else {
+                                _ = parent.registerPoll();
+                            }
+                            if ((stack_buffer[0..(stack_buffer.len - stack_buffer_head.len)].len > 0)) {
+                                _ = parent.vtable.onReadChunk(stack_buffer[0..(stack_buffer.len - stack_buffer_head.len)], .drained);
+                            }
                             return;
                         }
-                        got_retry = true;
-                    },
+                        if ((stack_buffer[0..(stack_buffer.len - stack_buffer_head.len)].len > 0)) {
+                            _ = parent.vtable.onReadChunk(stack_buffer[0..(stack_buffer.len - stack_buffer_head.len)], .progress);
+                        }
+                        _ = parent.onError(err);
+                        return;
+},
+}
+                    }
+                    if ((stack_buffer[0..(stack_buffer.len - stack_buffer_head.len)].len > 0)) {
+                        if (((!parent.vtable.onReadChunk(stack_buffer[0..(stack_buffer.len - stack_buffer_head.len)], (if (received_hup) .eof else .progress))) and (!received_hup))) {
+                            return;
+                        }
+                    }
+                    if ((!parent.vtable.isStreamingEnabled())) {
+                        break;
+                    }
                 }
             } else {
-                bun.handleOom(resizable_buffer.ensureUnusedCapacity(16 * 1024));
+                if (((resizable_buffer.capacity == 0) and (parent._offset == 0))) {
+                    const stack_buffer = parent.vtable.eventLoop().pipeReadBuffer();
+                    _ = bun.debugAssert((!streaming));
+                    switch (sys_fn(fd, stack_buffer, 0)) {
+.result => |bytes_read| {
+if ((bytes_read > 0)) {
+                        _ = bun.handleOom(resizable_buffer.appendSlice(stack_buffer[0..bytes_read]));
+                    }
+                    if (parent.maxbuf) |l| {
+                        _ = &l;
+                        _ = l.onReadBytes(bytes_read);
+                    }
+                    parent._offset = (parent._offset + bytes_read);
+                    if ((bytes_read == 0)) {
+                        _ = parent.closeWithoutReporting();
+                        _ = drainChunk(parent, resizable_buffer.items, .eof);
+                        if ((!parent.flags.is_done)) {
+                            _ = parent.done();
+                        }
+                        return;
+                    }
+},
+.err => |err| {
+if (err.isRetry()) {
+                        if (comptime (file_type == .file)) {
+                            _ = bun.Output.debugWarn("Received EAGAIN while reading from a file. This is a bug.", .{});
+                        } else {
+                            _ = parent.registerPoll();
+                        }
+                        return;
+                    }
+                    _ = parent.onError(err);
+                    return;
+},
+}
+                }
+            }
+            while (true) {
+                _ = bun.handleOom(resizable_buffer.ensureUnusedCapacity((16 * 1024)));
                 var buf: []u8 = resizable_buffer.unusedCapacitySlice();
-
-                switch (bun.sys.readNonblocking(fd, buf)) {
-                    .result => |bytes_read| {
-                        if (parent.maxbuf) |l| l.onReadBytes(bytes_read);
-                        parent._offset += bytes_read;
-                        resizable_buffer.items.len += bytes_read;
-
-                        if (bytes_read == 0) {
-                            parent.closeWithoutReporting();
-                            if (!parent.flags.is_done)
-                                parent.done();
-                            return;
-                        }
-
-                        if (streaming) {
-                            if (!parent.vtable.onReadChunk(buf[0..bytes_read], if (received_hup and bytes_read < buf.len) .eof else .progress)) {
-                                return;
-                            }
-                        }
-                    },
-                    .err => |err| {
-                        if (!err.isRetry()) {
-                            parent.onError(err);
-                            return;
-                        }
-                        got_retry = true;
-                    },
+                _ = &buf;
+                switch (sys_fn(fd, buf, parent._offset)) {
+.result => |bytes_read| {
+if (parent.maxbuf) |l| {
+                    _ = &l;
+                    _ = l.onReadBytes(bytes_read);
                 }
-            }
-
-            if (!received_hup) {
-                parent.registerPoll();
+                parent._offset = (parent._offset + bytes_read);
+                buf = buf[0..bytes_read];
+                resizable_buffer.items.len = (resizable_buffer.items.len + bytes_read);
+                if ((bytes_read == 0)) {
+                    _ = parent.closeWithoutReporting();
+                    _ = drainChunk(parent, resizable_buffer.items, .eof);
+                    if ((!parent.flags.is_done)) {
+                        _ = parent.done();
+                    }
+                    return;
+                }
+                if (parent.vtable.isStreamingEnabled()) {
+                    if ((resizable_buffer.items.len > 128000)) {
+                        var _clear_guard = ClearBufGuard{ .buf = resizable_buffer };
+                        _ = &_clear_guard;
+                        var ___clear_guard_moved = false; _ = &___clear_guard_moved;
+                        defer if (!___clear_guard_moved) { ___clear_guard_moved = true; const __T = @TypeOf(_clear_guard); if (@typeInfo(__T) == .optional) { if (_clear_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _clear_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _clear_guard; _drop_val.__cp_deinit(); } };
+                        if ((!parent.vtable.onReadChunk(resizable_buffer.items, .progress))) {
+                            return;
+                        }
+                        continue;
+                    }
+                }
+},
+.err => |err| {
+if (parent.vtable.isStreamingEnabled()) {
+                    if ((resizable_buffer.items.len > 0)) {
+                        _ = parent.vtable.onReadChunk(resizable_buffer.items, .drained);
+                        _ = resizable_buffer.clearRetainingCapacity();
+                    }
+                }
+                if (err.isRetry()) {
+                    if (comptime (file_type == .file)) {
+                        _ = bun.Output.debugWarn("Received EAGAIN while reading from a file. This is a bug.", .{});
+                    } else {
+                        _ = parent.registerPoll();
+                    }
+                    return;
+                }
+                _ = parent.onError(err);
                 return;
+},
+}
             }
-
-            if (got_retry) {
-                parent.registerPoll();
-                return;
-            }
-
-            switch (bun.isReadable(fd)) {
-                .hup => {},
-                .ready => {
-                    received_hup = false;
-                },
-                .not_ready => {
-                    parent.registerPoll();
-                    return;
-                },
-            }
-        }
     }
 
-    fn readWithFn(parent: *PosixBufferedReader, resizable_buffer: *std.array_list.Managed(u8), fd: bun.FD, size_hint: isize, received_hup: bool, comptime file_type: FileType, comptime sys_fn: *const fn(bun.FD, []u8, usize) bun.sys.Maybe(usize)) void {
-        _ = size_hint;
-        const streaming = parent.vtable.isStreamingEnabled();
-
-        if (streaming) {
-            const stack_buffer = parent.vtable.eventLoop().pipeReadBuffer();
-            while (resizable_buffer.capacity == 0) {
-                const stack_buffer_cutoff = stack_buffer.len / 2;
-                var stack_buffer_head = stack_buffer;
-                while (stack_buffer_head.len > 16 * 1024) {
-                    var buf = stack_buffer_head;
-
-                    switch (sys_fn(
-                        fd,
-                        buf,
-                        parent._offset,
-                    )) {
-                        .result => |bytes_read| {
-                            if (parent.maxbuf) |l| l.onReadBytes(bytes_read);
-                            parent._offset += bytes_read;
-                            buf = stack_buffer_head[0..bytes_read];
-                            stack_buffer_head = stack_buffer_head[bytes_read..];
-
-                            if (bytes_read == 0) {
-                                parent.closeWithoutReporting();
-                                if (stack_buffer[0 .. stack_buffer.len - stack_buffer_head.len].len > 0)
-                                    _ = parent.vtable.onReadChunk(stack_buffer[0 .. stack_buffer.len - stack_buffer_head.len], .eof);
-                                if (!parent.flags.is_done)
-                                    parent.done();
-                                return;
-                            }
-
-                            if (stack_buffer_head.len < stack_buffer_cutoff) {
-                                if (!parent.vtable.onReadChunk(stack_buffer[0 .. stack_buffer.len - stack_buffer_head.len], if (received_hup) .eof else .progress)) {
-                                    return;
-                                }
-                                stack_buffer_head = stack_buffer;
-                            }
-                        },
-                        .err => |err| {
-                            if (err.isRetry()) {
-                                if (comptime file_type == .file) {
-                                    bun.Output.debugWarn("Received EAGAIN while reading from a file. This is a bug.", .{});
-                                } else {
-                                    parent.registerPoll();
-                                }
-
-                                if (stack_buffer[0 .. stack_buffer.len - stack_buffer_head.len].len > 0)
-                                    _ = parent.vtable.onReadChunk(stack_buffer[0 .. stack_buffer.len - stack_buffer_head.len], .drained);
-                                return;
-                            }
-
-                            if (stack_buffer[0 .. stack_buffer.len - stack_buffer_head.len].len > 0)
-                                _ = parent.vtable.onReadChunk(stack_buffer[0 .. stack_buffer.len - stack_buffer_head.len], .progress);
-                            parent.onError(err);
-                            return;
-                        },
-                    }
-                }
-
-                if (stack_buffer[0 .. stack_buffer.len - stack_buffer_head.len].len > 0) {
-                    if (!parent.vtable.onReadChunk(stack_buffer[0 .. stack_buffer.len - stack_buffer_head.len], if (received_hup) .eof else .progress) and !received_hup) {
-                        return;
-                    }
-                }
-
-                if (!parent.vtable.isStreamingEnabled()) break;
+pub fn readFromBlockingPipeWithoutBlocking(parent: *PosixBufferedReader, resizable_buffer: *std.array_list.Managed(u8), fd: bun.FD, size_hint: isize, received_hup: bool) void {
+            if (parent.vtable.isStreamingEnabled()) {
+                _ = resizable_buffer.clearRetainingCapacity();
             }
-        } else if (resizable_buffer.capacity == 0 and parent._offset == 0) {
-            const stack_buffer = parent.vtable.eventLoop().pipeReadBuffer();
-            bun.debugAssert(!streaming);
-
-            switch (sys_fn(fd, stack_buffer, 0)) {
-                .result => |bytes_read| {
-                    if (bytes_read > 0) {
-                        bun.handleOom(resizable_buffer.appendSlice(stack_buffer[0..bytes_read]));
-                    }
-                    if (parent.maxbuf) |l| l.onReadBytes(bytes_read);
-                    parent._offset += bytes_read;
-
-                    if (bytes_read == 0) {
-                        parent.closeWithoutReporting();
-                        _ = drainChunk(parent, resizable_buffer.items, .eof);
-                        if (!parent.flags.is_done)
-                            parent.done();
-                        return;
-                    }
-                },
-                .err => |err| {
-                    if (err.isRetry()) {
-                        if (comptime file_type == .file) {
-                            bun.Output.debugWarn("Received EAGAIN while reading from a file. This is a bug.", .{});
-                        } else {
-                            parent.registerPoll();
-                        }
-                        return;
-                    }
-                    parent.onError(err);
-                    return;
-                },
-            }
-        }
-
-        while (true) {
-            bun.handleOom(resizable_buffer.ensureUnusedCapacity(16 * 1024));
-            var buf: []u8 = resizable_buffer.unusedCapacitySlice();
-
-            switch (sys_fn(fd, buf, parent._offset)) {
-                .result => |bytes_read| {
-                    if (parent.maxbuf) |l| l.onReadBytes(bytes_read);
-                    parent._offset += bytes_read;
-                    buf = buf[0..bytes_read];
-                    resizable_buffer.items.len += bytes_read;
-
-                    if (bytes_read == 0) {
-                        parent.closeWithoutReporting();
-                        _ = drainChunk(parent, resizable_buffer.items, .eof);
-                        if (!parent.flags.is_done)
-                            parent.done();
-                        return;
-                    }
-
-                    if (parent.vtable.isStreamingEnabled()) {
-                        if (resizable_buffer.items.len > 128_000) {
-                            defer {
-                                resizable_buffer.clearRetainingCapacity();
-                            }
-                            if (!parent.vtable.onReadChunk(resizable_buffer.items, .progress)) {
-                                return;
-                            }
-
-                            continue;
-                        }
-                    }
-                },
-                .err => |err| {
-                    if (parent.vtable.isStreamingEnabled()) {
-                        if (resizable_buffer.items.len > 0) {
-                            _ = parent.vtable.onReadChunk(resizable_buffer.items, .drained);
-                            resizable_buffer.clearRetainingCapacity();
-                        }
-                    }
-
-                    if (err.isRetry()) {
-                        if (comptime file_type == .file) {
-                            bun.Output.debugWarn("Received EAGAIN while reading from a file. This is a bug.", .{});
-                        } else {
-                            parent.registerPoll();
-                        }
-                        return;
-                    }
-                    parent.onError(err);
-                    return;
-                },
-            }
-        }
+            _ = readBlockingPipe(parent, resizable_buffer, fd, size_hint, received_hup);
     }
-
-    fn readFromBlockingPipeWithoutBlocking(parent: *PosixBufferedReader, resizable_buffer: *std.array_list.Managed(u8), fd: bun.FD, size_hint: isize, received_hup: bool) void {
-        if (parent.vtable.isStreamingEnabled()) {
-            resizable_buffer.clearRetainingCapacity();
-        }
-
-        readBlockingPipe(parent, resizable_buffer, fd, size_hint, received_hup);
-    }
-
+    const Flags = packed struct(u16) {
+            is_done: bool = false,
+            pollable: bool = false,
+            nonblocking: bool = false,
+            socket: bool = false,
+            received_eof: bool = false,
+            closed_without_reporting: bool = false,
+            close_handle: bool = true,
+            memfd: bool = false,
+            use_pread: bool = false,
+            is_paused: bool = false,
+            _: u6 = 0,
+        };
     comptime {
-        bun.meta.banFieldType(@This(), bool);
-    }
+            bun.meta.banFieldType(@This(), bool);
+        }
 };
 const WindowsBufferedReaderVTable = struct {
     onReaderDone: *const fn (*anyopaque) void,
@@ -716,489 +803,483 @@ pub const WindowsBufferedReader = struct {
     _buffer: std.array_list.Managed(u8) = std.array_list.Managed(u8).init(bun.default_allocator),
     flags: Flags = .{},
     maxbuf: ?*MaxBuf = null,
-
     parent: *anyopaque = undefined,
     vtable: WindowsBufferedReaderVTable = undefined,
 
-    pub fn memoryCost(this: *const WindowsBufferedReader) usize {
-        return @sizeOf(@This()) + this._buffer.capacity;
+pub fn memoryCost(self: *const @This()) usize {
+            return (@sizeOf(@This()) + self._buffer.capacity);
     }
 
-    const Flags = packed struct(u16) {
-        is_done: bool = false,
-        pollable: bool = false,
-        nonblocking: bool = false,
-        received_eof: bool = false,
-        closed_without_reporting: bool = false,
-        close_handle: bool = true,
+pub fn init(comptime Type: type) WindowsBufferedReader {
+            const fns = struct {
 
-        is_paused: bool = true,
-        has_inflight_read: bool = false,
-        use_pread: bool = false,
-
-        defer_done_callback: bool = false,
-        _: u6 = 0,
-    };
-
-    pub fn init(comptime Type: type) WindowsBufferedReader {
-        const fns = struct {
-            fn onReadChunk(this: *anyopaque, chunk: []const u8, hasMore: ReadState) bool {
-                return Type.onReadChunk(@as(*Type, @ptrCast(@alignCast(this))), chunk, hasMore);
-            }
-            fn onReaderDone(this: *anyopaque) void {
-                return Type.onReaderDone(@as(*Type, @ptrCast(@alignCast(this))));
-            }
-            fn onReaderError(this: *anyopaque, err: bun.sys.Error) void {
-                return Type.onReaderError(@as(*Type, @ptrCast(@alignCast(this))), err);
-            }
-            fn loop(this: *anyopaque) *Async.Loop {
-                return Type.loop(@as(*Type, @ptrCast(@alignCast(this))));
-            }
-        };
-        return .{
-            .vtable = .{
-                .onReadChunk = if (@hasDecl(Type, "onReadChunk")) &fns.onReadChunk else null,
-                .onReaderDone = &fns.onReaderDone,
-                .onReaderError = &fns.onReaderError,
-                .loop = &fns.loop,
-            },
-        };
+pub fn onReadChunk(ptr: *anyopaque, chunk: []const u8, hasMore: ReadState) bool {
+            return Type.onReadChunk(@as(*Type, @ptrCast(@alignCast(ptr))), chunk, hasMore);
     }
 
-    pub inline fn isDone(this: *WindowsBufferedReader) bool {
-        return this.flags.is_done or this.flags.received_eof or this.flags.closed_without_reporting;
+pub fn onReaderDone(ptr: *anyopaque) void {
+            return Type.onReaderDone(@as(*Type, @ptrCast(@alignCast(ptr))));
     }
 
-    pub fn from(to: *WindowsBufferedReader, other: anytype, parent: anytype) void {
-        bun.assert(other.source != null and to.source == null);
-        to.* = .{
-            .vtable = to.vtable,
-            .flags = other.flags,
-            ._buffer = other.buffer().*,
-            ._offset = other._offset,
-            .source = other.source,
-        };
-        other.flags.is_done = true;
-        other._offset = 0;
-        other.buffer().* = std.array_list.Managed(u8).init(bun.default_allocator);
-        other.source = null;
-        MaxBuf.transferToPipereader(&other.maxbuf, &to.maxbuf);
-        to.setParent(parent);
+pub fn onReaderError(ptr: *anyopaque, err_val: bun.sys.Error) void {
+            return Type.onReaderError(@as(*Type, @ptrCast(@alignCast(ptr))), err_val);
     }
 
-    pub fn getFd(this: *const WindowsBufferedReader) bun.FD {
-        const source = this.source orelse return bun.invalid_fd;
-        return source.getFd();
+pub fn loop(ptr: *anyopaque) *Async.Loop {
+            return Type.loop(@as(*Type, @ptrCast(@alignCast(ptr))));
+    }
+};
+            return .{ .vtable = .{ .onReadChunk = (if (@hasDecl(Type, "onReadChunk")) (&fns.onReadChunk) else null), .onReaderDone = (&fns.onReaderDone), .onReaderError = (&fns.onReaderError), .loop = (&fns.loop) } };
     }
 
-    pub fn watch(_: *WindowsBufferedReader) void {
+pub fn isDone(self: *@This()) bool {
+            return ((self.flags.is_done or self.flags.received_eof) or self.flags.closed_without_reporting);
     }
 
-    pub fn setParent(this: *WindowsBufferedReader, parent: anytype) void {
-        this.parent = parent;
-        if (!this.flags.is_done) {
-            if (this.source) |source| {
-                source.setData(this);
-            }
-        }
-    }
-
-    pub fn updateRef(this: *WindowsBufferedReader, value: bool) void {
-        if (this.source) |source| {
-            if (value) {
-                source.ref();
-            } else {
-                source.unref();
-            }
-        }
-    }
-
-    pub fn enableKeepingProcessAlive(this: *WindowsBufferedReader, _: anytype) void {
-        this.updateRef(true);
-    }
-
-    pub fn disableKeepingProcessAlive(this: *WindowsBufferedReader, _: anytype) void {
-        this.updateRef(false);
-    }
-
-    pub fn takeBuffer(this: *WindowsBufferedReader) std.array_list.Managed(u8) {
-        const out = this._buffer;
-        this._buffer = std.array_list.Managed(u8).init(out.allocator);
-        return out;
-    }
-
-    pub fn buffer(this: *WindowsBufferedReader) *std.array_list.Managed(u8) {
-        return &this._buffer;
-    }
-
-    pub const finalBuffer = buffer;
-
-    pub fn hasPendingActivity(this: *const WindowsBufferedReader) bool {
-        const source = this.source orelse return false;
-        return source.isActive();
-    }
-
-    pub fn hasPendingRead(this: *const WindowsBufferedReader) bool {
-        if (this.flags.has_inflight_read) return true;
-        const source = this.source orelse return false;
-        return switch (source) {
-            .file, .sync_file => |file| file.state != .deinitialized,
-            else => false,
-        };
-    }
-
-    fn _onReadChunk(this: *WindowsBufferedReader, buf: []u8, hasMore: ReadState) bool {
-        if (this.maxbuf) |m| m.onReadBytes(buf.len);
-
-        if (hasMore == .eof) {
-            this.flags.received_eof = true;
-        }
-
-        const onReadChunkFn = this.vtable.onReadChunk orelse {
-            this.flags.has_inflight_read = false;
-            return true;
-        };
-        const result = onReadChunkFn(this.parent, buf, hasMore);
-        this.flags.has_inflight_read = false;
-        return result;
-    }
-
-    fn finish(this: *WindowsBufferedReader) void {
-        this.flags.has_inflight_read = false;
-        this.flags.is_done = true;
-        this._buffer.shrinkAndFree(this._buffer.items.len);
-    }
-
-    pub fn done(this: *WindowsBufferedReader) void {
-        if (this.source) |source| bun.assert(source.isClosed());
-
-        this.finish();
-
-        this.vtable.onReaderDone(this.parent);
-    }
-
-    pub fn onError(this: *WindowsBufferedReader, err: bun.sys.Error) void {
-        this.finish();
-        this.vtable.onReaderError(this.parent, err);
-    }
-
-    pub fn getReadBufferWithStableMemoryAddress(this: *WindowsBufferedReader, suggested_size: usize) []u8 {
-        this.flags.has_inflight_read = true;
-        bun.handleOom(this._buffer.ensureUnusedCapacity(suggested_size));
-        const res = this._buffer.allocatedSlice()[this._buffer.items.len..];
-        return res;
-    }
-
-    pub fn startWithCurrentPipe(this: *WindowsBufferedReader) bun.sys.Maybe(void) {
-        bun.assert(!this.source.?.isClosed());
-        this.source.?.setData(this);
-        this.buffer().clearRetainingCapacity();
-        this.flags.is_done = false;
-        return this.startReading();
-    }
-
-    pub fn startWithPipe(this: *WindowsBufferedReader, pipe: *uv.Pipe) bun.sys.Maybe(void) {
-        this.source = .{ .pipe = pipe };
-        return this.startWithCurrentPipe();
-    }
-
-    pub fn start(this: *WindowsBufferedReader, fd: bun.FD, _: bool) bun.sys.Maybe(void) {
-        bun.assert(this.source == null);
-        const loop = this.vtable.loop(this.parent);
-        const source = switch (Source.open(loop, fd)) {
-            .err => |err| return .{ .err = err },
-            .result => |source| source,
-        };
-        source.setData(this);
-        this.source = source;
-        return this.startWithCurrentPipe();
-    }
-
-    pub fn startFileOffset(this: *WindowsBufferedReader, fd: bun.FD, poll: bool, offset: usize) bun.sys.Maybe(void) {
-        this._offset = offset;
-        this.flags.use_pread = true;
-        return this.start(fd, poll);
-    }
-
-    pub fn deinit(this: *WindowsBufferedReader) void {
-        MaxBuf.removeFromPipereader(&this.maxbuf);
-        this.buffer().deinit();
-        const source = this.source orelse return;
-        this.source = null;
-        if (!source.isClosed()) {
-            this.closeImpl(false);
-        }
-    }
-
-    pub fn setRawMode(this: *WindowsBufferedReader, value: bool) bun.sys.Maybe(void) {
-        const source = this.source orelse return .{
-            .err = .{
-                .errno = @intFromEnum(bun.sys.E.BADF),
-                .syscall = .uv_tty_set_mode,
-            },
-        };
-        return source.setRawMode(value);
-    }
-
-    fn onStreamAlloc(handle: *uv.Handle, suggested_size: usize, buf: *uv.uv_buf_t) callconv(.c) void {
-        var this = bun.cast(*WindowsBufferedReader, handle.data);
-        const result = this.getReadBufferWithStableMemoryAddress(suggested_size);
-        buf.* = uv.uv_buf_t.init(result);
-    }
-
-    fn onStreamRead(handle: *uv.uv_handle_t, nread: uv.ReturnCodeI64, buf: *const uv.uv_buf_t) callconv(.c) void {
-        const stream = bun.cast(*uv.uv_stream_t, handle);
-        var this = bun.cast(*WindowsBufferedReader, stream.data);
-
-        const nread_int = nread.int();
-
-        bun.sys.syslog("onStreamRead(0x{d}) = {d}", .{ @intFromPtr(this), nread_int });
-
-        switch (nread_int) {
-            0 => {
-                return;
-            },
-            uv.UV_EOF => {
-                _ = this.stopReading();
-                return this.onRead(.{ .result = 0 }, "", .eof);
-            },
-            else => {
-                if (nread.toError(.recv)) |err| {
-                    _ = this.stopReading();
-                    this.onRead(.{ .err = err }, "", .progress);
-                    return;
-                }
-                const len: usize = @intCast(nread_int);
-                var slice = buf.slice();
-                this.onRead(.{ .result = len }, slice[0..len], .progress);
-            },
-        }
-    }
-
-    fn onFileRead(fs: *uv.fs_t) callconv(.c) void {
-        const file = Source.File.fromFS(fs);
-        const result = fs.result;
-        const nread_int = result.int();
-        const was_canceled = nread_int == uv.UV_ECANCELED;
-
-        bun.sys.syslog("onFileRead({f}) = {d}", .{ bun.FD.fromUV(fs.file.fd), nread_int });
-
-        const parent_ptr = fs.data;
-
-        file.complete(was_canceled);
-
-        if (parent_ptr == null) {
-            bun.assert(file.state == .closing);
-            return;
-        }
-
-        var this: *WindowsBufferedReader = bun.cast(*WindowsBufferedReader, parent_ptr);
-
-        this.flags.has_inflight_read = false;
-
-        if (was_canceled) {
-            if (this.flags.defer_done_callback) {
-                this.flags.defer_done_callback = false;
-                this.closeImpl(true);
-            } else {
-                this.buffer().clearRetainingCapacity();
-            }
-            return;
-        }
-
-        if (this.flags.is_done) return;
-
-        switch (nread_int) {
-            0, uv.UV_EOF => {
-                this.flags.is_paused = true;
-                this.onRead(.{ .result = 0 }, "", .eof);
-            },
-            uv.UV_ECANCELED => unreachable,
-            else => {
-                if (result.toError(.read)) |err| {
-                    this.flags.is_paused = true;
-                    this.onRead(.{ .err = err }, "", .progress);
-                    return;
-                }
-                defer {
-                    if (!this.flags.is_paused) {
-                        if (this.source) |source| {
-                            if (source == .file) {
-                                const file_ptr = source.file;
-
-                                if (file_ptr.canStart()) {
-                                    source.setData(this);
-                                    file_ptr.prepare();
-                                    const buf = this.getReadBufferWithStableMemoryAddress(64 * 1024);
-                                    file_ptr.iov = uv.uv_buf_t.init(buf);
-                                    this.flags.has_inflight_read = true;
-
-                                    if (uv.uv_fs_read(this.vtable.loop(this.parent), &file_ptr.fs, file_ptr.file, @ptrCast(&file_ptr.iov), 1, if (this.flags.use_pread) @intCast(this._offset) else -1, onFileRead).toError(.write)) |err| {
-                                        file_ptr.complete(false);
-                                        this.flags.has_inflight_read = false;
-                                        this.flags.is_paused = true;
-                                        this.onRead(.{ .err = err }, "", .progress);
-                                    }
-                                }
+pub fn continueFileReadIfNotPaused(self: *@This()) void {
+            if ((!self.flags.is_paused)) {
+                if (self.source) |source| {
+                    _ = &source;
+                    if ((source == .file)) {
+                        const file_ptr = source.file;
+                        if (file_ptr.canStart()) {
+                            _ = source.setData(self);
+                            _ = file_ptr.prepare();
+                            const buf = self.getReadBufferWithStableMemoryAddress((64 * 1024));
+                            file_ptr.iov = uv.uv_buf_t.init(buf);
+                            self.flags.has_inflight_read = true;
+                            if (uv.uv_fs_read(self.vtable.loop(self.parent), (&file_ptr.fs), file_ptr.file, @ptrCast((&file_ptr.iov)), 1, (if (self.flags.use_pread) @intCast(self._offset) else -1), onFileRead).toError(.write)) |err| {
+                                _ = &err;
+                                _ = file_ptr.complete(false);
+                                self.flags.has_inflight_read = false;
+                                self.flags.is_paused = true;
+                                _ = self.onRead(.{ .err = err }, "", .progress);
                             }
                         }
                     }
                 }
-
-                const len: usize = @intCast(nread_int);
-                this._offset += len;
-                if (this.source) |source| {
-                    if (source == .file) {
-                        var buf = source.file.iov.slice();
-                        return this.onRead(.{ .result = len }, buf[0..len], .progress);
-                    }
-                }
-                bun.assert(false);
-                return this.onRead(.{ .err = bun.sys.Error.fromCode(bun.sys.E.PIPE, .read) }, "", .progress);
-            },
-        }
+            }
     }
 
-    pub fn startReading(this: *WindowsBufferedReader) bun.sys.Maybe(void) {
-        if (this.flags.is_done or !this.flags.is_paused) return .success;
-        this.flags.is_paused = false;
-        const source: Source = this.source orelse return .{ .err = bun.sys.Error.fromCode(bun.sys.E.BADF, .read) };
-        bun.assert(!source.isClosed());
-
-        switch (source) {
-            .file => |file| {
-                if (!file.canStart()) {
-                    source.setData(this);
-                    return .success;
-                }
-
-                source.setData(this);
-                file.prepare();
-                const buf = this.getReadBufferWithStableMemoryAddress(64 * 1024);
-                file.iov = uv.uv_buf_t.init(buf);
-                this.flags.has_inflight_read = true;
-
-                if (uv.uv_fs_read(this.vtable.loop(this.parent), &file.fs, file.file, @ptrCast(&file.iov), 1, if (this.flags.use_pread) @intCast(this._offset) else -1, onFileRead).toError(.write)) |err| {
-                    file.complete(false);
-                    this.flags.has_inflight_read = false;
-                    return .{ .err = err };
-                }
-            },
-            else => {
-                if (uv.uv_read_start(source.toStream(), &onStreamAlloc, &onStreamRead).toError(.open)) |err| {
-                    bun.windows.libuv.log("uv_read_start() = {s}", .{err.name()});
-                    return .{ .err = err };
-                }
-            },
-        }
-
-        return .success;
+pub fn from(to: *WindowsBufferedReader, other: anytype, parent: anytype) void {
+            _ = bun.assert(((other.source != null) and (to.source == null)));
+            to.* = .{ .vtable = to.vtable, .flags = other.flags, ._buffer = (other.buffer()).*, ._offset = other._offset, .source = other.source };
+            other.flags.is_done = true;
+            other._offset = 0;
+            (other.buffer()).* = std.array_list.Managed(u8).init(bun.default_allocator);
+            other.source = null;
+            _ = MaxBuf.transferToPipereader((&other.maxbuf), (&to.maxbuf));
+            _ = to.setParent(parent);
     }
 
-    pub fn stopReading(this: *WindowsBufferedReader) bun.sys.Maybe(void) {
-        if (this.flags.is_done or this.flags.is_paused) return .success;
-        this.flags.is_paused = true;
-        const source = this.source orelse return .success;
-        switch (source) {
-            .file => |file| {
-                file.stop();
-            },
-            else => {
-                source.toStream().readStop();
-            },
-        }
-        return .success;
+pub fn getFd(self: *const @This()) bun.FD {
+            const source = ((self.source) orelse { return bun.invalid_fd; });
+            return source.getFd();
     }
 
-    pub fn closeImpl(this: *WindowsBufferedReader, comptime callDone: bool) void {
-        if (this.source) |source| {
+pub fn watch(_: *WindowsBufferedReader) void {
+    }
+
+pub fn setParent(self: *@This(), parent: anytype) void {
+            self.parent = parent;
+            if ((!self.flags.is_done)) {
+                if (self.source) |source| {
+                    _ = &source;
+                    _ = source.setData(self);
+                }
+            }
+    }
+
+pub fn updateRef(self: *@This(), value: bool) void {
+            if (self.source) |source| {
+                _ = &source;
+                if (value) {
+                    _ = source.ref();
+                } else {
+                    _ = source.unref();
+                }
+            }
+    }
+
+pub fn enableKeepingProcessAlive(self: *@This(), _: anytype) void {
+            _ = self.updateRef(true);
+    }
+
+pub fn disableKeepingProcessAlive(self: *@This(), _: anytype) void {
+            _ = self.updateRef(false);
+    }
+
+pub fn takeBuffer(self: *@This()) std.array_list.Managed(u8) {
+            const out = self._buffer;
+            self._buffer = std.array_list.Managed(u8).init(out.allocator);
+            return out;
+    }
+
+pub fn buffer(self: *@This()) *std.array_list.Managed(u8) {
+            return (&self._buffer);
+    }
+
+pub fn hasPendingActivity(self: *const @This()) bool {
+            const source = ((self.source) orelse { return false; });
+            return source.isActive();
+    }
+
+pub fn hasPendingRead(self: *const @This()) bool {
+            if (self.flags.has_inflight_read) {
+                return true;
+            }
+            const source = ((self.source) orelse { return false; });
+            return (switch (source) {
+.file, .sync_file => |file| (file.state != .deinitialized),
+else => false,
+});
+    }
+
+pub fn _onReadChunk(self: *@This(), buf: []u8, hasMore: ReadState) bool {
+            if (self.maxbuf) |m| {
+                _ = &m;
+                _ = m.onReadBytes(buf.len);
+            }
+            if ((hasMore == .eof)) {
+                self.flags.received_eof = true;
+            }
+            const onReadChunkFn = ((self.vtable.onReadChunk) orelse {
+            self.flags.has_inflight_read = false;
+            return true;
+});
+            const result = onReadChunkFn(self.parent, buf, hasMore);
+            self.flags.has_inflight_read = false;
+            return result;
+    }
+
+pub fn finish(self: *@This()) void {
+            self.flags.has_inflight_read = false;
+            self.flags.is_done = true;
+            _ = self._buffer.shrinkAndFree(self._buffer.items.len);
+    }
+
+pub fn done(self: *@This()) void {
+            if (self.source) |source| {
+                _ = &source;
+                _ = bun.assert(source.isClosed());
+            }
+            _ = self.finish();
+            _ = self.vtable.onReaderDone(self.parent);
+    }
+
+pub fn onError(self: *@This(), err: bun.sys.Error) void {
+            _ = self.finish();
+            _ = self.vtable.onReaderError(self.parent, err);
+    }
+
+pub fn getReadBufferWithStableMemoryAddress(self: *@This(), suggested_size: usize) []u8 {
+            self.flags.has_inflight_read = true;
+            _ = bun.handleOom(self._buffer.ensureUnusedCapacity(suggested_size));
+            const res = self._buffer.allocatedSlice()[self._buffer.items.len..];
+            return res;
+    }
+
+pub fn startWithCurrentPipe(self: *@This()) bun.sys.Maybe(void) {
+            _ = bun.assert((!self.source.?.isClosed()));
+            _ = self.source.?.setData(self);
+            _ = self.buffer().clearRetainingCapacity();
+            self.flags.is_done = false;
+            return self.startReading();
+    }
+
+pub fn startWithPipe(self: *@This(), pipe: *uv.Pipe) bun.sys.Maybe(void) {
+            self.source = .{ .pipe = pipe };
+            return self.startWithCurrentPipe();
+    }
+
+pub fn start(self: *@This(), fd: bun.FD, _: bool) bun.sys.Maybe(void) {
+            _ = bun.assert((self.source == null));
+            const loop = self.vtable.loop(self.parent);
+            const source = (switch (Source.open(loop, fd)) {
+.err => |err| {
+return .{ .err = err };
+},
+.result => |source| source,
+});
+            _ = (source).?.setData(self);
+            self.source = source;
+            return self.startWithCurrentPipe();
+    }
+
+pub fn startFileOffset(self: *@This(), fd: bun.FD, poll: bool, offset: usize) bun.sys.Maybe(void) {
+            self._offset = offset;
+            self.flags.use_pread = true;
+            return self.start(fd, poll);
+    }
+
+pub fn deinit(self: *@This()) void {
+            _ = MaxBuf.removeFromPipereader((&self.maxbuf));
+            _ = self.buffer().deinit();
+            const source = ((self.source) orelse { return; });
+            self.source = null;
+            if ((!source.isClosed())) {
+                _ = self.closeImpl(false);
+            }
+    }
+
+pub fn setRawMode(self: *@This(), value: bool) bun.sys.Maybe(void) {
+            const source = ((self.source) orelse { return .{ .err = .{ .errno = @intFromEnum(bun.sys.E.BADF), .syscall = .uv_tty_set_mode } }; });
+            return source.setRawMode(value);
+    }
+
+pub fn onStreamAlloc(handle: *uv.Handle, suggested_size: usize, buf: *uv.uv_buf_t) callconv(.c) void {
+            var this = bun.cast(*WindowsBufferedReader, handle.data);
+            _ = &this;
+            const result = this.getReadBufferWithStableMemoryAddress(suggested_size);
+            buf.* = uv.uv_buf_t.init(result);
+    }
+
+pub fn onStreamRead(handle: *uv.uv_handle_t, nread: uv.ReturnCodeI64, buf: *const uv.uv_buf_t) callconv(.c) void {
+            const stream = bun.cast((&uv.uv_stream_t), handle);
+            var this = bun.cast(*WindowsBufferedReader, stream.data);
+            _ = &this;
+            const nread_int = nread.int();
+            _ = bun.sys.syslog("onStreamRead(0x{d}) = {d}", .{ @intFromPtr(this), nread_int });
+            switch (nread_int) {
+0 => {
+return;
+},
+uv.UV_EOF => {
+_ = this.stopReading();
+            return this.onRead(.{ .result = 0 }, "", .eof);
+},
+else => {
+if (nread.toError(.recv)) |err| {
+                _ = &err;
+                _ = this.stopReading();
+                _ = this.onRead(.{ .err = err }, "", .progress);
+                return;
+            }
+            const len: usize = @intCast(nread_int);
+            var slice = buf.slice();
+            _ = &slice;
+            _ = this.onRead(.{ .result = len }, slice[0..len], .progress);
+},
+}
+    }
+
+pub fn onFileRead(fs: *uv.fs_t) callconv(.c) void {
+            const file = Source.File.fromFS(fs);
+            const result = fs.result;
+            const nread_int = result.int();
+            const was_canceled = (nread_int == uv.UV_ECANCELED);
+            _ = bun.sys.syslog("onFileRead({f}) = {d}", .{ bun.FD.fromUV(fs.file.fd), nread_int });
+            const parent_ptr = fs.data;
+            _ = file.complete(was_canceled);
+            if ((parent_ptr == null)) {
+                _ = bun.assert((file.state == .closing));
+                return;
+            }
+            var this: *WindowsBufferedReader = bun.cast(*WindowsBufferedReader, parent_ptr);
+            _ = &this;
+            this.flags.has_inflight_read = false;
+            if (was_canceled) {
+                if (this.flags.defer_done_callback) {
+                    this.flags.defer_done_callback = false;
+                    _ = this.closeImpl(true);
+                } else {
+                    _ = this.buffer().clearRetainingCapacity();
+                }
+                return;
+            }
+            if (this.flags.is_done) {
+                return;
+            }
+            switch (nread_int) {
+0, uv.UV_EOF => {
+this.flags.is_paused = true;
+            _ = this.onRead(.{ .result = 0 }, "", .eof);
+},
+uv.UV_ECANCELED => {
+_ = unreachable;
+},
+else => {
+if (result.toError(.read)) |err| {
+                _ = &err;
+                this.flags.is_paused = true;
+                _ = this.onRead(.{ .err = err }, "", .progress);
+                return;
+            }
+            var _read_guard = WindowsReadGuard{ .reader = this };
+            _ = &_read_guard;
+            var ___read_guard_moved = false; _ = &___read_guard_moved;
+            defer if (!___read_guard_moved) { ___read_guard_moved = true; const __T = @TypeOf(_read_guard); if (@typeInfo(__T) == .optional) { if (_read_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _read_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _read_guard; _drop_val.__cp_deinit(); } };
+            const len: usize = @intCast(nread_int);
+            this._offset = (this._offset + len);
+            if (this.source) |source| {
+                _ = &source;
+                if ((source == .file)) {
+                    var buf = source.file.iov.slice();
+                    _ = &buf;
+                    return this.onRead(.{ .result = len }, buf[0..len], .progress);
+                }
+            }
+            _ = bun.assert(false);
+            return this.onRead(.{ .err = bun.sys.Error.fromCode(bun.sys.E.PIPE, .read) }, "", .progress);
+},
+}
+    }
+
+pub fn startReading(self: *@This()) bun.sys.Maybe(void) {
+            if ((self.flags.is_done or (!self.flags.is_paused))) {
+                return .success;
+            }
+            self.flags.is_paused = false;
+            const source: Source = ((self.source) orelse { return .{ .err = bun.sys.Error.fromCode(bun.sys.E.BADF, .read) }; });
+            _ = bun.assert((!source.isClosed()));
             switch (source) {
-                .sync_file, .file => |file| {
-                    file.detach();
-                },
-                .pipe => |pipe| {
-                    pipe.data = pipe;
-                    this.flags.is_paused = true;
-                    pipe.close(onPipeClose);
-                },
-                .tty => |tty| {
-                    if (Source.StdinTTY.isStdinTTY(tty)) {
-                    } else {
-                        tty.data = tty;
-                        tty.close(onTTYClose);
-                    }
-
-                    this.flags.is_paused = true;
-                },
+.file => |file| {
+if ((!file.canStart())) {
+                _ = source.setData(self);
+                return .success;
             }
-            this.source = null;
-            if (comptime callDone) this.done();
-        }
+            _ = source.setData(self);
+            _ = file.prepare();
+            const buf = self.getReadBufferWithStableMemoryAddress((64 * 1024));
+            file.iov = uv.uv_buf_t.init(buf);
+            self.flags.has_inflight_read = true;
+            if (uv.uv_fs_read(self.vtable.loop(self.parent), (&file.fs), file.file, @ptrCast((&file.iov)), 1, (if (self.flags.use_pread) @intCast(self._offset) else -1), onFileRead).toError(.write)) |err| {
+                _ = &err;
+                _ = file.complete(false);
+                self.flags.has_inflight_read = false;
+                return .{ .err = err };
+            }
+},
+else => {
+if (uv.uv_read_start(source.toStream(), (&onStreamAlloc), (&onStreamRead)).toError(.open)) |err| {
+                _ = &err;
+                _ = bun.windows.libuv.log("uv_read_start() = {s}", .{ err.name() });
+                return .{ .err = err };
+            }
+},
+}
+            return .success;
     }
 
-    pub fn close(this: *WindowsBufferedReader) void {
-        _ = this.stopReading();
+pub fn stopReading(self: *@This()) bun.sys.Maybe(void) {
+            if ((self.flags.is_done or self.flags.is_paused)) {
+                return .success;
+            }
+            self.flags.is_paused = true;
+            const source = ((self.source) orelse { return .success; });
+            switch (source) {
+.file => |file| {
+_ = file.stop();
+},
+else => {
+_ = source.toStream().readStop();
+},
+}
+            return .success;
+    }
 
-        if (this.source) |source| {
-            if (source == .file or source == .sync_file) {
-                const file = source.file;
-                if (file.state == .canceling or file.state == .operating) {
-                    this.flags.defer_done_callback = true;
-                    return;
+pub fn closeImpl(self: *@This(), comptime callDone: bool) void {
+            if (self.source) |source| {
+                _ = &source;
+                switch (source) {
+.sync_file, .file => |file| {
+_ = file.detach();
+},
+.pipe => |pipe| {
+pipe.data = pipe;
+                self.flags.is_paused = true;
+                _ = pipe.close(onPipeClose);
+},
+.tty => |tty| {
+if (Source.StdinTTY.isStdinTTY(tty)) {
+                } else {
+                    tty.data = tty;
+                    _ = tty.close(onTTYClose);
+                }
+                self.flags.is_paused = true;
+},
+}
+                self.source = null;
+                if (comptime callDone) {
+                    _ = self.done();
                 }
             }
-        }
-
-        this.closeImpl(true);
     }
 
-    fn onPipeClose(handle: *uv.Pipe) callconv(.c) void {
-        const this = bun.cast(*uv.Pipe, handle.data);
-        bun.destroy(this);
-    }
-
-    fn onTTYClose(handle: *uv.uv_tty_t) callconv(.c) void {
-        const this = bun.cast(*uv.uv_tty_t, handle.data);
-        bun.default_allocator.destroy(this);
-    }
-
-    pub fn onRead(this: *WindowsBufferedReader, amount: bun.sys.Maybe(usize), slice: []u8, hasMore: ReadState) void {
-        if (amount == .err) {
-            this.onError(amount.err);
-            return;
-        }
-
-        var buf = this.buffer();
-        if (comptime bun.Environment.allow_assert) {
-            if (slice.len > 0 and !bun.isSliceInBuffer(slice, buf.allocatedSlice())) {
-                @panic("uv_read_cb: buf is not in buffer! This is a bug in bun. Please report it.");
+pub fn close(self: *@This()) void {
+            _ = self.stopReading();
+            if (self.source) |source| {
+                _ = &source;
+                if (((source == .file) or (source == .sync_file))) {
+                    const file = source.file;
+                    if (((file.state == .canceling) or (file.state == .operating))) {
+                        self.flags.defer_done_callback = true;
+                        return;
+                    }
+                }
             }
-        }
-
-        buf.items.len += amount.result;
-
-        _ = this._onReadChunk(slice, hasMore);
-
-        if (hasMore == .eof) {
-            close(this);
-        }
+            _ = self.closeImpl(true);
     }
 
-    pub fn pause(this: *WindowsBufferedReader) void {
-        _ = this.stopReading();
+pub fn onPipeClose(handle: *uv.Pipe) callconv(.c) void {
+            const this = bun.cast(*uv.Pipe, handle.data);
+            _ = bun.destroy(this);
     }
 
-    pub fn unpause(this: *WindowsBufferedReader) void {
-        _ = this.startReading();
+pub fn onTTYClose(handle: *uv.uv_tty_t) callconv(.c) void {
+            const this = bun.cast((&uv.uv_tty_t), handle.data);
+            _ = bun.default_allocator.destroy(this);
     }
 
-    pub fn read(this: *WindowsBufferedReader) void {
-        this.unpause();
+pub fn onRead(self: *@This(), amount: bun.sys.Maybe(usize), slice: []u8, hasMore: ReadState) void {
+            if ((amount == .err)) {
+                _ = self.onError(amount.err);
+                return;
+            }
+            var buf = self.buffer();
+            _ = &buf;
+            if (comptime bun.Environment.allow_assert) {
+                if (((slice.len > 0) and (!bun.isSliceInBuffer(slice, buf.allocatedSlice())))) {
+                    _ = @panic("uv_read_cb: buf is not in buffer! This is a bug in bun. Please report it.");
+                }
+            }
+            buf.items.len = (buf.items.len + amount.result);
+            _ = self._onReadChunk(slice, hasMore);
+            if ((hasMore == .eof)) {
+                _ = close(self);
+            }
     }
 
+pub fn pause(self: *@This()) void {
+            _ = self.stopReading();
+    }
+
+pub fn unpause(self: *@This()) void {
+            _ = self.startReading();
+    }
+
+pub fn read(self: *@This()) void {
+            _ = self.unpause();
+    }
+    const Flags = packed struct(u16) {
+            is_done: bool = false,
+            pollable: bool = false,
+            nonblocking: bool = false,
+            received_eof: bool = false,
+            closed_without_reporting: bool = false,
+            close_handle: bool = true,
+    
+            is_paused: bool = true,
+            has_inflight_read: bool = false,
+            use_pread: bool = false,
+    
+            defer_done_callback: bool = false,
+            _: u6 = 0,
+        };
+    pub const finalBuffer = buffer;
     comptime {
-        bun.meta.banFieldType(WindowsBufferedReader, bool);
-    }
+            bun.meta.banFieldType(WindowsBufferedReader, bool);
+        }
 };
 pub const BufferedReader = (if (bun.Environment.isPosix) PosixBufferedReader else (if (bun.Environment.isWindows) WindowsBufferedReader else @compileError("Unsupported platform")));
 pub const PipeReader = BufferedReader;

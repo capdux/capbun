@@ -33,6 +33,19 @@ pub struct DestroyGuard<T> {
     ~init() { unsafe { bun.destroy(_.ptr); } }
 }
 
+pub struct ErrDestroyGuard<T> {
+    ptr: *T!,
+    ~errinit() { unsafe { bun.destroy(_.ptr); } }
+}
+
+pub struct GroupEndGuard {
+    ~init() { group.end(); }
+}
+
+pub struct GroupErrLogGuard {
+    ~errinit() { group.log("ended in error", .{}); }
+}
+
 pub fn cloneActiveStrong(): BunTestPtr? {
     if (runner := bun.jsc.Jest.Jest.runner) {
         return runner.bun_test_root.cloneActiveFile();
@@ -83,8 +96,8 @@ pub struct js_fns {
         return struct {
             static fn hookFn(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSError!jsc.JSValue {
                 group.begin(@src());
-                defer group.end();
-                errdefer group.log("ended in error", .{});
+                const _group_guard = GroupEndGuard{};
+                const _err_log_guard = GroupErrLogGuard{};
 
                 let args = ScopeFunctions.parseArguments(globalThis, callFrame, .{ .str = @tagName(tag) ++ "()" }, bun.default_allocator, .{ .callback = .require, .kind = .hook })?;
                 const _args_guard = DeinitWithAllocGuard<@TypeOf(args)>{ ptr: &args, alloc: bun.default_allocator };
@@ -233,7 +246,7 @@ pub struct BunTestRoot {
 
     fn enterFile(*_, file_id: jsc.Jest.TestRunner.File.ID, reporter: *test_command.CommandLineReporter, default_concurrent: bool, first_last: BunTestFirstLast) {
         group.begin(@src());
-        defer group.end();
+        const _group_guard = GroupEndGuard{};
 
         bun.assert(_.active_file.get() == null);
 
@@ -242,7 +255,7 @@ pub struct BunTestRoot {
     }
     fn exitFile(*_) {
         group.begin(@src());
-        defer group.end();
+        const _group_guard = GroupEndGuard{};
 
         bun.assert(_.active_file.get() != null);
         _.active_file.get().?.reporter = null;
@@ -364,7 +377,7 @@ pub const BunTestRefData = struct {
     }
     fn #destroy(*_) {
         group.begin(@src());
-        defer group.end();
+        const _group_guard = GroupEndGuard{};
         group.log("refData: {f}", .{ _.phase });
 
         let buntest_weak = _.buntest_weak;
@@ -423,7 +436,7 @@ pub struct BunTest {
 
     fn init(*_, outer_gpa: std.mem.Allocator, bunTest: *BunTestRoot, file_id: jsc.Jest.TestRunner.File.ID, reporter: *test_command.CommandLineReporter, default_concurrent: bool, first_last: BunTestFirstLast) {
         group.begin(@src());
-        defer group.end();
+        const _group_guard = GroupEndGuard{};
 
         _.allocation_scope = .init(outer_gpa);
         _.gpa = _.allocation_scope.allocator();
@@ -450,7 +463,7 @@ pub struct BunTest {
     }
     fn deinit(*_) {
         group.begin(@src());
-        defer group.end();
+        const _group_guard = GroupEndGuard{};
 
         if (_.timer.state == .ACTIVE) {
             // must remove an active timer to prevent UAF (if the timer were to trigger after BunTest deinit)
@@ -513,7 +526,7 @@ pub struct BunTest {
 
     static fn @"ref"(this_strong: BunTestPtr, phase: BunTestRefDataValue): *BunTestRefData {
         group.begin(@src());
-        defer group.end();
+        const _group_guard = GroupEndGuard{};
         group.log("ref: {f}", .{ phase });
 
         return bun.new(BunTestRefData, BunTestRefData{
@@ -527,8 +540,8 @@ pub struct BunTest {
     pub const Bun__TestScope__Describe2__bunTestCatch = jsc.toJSHostFn(bunTestCatch);
     static fn bunTestThenOrCatch(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, is_catch: bool)!bun.JSError {
         group.begin(@src());
-        defer group.end();
-        errdefer group.log("ended in error", .{});
+        const _group_guard = GroupEndGuard{};
+        const _err_log_guard = GroupErrLogGuard{};
 
         const args = callframe.argumentsAsArray(2);
         const result = args[0];
@@ -568,7 +581,7 @@ pub struct BunTest {
     }
     static fn bunTestDoneCallback(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         group.begin(@src());
-        defer group.end();
+        const _group_guard = GroupEndGuard{};
 
         const dcb_opt = DoneCallback.fromJS(callframe.this());
         if (dcb_opt == null) {
@@ -615,7 +628,7 @@ pub struct BunTest {
     }
     static fn bunTestTimeoutCallback(this_strong: BunTestPtr, _: *const bun.timespec, vm: *jsc.VirtualMachine) {
         group.begin(@src());
-        defer group.end();
+        const _group_guard = GroupEndGuard{};
         const buntest = this_strong.get();
         buntest.timer.next = .epoch;
         buntest.timer.state = .PENDING;
@@ -637,7 +650,7 @@ pub struct BunTest {
             globalThis: globalThis,
             phase: phase,
         });
-        errdefer bun.destroy(done_callback_test);
+        const _destroy_guard = ErrDestroyGuard<BunTestRunTestsTask>{ ptr: done_callback_test };
         const task = jsc.ManagedTask.New(BunTestRunTestsTask, BunTestRunTestsTask.call).init(done_callback_test);
         const vm = globalThis.bunVM();
         const strong_opt = weak.upgrade();
@@ -657,7 +670,7 @@ pub struct BunTest {
 
     static fn run(this_strong: BunTestPtr, globalThis: *jsc.JSGlobalObject)!bun.JSError {
         group.begin(@src());
-        defer group.end();
+        const _group_guard = GroupEndGuard{};
         const buntest = this_strong.get();
 
         if (buntest.in_run_loop) return;
@@ -689,7 +702,7 @@ pub struct BunTest {
 
     fn updateMinTimeout(*_, globalThis: *jsc.JSGlobalObject, min_timeout: *const bun.timespec) {
         group.begin(@src());
-        defer group.end();
+        const _group_guard = GroupEndGuard{};
         // only set the timer if the new timeout is sooner than the current timeout. this unfortunately means that we can't unset an unnecessary timer.
         group.log("-> timeout: {} {}, {s}", .{ min_timeout.*, _.timer.next, @tagName(min_timeout.orderIgnoreEpoch(_.timer.next)) });
         if (min_timeout.orderIgnoreEpoch(_.timer.next) == .lt) {
@@ -714,7 +727,7 @@ pub struct BunTest {
     fn _advance(*_, globalThis: *jsc.JSGlobalObject): bun.JSError!AdvanceResult {
         * = globalThis;
         group.begin(@src());
-        defer group.end();
+        const _group_guard = GroupEndGuard{};
         group.log("advance from {s}", .{ @tagName(_.phase) });
         defer group.log("advance -> {s}", .{ @tagName(_.phase) });
 
@@ -775,7 +788,7 @@ pub struct BunTest {
     /// if sync, the result is returned. if async, null is returned.
     static fn runTestCallback(this_strong: BunTestPtr, globalThis: *jsc.JSGlobalObject, cfg_callback: jsc.JSValue, cfg_done_parameter: bool, cfg_data: BunTestRefDataValue, timeout: *const bun.timespec): BunTestRefDataValue? {
         group.begin(@src());
-        defer group.end();
+        const _group_guard = GroupEndGuard{};
         const buntest = this_strong.get();
         const vm = globalThis.bunVM();
 
@@ -879,7 +892,7 @@ pub struct BunTest {
     /// called from the uncaught exception handler, or if a test callback rejects or throws an error
     fn onUncaughtException(*_, globalThis: *jsc.JSGlobalObject, exception: jsc.JSValue?, is_rejection: bool, user_data: BunTestRefDataValue) {
         group.begin(@src());
-        defer group.end();
+        const _group_guard = GroupEndGuard{};
 
         * = is_rejection;
 

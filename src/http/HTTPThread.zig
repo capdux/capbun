@@ -149,6 +149,21 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub fn MutexUnlockGuard(comptime T: type) type {
+    return struct {
+        lock: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.lock.unlock();
+                }
+        }
+    };
+}
+
 pub const WriteMessage = struct {
     async_http_id: u32,
     message_type: WriteMessageType,
@@ -665,9 +680,13 @@ pub fn processEvents(self: *HTTPThread) noreturn {
 pub fn scheduleResponseBodyDrain(self: *HTTPThread, async_http_id: u32) void {
         {
             _ = self.queued_response_body_drains_lock.lock();
-            defer {
-            _ = self.queued_response_body_drains_lock.unlock();
-            }
+            var _lock_guard = MutexUnlockGuard(bun.Mutex){ .lock = (blk: {
+            break :blk (&self.queued_response_body_drains_lock);
+
+}) };
+            _ = &_lock_guard;
+            var ___lock_guard_moved = false; _ = &___lock_guard_moved;
+            defer if (!___lock_guard_moved) { ___lock_guard_moved = true; const __T = @TypeOf(_lock_guard); if (@typeInfo(__T) == .optional) { if (_lock_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _lock_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _lock_guard; _drop_val.__cp_deinit(); } };
             _ = bun.handleOom(self.queued_response_body_drains.append(bun.default_allocator, .{ .async_http_id = async_http_id }));
         }
         if (self.has_awoken.load(.monotonic)) {
@@ -678,9 +697,13 @@ pub fn scheduleResponseBodyDrain(self: *HTTPThread, async_http_id: u32) void {
 pub fn scheduleShutdown(self: *HTTPThread, http: *AsyncHTTP) void {
         {
             _ = self.queued_shutdowns_lock.lock();
-            defer {
-            _ = self.queued_shutdowns_lock.unlock();
-            }
+            var _lock_guard = MutexUnlockGuard(bun.Mutex){ .lock = (blk: {
+            break :blk (&self.queued_shutdowns_lock);
+
+}) };
+            _ = &_lock_guard;
+            var ___lock_guard_moved = false; _ = &___lock_guard_moved;
+            defer if (!___lock_guard_moved) { ___lock_guard_moved = true; const __T = @TypeOf(_lock_guard); if (@typeInfo(__T) == .optional) { if (_lock_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _lock_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _lock_guard; _drop_val.__cp_deinit(); } };
             _ = bun.handleOom(self.queued_shutdowns.append(bun.default_allocator, .{ .async_http_id = http.async_http_id }));
         }
         if (self.has_awoken.load(.monotonic)) {
@@ -691,9 +714,13 @@ pub fn scheduleShutdown(self: *HTTPThread, http: *AsyncHTTP) void {
 pub fn scheduleRequestWrite(self: *HTTPThread, http: *AsyncHTTP, messageType: WriteMessageType) void {
         {
             _ = self.queued_writes_lock.lock();
-            defer {
-            _ = self.queued_writes_lock.unlock();
-            }
+            var _lock_guard = MutexUnlockGuard(bun.Mutex){ .lock = (blk: {
+            break :blk (&self.queued_writes_lock);
+
+}) };
+            _ = &_lock_guard;
+            var ___lock_guard_moved = false; _ = &___lock_guard_moved;
+            defer if (!___lock_guard_moved) { ___lock_guard_moved = true; const __T = @TypeOf(_lock_guard); if (@typeInfo(__T) == .optional) { if (_lock_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _lock_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _lock_guard; _drop_val.__cp_deinit(); } };
             _ = bun.handleOom(self.queued_writes.append(bun.default_allocator, .{ .async_http_id = http.async_http_id, .message_type = messageType }));
         }
         if (self.has_awoken.load(.monotonic)) {

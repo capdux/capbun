@@ -61,47 +61,66 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
-const s3_error = @import("../../../s3_signing/error.zig");
-const getSignErrorMessage = s3_error.getSignErrorMessage;
-const bun = @import("bun");
-const jsc = bun.jsc;
-pub const S3Error = s3_error.S3Error;
+pub const JSS3ErrorGuard = struct {
+    err: *const JSS3Error,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *JSS3ErrorGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = self.err.deinit();
+    }
+};
+
 pub const JSS3Error = extern struct {
     code: bun.String = bun.String.empty,
     message: bun.String = bun.String.empty,
     path: bun.String = bun.String.empty,
 
-    pub fn init(code: []const u8, message: []const u8, path: ?[]const u8) JSS3Error {
-        var path_str = bun.String.empty;
-        if (path != null) {
-            path_str = bun.String.init(path.?);
-        }
-        return .{
-            .code = bun.String.createAtomIfPossible(code),
-            .message = bun.String.createAtomIfPossible(message),
-            .path = path_str,
-        };
+pub fn init(code: []const u8, message: []const u8, path: ?[]const u8) JSS3Error {
+            var path_str = bun.String.empty;
+            _ = &path_str;
+            if (path) |p| {
+                _ = &p;
+                path_str = bun.String.init(p);
+            }
+            return JSS3Error{ .code = bun.String.createAtomIfPossible(code), .message = bun.String.createAtomIfPossible(message), .path = path_str };
     }
 
-    pub fn release(self: *JSS3Error) void {
-        self.path.deref();
-        self.code.deref();
-        self.message.deref();
+pub fn release(self: *JSS3Error) void {
+            _ = self.path.deref();
+            _ = self.code.deref();
+            _ = self.message.deref();
     }
 
-    pub fn deinit(self: *const JSS3Error) void {
-        self.path.deref();
-        self.code.deref();
-        self.message.deref();
+pub fn deinit(self: JSS3Error) void {
+            _ = self.path.deref();
+            _ = self.code.deref();
+            _ = self.message.deref();
     }
 
-    pub fn toErrorInstance(self: *const JSS3Error, global: *jsc.JSGlobalObject) jsc.JSValue {
-        defer self.deinit();
-        return S3Error__toErrorInstance(self, global);
+pub fn toErrorInstance(self: JSS3Error, global: *jsc.JSGlobalObject) jsc.JSValue {
+            var _guard = JSS3ErrorGuard{ .err = (blk: {
+            break :blk (&self);
+
+}) };
+            _ = &_guard;
+            var ___guard_moved = false; _ = &___guard_moved;
+            defer if (!___guard_moved) { ___guard_moved = true; const __T = @TypeOf(_guard); if (@typeInfo(__T) == .optional) { if (_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard; _drop_val.__cp_deinit(); } };
+            return JSS3Error.S3Error__toErrorInstance((blk: {
+            break :blk (&self);
+
+}), global);
     }
 
-    extern fn S3Error__toErrorInstance(this: *const JSS3Error, global: *jsc.JSGlobalObject) callconv(jsc.conv) jsc.JSValue;
+pub extern "c" fn S3Error__toErrorInstance(err_ptr: *const JSS3Error, global: *jsc.JSGlobalObject) callconv(jsc.conv) jsc.JSValue;
 };
+
+const s3_error = @import("../../../s3_signing/error.zig");
+const getSignErrorMessage = s3_error.getSignErrorMessage;
+const bun = @import("bun");
+const jsc = bun.jsc;
+pub const S3Error = s3_error.S3Error;
 
 pub fn getJSSignError(err: anyerror, globalThis: *jsc.JSGlobalObject) jsc.JSValue {
         return (switch (err) {

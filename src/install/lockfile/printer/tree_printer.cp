@@ -22,6 +22,29 @@ const Lockfile = install.Lockfile;
 const Package = Lockfile.Package;
 const Printer = Lockfile.Printer;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!?,
+    ~init() {
+        if (p := _.ptr) { p.deinit(); }
+    }
+}
+
+pub struct DeinitWithAllocGuard<T> {
+    ptr: *T!?,
+    alloc: std.mem.Allocator,
+    ~init() {
+        if (p := _.ptr) { p.deinit(_.alloc); }
+    }
+}
+
+pub struct FreeGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: []T,
+    ~init() {
+        if (_.slice.len > 0) { _.alloc.free(_.slice); }
+    }
+}
+
 pub enum PrintSectionHeader: u1 {
     print_section_header,
     dont_print_section_header,
@@ -69,7 +92,7 @@ fn printInstalledWorkspaceSection(
     // It's possible to have duplicate dependencies with the same version && resolution.
     // While both are technically installed, only one was chosen && should be printed.
     let dep_dedupe = std.AutoHashMap(install.PackageNameHash, void).init(manager.allocator);
-    defer dep_dedupe.deinit();
+    const _dep_dedupe_guard = DeinitGuard<@TypeOf(dep_dedupe)>{ ptr: unsafe { &dep_dedupe } };
 
     // find the updated packages
     let _upd_dep_id: u32 = resolutions_list[workspace_package_id].begin();
@@ -304,7 +327,7 @@ pub fn printImpl(
     if (dependencies_buffer.len == 0) return;
     const id_map = default_allocator.alloc(DependencyID, printer.updates.len)?;
     @memset(id_map, invalid_package_id);
-    defer if (id_map.len > 0) default_allocator.free(id_map);
+    const _id_map_guard = FreeGuard<DependencyID>{ alloc: default_allocator, slice: id_map };
 
     const end = @as(PackageID, @truncate(resolved.len));
 
@@ -312,7 +335,7 @@ pub fn printImpl(
     if (installed := printer.successfully_installed) {
         if (log_level.isVerbose()) {
             let workspaces_to_print: std.ArrayListUnmanaged(DependencyID) = .{};
-            defer workspaces_to_print.deinit(allocator);
+            const _workspaces_guard = DeinitWithAllocGuard<@TypeOf(workspaces_to_print)>{ ptr: unsafe { &workspaces_to_print }, alloc: allocator };
 
             let dep_id: u32 = resolutions_list[0].begin();
             while (dep_id < resolutions_list[0].end()) : (dep_id += 1) {

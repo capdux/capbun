@@ -136,6 +136,22 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub fn UnlockGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T = null,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    _ = p.unlock();
+                }
+        }
+    };
+}
+
 pub const PromptOnceState = struct {
     removed_count: u32 = 0,
 };
@@ -260,9 +276,14 @@ _ = debug("[runFromThreadPoolImpl:getcwd] DirTask({x}) failed: {s}: {s}", .{ (bl
 
 }), @tagName(e.getErrno()), e.path });
                     _ = self.task_manager.err_mutex.lock();
-                    defer {
-                    _ = self.task_manager.err_mutex.unlock();
-                    }
+                    const mutex_ptr = (blk: {
+                    break :blk (&self.task_manager.err_mutex);
+
+});
+                    var _err_mutex_guard = UnlockGuard(@TypeOf(mutex_ptr.*)){ .ptr = mutex_ptr };
+                    _ = &_err_mutex_guard;
+                    var ___err_mutex_guard_moved = false; _ = &___err_mutex_guard_moved;
+                    defer if (!___err_mutex_guard_moved) { ___err_mutex_guard_moved = true; const __T = @TypeOf(_err_mutex_guard); if (@typeInfo(__T) == .optional) { if (_err_mutex_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _err_mutex_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _err_mutex_guard; _drop_val.__cp_deinit(); } };
                     if ((self.task_manager.e == null)) {
                         self.task_manager.e = e;
                         _ = self.task_manager.error_signal.store(true, .seq_cst);
@@ -281,9 +302,14 @@ _ = debug("[runFromThreadPoolImpl] DirTask({x}) failed: {s}: {s}", .{ (blk: {
 
 }), @tagName(e.getErrno()), e.path });
             _ = self.task_manager.err_mutex.lock();
-            defer {
-            _ = self.task_manager.err_mutex.unlock();
-            }
+            const mutex_ptr = (blk: {
+            break :blk (&self.task_manager.err_mutex);
+
+});
+            var _err_mutex_guard = UnlockGuard(@TypeOf(mutex_ptr.*)){ .ptr = mutex_ptr };
+            _ = &_err_mutex_guard;
+            var ___err_mutex_guard_moved = false; _ = &___err_mutex_guard_moved;
+            defer if (!___err_mutex_guard_moved) { ___err_mutex_guard_moved = true; const __T = @TypeOf(_err_mutex_guard); if (@typeInfo(__T) == .optional) { if (_err_mutex_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _err_mutex_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _err_mutex_guard; _drop_val.__cp_deinit(); } };
             if ((self.task_manager.e == null)) {
                 self.task_manager.e = e;
                 _ = self.task_manager.error_signal.store(true, .seq_cst);
@@ -305,9 +331,14 @@ pub fn handleErr(self: *ShellDirTask, e: Syscall.Error) void {
 
 }), @tagName(e.getErrno()), e.path });
             _ = self.task_manager.err_mutex.lock();
-            defer {
-            _ = self.task_manager.err_mutex.unlock();
-            }
+            const mutex_ptr = (blk: {
+            break :blk (&self.task_manager.err_mutex);
+
+});
+            var _err_mutex_guard = UnlockGuard(@TypeOf(mutex_ptr.*)){ .ptr = mutex_ptr };
+            _ = &_err_mutex_guard;
+            var ___err_mutex_guard_moved = false; _ = &___err_mutex_guard_moved;
+            defer if (!___err_mutex_guard_moved) { ___err_mutex_guard_moved = true; const __T = @TypeOf(_err_mutex_guard); if (@typeInfo(__T) == .optional) { if (_err_mutex_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _err_mutex_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _err_mutex_guard; _drop_val.__cp_deinit(); } };
             if ((self.task_manager.e == null)) {
                 self.task_manager.e = e;
                 _ = self.task_manager.error_signal.store(true, .seq_cst);
@@ -379,9 +410,14 @@ _ = debug("[deleteAfterWaitingForChildren] DirTask({x}) failed: {s}: {s}", .{ (b
 
 }), @tagName(e.getErrno()), e.path });
             _ = self.task_manager.err_mutex.lock();
-            defer {
-            _ = self.task_manager.err_mutex.unlock();
-            }
+            const mutex_ptr = (blk: {
+            break :blk (&self.task_manager.err_mutex);
+
+});
+            var _err_mutex_guard = UnlockGuard(@TypeOf(mutex_ptr.*)){ .ptr = mutex_ptr };
+            _ = &_err_mutex_guard;
+            var ___err_mutex_guard_moved = false; _ = &___err_mutex_guard_moved;
+            defer if (!___err_mutex_guard_moved) { ___err_mutex_guard_moved = true; const __T = @TypeOf(_err_mutex_guard); if (@typeInfo(__T) == .optional) { if (_err_mutex_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _err_mutex_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _err_mutex_guard; _drop_val.__cp_deinit(); } };
             if ((self.task_manager.e == null)) {
                 self.task_manager.e = e;
             } else {

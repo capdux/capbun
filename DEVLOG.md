@@ -1633,3 +1633,8 @@
 - `~errinit()` 上线后全面取代手写 `disarm()` 模式（`WindowsWatcher`, `HTMLScanner`, `IndexStringMap`, `defines`, `bunfig`, `multi_array_list`, `codec_bmp`, `thumbhash`, `ValkeyCommand`, `InternalSourceMap`, `FieldDescription`, `Signature`, `RowDescription`, `tcc`），显著降低漏撤防风险与代码膨胀。
 - `color.cp`：`RelativeComponentParser` 无状态工具方法与内部 `Closure` 回调须显式标注 `static fn`，且 `components` 字段改为 `[4]f32` 避免运行时下标访问匿名元组触发 `unable to resolve comptime value`。
 - `gradient.cp`：`WebKitGradient` 提取顶层 `WebKitGradientLinear`/`WebKitGradientRadial` 并采用纯 CP `pub union(enum)` 后，完整恢复全部成员方法 codegen。
+
+## [2026-11-22 Wave #37] 全仓收官经验
+- `boringssl.cp`：C-FFI 函数指针类型别名中的 `?*const anyopaque` 与 `?*anyopaque` 须严格区分（`(*const !)?` 与 `OptVoidPtr`），防止丢弃 `const` 限定符；`@opaque pub struct` 实例方法须显式标注 `*_` 并直接传 `_` 而非 `&_`，避免按值传参 `opaque` 或取二级指针；`[*c](*Type)?` 须通过顶层 `Opt_Type` 别名防止折叠为 `?[*c]Type`。
+- `LinkerContext.cp`：将 `pub const LinkerContext = struct` 拆升 11 个嵌套结构体并转为 `pub struct LinkerContext` 后，完整启用了 `~init()`/`~errinit()` 自动析构注入；`j.pushStatic` 多行 `\\` 字符串改为单行 `\n` 字符串。
+- `ffi.cp`：`[bun.MAX_PATH_BYTES]u8` 提取顶层常量 `max_path_bytes`；`TCC.Error!void` 提取 `TccRelocateReturn` 避免实参被拆为两个参数。

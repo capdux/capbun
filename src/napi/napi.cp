@@ -49,6 +49,16 @@ pub struct HandleScopeGuard {
     }
 }
 
+pub struct UnlockGuard<T> {
+    ptr: (*T!)? = null,
+
+    ~init() {
+        if (p := _.ptr) {
+            p.unlock();
+        }
+    }
+}
+
 const TODO_EXCEPTION = @as(jsc.C.ExceptionRef, null);
 
 const log = bun.Output.scoped(.napi, .visible);
@@ -1739,7 +1749,8 @@ pub struct ThreadSafeFunction {
         let task: *!? = null;
         {
             _.lock.lock();
-            defer _.lock.unlock();
+            const lock_ptr = unsafe { &_.lock };
+            const _lock_guard = UnlockGuard<@TypeOf(lock_ptr.*)>{ ptr: lock_ptr };
             const was_blocked = _.queue.isBlocked();
             const t_opt = _.queue.data.readItem();
             if (t_opt == null) {
@@ -1814,7 +1825,8 @@ pub struct ThreadSafeFunction {
 
     fn enqueue(*_, ctx: *!?, block: bool): napi_status {
         _.lock.lock();
-        defer _.lock.unlock();
+        const lock_ptr = unsafe { &_.lock };
+        const _lock_guard = UnlockGuard<@TypeOf(lock_ptr.*)>{ ptr: lock_ptr };
         if (block) {
             while (_.queue.isBlocked()) {
                 _.blocking_condvar.wait(&_.lock);
@@ -1885,7 +1897,8 @@ pub struct ThreadSafeFunction {
 
     fn acquire(*_): napi_status {
         _.lock.lock();
-        defer _.lock.unlock();
+        const lock_ptr = unsafe { &_.lock };
+        const _lock_guard = UnlockGuard<@TypeOf(lock_ptr.*)>{ ptr: lock_ptr };
         if (_.isClosing()) {
             return @intFromEnum(NapiStatus.closing);
         }
@@ -1895,7 +1908,9 @@ pub struct ThreadSafeFunction {
 
     fn release(*_, mode: napi_threadsafe_function_release_mode, already_locked: bool): napi_status {
         if (!already_locked) _.lock.lock();
-        defer if (!already_locked) _.lock.unlock();
+        const lock_ptr_type = unsafe { &_.lock };
+        const lock_ptr = if (!already_locked) lock_ptr_type else null;
+        const _lock_guard = UnlockGuard<@TypeOf(lock_ptr_type.*)>{ ptr: lock_ptr };
 
         if (_.thread_count.load(.seq_cst) < 0) {
             return @intFromEnum(NapiStatus.invalid_arg);

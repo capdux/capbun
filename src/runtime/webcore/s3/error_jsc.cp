@@ -29,42 +29,41 @@ pub fn throwSignError(err: anyerror, globalThis: *jsc.JSGlobalObject): bun.JSErr
     };
 }
 
-pub const JSS3Error = extern struct {
+struct JSS3ErrorGuard {
+    err: *const JSS3Error!,
+    ~init() { _.err.deinit(); }
+}
+
+@c pub struct JSS3Error {
     code: bun.String = bun.String.empty,
     message: bun.String = bun.String.empty,
     path: bun.String = bun.String.empty,
 
-    pub fn init(code: []const u8, message: []const u8, path: ?[]const u8) JSS3Error {
+    static fn init(code: []const u8, message: []const u8, path: ([]const u8)?): JSS3Error {
         let path_str = bun.String.empty;
-        if (path != null) {
-            path_str = bun.String.init(path.?);
-        }
-        return .{
-            .code = bun.String.createAtomIfPossible(code),
-            .message = bun.String.createAtomIfPossible(message),
-            .path = path_str,
+        if (p := path) { path_str = bun.String.init(p); }
+        return JSS3Error{
+            code: bun.String.createAtomIfPossible(code),
+            message: bun.String.createAtomIfPossible(message),
+            path: path_str,
         };
     }
-
-    pub fn release(self: *JSS3Error) void {
-        self.path.deref();
-        self.code.deref();
-        self.message.deref();
+    fn release(*_) {
+        _.path.deref();
+        _.code.deref();
+        _.message.deref();
     }
-
-    pub fn deinit(self: *const JSS3Error) void {
-        self.path.deref();
-        self.code.deref();
-        self.message.deref();
+    fn deinit() {
+        _.path.deref();
+        _.code.deref();
+        _.message.deref();
     }
-
-    pub fn toErrorInstance(self: *const JSS3Error, global: *jsc.JSGlobalObject) jsc.JSValue {
-        defer self.deinit();
-        return S3Error__toErrorInstance(self, global);
+    fn toErrorInstance(global: *jsc.JSGlobalObject): jsc.JSValue {
+        const _guard = JSS3ErrorGuard{ err: unsafe { &_ } };
+        return S3Error__toErrorInstance(unsafe { &_ }, global);
     }
-
-    extern fn S3Error__toErrorInstance(this: *const JSS3Error, global: *jsc.JSGlobalObject) callconv(jsc.conv) jsc.JSValue;
-};
+    extern fn S3Error__toErrorInstance(err_ptr: *const JSS3Error, global: *jsc.JSGlobalObject) callconv(jsc.conv): jsc.JSValue;
+}
 
 pub fn s3ErrorToJS(s3_err: *const S3Error, globalObject: *jsc.JSGlobalObject, path: ([]const u8)?): jsc.JSValue {
     const value = JSS3Error.init(s3_err.code, s3_err.message, path).toErrorInstance(globalObject);

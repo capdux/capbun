@@ -9,6 +9,22 @@ pub const bun = @import("bun");
 const Environment = @import("bun").Environment;
 const Output = @import("bun").Output;
 const jsc = @import("bun").jsc;
+pub fn CloseGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T = null,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    _ = p.close();
+                }
+        }
+    };
+}
+
 pub const ReadDuringJSOnPullResult = union(enum) {
     none: void,
     js: []u8,
@@ -197,13 +213,14 @@ pub fn onReadChunk(self: *FileReader, init_buf: []const u8, state: bun.io.ReadSt
             _ = self.reader.close();
             return false;
         }
-        var close = false;
-        _ = &close;
-        defer {
-        if (close) {
-            _ = self.reader.close();
-        }
-        }
+        const reader_ptr = (blk: {
+        break :blk (&self.reader);
+
+});
+        var _close_guard = CloseGuard(@TypeOf(reader_ptr.*)){  };
+        _ = &_close_guard;
+        var ___close_guard_moved = false; _ = &___close_guard_moved;
+        defer if (!___close_guard_moved) { ___close_guard_moved = true; const __T = @TypeOf(_close_guard); if (@typeInfo(__T) == .optional) { if (_close_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _close_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _close_guard; _drop_val.__cp_deinit(); } };
         var hasMore = (state != .eof);
         _ = &hasMore;
         if ((buf.len > 0)) {
@@ -218,7 +235,7 @@ pub fn onReadChunk(self: *FileReader, init_buf: []const u8, state: bun.io.ReadSt
                 }
                 self.total_readed = (self.total_readed + len);
                 if ((buf.len == 0)) {
-                    close = true;
+                    _close_guard.ptr = reader_ptr;
                     hasMore = false;
                 }
             }

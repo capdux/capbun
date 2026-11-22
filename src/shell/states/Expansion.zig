@@ -62,9 +62,44 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub const ExpansionIterGuard = struct {
+    iter: *GlobWalker.Iterator,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *ExpansionIterGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = self.iter.deinit();
+    }
+};
+
+pub const ExpansionArenaGuard = struct {
+    arena: *Arena,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *ExpansionArenaGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = self.arena.deinit();
+    }
+};
+
+pub fn PtrDerefGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.ptr.deref();
+        }
+    };
+}
+
 pub const ShellGlobTask = struct {
     task: WorkPoolTask = .{ .callback = (&ShellGlobTask.runFromThreadPool) },
     expansion: *Expansion,
@@ -106,9 +141,10 @@ pub fn walkImpl(self: *ShellGlobTask) Maybe(void) {
             _ = debug("walkImpl", .{});
             var iter = GlobWalker.Iterator{ .walker = self.walker };
             _ = &iter;
-            defer {
-            _ = iter.deinit();
-            }
+            var _iter_guard = ExpansionIterGuard{ .iter = (&iter) };
+            _ = &_iter_guard;
+            var ___iter_guard_moved = false; _ = &___iter_guard_moved;
+            defer if (!___iter_guard_moved) { ___iter_guard_moved = true; const __T = @TypeOf(_iter_guard); if (@typeInfo(__T) == .optional) { if (_iter_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _iter_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _iter_guard; _drop_val.__cp_deinit(); } };
             switch (bun.handleOom(iter.init())) {
 .err => |e| {
 return .{ .err = e };
@@ -189,7 +225,10 @@ out_idx: u32,
 has_quoted_empty: bool = false,
 
 pub fn format(expansion: *const Expansion, writer: *std.Io.Writer) !void {
-        _ = try writer.print("Expansion(0x{x})", .{ @intFromPtr(expansion) });
+        _ = try writer.print("Expansion(0x{x})", .{ (blk: {
+        break :blk @intFromPtr(expansion);
+
+}) });
 }
 
 pub fn allocator(self: *Expansion) std.mem.Allocator {
@@ -197,13 +236,19 @@ pub fn allocator(self: *Expansion) std.mem.Allocator {
 }
 
 pub fn init(interpreter: *Interpreter, shell_state: *ShellExecEnv, expansion: *Expansion, node: *const ast.Atom, parent: ParentPtr, out_result: Result, io: IO) void {
-        _ = log("Expansion(0x{x}) init", .{ @intFromPtr(expansion) });
+        _ = log("Expansion(0x{x}) init", .{ (blk: {
+        break :blk @intFromPtr(expansion);
+
+}) });
         expansion.* = .{ .node = node, .base = State.initBorrowedAllocScope(.expansion, interpreter, shell_state, parent.scopedAllocator()), .parent = parent, .word_idx = 0, .state = .normal, .child_state = .idle, .out = out_result, .out_idx = 0, .current_out = undefined, .io = io };
         expansion.current_out = std.array_list.Managed(u8).init(expansion.base.allocator());
 }
 
 pub fn deinit(self: *Expansion) void {
-        _ = log("Expansion(0x{x}) deinit", .{ @intFromPtr(self) });
+        _ = log("Expansion(0x{x}) deinit", .{ (blk: {
+        break :blk @intFromPtr(self);
+
+}) });
         _ = self.current_out.deinit();
         _ = self.io.deinit();
         _ = self.base.endScope();
@@ -273,9 +318,10 @@ _ = bun.handleOom(self.current_out.insert(0, 126));
 .braces => {
 var arena_ = Arena.init(self.base.allocator());
             _ = &arena_;
-            defer {
-            _ = arena_.deinit();
-            }
+            var _arena_guard = ExpansionArenaGuard{ .arena = (&arena_) };
+            _ = &_arena_guard;
+            var ___arena_guard_moved = false; _ = &___arena_guard_moved;
+            defer if (!___arena_guard_moved) { ___arena_guard_moved = true; const __T = @TypeOf(_arena_guard); if (@typeInfo(__T) == .optional) { if (_arena_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _arena_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _arena_guard; _drop_val.__cp_deinit(); } };
             const arena_allocator = arena_.allocator();
             const brace_str = self.current_out.items[0..];
             var lexer_output = (if (bun.strings.isAllASCII(brace_str)) lexer_output: {
@@ -496,12 +542,12 @@ pub fn convertNewlinesToSpaces(stdout_: []u8) []u8 {
             _ = Expansion.convertNewlinesToSpacesSlow(0, stdout);
             return stdout[0..];
         }
-        const needles: @Vector(16,u8) = @splat(10);
-        const spaces: @Vector(16,u8) = @splat(32);
+        const needles: @Vector(16, u8) = @splat(10);
+        const spaces: @Vector(16, u8) = @splat(32);
         var i: usize = 0;
         _ = &i;
         while (((i + 16) <= stdout.len)) : (i = (i + 16)) {
-            const haystack: @Vector(16,u8) = (stdout[i..][0..16]).*;
+            const haystack: @Vector(16, u8) = (stdout[i..][0..16]).*;
             (stdout[i..][0..16]).* = @select(u8, (haystack == needles), spaces, haystack);
         }
         if ((i < stdout.len)) {
@@ -832,49 +878,51 @@ pub const Result = union(enum) {
         done: bool = false,
     },
 
-    fn pushResultSliceOwned(res: *Result, buf: [:0]const u8) PushAction {
-        if (comptime bun.Environment.allow_assert) {
-            assert(buf[buf.len] == 0);
-        }
-
-        switch (res.*) {
-            .array_of_slice => {
-                bun.handleOom(res.array_of_slice.append(buf));
-                return .moved;
-            },
-            .array_of_ptr => {
-                bun.handleOom(res.array_of_ptr.append(@as(ArgStr, @ptrCast(buf.ptr))));
-                return .moved;
-            },
-            .single => {
-                if (res.single.done) return .copied;
-                bun.handleOom(res.single.list.appendSlice(buf[0 .. buf.len + 1]));
-                res.single.done = true;
+pub fn pushResultSliceOwned(res: *Result, buf: [:0]const u8) PushAction {
+            if (comptime bun.Environment.allow_assert) {
+                _ = assert((buf[@as(usize, @intCast(buf.len))] == 0));
+            }
+            switch (res.*) {
+.array_of_slice => {
+_ = bun.handleOom(res.array_of_slice.append(buf));
+            return .moved;
+},
+.array_of_ptr => {
+_ = bun.handleOom(res.array_of_ptr.append(@as(ArgStr, @ptrCast(buf.ptr))));
+            return .moved;
+},
+.single => {
+if (res.single.done) {
                 return .copied;
-            },
-        }
+            }
+            _ = bun.handleOom(res.single.list.appendSlice(buf[0..(buf.len + 1)]));
+            res.single.done = true;
+            return .copied;
+},
+}
     }
 
-    fn pushResult(res: *Result, buf: *std.array_list.Managed(u8)) PushAction {
-        if (comptime bun.Environment.allow_assert) {
-            assert(buf.items[buf.items.len - 1] == 0);
-        }
-
-        switch (res.*) {
-            .array_of_slice => {
-                bun.handleOom(res.array_of_slice.append(buf.items[0 .. buf.items.len - 1 :0]));
-                return .moved;
-            },
-            .array_of_ptr => {
-                bun.handleOom(res.array_of_ptr.append(@as(ArgStr, @ptrCast(buf.items.ptr))));
-                return .moved;
-            },
-            .single => {
-                if (res.single.done) return .copied;
-                bun.handleOom(res.single.list.appendSlice(buf.items[0..]));
+pub fn pushResult(res: *Result, buf: *std.array_list.Managed(u8)) PushAction {
+            if (comptime bun.Environment.allow_assert) {
+                _ = assert((buf.items[@as(usize, @intCast((buf.items.len - 1)))] == 0));
+            }
+            switch (res.*) {
+.array_of_slice => {
+_ = bun.handleOom(res.array_of_slice.append(buf.items[0..(buf.items.len - 1) :0]));
+            return .moved;
+},
+.array_of_ptr => {
+_ = bun.handleOom(res.array_of_ptr.append(@as(ArgStr, @ptrCast(buf.items.ptr))));
+            return .moved;
+},
+.single => {
+if (res.single.done) {
                 return .copied;
-            },
-        }
+            }
+            _ = bun.handleOom(res.single.list.appendSlice(buf.items[0..]));
+            return .copied;
+},
+}
     }
 };
 pub const ExpansionState = union(enum) {

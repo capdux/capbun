@@ -10,6 +10,13 @@ const streams = webcore.streams;
 
 const log = Output.scoped(.FileReader, .visible);
 
+pub struct CloseGuard<T> {
+    ptr: *T!? = null,
+    ~init() {
+        if (p := _.ptr) { p.close(); }
+    }
+}
+
 @c {
     fn open_as_nonblocking_tty(fd: i32, flags: i32): i32;
 }
@@ -313,8 +320,8 @@ pub union(enum) Lazy {
             _.reader.close();
             return false;
         }
-        let close = false;
-        defer if (close) _.reader.close();
+        const reader_ptr = unsafe { &_.reader };
+        let _close_guard = CloseGuard<@TypeOf(reader_ptr.*)>{};
         let hasMore = state != .eof;
 
         if (buf.len > 0) {
@@ -327,7 +334,7 @@ pub union(enum) Lazy {
                 _.total_readed += len;
 
                 if (buf.len == 0) {
-                    close = true;
+                    _close_guard.ptr = reader_ptr;
                     hasMore = false;
                 }
             }

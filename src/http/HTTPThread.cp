@@ -25,6 +25,13 @@ struct DeinitWithAllocGuard<T> {
     }
 }
 
+struct MutexUnlockGuard<T> {
+    lock: *T!,
+    ~init() {
+        unsafe { _.lock.unlock(); }
+    }
+}
+
 export enum WriteMessageType(u2) {
     data = 0,
     end = 1,
@@ -592,7 +599,7 @@ export @root @value struct HTTPThread {
     fn scheduleResponseBodyDrain(*_, async_http_id: u32) {
         {
             this.queued_response_body_drains_lock.lock();
-            defer this.queued_response_body_drains_lock.unlock();
+            const _lock_guard = MutexUnlockGuard<bun.Mutex>{ lock: unsafe { &this.queued_response_body_drains_lock } };
             bun.handleOom(this.queued_response_body_drains.append(bun.default_allocator, {
                 async_http_id: async_http_id,
             }));
@@ -605,7 +612,7 @@ export @root @value struct HTTPThread {
     fn scheduleShutdown(*_, http: *AsyncHTTP) {
         {
             this.queued_shutdowns_lock.lock();
-            defer this.queued_shutdowns_lock.unlock();
+            const _lock_guard = MutexUnlockGuard<bun.Mutex>{ lock: unsafe { &this.queued_shutdowns_lock } };
             bun.handleOom(this.queued_shutdowns.append(bun.default_allocator, {
                 async_http_id: http.async_http_id,
             }));
@@ -618,7 +625,7 @@ export @root @value struct HTTPThread {
     fn scheduleRequestWrite(*_, http: *AsyncHTTP, messageType: WriteMessageType) {
         {
             this.queued_writes_lock.lock();
-            defer this.queued_writes_lock.unlock();
+            const _lock_guard = MutexUnlockGuard<bun.Mutex>{ lock: unsafe { &this.queued_writes_lock } };
             bun.handleOom(this.queued_writes.append(bun.default_allocator, {
                 async_http_id: http.async_http_id,
                 message_type: messageType,

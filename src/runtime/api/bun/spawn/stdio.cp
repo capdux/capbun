@@ -1,95 +1,101 @@
-pub const Stdio = union(enum) {
-    inherit,
-    capture: struct { buf: *bun.ByteList },
-    ignore,
+struct FormatterGuard {
+    fmt: *jsc.ConsoleObject.Formatter!,
+    ~init() { _.fmt.deinit(); }
+}
+
+pub struct StdioCapture {
+    buf: *bun.ByteList!,
+}
+
+pub struct StdioDup2 {
+    out: bun.jsc.Subprocess.StdioKind,
+    to: bun.jsc.Subprocess.StdioKind,
+}
+
+pub union(enum) StdioToSpawnOptsError {
+    stdin_used_as_out: void,
+    out_used_as_stdin: void,
+    blob_used_as_out: void,
+    uv_pipe: bun.sys.E,
+
+    fn toStr(): []const u8 {
+        return switch (_) {
+            .stdin_used_as_out => "Stdin cannot be used for stdout or stderr",
+            .out_used_as_stdin => "Stdout and stderr cannot be used for stdin",
+            .blob_used_as_out => "Blobs are immutable, and cannot be used for stdout/stderr",
+            .uv_pipe => @panic("TODO"),
+        };
+    }
+
+    fn throwJS(globalThis: *jsc.JSGlobalObject): bun.JSError {
+        return globalThis.throw("{s}", [_.toStr()]);
+    }
+}
+
+pub union(enum) StdioResult {
+    result: bun.spawn.SpawnOptions.Stdio,
+    @"err": StdioToSpawnOptsError,
+}
+
+pub fn StdioResultT(comptime T: type): type {
+    return union(enum) {
+        result: T,
+        err: StdioToSpawnOptsError,
+    };
+}
+
+pub union(enum) Stdio {
+    inherit: void,
+    capture: StdioCapture,
+    ignore: void,
     fd: bun.FD,
-    dup2: struct {
-        out: bun.jsc.Subprocess.StdioKind,
-        to: bun.jsc.Subprocess.StdioKind,
-    },
+    dup2: StdioDup2,
     path: jsc.Node.PathLike,
     blob: jsc.WebCore.Blob.Any,
     array_buffer: jsc.ArrayBuffer.Strong,
     memfd: bun.FD,
-    pipe,
-    ipc,
+    pipe: void,
+    ipc: void,
     readable_stream: jsc.WebCore.ReadableStream,
 
     const log = bun.sys.syslog;
+    const Result = StdioResult;
+    const ResultT = StdioResultT;
+    const ToSpawnOptsError = StdioToSpawnOptsError;
+    const SpawnStdio = bun.spawn.SpawnOptions.Stdio;
 
-    pub const Result = union(enum) {
-        result: bun.spawn.SpawnOptions.Stdio,
-        err: ToSpawnOptsError,
-    };
-
-    pub fn ResultT(comptime T: type) type {
-        return union(enum) {
-            result: T,
-            err: ToSpawnOptsError,
+    fn byteSlice(): []const u8 {
+        return switch (_) {
+            .capture => _.capture.buf.slice(),
+            .array_buffer => _.array_buffer.array_buffer.byteSlice(),
+            .blob => _.blob.slice(),
+            else => "",
         };
     }
 
-    pub const ToSpawnOptsError = union(enum) {
-        stdin_used_as_out,
-        out_used_as_stdin,
-        blob_used_as_out,
-        uv_pipe: bun.sys.E,
-
-        pub fn toStr(this: *const @This()) []const u8 {
-            return switch (this.*) {
-                .stdin_used_as_out => "Stdin cannot be used for stdout or stderr",
-                .out_used_as_stdin => "Stdout and stderr cannot be used for stdin",
-                .blob_used_as_out => "Blobs are immutable, and cannot be used for stdout/stderr",
-                .uv_pipe => @panic("TODO"),
-            };
-        }
-
-        pub fn throwJS(this: *const @This(), globalThis: *jsc.JSGlobalObject) bun.JSError {
-            return globalThis.throw("{s}", .{this.toStr()});
-        }
-    };
-
-    pub fn byteSlice(this: *const Stdio) []const u8 {
-        return switch (this.*) {
-            .capture => this.capture.buf.slice(),
-            .array_buffer => this.array_buffer.array_buffer.byteSlice(),
-            .blob => this.blob.slice(),
-            else => &[_]u8{},
-        };
-    }
-
-    pub fn deinit(this: *Stdio) void {
-        switch (this.*) {
-            .array_buffer => |*array_buffer| {
-                array_buffer.deinit();
-            },
-            .blob => |*blob| {
-                blob.detach();
-            },
-            .memfd => |fd| {
-                fd.close();
-            },
-            .readable_stream => {
-                // ReadableStream cleanup is handled by the subprocess
-            },
+    fn deinit(*_) {
+        switch (_.*) {
+            .array_buffer => _.array_buffer.deinit(),
+            .blob => _.blob.detach(),
+            .memfd fd => fd.close(),
+            .readable_stream => {},
             else => {},
         }
     }
 
-    pub fn canUseMemfd(this: *const @This(), is_sync: bool, has_max_buffer: bool) bool {
+    fn canUseMemfd(is_sync: bool, has_max_buffer: bool): bool {
         if (comptime !Environment.isLinux) {
             return false;
         }
-
-        return switch (this.*) {
-            .blob => !this.blob.needsToReadFile(),
+        return switch (_) {
+            .blob => !_.blob.needsToReadFile(),
             .memfd, .array_buffer => true,
-            .pipe => is_sync and !has_max_buffer,
+            .pipe => is_sync && !has_max_buffer,
             else => false,
         };
     }
 
-    pub fn useMemfd(this: *@This(), index: u32) bool {
+    fn useMemfd(*_, index: u32): bool {
         if (comptime !Environment.isLinux) {
             return false;
         }
@@ -103,191 +109,171 @@ pub const Stdio = union(enum) {
 
         const fd = bun.sys.memfd_create(label, .cross_process).unwrap() catch return false;
 
-        let remain = this.byteSlice();
+        let remain = _.byteSlice();
+        if (remain.len > 0) {
+            * = bun.sys.ftruncate(fd, @intCast(remain.len));
+        }
 
-        if (remain.len > 0)
-            // Hint at the size of the file
-            _ = bun.sys.ftruncate(fd, @intCast(remain.len));
-
-        // Dump all the bytes in there
         let written: isize = 0;
         while (remain.len > 0) {
             switch (bun.sys.pwrite(fd, remain, written)) {
-                .err => |err| {
-                    if (err.getErrno() == .AGAIN) {
+                .err e => {
+                    if (e.getErrno() == .AGAIN) {
                         continue;
                     }
-
-                    Output.debugWarn("Failed to write to memfd: {s}", .{@tagName(err.getErrno())});
+                    Output.debugWarn("Failed to write to memfd: {s}", [@tagName(e.getErrno())]);
                     fd.close();
                     return false;
                 },
-                .result => |result| {
+                .result result => {
                     if (result == 0) {
                         Output.debugWarn("Failed to write to memfd: EOF", .{});
                         fd.close();
                         return false;
                     }
-                    written += @intCast(result);
+                    written += @as(isize, @intCast(result));
                     remain = remain[result..];
                 },
             }
         }
 
-        switch (this.*) {
-            .array_buffer => this.array_buffer.deinit(),
-            .blob => this.blob.detach(),
+        switch (_.*) {
+            .array_buffer => _.array_buffer.deinit(),
+            .blob => _.blob.detach(),
             else => {},
         }
 
-        this.* = .{ .memfd = fd };
+        _.* = Stdio{ memfd: fd };
         return true;
     }
 
-    fn toPosix(
-        stdio: *@This(),
-        i: i32,
-    ) Result {
-        return .{
-            .result = switch (stdio.*) {
-                .blob => |blob| brk: {
-                    const fd = bun.FD.Stdio.fromInt(i).?.fd();
+    fn toPosix(*_, i: i32): Result {
+        return Result{
+            result: switch (_.*) {
+                .blob blob => brk: {
+                    const expected_fd = bun.FD.Stdio.fromInt(i).?.fd();
                     if (blob.needsToReadFile()) {
-                        if (blob.store()) |store| {
+                        if (store := blob.store()) {
                             if (store.data.file.pathlike == .fd) {
-                                if (store.data.file.pathlike.fd == fd) {
-                                    break :brk .{ .inherit = {} };
+                                if (store.data.file.pathlike.fd == expected_fd) {
+                                    break :brk SpawnStdio.inherit;
                                 }
-
-                                if (store.data.file.pathlike.fd.stdioTag()) |tag| switch (tag) {
-                                    .std_in => {
-                                        if (i == 1 or i == 2) {
-                                            return .{ .err = .stdin_used_as_out };
-                                        }
-                                    },
-                                    .std_out, .std_err => {
-                                        if (i == 0) {
-                                            return .{ .err = .out_used_as_stdin };
-                                        }
-                                    },
-                                };
-
-                                break :brk .{ .pipe = store.data.file.pathlike.fd };
+                                if (tag := store.data.file.pathlike.fd.stdioTag()) {
+                                    switch (tag) {
+                                        .std_in => {
+                                            if (i == 1 || i == 2) {
+                                                return Result{ @"err": .stdin_used_as_out };
+                                            }
+                                        },
+                                        .std_out, .std_err => {
+                                            if (i == 0) {
+                                                return Result{ @"err": .out_used_as_stdin };
+                                            }
+                                        },
+                                    }
+                                }
+                                break :brk SpawnStdio{ pipe: store.data.file.pathlike.fd };
                             }
-
-                            break :brk .{ .path = store.data.file.pathlike.path.slice() };
+                            break :brk SpawnStdio{ path: store.data.file.pathlike.path.slice() };
                         }
                     }
-
-                    if (i == 1 or i == 2) {
-                        return .{ .err = .blob_used_as_out };
+                    if (i == 1 || i == 2) {
+                        return Result{ @"err": .blob_used_as_out };
                     }
-
-                    break :brk .{ .buffer = {} };
+                    break :brk SpawnStdio.buffer;
                 },
-                .dup2 => .{ .dup2 = .{ .out = stdio.dup2.out, .to = stdio.dup2.to } },
-                .capture, .pipe, .array_buffer, .readable_stream => .{ .buffer = {} },
-                .ipc => .{ .ipc = {} },
-                .fd => |fd| .{ .pipe = fd },
-                .memfd => |fd| .{ .pipe = fd },
-                .path => |pathlike| .{ .path = pathlike.slice() },
-                .inherit => .{ .inherit = {} },
-                .ignore => .{ .ignore = {} },
+                .dup2 => SpawnStdio{ dup2: .{ .out = _.dup2.out, .to = _.dup2.to } },
+                .capture, .pipe, .array_buffer, .readable_stream => SpawnStdio.buffer,
+                .ipc => SpawnStdio.ipc,
+                .fd fd => SpawnStdio{ pipe: fd },
+                .memfd fd => SpawnStdio{ pipe: fd },
+                .path pathlike => SpawnStdio{ path: pathlike.slice() },
+                .inherit => SpawnStdio.inherit,
+                .ignore => SpawnStdio.ignore,
             },
         };
     }
 
-    fn toWindows(
-        stdio: *@This(),
-        i: i32,
-    ) Result {
-        return .{
-            .result = switch (stdio.*) {
-                .blob => |blob| brk: {
-                    const fd = bun.FD.Stdio.fromInt(i).?.fd();
+    fn toWindows(*_, i: i32): Result {
+        return Result{
+            result: switch (_.*) {
+                .blob blob => brk: {
+                    const expected_fd = bun.FD.Stdio.fromInt(i).?.fd();
                     if (blob.needsToReadFile()) {
-                        if (blob.store()) |store| {
+                        if (store := blob.store()) {
                             if (store.data.file.pathlike == .fd) {
-                                if (store.data.file.pathlike.fd == fd) {
-                                    break :brk .{ .inherit = {} };
+                                if (store.data.file.pathlike.fd == expected_fd) {
+                                    break :brk SpawnStdio.inherit;
                                 }
-
-                                if (store.data.file.pathlike.fd.stdioTag()) |tag| switch (tag) {
-                                    .std_in => {
-                                        if (i == 1 or i == 2) {
-                                            return .{ .err = .stdin_used_as_out };
-                                        }
-                                    },
-                                    .std_out, .std_err => {
-                                        if (i == 0) {
-                                            return .{ .err = .out_used_as_stdin };
-                                        }
-                                    },
-                                };
-
-                                break :brk .{ .pipe = store.data.file.pathlike.fd };
+                                if (tag := store.data.file.pathlike.fd.stdioTag()) {
+                                    switch (tag) {
+                                        .std_in => {
+                                            if (i == 1 || i == 2) {
+                                                return Result{ @"err": .stdin_used_as_out };
+                                            }
+                                        },
+                                        .std_out, .std_err => {
+                                            if (i == 0) {
+                                                return Result{ @"err": .out_used_as_stdin };
+                                            }
+                                        },
+                                    }
+                                }
+                                break :brk SpawnStdio{ pipe: store.data.file.pathlike.fd };
                             }
-
-                            break :brk .{ .path = store.data.file.pathlike.path.slice() };
+                            break :brk SpawnStdio{ path: store.data.file.pathlike.path.slice() };
                         }
                     }
-
-                    if (i == 1 or i == 2) {
-                        return .{ .err = .blob_used_as_out };
+                    if (i == 1 || i == 2) {
+                        return Result{ @"err": .blob_used_as_out };
                     }
-
-                    break :brk .{ .buffer = createZeroedPipe() };
+                    break :brk SpawnStdio{ buffer: createZeroedPipe() };
                 },
-                .ipc => .{ .ipc = createZeroedPipe() },
-                .capture, .pipe, .array_buffer, .readable_stream => .{ .buffer = createZeroedPipe() },
-                .fd => |fd| .{ .pipe = fd },
-                .dup2 => .{ .dup2 = .{ .out = stdio.dup2.out, .to = stdio.dup2.to } },
-                .path => |pathlike| .{ .path = pathlike.slice() },
-                .inherit => .{ .inherit = {} },
-                .ignore => .{ .ignore = {} },
-
+                .ipc => SpawnStdio{ ipc: createZeroedPipe() },
+                .capture, .pipe, .array_buffer, .readable_stream => SpawnStdio{ buffer: createZeroedPipe() },
+                .fd fd => SpawnStdio{ pipe: fd },
+                .dup2 => SpawnStdio{ dup2: .{ .out = _.dup2.out, .to = _.dup2.to } },
+                .path pathlike => SpawnStdio{ path: pathlike.slice() },
+                .inherit => SpawnStdio.inherit,
+                .ignore => SpawnStdio.ignore,
                 .memfd => @panic("This should never happen"),
             },
         };
     }
 
-    pub fn toSync(this: *@This(), i: u32) void {
-        // Piping an empty stdin doesn't make sense
-        if (i == 0 and this.* == .pipe) {
-            this.* = .{ .ignore = {} };
+    fn toSync(*_, i: u32) {
+        if (i == 0 && _.* == .pipe) {
+            _.* = .ignore;
         }
     }
 
     /// On windows this function allocate memory ensure that .deinit() is called or ownership is passed for all *uv.Pipe
-    pub fn asSpawnOption(
-        stdio: *@This(),
-        i: i32,
-    ) Stdio.Result {
+    fn asSpawnOption(*_, i: i32): Stdio.Result {
         if (comptime Environment.isWindows) {
-            return stdio.toWindows(i);
+            return _.toWindows(i);
         } else {
-            return stdio.toPosix(i);
+            return _.toPosix(i);
         }
     }
 
-    pub fn isPiped(self: Stdio) bool {
-        return switch (self) {
+    fn isPiped(): bool {
+        return switch (_) {
             .capture, .array_buffer, .blob, .pipe, .readable_stream => true,
             .ipc => Environment.isWindows,
             else => false,
         };
     }
 
-    fn extractBodyValue(out_stdio: *Stdio, globalThis: *jsc.JSGlobalObject, i: i32, body: *jsc.WebCore.Body.Value, is_sync: bool) bun.JSError!void {
+    static fn extractBodyValue(out_stdio: *Stdio, globalThis: *jsc.JSGlobalObject, i: i32, body: *jsc.WebCore.Body.Value, is_sync: bool): bun.JSError!void {
         body.toBlobIfPossible();
 
-        if (body.tryUseAsAnyBlob()) |blob| {
+        if (blob := body.tryUseAsAnyBlob()) {
             return out_stdio.extractBlob(globalThis, blob, i);
         }
 
         switch (body.*) {
             .Null, .Empty => {
-                out_stdio.* = .{ .ignore = {} };
+                out_stdio.* = .ignore;
                 return;
             },
             .Used => {
@@ -296,57 +282,46 @@ pub const Stdio = union(enum) {
             .Error => {
                 return globalThis.throwValue(body.Error.toJS(globalThis));
             },
-
-            .Blob, .WTFStringImpl, .InternalBlob => unreachable, // handled above.
+            .Blob, .WTFStringImpl, .InternalBlob => unreachable,
             .Locked => {
                 if (is_sync) {
                     return globalThis.throwInvalidArguments("ReadableStream cannot be used in sync mode", .{});
                 }
-
                 switch (i) {
                     0 => {},
-                    1 => {
-                        return globalThis.throwInvalidArguments("ReadableStream cannot be used for stdout yet. For now, do .stdout", .{});
-                    },
-                    2 => {
-                        return globalThis.throwInvalidArguments("ReadableStream cannot be used for stderr yet. For now, do .stderr", .{});
-                    },
+                    1 => return globalThis.throwInvalidArguments("ReadableStream cannot be used for stdout yet. For now, do .stdout", .{}),
+                    2 => return globalThis.throwInvalidArguments("ReadableStream cannot be used for stderr yet. For now, do .stderr", .{}),
                     else => unreachable,
                 }
-
-                const stream_value = try body.toReadableStream(globalThis);
-
-                const stream = (try jsc.WebCore.ReadableStream.fromJS(stream_value, globalThis)) orelse return globalThis.throwInvalidArguments("Failed to create ReadableStream", .{});
-
+                const stream_value = body.toReadableStream(globalThis)?;
+                const stream = (jsc.WebCore.ReadableStream.fromJS(stream_value, globalThis)?) ?? return globalThis.throwInvalidArguments("Failed to create ReadableStream", .{});
                 if (stream.isDisturbed(globalThis)) {
                     return globalThis.ERR(.BODY_ALREADY_USED, "ReadableStream has already been used", .{}).throw();
                 }
-
-                out_stdio.* = .{ .readable_stream = stream };
+                out_stdio.* = { readable_stream: stream };
             },
         }
-
         return;
     }
 
-    pub fn extract(out_stdio: *Stdio, globalThis: *jsc.JSGlobalObject, i: i32, value: JSValue, is_sync: bool) bun.JSError!void {
+    static fn extract(out_stdio: *Stdio, globalThis: *jsc.JSGlobalObject, i: i32, value: JSValue, is_sync: bool): bun.JSError!void {
         if (value == .zero) return;
         if (value.isUndefined()) return;
         if (value.isNull()) {
-            out_stdio.* = Stdio{ .ignore = {} };
+            out_stdio.* = .ignore;
             return;
         }
 
         if (value.isString()) {
-            const str = try value.getZigString(globalThis);
+            const str = value.getZigString(globalThis)?;
             if (str.eqlComptime("inherit")) {
-                out_stdio.* = Stdio{ .inherit = {} };
+                out_stdio.* = .inherit;
             } else if (str.eqlComptime("ignore")) {
-                out_stdio.* = Stdio{ .ignore = {} };
-            } else if (str.eqlComptime("pipe") or str.eqlComptime("overlapped")) {
-                out_stdio.* = Stdio{ .pipe = {} };
+                out_stdio.* = .ignore;
+            } else if (str.eqlComptime("pipe") || str.eqlComptime("overlapped")) {
+                out_stdio.* = .pipe;
             } else if (str.eqlComptime("ipc")) {
-                out_stdio.* = Stdio{ .ipc = {} };
+                out_stdio.* = .ipc;
             } else {
                 return globalThis.throwInvalidArguments("stdio must be an array of 'inherit', 'pipe', 'ignore', Bun.file(pathOrFd), number, or null", .{});
             }
@@ -359,47 +334,48 @@ pub const Stdio = union(enum) {
             }
 
             if (file_fd >= std.math.maxInt(i32)) {
-                let formatter = jsc.ConsoleObject.Formatter{ .globalThis = globalThis };
-                defer formatter.deinit();
-                return globalThis.throwInvalidArguments("file descriptor must be a valid integer, received: {f}", .{value.toFmt(&formatter)});
+                let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis };
+                const _guard = FormatterGuard{ fmt: unsafe { &formatter } };
+                return globalThis.throwInvalidArguments("file descriptor must be a valid integer, received: {f}", [value.toFmt(unsafe { &formatter })]);
             }
 
-            if (fd.stdioTag()) |tag| switch (tag) {
-                .std_in => {
-                    if (i == 1 or i == 2) {
-                        return globalThis.throwInvalidArguments("stdin cannot be used for stdout or stderr", .{});
-                    }
-
-                    out_stdio.* = Stdio{ .inherit = {} };
-                    return;
-                },
-                .std_out, .std_err => {
-                    if (i == 0) {
-                        return globalThis.throwInvalidArguments("stdout and stderr cannot be used for stdin", .{});
-                    }
-                    if (i == 1 and tag == .std_out) {
-                        out_stdio.* = .{ .inherit = {} };
+            if (tag := fd.stdioTag()) {
+                switch (tag) {
+                    .std_in => {
+                        if (i == 1 || i == 2) {
+                            return globalThis.throwInvalidArguments("stdin cannot be used for stdout or stderr", .{});
+                        }
+                        out_stdio.* = .inherit;
                         return;
-                    } else if (i == 2 and tag == .std_err) {
-                        out_stdio.* = .{ .inherit = {} };
-                        return;
-                    }
-                },
-            };
+                    },
+                    .std_out, .std_err => {
+                        if (i == 0) {
+                            return globalThis.throwInvalidArguments("stdout and stderr cannot be used for stdin", .{});
+                        }
+                        if (i == 1 && tag == .std_out) {
+                            out_stdio.* = .inherit;
+                            return;
+                        } else if (i == 2 && tag == .std_err) {
+                            out_stdio.* = .inherit;
+                            return;
+                        }
+                    },
+                }
+            }
 
-            out_stdio.* = Stdio{ .fd = fd };
+            out_stdio.* = Stdio{ fd: fd };
             return;
-        } else if (value.as(jsc.WebCore.Blob)) |blob| {
-            return out_stdio.extractBlob(globalThis, .{ .Blob = blob.dupe() }, i);
-        } else if (value.as(jsc.WebCore.Request)) |req| {
+        } else if (blob := value.as(jsc.WebCore.Blob)) {
+            return out_stdio.extractBlob(globalThis, { Blob: blob.dupe() }, i);
+        } else if (req := value.as(jsc.WebCore.Request)) {
             return extractBodyValue(out_stdio, globalThis, i, req.getBodyValue(), is_sync);
-        } else if (value.as(jsc.WebCore.Response)) |res| {
+        } else if (res := value.as(jsc.WebCore.Response)) {
             return extractBodyValue(out_stdio, globalThis, i, res.getBodyValue(), is_sync);
         }
 
-        if (try jsc.WebCore.ReadableStream.fromJS(value, globalThis)) |stream_| {
+        if (stream_ := jsc.WebCore.ReadableStream.fromJS(value, globalThis)?) {
             let stream = stream_;
-            if (stream.toAnyBlob(globalThis)) |blob| {
+            if (blob := stream.toAnyBlob(globalThis)) {
                 return out_stdio.extractBlob(globalThis, blob, i);
             }
 
@@ -411,27 +387,26 @@ pub const Stdio = union(enum) {
             };
 
             if (is_sync) {
-                return globalThis.throwInvalidArguments("'{s}' ReadableStream cannot be used in sync mode", .{name});
+                return globalThis.throwInvalidArguments("'{s}' ReadableStream cannot be used in sync mode", [name]);
             }
 
             if (stream.isDisturbed(globalThis)) {
-                return globalThis.ERR(.INVALID_STATE, "'{s}' ReadableStream has already been used", .{name}).throw();
+                return globalThis.ERR(.INVALID_STATE, "'{s}' ReadableStream has already been used", [name]).throw();
             }
-            out_stdio.* = .{ .readable_stream = stream };
+            out_stdio.* = { readable_stream: stream };
             return;
         }
 
-        if (value.asArrayBuffer(globalThis)) |array_buffer| {
-            // Change in Bun v1.0.34: don't throw for empty ArrayBuffer
+        if (array_buffer := value.asArrayBuffer(globalThis)) {
             if (array_buffer.byteSlice().len == 0) {
-                out_stdio.* = .{ .ignore = {} };
+                out_stdio.* = .ignore;
                 return;
             }
 
-            out_stdio.* = .{
-                .array_buffer = jsc.ArrayBuffer.Strong{
-                    .array_buffer = array_buffer,
-                    .held = .create(array_buffer.value, globalThis),
+            out_stdio.* = {
+                array_buffer: jsc.ArrayBuffer.Strong{
+                    array_buffer: array_buffer,
+                    held: .create(array_buffer.value, globalThis),
                 },
             };
             return;
@@ -440,58 +415,52 @@ pub const Stdio = union(enum) {
         return globalThis.throwInvalidArguments("stdio must be an array of 'inherit', 'ignore', or null", .{});
     }
 
-    pub fn extractBlob(stdio: *Stdio, globalThis: *jsc.JSGlobalObject, blob: jsc.WebCore.Blob.Any, i: i32) bun.JSError!void {
+    static fn extractBlob(stdio: *Stdio, globalThis: *jsc.JSGlobalObject, blob: jsc.WebCore.Blob.Any, i: i32): bun.JSError!void {
         const fd = bun.FD.Stdio.fromInt(i).?.fd();
 
         if (blob.needsToReadFile()) {
-            if (blob.store()) |store| {
+            if (store := blob.store()) {
                 if (store.data.file.pathlike == .fd) {
                     if (store.data.file.pathlike.fd == fd) {
                         stdio.* = .inherit;
                     } else {
-                        // TODO: is this supposed to be `store.data.file.pathlike.fd`?
-                        if (bun.FD.Stdio.fromInt(i)) |tag| switch (tag) {
-                            .std_in,
-                            => if (i == 1 or i == 2) {
-                                return globalThis.throwInvalidArguments("stdin cannot be used for stdout or stderr", .{});
-                            },
-                            .std_out,
-                            .std_err,
-                            => if (i == 0) {
-                                return globalThis.throwInvalidArguments("stdout and stderr cannot be used for stdin", .{});
-                            },
-                        };
-
-                        stdio.* = .{ .fd = store.data.file.pathlike.fd };
+                        if (tag := bun.FD.Stdio.fromInt(i)) {
+                            switch (tag) {
+                                .std_in => if (i == 1 || i == 2) {
+                                    return globalThis.throwInvalidArguments("stdin cannot be used for stdout or stderr", .{});
+                                },
+                                .std_out, .std_err => if (i == 0) {
+                                    return globalThis.throwInvalidArguments("stdout and stderr cannot be used for stdin", .{});
+                                },
+                            }
+                        }
+                        stdio.* = { fd: store.data.file.pathlike.fd };
                     }
-
                     return;
                 }
-
-                stdio.* = .{ .path = store.data.file.pathlike.path };
+                stdio.* = { path: store.data.file.pathlike.path };
                 return;
             }
         }
 
-        if (i == 1 or i == 2) {
+        if (i == 1 || i == 2) {
             return globalThis.throwInvalidArguments("Blobs are immutable, and cannot be used for stdout/stderr", .{});
         }
 
-        // Instead of writing an empty blob, lets just make it /dev/null
         if (blob.fastSize() == 0) {
-            stdio.* = .{ .ignore = {} };
+            stdio.* = .ignore;
             return;
         }
 
-        stdio.* = .{ .blob = blob };
+        stdio.* = { blob: blob };
         return;
     }
-};
+}
 
 /// Allocate a zero-initialized uv.Pipe. Zero-init ensures `pipe.loop` is null
 /// for pipes that never reach `uv_pipe_init`, so `closeAndDestroy` can tell
 /// whether `uv_close` is needed.
-fn createZeroedPipe(): *uv.Pipe {
+fn createZeroedPipe(): *uv.Pipe! {
     return bun.new(uv.Pipe, std.mem.zeroes(uv.Pipe));
 }
 

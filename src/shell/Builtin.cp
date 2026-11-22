@@ -28,6 +28,22 @@ const IO = shell.Interpreter.IO;
 
 const EnvMap = shell.interpret.EnvMap;
 const ExitCode = shell.interpret.ExitCode;
+
+struct PtrDerefGuard<T> {
+    ptr: *T;
+
+    ~init() {
+        _.ptr.deref();
+    }
+}
+
+struct PtrDeinitGuard<T> {
+    ptr: *T;
+
+    ~init() {
+        _.ptr.deinit();
+    }
+}
 const OutputNeedsIOSafeGuard = shell.interpret.OutputNeedsIOSafeGuard;
 const ShellSyscall = shell.interpret.ShellSyscall;
 const log = shell.interpret.log;
@@ -525,7 +541,7 @@ static fn initRedirections(
                     { pollable: is_pollable, nonblocking: is_nonblocking, is_socket: is_socket },
                     cmd.base.eventLoop(),
                 );
-                defer redirect_writer.deref();
+                const _writer_guard = PtrDerefGuard<IOWriter>{ ptr: redirect_writer };
 
                 if (node.redirect.stdout) {
                     cmd.exec.bltn.stdout.deref();
@@ -579,7 +595,7 @@ static fn initRedirections(
                     }
 
                     let original_blob = body.use();
-                    defer original_blob.deinit();
+                    const _orig_blob_guard = PtrDeinitGuard<@TypeOf(original_blob)>{ ptr: *original_blob };
 
                     if (!node.redirect.stdin && !node.redirect.stdout && !node.redirect.stderr) {
                         return null;
@@ -589,7 +605,7 @@ static fn initRedirections(
                         ref_count: .init(),
                         blob: original_blob.dupe(),
                     });
-                    defer blob.deref();
+                    const _blob_guard = PtrDerefGuard<Blob>{ ptr: blob };
 
                     if (node.redirect.stdin) {
                         cmd.exec.bltn.stdin.deref();
@@ -678,7 +694,7 @@ pub fn done(*_, exit_code: auto): Yield {
     _.exit_code = code;
 
     let cmd = _.parentCmdMut();
-    log("builtin done ({s}: exit={d}) cmd to free: ({x})", .{ @tagName(_.kind), code, @intFromPtr(cmd) });
+    log("builtin done ({s}: exit={d}) cmd to free: ({x})", .{ @tagName(_.kind), code, unsafe { @intFromPtr(cmd) } });
     cmd.exit_code = _.exit_code.?;
 
     // Aggregate output data if shell state is piped and this cmd is piped

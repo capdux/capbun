@@ -32,6 +32,7 @@ pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
@@ -44,7 +45,76 @@ fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @Type
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
 fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == __CpErr) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return __CpErr{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return __CpErr{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return __CpErr{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return __CpErr.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return __CpErr.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return __CpErr{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
 fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+const Message = struct { __cp_no_message_sentinel: void = {} };
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
+
+pub const DerefRouteGuard = struct {
+    route: *Route,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *DerefRouteGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = self.route.deref();
+    }
+};
+
+pub const ConfigErrGuard = struct {
+    cfg: *JSBundler.Config,
+    __cp_errdropped: bool = false,
+
+pub fn __cp_errdeinit(self: *ConfigErrGuard) void {
+        if (self.__cp_errdropped) return;
+        self.__cp_errdropped = true;
+            _ = self.cfg.deinit(bun.default_allocator);
+    }
+};
+
+pub const PendingListGuard = struct {
+    list: *std.ArrayListUnmanaged(*RoutePendingResponse),
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *PendingListGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = self.list.deinit(bun.default_allocator);
+    }
+};
+
+pub const PendingRespGuard = struct {
+    resp: *RoutePendingResponse,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *PendingRespGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = self.resp.deinit();
+    }
+};
 
 pub const HTMLBundle = @This();
 
@@ -75,6 +145,470 @@ pub const fromJSDirect = js.fromJSDirect;
 const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, .{});
 pub const ref = RefCount.ref;
 pub const deref = RefCount.deref;
+pub const RouteMethod = union(enum) {
+    any: void,
+    method: bun.http.Method.Set,
+};
+
+pub const RouteState = union(enum) {
+    pending: void,
+    building: ?*bun.BundleV2.JSBundleCompletionTask,
+    err_val: bun.logger.Log,
+    html: *StaticRoute,
+
+pub fn deinit(self: *RouteState) void {
+            switch (self.*) {
+.err_val => {
+_ = self.err_val.deinit();
+},
+.building => {
+if (self.building) |c| {
+                _ = &c;
+                c.cancelled = true;
+                _ = c.deref();
+            }
+},
+.html => {
+_ = self.html.deref();
+},
+.pending => {
+
+},
+}
+    }
+
+pub fn memoryCost(self: RouteState) usize {
+            return (switch (self) {
+.pending => 0,
+.building => 0,
+.err_val => self.err_val.memoryCost(),
+.html => self.html.memoryCost(),
+});
+    }
+};
+
+pub const RoutePendingResponse = struct {
+    method: bun.http.Method,
+    resp: HTTPResponse,
+    is_response_pending: bool = true,
+    server: ?AnyServer = null,
+    route: *Route,
+
+pub fn deinit(self: *RoutePendingResponse) void {
+            if (self.is_response_pending) {
+                _ = self.resp.clearAborted();
+                _ = self.resp.clearOnWritable();
+                _ = self.resp.endWithoutBody(true);
+            }
+            _ = self.route.deref();
+            _ = bun.destroy(self);
+    }
+
+pub fn onAborted(self: *RoutePendingResponse, _: HTTPResponse) void {
+            _ = bun.debugAssert((self.is_response_pending == true));
+            self.is_response_pending = false;
+            _ = self.route.ref();
+            var _route_guard = DerefRouteGuard{ .route = self.route };
+            _ = &_route_guard;
+            var ___route_guard_moved = false; _ = &___route_guard_moved;
+            defer if (!___route_guard_moved) { ___route_guard_moved = true; const __T = @TypeOf(_route_guard); if (@typeInfo(__T) == .optional) { if (_route_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _route_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _route_guard; _drop_val.__cp_deinit(); } };
+            while (std.mem.indexOfScalar(*RoutePendingResponse, self.route.pending_responses.items, self)) |index| {
+                _ = self.route.pending_responses.orderedRemove(index);
+                _ = self.route.deref();
+            }
+    }
+};
+
+pub const Route = struct {
+    bundle: RefPtr(HTMLBundle),
+    ref_count: Route.RefCount,
+    server: ?AnyServer = null,
+    state: RouteState,
+    dev_server_id: bun.bake.DevServer.RouteBundle.Index.Optional = .none,
+    pending_responses: std.ArrayListUnmanaged(*RoutePendingResponse) = .{},
+    method: RouteMethod = .{ .any = undefined },
+
+pub fn memoryCost(self: Route) usize {
+            var cost: usize = 0;
+            _ = &cost;
+            cost = (cost + @sizeOf(Route));
+            cost = (cost + (self.pending_responses.items.len * @sizeOf(RoutePendingResponse)));
+            cost = (cost + self.state.memoryCost());
+            return cost;
+    }
+
+pub fn init(html_bundle: *HTMLBundle) RefPtr(Route) {
+            return RefPtr(Route).new(.{ .bundle = .initRef(html_bundle), .pending_responses = .{}, .ref_count = .init(), .server = null, .state = .pending });
+    }
+
+pub fn deinit(self: *Route) void {
+            _ = bun.assert((self.pending_responses.items.len == 0));
+            _ = self.pending_responses.deinit(bun.default_allocator);
+            _ = self.bundle.deref();
+            _ = self.state.deinit();
+            _ = bun.destroy(self);
+    }
+
+pub fn onRequest(self: *Route, req: uws.AnyRequest, resp: HTTPResponse) void {
+            _ = self.onAnyRequest(req, resp, false);
+    }
+
+pub fn onHEADRequest(self: *Route, req: uws.AnyRequest, resp: HTTPResponse) void {
+            _ = self.onAnyRequest(req, resp, true);
+    }
+
+pub fn onAnyRequest(self: *Route, req: uws.AnyRequest, resp: HTTPResponse, is_head: bool) void {
+            _ = self.ref();
+            var _route_guard = DerefRouteGuard{ .route = self };
+            _ = &_route_guard;
+            var ___route_guard_moved = false; _ = &___route_guard_moved;
+            defer if (!___route_guard_moved) { ___route_guard_moved = true; const __T = @TypeOf(_route_guard); if (@typeInfo(__T) == .optional) { if (_route_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _route_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _route_guard; _drop_val.__cp_deinit(); } };
+            const server: AnyServer = ((self.server) orelse {
+            _ = resp.endWithoutBody(true);
+            return;
+});
+            if (server.config().isDevelopment()) {
+                if (server.devServer()) |dev| {
+                    _ = &dev;
+                    switch (req) {
+.h1 => |h1| {
+_ = bun.handleOom(dev.respondForHTMLBundle(self, h1, resp));
+},
+.h3 => {
+_ = resp.writeStatus("503 Service Unavailable");
+                    _ = resp.end("DevServer HMR is HTTP/1.1 only", true);
+},
+}
+                    return;
+                }
+                if ((self.state == .html)) {
+                    _ = self.state.html.deref();
+                    self.state = .pending;
+                } else {
+                    if ((self.state == .err_val)) {
+                        _ = self.state.err_val.deinit();
+                        self.state = .pending;
+                    }
+                }
+            }
+            while (true) {
+                switch (self.state) {
+.pending => {
+if (bun.Environment.enable_logs) {
+                    _ = debug("onRequest: {s} - pending", .{ req.url() });
+                }
+                _ = bun.handleOom(self.scheduleBundle(server));
+                continue;
+},
+.building => {
+if (bun.Environment.enable_logs) {
+                    _ = debug("onRequest: {s} - building", .{ req.url() });
+                }
+                const pending = bun.new(RoutePendingResponse, .{ .method = ((bun.http.Method.which(req.method())) orelse {
+                _ = resp.writeStatus("405 Method Not Allowed");
+                _ = resp.endWithoutBody(true);
+                return;
+}), .resp = resp, .server = self.server, .route = self });
+                _ = bun.handleOom(self.pending_responses.append(bun.default_allocator, pending));
+                _ = self.ref();
+                _ = resp.onAborted(*RoutePendingResponse, RoutePendingResponse.onAborted, pending);
+                _ = req.setYield(false);
+                break;
+},
+.err_val => |log| {
+if (bun.Environment.enable_logs) {
+                    _ = debug("onRequest: {s} - err", .{ req.url() });
+                }
+                _ = &log;
+                _ = resp.endWithoutBody(true);
+                break;
+},
+.html => |html| {
+if (bun.Environment.enable_logs) {
+                    _ = debug("onRequest: {s} - html", .{ req.url() });
+                }
+                if (is_head) {
+                    _ = html.onHEADRequest(req, resp);
+                } else {
+                    _ = html.onRequest(req, resp);
+                }
+                break;
+},
+}
+            }
+    }
+
+pub fn scheduleBundle(self: *Route, server: AnyServer) !void {
+            switch (server.getOrLoadPlugins(.{ .html_bundle_route = self })) {
+.err => {
+self.state = .{ .err_val = bun.logger.Log.init(bun.default_allocator) };
+},
+.ready => |plugins| {
+_ = try self.onPluginsResolved(plugins);
+},
+.pending => {
+self.state = .{ .building = null };
+},
+}
+    }
+
+pub fn onPluginsResolved(self: *Route, plugins: ?*jsc.API.JSBundler.Plugin) !void {
+            const global = self.bundle.data.global;
+            const server = self.server.?;
+            const development = server.config().development;
+            const vm = global.bunVM();
+            var config: JSBundler.Config = .{};
+            _ = &config;
+            var _cfg_guard = ConfigErrGuard{ .cfg = (blk: {
+            break :blk (&config);
+
+}) };
+            _ = &_cfg_guard;
+            var ___cfg_guard_moved = false; _ = &___cfg_guard_moved;
+            errdefer if (!___cfg_guard_moved) { ___cfg_guard_moved = true; const __T = @TypeOf(_cfg_guard); if (@typeInfo(__T) == .optional) { if (_cfg_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { __cp_opt_v.__cp_errdeinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_errdeinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_errdeinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { _cfg_guard.__cp_errdeinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_errdeinit")) { var _drop_val = _cfg_guard; _drop_val.__cp_errdeinit(); } };
+            _ = try config.entry_points.insert(self.bundle.data.path);
+            if (vm.transpiler.options.transform_options.serve_public_path) |public_path| {
+                _ = &public_path;
+                if ((public_path.len > 0)) {
+                    _ = try config.public_path.appendSlice(public_path);
+                } else {
+                    _ = try config.public_path.appendChar(47);
+                }
+            } else {
+                _ = try config.public_path.appendChar(47);
+            }
+            if ((vm.transpiler.options.transform_options.serve_env_behavior != ._none)) {
+                config.env_behavior = vm.transpiler.options.transform_options.serve_env_behavior;
+                if ((config.env_behavior == .prefix)) {
+                    _ = try config.env_prefix.appendSlice(((vm.transpiler.options.transform_options.serve_env_prefix) orelse ("")));
+                }
+            }
+            if (vm.transpiler.options.transform_options.serve_splitting) {
+                config.code_splitting = vm.transpiler.options.transform_options.serve_splitting;
+            }
+            config.target = .browser;
+            const is_development = development.isDevelopment();
+            if (bun.cli.Command.get().args.serve_minify_identifiers) |minify_identifiers| {
+                _ = &minify_identifiers;
+                config.minify.identifiers = minify_identifiers;
+            } else {
+                if ((!is_development)) {
+                    config.minify.identifiers = true;
+                }
+            }
+            if (bun.cli.Command.get().args.serve_minify_whitespace) |minify_whitespace| {
+                _ = &minify_whitespace;
+                config.minify.whitespace = minify_whitespace;
+            } else {
+                if ((!is_development)) {
+                    config.minify.whitespace = true;
+                }
+            }
+            if (bun.cli.Command.get().args.serve_minify_syntax) |minify_syntax| {
+                _ = &minify_syntax;
+                config.minify.syntax = minify_syntax;
+            } else {
+                if ((!is_development)) {
+                    config.minify.syntax = true;
+                }
+            }
+            if (bun.cli.Command.get().args.serve_define) |define| {
+                _ = &define;
+                _ = bun.assert((define.keys.len == define.values.len));
+                _ = try config.define.map.ensureUnusedCapacity(define.keys.len);
+                config.define.map.unmanaged.entries.len = define.keys.len;
+                _ = @memcpy(config.define.map.keys(), define.keys);
+                {
+                    var i: i32 = 0;
+                    _ = &i;
+                    const __end_0 = define.keys.len;
+                    while (i < __end_0) : (i += 1) {
+                        config.define.map.values()[cp_cast_int(usize, i)] = bun.handleOom(config.define.map.allocator.dupe(u8, define.values[@as(usize, @intCast(i))]));
+                    }
+                }
+                _ = try config.define.map.reIndex();
+            }
+            if ((!is_development)) {
+                _ = bun.handleOom(config.define.put("process.env.NODE_ENV", "\"production\""));
+                config.jsx.development = false;
+            } else {
+                config.force_node_env = .development;
+                config.jsx.development = true;
+            }
+            config.source_map = .linked;
+            const completion_task = try bun.BundleV2.createAndScheduleCompletionTask(config, plugins, global, vm.eventLoop(), bun.default_allocator);
+            completion_task.started_at_ns = bun.getRoughTickCount(.allow_mocked_time).ns();
+            completion_task.html_build_task = self;
+            self.state = .{ .building = completion_task };
+            _ = self.ref();
+    }
+
+pub fn onPluginsRejected(self: *Route) !void {
+            {
+                _ = debug("HTMLBundleRoute(0x{x}) plugins rejected", .{ @intFromPtr(self) });
+            }
+            self.state = .{ .err_val = bun.logger.Log.init(bun.default_allocator) };
+            _ = self.resumePendingResponses();
+    }
+
+pub fn onComplete(self: *Route, completion_task: *bun.BundleV2.JSBundleCompletionTask) void {
+            var _route_guard = DerefRouteGuard{ .route = self };
+            _ = &_route_guard;
+            var ___route_guard_moved = false; _ = &___route_guard_moved;
+            defer if (!___route_guard_moved) { ___route_guard_moved = true; const __T = @TypeOf(_route_guard); if (@typeInfo(__T) == .optional) { if (_route_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _route_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _route_guard; _drop_val.__cp_deinit(); } };
+            switch (completion_task.result) {
+.err => |e| {
+if (bun.Environment.enable_logs) {
+                _ = debug("onComplete: err - {s}", .{ @errorName(e) });
+            }
+            self.state = .{ .err_val = bun.logger.Log.init(bun.default_allocator) };
+            _ = bun.handleOom(completion_task.log.cloneToWithRecycled((&self.state.err_val), true));
+            if (self.server) |server| {
+                _ = &server;
+                if (server.config().isDevelopment()) {
+                    switch (bun.Output.enable_ansi_colors_stderr) {
+inline else => |enable_ansi_colors| {
+const writer = bun.Output.errorWriterBuffered();
+                    _ = (blk_catch_0: { break :blk_catch_0 ((self.state.err_val.printWithEnableAnsiColors(writer, enable_ansi_colors)) catch |__ce_0| { _ = &__ce_0;  }); });
+                    _ = (blk_catch_1: { break :blk_catch_1 ((writer.flush()) catch |__ce_1| { _ = &__ce_1;  }); });
+},
+}
+                }
+            }
+},
+.value => |bundle| {
+if (bun.Environment.enable_logs) {
+                _ = debug("onComplete: success", .{});
+            }
+            const server: AnyServer = ((self.server) orelse { return; });
+            const globalThis = server.globalThis();
+            const output_files = bundle.output_files.items;
+            if (server.config().isDevelopment()) {
+                const now = bun.getRoughTickCount(.allow_mocked_time).ns();
+                const duration = (now - completion_task.started_at_ns);
+                var duration_f64: f64 = @floatFromInt(duration);
+                _ = &duration_f64;
+                duration_f64 = (duration_f64 / std.time.ns_per_s);
+                _ = bun.Output.printElapsed(duration_f64);
+                var byte_length: u64 = 0;
+                _ = &byte_length;
+                for (cp_mut_slice(&output_files)) |*output_file| {
+                    _ = &output_file;
+                    byte_length = (byte_length + (output_file.*).size_without_sourcemap);
+                }
+                _ = bun.Output.prettyErrorln(" <green>bundle<r> {s} <d>{d:.2} KB<r>", .{ std.fs.path.basename(self.bundle.data.path), (@as(f64, @floatFromInt(byte_length)) / 1000.0) });
+                _ = bun.Output.flush();
+            }
+            var this_html_route: ?*StaticRoute = null;
+            _ = &this_html_route;
+            for (cp_mut_slice(&output_files)) |*output_file| {
+                _ = &output_file;
+                const blob = jsc.WebCore.Blob.Any{ .Blob = bun.handleOom((output_file.*).toBlob(bun.default_allocator, globalThis)) };
+                var headers = bun.http.Headers{ .allocator = bun.default_allocator };
+                _ = &headers;
+                const content_type = ((blob.Blob.contentTypeOrMimeType()) orelse (brk: {
+                _ = bun.debugAssert(false);
+                break :brk (if (@typeInfo(@TypeOf((output_file.*).loader.toMimeType(empty_paths[0..0]))) == .@"enum") @intFromEnum((output_file.*).loader.toMimeType(empty_paths[0..0])) else (output_file.*).loader.toMimeType(empty_paths[0..0]).value);
+}));
+                _ = bun.handleOom(headers.append("Content-Type", content_type));
+                if ((((output_file.*).loader != .html) and ((if (@typeInfo(@TypeOf((output_file.*))) == .@"enum") @intFromEnum((output_file.*)) else (output_file.*).value) == .buffer))) {
+                    var hashbuf: [64]u8 = undefined;
+                    _ = &hashbuf;
+                    const etag_str = (blk_catch_2: { break :blk_catch_2 ((std.fmt.bufPrint((&hashbuf), "{f}", .{ bun.fmt.hexIntLower((output_file.*).hash) })) catch |e| { _ = &e; break :blk_catch_2 (__sw_blk_3: { const __disc_3 = e; _ = &__disc_3; if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .NoSpaceLeft)) {  break :__sw_blk_3 cp_val(unreachable); } }  unreachable; }); }); });
+                    _ = bun.handleOom(headers.append("ETag", etag_str));
+                    if (((!server.config().isDevelopment()) and ((output_file.*).output_kind == .chunk))) {
+                        _ = bun.handleOom(headers.append("Cache-Control", "public, max-age=31536000"));
+                    }
+                }
+                if (server.config().isDevelopment()) {
+                    if (((output_file.*).source_map_index != std.math.maxInt(u32))) {
+                        var route_path = output_files[@as(usize, @intCast((output_file.*).source_map_index))].dest_path;
+                        _ = &route_path;
+                        if ((strings.hasPrefixComptime(route_path, "./") or strings.hasPrefixComptime(route_path, ".\\"))) {
+                            route_path = route_path[1..];
+                        }
+                        _ = bun.handleOom(headers.append("SourceMap", route_path));
+                    }
+                }
+                const static_route = bun.new(StaticRoute, .{ .ref_count = .init(), .blob = blob, .server = server, .status_code = 200, .headers = headers, .cached_blob_size = blob.size() });
+                if (((this_html_route == null) and ((output_file.*).output_kind == .@"entry-point"))) {
+                    if (((output_file.*).loader == .html)) {
+                        this_html_route = static_route;
+                    }
+                }
+                var route_path = (output_file.*).dest_path;
+                _ = &route_path;
+                if ((strings.hasPrefixComptime(route_path, "./") or strings.hasPrefixComptime(route_path, ".\\"))) {
+                    route_path = route_path[1..];
+                }
+                _ = bun.handleOom(server.appendStaticRoute(route_path, .{ .static = static_route }, .@"any"));
+            }
+            const html_route: *StaticRoute = ((this_html_route) orelse (@panic("Internal assertion failure: HTML entry point not found in HTMLBundle.")));
+            const html_route_clone = bun.handleOom(html_route.clone(globalThis));
+            self.state = .{ .html = html_route_clone };
+            if ((!bun.handleOom(server.reloadStaticRoutes()))) {
+            }
+},
+.pending => {
+_ = unreachable;
+},
+}
+            _ = self.resumePendingResponses();
+    }
+
+pub fn resumePendingResponses(self: *Route) void {
+            var pending = self.pending_responses;
+            _ = &pending;
+            var _pending_guard = PendingListGuard{ .list = (blk: {
+            break :blk (&pending);
+
+}) };
+            _ = &_pending_guard;
+            var ___pending_guard_moved = false; _ = &___pending_guard_moved;
+            defer if (!___pending_guard_moved) { ___pending_guard_moved = true; const __T = @TypeOf(_pending_guard); if (@typeInfo(__T) == .optional) { if (_pending_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _pending_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _pending_guard; _drop_val.__cp_deinit(); } };
+            self.pending_responses = .{};
+            for (pending.items) |pending_response| {
+                _ = &pending_response;
+                var _resp_guard = PendingRespGuard{ .resp = pending_response };
+                _ = &_resp_guard;
+                var ___resp_guard_moved = false; _ = &___resp_guard_moved;
+                defer if (!___resp_guard_moved) { ___resp_guard_moved = true; const __T = @TypeOf(_resp_guard); if (@typeInfo(__T) == .optional) { if (_resp_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _resp_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _resp_guard; _drop_val.__cp_deinit(); } };
+                const resp = pending_response.resp;
+                const method = pending_response.method;
+                if ((!pending_response.is_response_pending)) {
+                    continue;
+                }
+                pending_response.is_response_pending = false;
+                _ = resp.clearAborted();
+                switch (self.state) {
+.html => |html| {
+if ((method == .HEAD)) {
+                    _ = html.onHEAD(resp);
+                } else {
+                    _ = html.on(resp);
+                }
+},
+.err_val => |log| {
+if (self.server.?.config().isDevelopment()) {
+                    _ = &log;
+                }
+                _ = resp.writeStatus("500 Build Failed");
+                _ = resp.endWithoutBody(false);
+},
+else => {
+_ = resp.endWithoutBody(false);
+},
+}
+            }
+    }
+    const RefCount = bun.ptr.RefCount(@This(), "ref_count", Route.deinit, .{ .debug_name = "HTMLBundleRoute" });
+    pub const ref = Route.RefCount.ref;
+    pub const deref = Route.RefCount.deref;
+    pub const State = RouteState;
+    pub const PendingResponse = RoutePendingResponse;
+};
+
+pub const HTMLBundleRoute = Route;
 const debug = bun.Output.scoped(.HTMLBundle, .hidden);
 const StaticRoute = @import("./StaticRoute.zig");
 const bun = @import("bun");
@@ -88,477 +622,3 @@ const JSBundler = jsc.API.JSBundler;
 const uws = bun.uws;
 const HTTPResponse = bun.uws.AnyResponse;
 const empty_paths: [0][]const u8 = undefined;
-pub const HTMLBundleRoute = Route;
-pub const Route = struct {
-    /// One HTMLBundle.Route can be specified multiple times
-    const RefCount = bun.ptr.RefCount(@This(), "ref_count", Route.deinit, .{ .debug_name = "HTMLBundleRoute" });
-    pub const ref = Route.RefCount.ref;
-    pub const deref = Route.RefCount.deref;
-
-    bundle: RefPtr(HTMLBundle),
-    ref_count: Route.RefCount,
-    // TODO: attempt to remove the null case. null is only present during server
-    // initialization as only a ServerConfig object is present.
-    server: ?AnyServer = null,
-    /// When using DevServer, this value is never read or written to.
-    state: State,
-    /// Written and read by DevServer to identify if this route has been
-    /// registered with the bundler.
-    dev_server_id: bun.bake.DevServer.RouteBundle.Index.Optional = .none,
-    /// When state == .pending, incomplete responses are stored here.
-    pending_responses: std.ArrayListUnmanaged(*PendingResponse) = .{},
-
-    method: union(enum) {
-        any: void,
-        method: bun.http.Method.Set,
-    } = .any,
-
-    pub fn memoryCost(this: *const Route) usize {
-        var cost: usize = 0;
-        cost += @sizeOf(Route);
-        cost += this.pending_responses.items.len * @sizeOf(PendingResponse);
-        cost += this.state.memoryCost();
-        return cost;
-    }
-
-    pub fn init(html_bundle: *HTMLBundle) RefPtr(Route) {
-        return .new(.{
-            .bundle = .initRef(html_bundle),
-            .pending_responses = .{},
-            .ref_count = .init(),
-            .server = null,
-            .state = .pending,
-        });
-    }
-
-    fn deinit(this: *Route) void {
-        bun.assert(this.pending_responses.items.len == 0); // pending responses keep a ref to the route
-        this.pending_responses.deinit(bun.default_allocator);
-        this.bundle.deref();
-        this.state.deinit();
-        bun.destroy(this);
-    }
-
-    pub const State = union(enum) {
-        pending,
-        building: ?*bun.BundleV2.JSBundleCompletionTask,
-        err: bun.logger.Log,
-        html: *StaticRoute,
-
-        pub fn deinit(this: *State) void {
-            switch (this.*) {
-                .err => |*log| {
-                    log.deinit();
-                },
-                .building => |completion| if (completion) |c| {
-                    c.cancelled = true;
-                    c.deref();
-                },
-                .html => {
-                    this.html.deref();
-                },
-                .pending => {},
-            }
-        }
-
-        pub fn memoryCost(this: *const State) usize {
-            return switch (this.*) {
-                .pending => 0,
-                .building => 0,
-                .err => |log| log.memoryCost(),
-                .html => |html| html.memoryCost(),
-            };
-        }
-    };
-
-    pub fn onRequest(this: *Route, req: uws.AnyRequest, resp: HTTPResponse) void {
-        this.onAnyRequest(req, resp, false);
-    }
-
-    pub fn onHEADRequest(this: *Route, req: uws.AnyRequest, resp: HTTPResponse) void {
-        this.onAnyRequest(req, resp, true);
-    }
-
-    fn onAnyRequest(this: *Route, req: uws.AnyRequest, resp: HTTPResponse, is_head: bool) void {
-        this.ref();
-        defer this.deref();
-        const server: AnyServer = this.server orelse {
-            resp.endWithoutBody(true);
-            return;
-        };
-
-        if (server.config().isDevelopment()) {
-            if (server.devServer()) |dev| {
-                // DevServer's HMR path is *uws.Request-typed; H3 isn't routed
-                // there (no h3_app on plain-HTTP debug servers in practice),
-                // but stay defensive.
-                switch (req) {
-                    .h1 => |h1| bun.handleOom(dev.respondForHTMLBundle(this, h1, resp)),
-                    .h3 => {
-                        resp.writeStatus("503 Service Unavailable");
-                        resp.end("DevServer HMR is HTTP/1.1 only", true);
-                    },
-                }
-                return;
-            }
-
-            // Simpler development workflow which rebundles on every request.
-            if (this.state == .html) {
-                this.state.html.deref();
-                this.state = .pending;
-            } else if (this.state == .err) {
-                this.state.err.deinit();
-                this.state = .pending;
-            }
-        }
-
-        state: switch (this.state) {
-            .pending => {
-                if (bun.Environment.enable_logs)
-                    debug("onRequest: {s} - pending", .{req.url()});
-                bun.handleOom(this.scheduleBundle(server));
-                continue :state this.state;
-            },
-            .building => {
-                if (bun.Environment.enable_logs)
-                    debug("onRequest: {s} - building", .{req.url()});
-
-                // create the PendingResponse, add it to the list
-                const pending = bun.new(PendingResponse, .{
-                    .method = bun.http.Method.which(req.method()) orelse {
-                        resp.writeStatus("405 Method Not Allowed");
-                        resp.endWithoutBody(true);
-                        return;
-                    },
-                    .resp = resp,
-                    .server = this.server,
-                    .route = this,
-                });
-
-                bun.handleOom(this.pending_responses.append(bun.default_allocator, pending));
-
-                this.ref();
-                resp.onAborted(*PendingResponse, PendingResponse.onAborted, pending);
-                req.setYield(false);
-            },
-            .err => |log| {
-                if (bun.Environment.enable_logs)
-                    debug("onRequest: {s} - err", .{req.url()});
-                _ = log; // TODO: use the code from DevServer.zig to render the error
-                resp.endWithoutBody(true);
-            },
-            .html => |html| {
-                if (bun.Environment.enable_logs)
-                    debug("onRequest: {s} - html", .{req.url()});
-                if (is_head) {
-                    html.onHEADRequest(req, resp);
-                } else {
-                    html.onRequest(req, resp);
-                }
-            },
-        }
-    }
-
-    /// Schedule a bundle to be built.
-    /// If success, bumps the ref count and returns true;
-    fn scheduleBundle(this: *Route, server: AnyServer) !void {
-        switch (server.getOrLoadPlugins(.{ .html_bundle_route = this })) {
-            .err => this.state = .{ .err = bun.logger.Log.init(bun.default_allocator) },
-            .ready => |plugins| try onPluginsResolved(this, plugins),
-            .pending => this.state = .{ .building = null },
-        }
-    }
-
-    pub fn onPluginsResolved(this: *Route, plugins: ?*jsc.API.JSBundler.Plugin) !void {
-        const global = this.bundle.data.global;
-        const server = this.server.?;
-        const development = server.config().development;
-        const vm = global.bunVM();
-
-        var config: JSBundler.Config = .{};
-        errdefer config.deinit(bun.default_allocator);
-        try config.entry_points.insert(this.bundle.data.path);
-        if (vm.transpiler.options.transform_options.serve_public_path) |public_path| {
-            if (public_path.len > 0) {
-                try config.public_path.appendSlice(public_path);
-            } else {
-                try config.public_path.appendChar('/');
-            }
-        } else {
-            try config.public_path.appendChar('/');
-        }
-
-        if (vm.transpiler.options.transform_options.serve_env_behavior != ._none) {
-            config.env_behavior = vm.transpiler.options.transform_options.serve_env_behavior;
-
-            if (config.env_behavior == .prefix) {
-                try config.env_prefix.appendSlice(vm.transpiler.options.transform_options.serve_env_prefix orelse "");
-            }
-        }
-
-        if (vm.transpiler.options.transform_options.serve_splitting) {
-            config.code_splitting = vm.transpiler.options.transform_options.serve_splitting;
-        }
-
-        config.target = .browser;
-        const is_development = development.isDevelopment();
-
-        if (bun.cli.Command.get().args.serve_minify_identifiers) |minify_identifiers| {
-            config.minify.identifiers = minify_identifiers;
-        } else if (!is_development) {
-            config.minify.identifiers = true;
-        }
-
-        if (bun.cli.Command.get().args.serve_minify_whitespace) |minify_whitespace| {
-            config.minify.whitespace = minify_whitespace;
-        } else if (!is_development) {
-            config.minify.whitespace = true;
-        }
-
-        if (bun.cli.Command.get().args.serve_minify_syntax) |minify_syntax| {
-            config.minify.syntax = minify_syntax;
-        } else if (!is_development) {
-            config.minify.syntax = true;
-        }
-
-        if (bun.cli.Command.get().args.serve_define) |define| {
-            bun.assert(define.keys.len == define.values.len);
-            try config.define.map.ensureUnusedCapacity(define.keys.len);
-            config.define.map.unmanaged.entries.len = define.keys.len;
-            @memcpy(config.define.map.keys(), define.keys);
-            for (config.define.map.values(), define.values) |*to, from| {
-                to.* = bun.handleOom(config.define.map.allocator.dupe(u8, from));
-            }
-            try config.define.map.reIndex();
-        }
-
-        if (!is_development) {
-            bun.handleOom(config.define.put("process.env.NODE_ENV", "\"production\""));
-            config.jsx.development = false;
-        } else {
-            config.force_node_env = .development;
-            config.jsx.development = true;
-        }
-        config.source_map = .linked;
-
-        const completion_task = try bun.BundleV2.createAndScheduleCompletionTask(
-            config,
-            plugins,
-            global,
-            vm.eventLoop(),
-            bun.default_allocator,
-        );
-        completion_task.started_at_ns = bun.getRoughTickCount(.allow_mocked_time).ns();
-        completion_task.html_build_task = this;
-        this.state = .{ .building = completion_task };
-
-        // While we're building, ensure this doesn't get freed.
-        this.ref();
-    }
-
-    pub fn onPluginsRejected(this: *Route) !void {
-        debug("HTMLBundleRoute(0x{x}) plugins rejected", .{@intFromPtr(this)});
-        this.state = .{ .err = bun.logger.Log.init(bun.default_allocator) };
-        this.resumePendingResponses();
-    }
-
-    pub fn onComplete(this: *Route, completion_task: *bun.BundleV2.JSBundleCompletionTask) void {
-        // For the build task.
-        defer this.deref();
-
-        switch (completion_task.result) {
-            .err => |err| {
-                if (bun.Environment.enable_logs)
-                    debug("onComplete: err - {s}", .{@errorName(err)});
-                this.state = .{ .err = bun.logger.Log.init(bun.default_allocator) };
-                bun.handleOom(completion_task.log.cloneToWithRecycled(&this.state.err, true));
-
-                if (this.server) |server| {
-                    if (server.config().isDevelopment()) {
-                        switch (bun.Output.enable_ansi_colors_stderr) {
-                            inline else => |enable_ansi_colors| {
-                                const writer = bun.Output.errorWriterBuffered();
-                                this.state.err.printWithEnableAnsiColors(writer, enable_ansi_colors) catch {};
-                                writer.flush() catch {};
-                            },
-                        }
-                    }
-                }
-            },
-            .value => |bundle| {
-                if (bun.Environment.enable_logs)
-                    debug("onComplete: success", .{});
-                // Find the HTML entry point and create static routes
-                const server: AnyServer = this.server orelse return;
-                const globalThis = server.globalThis();
-                const output_files = bundle.output_files.items;
-
-                if (server.config().isDevelopment()) {
-                    const now = bun.getRoughTickCount(.allow_mocked_time).ns();
-                    const duration = now - completion_task.started_at_ns;
-                    var duration_f64: f64 = @floatFromInt(duration);
-                    duration_f64 /= std.time.ns_per_s;
-
-                    bun.Output.printElapsed(duration_f64);
-                    var byte_length: u64 = 0;
-                    for (output_files) |*output_file| {
-                        byte_length += output_file.size_without_sourcemap;
-                    }
-
-                    bun.Output.prettyErrorln(" <green>bundle<r> {s} <d>{d:.2} KB<r>", .{ std.fs.path.basename(this.bundle.data.path), @as(f64, @floatFromInt(byte_length)) / 1000.0 });
-                    bun.Output.flush();
-                }
-
-                var this_html_route: ?*StaticRoute = null;
-
-                // Create static routes for each output file
-                for (output_files) |*output_file| {
-                    const blob = jsc.WebCore.Blob.Any{ .Blob = bun.handleOom(output_file.toBlob(bun.default_allocator, globalThis)) };
-                    var headers = bun.http.Headers{ .allocator = bun.default_allocator };
-                    const content_type = blob.Blob.contentTypeOrMimeType() orelse brk: {
-                        bun.debugAssert(false); // should be populated by `output_file.toBlob`
-                        break :brk output_file.loader.toMimeType(empty_paths[0..0]).value;
-                    };
-                    bun.handleOom(headers.append("Content-Type", content_type));
-                    // Do not apply etags to html.
-                    if (output_file.loader != .html and output_file.value == .buffer) {
-                        var hashbuf: [64]u8 = undefined;
-                        const etag_str = std.fmt.bufPrint(
-                            &hashbuf,
-                            "{f}",
-                            .{bun.fmt.hexIntLower(output_file.hash)},
-                        ) catch |err| switch (err) {
-                            error.NoSpaceLeft => unreachable,
-                        };
-                        bun.handleOom(headers.append("ETag", etag_str));
-                        if (!server.config().isDevelopment() and (output_file.output_kind == .chunk))
-                            bun.handleOom(headers.append("Cache-Control", "public, max-age=31536000"));
-                    }
-
-                    // Add a SourceMap header if we have a source map index
-                    // and it's in development mode.
-                    if (server.config().isDevelopment()) {
-                        if (output_file.source_map_index != std.math.maxInt(u32)) {
-                            var route_path = output_files[output_file.source_map_index].dest_path;
-                            if (strings.hasPrefixComptime(route_path, "./") or strings.hasPrefixComptime(route_path, ".\\")) {
-                                route_path = route_path[1..];
-                            }
-                            bun.handleOom(headers.append("SourceMap", route_path));
-                        }
-                    }
-
-                    const static_route = bun.new(StaticRoute, .{
-                        .ref_count = .init(),
-                        .blob = blob,
-                        .server = server,
-                        .status_code = 200,
-                        .headers = headers,
-                        .cached_blob_size = blob.size(),
-                    });
-
-                    if (this_html_route == null and output_file.output_kind == .@"entry-point") {
-                        if (output_file.loader == .html) {
-                            this_html_route = static_route;
-                        }
-                    }
-
-                    var route_path = output_file.dest_path;
-
-                    // The route path gets cloned inside of appendStaticRoute.
-                    if (strings.hasPrefixComptime(route_path, "./") or strings.hasPrefixComptime(route_path, ".\\")) {
-                        route_path = route_path[1..];
-                    }
-
-                    bun.handleOom(server.appendStaticRoute(route_path, .{ .static = static_route }, .any));
-                }
-
-                const html_route: *StaticRoute = this_html_route orelse @panic("Internal assertion failure: HTML entry point not found in HTMLBundle.");
-                const html_route_clone = bun.handleOom(html_route.clone(globalThis));
-                this.state = .{ .html = html_route_clone };
-
-                if (!bun.handleOom(server.reloadStaticRoutes())) {
-                    // Server has shutdown, so it won't receive any new requests
-                    // TODO: handle this case
-                }
-            },
-            .pending => unreachable,
-        }
-
-        // Handle pending responses
-        this.resumePendingResponses();
-    }
-
-    pub fn resumePendingResponses(this: *Route) void {
-        var pending = this.pending_responses;
-        defer pending.deinit(bun.default_allocator);
-        this.pending_responses = .{};
-        for (pending.items) |pending_response| {
-            defer pending_response.deinit();
-
-            const resp = pending_response.resp;
-            const method = pending_response.method;
-            if (!pending_response.is_response_pending) {
-                // Aborted
-                continue;
-            }
-            pending_response.is_response_pending = false;
-            resp.clearAborted();
-
-            switch (this.state) {
-                .html => |html| {
-                    if (method == .HEAD) {
-                        html.onHEAD(resp);
-                    } else {
-                        html.on(resp);
-                    }
-                },
-                .err => |log| {
-                    if (this.server.?.config().isDevelopment()) {
-                        _ = log; // TODO: use the code from DevServer.zig to render the error
-                    } else {
-                        // To protect privacy, do not show errors to end users in production.
-                        // TODO: Show a generic error page.
-                    }
-                    resp.writeStatus("500 Build Failed");
-                    resp.endWithoutBody(false);
-                },
-                else => {
-                    resp.endWithoutBody(false);
-                },
-            }
-        }
-    }
-
-    /// Represents an in-flight response before the bundle has finished building.
-    pub const PendingResponse = struct {
-        method: bun.http.Method,
-        resp: HTTPResponse,
-        is_response_pending: bool = true,
-        server: ?AnyServer = null,
-        route: *Route,
-
-        pub fn deinit(this: *PendingResponse) void {
-            if (this.is_response_pending) {
-                this.resp.clearAborted();
-                this.resp.clearOnWritable();
-                this.resp.endWithoutBody(true);
-            }
-            this.route.deref();
-            bun.destroy(this);
-        }
-
-        pub fn onAborted(this: *PendingResponse, _: HTTPResponse) void {
-            bun.debugAssert(this.is_response_pending == true);
-            this.is_response_pending = false;
-
-            // Technically, this could be the final ref count, but we don't want to risk it
-            this.route.ref();
-            defer this.route.deref();
-
-            while (std.mem.indexOfScalar(*PendingResponse, this.route.pending_responses.items, this)) |index| {
-                _ = this.route.pending_responses.orderedRemove(index);
-                this.route.deref();
-            }
-        }
-    };
-};

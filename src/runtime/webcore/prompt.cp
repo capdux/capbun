@@ -17,6 +17,13 @@ const ManagedList = std.array_list.Managed;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!?,
+    ~init() {
+        if (p := _.ptr) { p.deinit(); }
+    }
+}
+
 comptime {
     const js_alert = jsc.toJSHostFn(alert);
     @export(&js_alert, .{ .name = "WebCore__alert" });
@@ -34,8 +41,8 @@ fn alert(globalObject: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSVa
     if (has_message) {
         let state = heap.stackFallback(2048, default_allocator);
         const allocator = state.get();
-        const message = arguments[0].toSlice(globalObject, allocator)?;
-        defer message.deinit();
+        let message = arguments[0].toSlice(globalObject, allocator)?;
+        const _msg_guard = DeinitGuard<@TypeOf(message)>{ ptr: unsafe { &message } };
 
         if (message.len > 0) {
             output.writeAll(message.slice()) catch {
@@ -72,8 +79,8 @@ fn confirm(globalObject: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JS
     if (has_message) {
         let state = heap.stackFallback(1024, default_allocator);
         const allocator = state.get();
-        const message = arguments[0].toSlice(globalObject, allocator)?;
-        defer message.deinit();
+        let message = arguments[0].toSlice(globalObject, allocator)?;
+        const _msg_guard = DeinitGuard<@TypeOf(message)>{ ptr: unsafe { &message } };
 
         output.writeAll(message.slice()) catch {
             return JSValue.@"false";
@@ -185,8 +192,8 @@ export class prompt {
         if (has_default) default_val = arguments[1];
 
         if (has_message) {
-            const message = arguments[0].toSlice(globalObject, allocator)?;
-            defer message.deinit();
+            let message = arguments[0].toSlice(globalObject, allocator)?;
+            const _msg_guard = DeinitGuard<@TypeOf(message)>{ ptr: unsafe { &message } };
 
             output.writeAll(message.slice()) catch {
                 return JSValue.@"null";
@@ -200,8 +207,8 @@ export class prompt {
         };
 
         if (has_default) {
-            const default_string = arguments[1].toSlice(globalObject, allocator)?;
-            defer default_string.deinit();
+            let default_string = arguments[1].toSlice(globalObject, allocator)?;
+            const _default_guard = DeinitGuard<@TypeOf(default_string)>{ ptr: unsafe { &default_string } };
 
             output.print("[{s}] ", [default_string.slice()]) catch {
                 return JSValue.@"false";
@@ -240,7 +247,7 @@ export class prompt {
         let input: ManagedList(u8) = ManagedList(u8).initCapacity(allocator, 2048) catch {
             return JSValue.@"null";
         };
-        defer input.deinit();
+        const _input_guard = DeinitGuard<@TypeOf(input)>{ ptr: unsafe { &input } };
 
         input.appendAssumeCapacity(first_byte);
         if (second := second_byte) {

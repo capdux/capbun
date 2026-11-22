@@ -23,6 +23,13 @@ const BoringSSL = bun.BoringSSL.c;
 const Blob = jsc.WebCore.Blob;
 
 const PipeReadBuffer = [256 * 1024]u8;
+
+struct MutexGuard {
+    m: *bun.Mutex!,
+    ~init() {
+        _.m.unlock();
+    }
+}
 const DIGESTED_HMAC_256_LEN = 32;
 
 const socket_group_fields = [
@@ -198,7 +205,7 @@ pub struct AWSSignatureCache {
 
     pub fn get(*_, numeric_day: u64, key: []const u8): ([]const u8)? {
         _.lock.lock();
-        defer _.lock.unlock();
+        const _guard = MutexGuard{ m: unsafe { &_.lock } };
         if (_.date == 0) {
             return null;
         }
@@ -212,7 +219,7 @@ pub struct AWSSignatureCache {
 
     pub fn set(*_, numeric_day: u64, key: []const u8, value: [DIGESTED_HMAC_256_LEN]u8) {
         _.lock.lock();
-        defer _.lock.unlock();
+        const _guard = MutexGuard{ m: unsafe { &_.lock } };
         if (_.date == 0) {
             _.cache = bun.StringArrayHashMap([DIGESTED_HMAC_256_LEN]u8).init(bun.default_allocator);
         } else if (_.date != numeric_day) {
@@ -434,13 +441,13 @@ pub enum StdinFdType: i32 {
 
     pub fn addListeningSocketForWatchMode(*_, socket: bun.FD) {
         _.listening_sockets_for_watch_mode_lock.lock();
-        defer _.listening_sockets_for_watch_mode_lock.unlock();
+        const _guard = MutexGuard{ m: unsafe { &_.listening_sockets_for_watch_mode_lock } };
         _.listening_sockets_for_watch_mode.append(bun.default_allocator, socket) catch {};
     }
 
     pub fn removeListeningSocketForWatchMode(*_, socket: bun.FD) {
         _.listening_sockets_for_watch_mode_lock.lock();
-        defer _.listening_sockets_for_watch_mode_lock.unlock();
+        const _guard = MutexGuard{ m: unsafe { &_.listening_sockets_for_watch_mode_lock } };
         if (i := std.mem.indexOfScalar(bun.FD, _.listening_sockets_for_watch_mode.items, socket)) {
             * = _.listening_sockets_for_watch_mode.swapRemove(i);
         }
@@ -448,7 +455,7 @@ pub enum StdinFdType: i32 {
 
     pub fn closeAllListenSocketsForWatchMode(*_) {
         _.listening_sockets_for_watch_mode_lock.lock();
-        defer _.listening_sockets_for_watch_mode_lock.unlock();
+        const _guard = MutexGuard{ m: unsafe { &_.listening_sockets_for_watch_mode_lock } };
         for (socket of _.listening_sockets_for_watch_mode.items) {
             socket.close();
         }

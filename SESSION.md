@@ -374,3 +374,14 @@
 - **Wave #36（1-defer 全清零，86 模块）**：分 4 批完成全仓全部 86 个可改造 1-defer 模块（`HTMLScanner`..`EventLoopTimer` 21 模块、`ManagedTask`..`fmt_jsc` 22 模块、`logger`..`InternalSourceMap` 21 模块、`ParsedSourceMap`..`socket` 22 模块），全面采用 `~init()` / `~errinit()` 原生析构。
 - **联合排雷**：修复 `MySQLStatement`/`PostgresSQLStatement` (`pub const Status/ref/deref`)、`ValkeyCommand` (`switch (_)`)、`custom.cp` (元组解包)、`color.cp` (`RelativeComponentParser` `static fn` 与 `[4]f32`)、`gradient.cp` (`WebKitGradient` 纯 CP 重构)。
 - **全仓验证**：`cpc_brief.py` 四门禁全绿（膨胀率 `0.794 ~ 1.195 <= 1.2x`）；`bun run zig:check` 5/5 PASS；`bun bd test test/regression/issue/29181.test.ts test/js/bun/util/bun-file.test.ts` 8/8 PASS（460 expect() calls，Debug + ASan）。
+
+### [2026-11-22 上游 `cp_agy` 工单投递]
+- `task-bun-20261122-const-type-opt-try`（repro: `/data/dev/cp/temp/repro_const_type_opt_try.cp`）：顶层 `const` 类型别名右值中的 `(*const fn ...)?` / `FnB?` 被 `cpc` 误生成为 `try ...`，触发 Zig `'try' outside function scope`。
+
+### [2026-11-22 上游 `cp_agy` 结单验收（1 条）]
+- `task-bun-20261122-const-type-opt-try`：已修复并验收。`cpc` 在 Codegen 增加 `in_container_const` 上下文区分类型位置 `?T` 与表达式错误传播 `try expr`，`pub const FnA = (*const fn ...)?;` 与 `pub const OptFnB = FnB?;` 现已正确生成 `?*const fn ...` 与 `?FnB`。
+
+### [2026-11-22 Wave #37] 全仓 100% `.cp` 覆盖达成 + 剩余 RAII 模块收官（39 模块，全仓 `zig:check` + `bun bd test` 通过）
+- **100% `.cp` 覆盖收官**：完成全仓最后 2 个未迁移文件 `src/string/immutable/grapheme_tables.cp`（35,621 行，ratio `1.0`）与 `src/boringssl_sys/boringssl.cp`（19,306 行，ratio `1.109`），`src/` 1,295/1,295 模块实现 100.00% 纯 `.cp` 覆盖。
+- **剩余 RAII 与纯化收官（37 模块）**：完成 `ref_count`, `interpreter`, `Builtin`, `Expansion`, `small_list`, `GlobWalker`, `napi`, `scanImportsAndExports`, `tree_printer`, `rm`, `FileReader`, `writeOutputFilesToDisk`, `prompt`, `color`, `stdio`, `error_jsc`, `bun_test`, `Execution`, `ScopeFunctions`, `Collection`, `debug`, `JSMySQLQuery`, `ResultSet`, `MySQLQuery`, `Auth`, `HTTPThread`, `SSLConfig`, `node_assert`, `node_zlib_binding`, `BlockList`, `rare_data`, `host_fn`, `PipeReader`, `HTMLBundle`, `LinkerContext`（`pub struct` 拆升重构）, `ffi`, `calc`（解封原生 `toCss`）的 RAII `~init()`/`~errinit()` 与 `unsafe {}` 合规化。
+- **全仓验证**：`cpc_brief.py` 四门禁全绿（膨胀率 `0.824 ~ 1.195 <= 1.2x`）；`bun run zig:check` 5/5 PASS；`bun bd test test/regression/issue/29181.test.ts test/js/bun/util/bun-file.test.ts` 8/8 PASS（460 expect() calls，Debug + ASan）。

@@ -208,6 +208,22 @@ pub fn __cp_deinit(self: *HandleScopeGuard) void {
     }
 };
 
+pub fn UnlockGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T = null,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    _ = p.unlock();
+                }
+        }
+    };
+}
+
 pub const NapiEnvExternalSharedDescriptor = struct {
     pub const ref = NapiEnv__ref;
     pub const deref = NapiEnv__deref;
@@ -523,9 +539,14 @@ pub fn dispatchOne(self: *ThreadSafeFunction, is_first: bool) bool {
             _ = &task;
             {
                 _ = self.lock.lock();
-                defer {
-                _ = self.lock.unlock();
-                }
+                const lock_ptr = (blk: {
+                break :blk (&self.lock);
+
+});
+                var _lock_guard = UnlockGuard(@TypeOf(lock_ptr.*)){ .ptr = lock_ptr };
+                _ = &_lock_guard;
+                var ___lock_guard_moved = false; _ = &___lock_guard_moved;
+                defer if (!___lock_guard_moved) { ___lock_guard_moved = true; const __T = @TypeOf(_lock_guard); if (@typeInfo(__T) == .optional) { if (_lock_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _lock_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _lock_guard; _drop_val.__cp_deinit(); } };
                 const was_blocked = self.queue.isBlocked();
                 const t_opt = self.queue.data.readItem();
                 if ((t_opt == null)) {
@@ -591,9 +612,14 @@ const js: JSValue = ((cb.js.get()) orelse (.js_undefined));
 
 pub fn enqueue(self: *ThreadSafeFunction, ctx: ?*anyopaque, block: bool) napi_status {
             _ = self.lock.lock();
-            defer {
-            _ = self.lock.unlock();
-            }
+            const lock_ptr = (blk: {
+            break :blk (&self.lock);
+
+});
+            var _lock_guard = UnlockGuard(@TypeOf(lock_ptr.*)){ .ptr = lock_ptr };
+            _ = &_lock_guard;
+            var ___lock_guard_moved = false; _ = &___lock_guard_moved;
+            defer if (!___lock_guard_moved) { ___lock_guard_moved = true; const __T = @TypeOf(_lock_guard); if (@typeInfo(__T) == .optional) { if (_lock_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _lock_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _lock_guard; _drop_val.__cp_deinit(); } };
             if (block) {
                 while (self.queue.isBlocked()) {
                     _ = self.blocking_condvar.wait((&self.lock));
@@ -656,9 +682,14 @@ pub fn unref(self: *ThreadSafeFunction) void {
 
 pub fn acquire(self: *ThreadSafeFunction) napi_status {
             _ = self.lock.lock();
-            defer {
-            _ = self.lock.unlock();
-            }
+            const lock_ptr = (blk: {
+            break :blk (&self.lock);
+
+});
+            var _lock_guard = UnlockGuard(@TypeOf(lock_ptr.*)){ .ptr = lock_ptr };
+            _ = &_lock_guard;
+            var ___lock_guard_moved = false; _ = &___lock_guard_moved;
+            defer if (!___lock_guard_moved) { ___lock_guard_moved = true; const __T = @TypeOf(_lock_guard); if (@typeInfo(__T) == .optional) { if (_lock_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _lock_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _lock_guard; _drop_val.__cp_deinit(); } };
             if (self.isClosing()) {
                 return @intFromEnum(NapiStatus.closing);
             }
@@ -670,11 +701,15 @@ pub fn release(self: *ThreadSafeFunction, mode: napi_threadsafe_function_release
             if ((!already_locked)) {
                 _ = self.lock.lock();
             }
-            defer {
-            if ((!already_locked)) {
-                _ = self.lock.unlock();
-            }
-            }
+            const lock_ptr_type = (blk: {
+            break :blk (&self.lock);
+
+});
+            const lock_ptr = (if ((!already_locked)) lock_ptr_type else null);
+            var _lock_guard = UnlockGuard(@TypeOf(lock_ptr_type.*)){ .ptr = lock_ptr };
+            _ = &_lock_guard;
+            var ___lock_guard_moved = false; _ = &___lock_guard_moved;
+            defer if (!___lock_guard_moved) { ___lock_guard_moved = true; const __T = @TypeOf(_lock_guard); if (@typeInfo(__T) == .optional) { if (_lock_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _lock_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _lock_guard; _drop_val.__cp_deinit(); } };
             if ((self.thread_count.load(.seq_cst) < 0)) {
                 return @intFromEnum(NapiStatus.invalid_arg);
             }

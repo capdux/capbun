@@ -1668,8 +1668,7 @@ pub fn MathFunction(comptime V: type): type {
                 .round => |*rnd| {
                     try dest.writeStr("round(");
                     if (rnd.strategy != RoundingStrategy.default()) {
-                        // TODO(cpc): [task-bun-20261122-enum-readonly-method-mut-self]
-                        try dest.writeStr(rnd.strategy.asStr());
+                        try rnd.strategy.toCss(dest);
                         try dest.delim(',', false);
                     }
                     try rnd.value.toCss(dest);

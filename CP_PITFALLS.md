@@ -179,3 +179,4 @@
   - `Factory(): type` 内局部类型别名 `const G = Guard(T); const g = G{ ... };` 已支持自动注入 `defer __cp_deinit()`（`task-bun-20261122-local-alias-raii-drop`）；
   - 原生支持 `~errinit()`（对应 Zig `errdefer`：仅在 error 返回路径自动触发 `__cp_errdeinit()`，正常路径自动跳过无需手写 `disarm()`；亦支持 `move(guard)` 编译器级撤防）（`task-bun-20261122-raii-errinit-or-move-disarm`）；
   - `pub enum` 中未写 `*_` 的只读实例方法现正确生成只读值接收者 `self: Enum`，`*const Enum` 可直接调用（`task-bun-20261122-enum-readonly-method-mut-self`）。
+  - 顶层与容器内 `const` 类型别名右值中的 `(T)?` / `T?` 已正确生成 `?T`（不再误作 `try`）（`task-bun-20261122-const-type-opt-try`）；

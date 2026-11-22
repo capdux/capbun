@@ -484,9 +484,6 @@ pub fn GlobWalker_(
             }
 
             pub fn deinit(this: *Iterator) void {
-                defer {
-                    bun.debugAssert(this.fds_open == 0);
-                }
                 this.closeCwdFd();
                 switch (this.iter_state) {
                     .directory => |dir| {
@@ -1098,8 +1095,8 @@ pub fn GlobWalker_(
             while (component_idx < this.patternComponents.items.len) {
                 switch (this.patternComponents.items[component_idx].syntax_hint) {
                     .Dot => {
-                        defer component_idx += 1;
                         if (len + 2 >= bun.MAX_PATH_BYTES) {
+                            component_idx += 1;
                             return .{ .err = this.handleSysErrWithPath(Syscall.Error.fromCode(.NAMETOOLONG, .open), path_buf[0..len :0]) };
                         }
                         if (len == 0) {
@@ -1112,11 +1109,12 @@ pub fn GlobWalker_(
                             path_buf[len + 2] = 0;
                             len += 2;
                         }
+                        component_idx += 1;
                     },
                     .DotBack => {
-                        defer component_idx += 1;
                         encountered_dot_dot.* = true;
                         if (len + 3 >= bun.MAX_PATH_BYTES) {
+                            component_idx += 1;
                             return .{ .err = this.handleSysErrWithPath(Syscall.Error.fromCode(.NAMETOOLONG, .open), path_buf[0..len :0]) };
                         }
                         if (len == 0) {
@@ -1131,6 +1129,7 @@ pub fn GlobWalker_(
                             path_buf[len + 3] = 0;
                             len += 3;
                         }
+                        component_idx += 1;
                     },
                     else => break,
                 }

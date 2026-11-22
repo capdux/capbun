@@ -54,6 +54,13 @@ pub struct FreeGuard<T> {
     }
 }
 
+pub struct EndGuard<T> {
+    ptr: *T!?,
+    ~init() {
+        if (p := _.ptr) { p.end(); }
+    }
+}
+
 pub fn writeOutputFilesToDisk(
     c: *LinkerContext,
     root_path: string,
@@ -62,7 +69,7 @@ pub fn writeOutputFilesToDisk(
     standalone_chunk_contents: ([]const MaybeByteSlice)?,
 )! {
     let trace = bun.perf.trace("Bundler.writeOutputFilesToDisk");
-    defer trace.end();
+    const _trace_guard = EndGuard<@TypeOf(trace)>{ ptr: unsafe { &trace } };
     let root_dir = std.fs.cwd().makeOpenPath(root_path, {}) catch |e| {
         if (e == error.NotDir) {
             c.log.addErrorFmt(null, Logger.Loc.Empty, bun.default_allocator, "Failed to create output directory {f} is a file. Please choose a different outdir or delete {f}", [
@@ -122,7 +129,7 @@ pub fn writeOutputFilesToDisk(
         }
 
         let trace2 = bun.perf.trace("Bundler.writeChunkToDisk");
-        defer trace2.end();
+        const _trace2_guard = EndGuard<@TypeOf(trace2)>{ ptr: unsafe { &trace2 } };
         defer max_heap_allocator.reset();
 
         const rel_path = chunk.final_rel_path;

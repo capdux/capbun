@@ -39,6 +39,13 @@ struct DerefGuard<T> {
     }
 }
 
+struct UnlockGuard<T> {
+    ptr: (*T!)? = null,
+    ~init() {
+        if (p := _.ptr) p.unlock();
+    }
+}
+
 pub struct PromptOnceState {
     removed_count: u32 = 0,
 }
@@ -214,7 +221,8 @@ pub struct ShellDirTask {
                     .err => |e| {
                         debug("[runFromThreadPoolImpl:getcwd] DirTask({x}) failed: {s}: {s}", .{ unsafe { @intFromPtr(_) }, @tagName(e.getErrno()), e.path });
                         _.task_manager.err_mutex.lock();
-                        defer _.task_manager.err_mutex.unlock();
+                        const mutex_ptr = unsafe { &_.task_manager.err_mutex };
+                        const _err_mutex_guard = UnlockGuard<@TypeOf(mutex_ptr.*)>{ ptr: mutex_ptr };
                         if (_.task_manager.e == null) {
                             _.task_manager.e = e;
                             _.task_manager.error_signal.store(true, .seq_cst);
@@ -231,7 +239,8 @@ pub struct ShellDirTask {
             .err => |e| {
                 debug("[runFromThreadPoolImpl] DirTask({x}) failed: {s}: {s}", .{ unsafe { @intFromPtr(_) }, @tagName(e.getErrno()), e.path });
                 _.task_manager.err_mutex.lock();
-                defer _.task_manager.err_mutex.unlock();
+                const mutex_ptr = unsafe { &_.task_manager.err_mutex };
+                const _err_mutex_guard = UnlockGuard<@TypeOf(mutex_ptr.*)>{ ptr: mutex_ptr };
                 if (_.task_manager.e == null) {
                     _.task_manager.e = e;
                     _.task_manager.error_signal.store(true, .seq_cst);
@@ -247,7 +256,8 @@ pub struct ShellDirTask {
     pub fn handleErr(*_, e: Syscall.Error) {
         debug("[handleErr] DirTask({x}) failed: {s}: {s}", .{ unsafe { @intFromPtr(_) }, @tagName(e.getErrno()), e.path });
         _.task_manager.err_mutex.lock();
-        defer _.task_manager.err_mutex.unlock();
+        const mutex_ptr = unsafe { &_.task_manager.err_mutex };
+        const _err_mutex_guard = UnlockGuard<@TypeOf(mutex_ptr.*)>{ ptr: mutex_ptr };
         if (_.task_manager.e == null) {
             _.task_manager.e = e;
             _.task_manager.error_signal.store(true, .seq_cst);
@@ -304,7 +314,8 @@ pub struct ShellDirTask {
             .err => |e| {
                 debug("[deleteAfterWaitingForChildren] DirTask({x}) failed: {s}: {s}", .{ unsafe { @intFromPtr(_) }, @tagName(e.getErrno()), e.path });
                 _.task_manager.err_mutex.lock();
-                defer _.task_manager.err_mutex.unlock();
+                const mutex_ptr = unsafe { &_.task_manager.err_mutex };
+                const _err_mutex_guard = UnlockGuard<@TypeOf(mutex_ptr.*)>{ ptr: mutex_ptr };
                 if (_.task_manager.e == null) {
                     _.task_manager.e = e;
                 } else {

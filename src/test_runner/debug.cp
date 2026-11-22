@@ -71,16 +71,20 @@ pub struct group {
     }
 }
 
+pub struct GroupEndGuard {
+    ~init() { group.end(); }
+}
+
 pub fn dumpTest(current: *ExecutionEntry, label: []const u8): bun.JSError!void {
     if (!group.getLogEnabled()) return;
     group.beginMsg("{s} \"{f}\" (concurrent={}, only={})", .{ label, std.zig.fmtString(current.base.name ?? "(unnamed)"), current.base.concurrent, current.base.only });
-    defer group.end();
+    const _group_guard = GroupEndGuard{};
 }
 
 pub fn dumpDescribe(describe: *DescribeScope): bun.JSError!void {
     if (!group.getLogEnabled()) return;
     group.beginMsg("describe \"{f}\" (concurrent={}, mode={s}, only={s}, has_callback={})", .{ std.zig.fmtString(describe.base.name ?? "(unnamed)"), describe.base.concurrent, @tagName(describe.base.mode), @tagName(describe.base.only), describe.base.has_callback });
-    defer group.end();
+    const _group_guard = GroupEndGuard{};
 
     for (entry of describe.beforeAll.items) dumpTest(entry, "beforeAll")?;
     for (entry of describe.beforeEach.items) dumpTest(entry, "beforeEach")?;
@@ -100,18 +104,18 @@ pub fn dumpSub(current: TestScheduleEntry): bun.JSError!void {
 pub fn dumpOrder(client: *Execution): bun.JSError!void {
     if (!group.getLogEnabled()) return;
     group.beginMsg("dumpOrder", .{});
-    defer group.end();
+    const _group_guard = GroupEndGuard{};
 
     for (group_index of 0..client.groups.len) {
         const group_value = client.groups[group_index];
         group.beginMsg("{d} ConcurrentGroup ({d}-{d})", .{ group_index, group_value.sequence_start, group_value.sequence_end });
-        defer group.end();
+        const _group_guard_g = GroupEndGuard{};
 
         const seqs = group_value.sequences(client);
         for (sequence_index of 0..seqs.len) {
             const sequence = &seqs[sequence_index];
             group.beginMsg("{d} Sequence ({d}x)", .{ sequence_index, sequence.remaining_repeat_count });
-            defer group.end();
+            const _group_guard_s = GroupEndGuard{};
 
             let current_entry = sequence.first_entry;
             while (entry := current_entry) : (current_entry = entry.next) {

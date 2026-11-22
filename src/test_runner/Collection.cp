@@ -16,6 +16,9 @@ pub struct DeinitGuard<T> {
         }
     }
 }
+pub struct GroupEndGuard {
+    ~init() { group.end(); }
+}
 
 pub struct QueuedDescribe {
     callback: jsc.Strong.Deprecated,
@@ -38,7 +41,7 @@ pub struct QueuedDescribe {
 
     static fn init(gpa: std.mem.Allocator, bun_test_root: *bun_test.BunTestRoot): Collection {
         group.begin(@src());
-        defer group.end();
+        const _group_guard = GroupEndGuard{};
 
         let only_mode: bun_test.DescribeScope.Only = .no;
         if (runner := jsc.Jest.Jest.runner) {
@@ -86,7 +89,7 @@ pub struct QueuedDescribe {
 
     fn enqueueDescribeCallback(*_, new_scope: *DescribeScope, callback: jsc.JSValue?): bun.JSError!void {
         group.begin(@src());
-        defer group.end();
+        const _group_guard = GroupEndGuard{};
 
         bun.assert(!_.locked);
         const buntest = _.bunTest();
@@ -104,7 +107,7 @@ pub struct QueuedDescribe {
 
     fn runOneCompleted(*_, globalThis: *jsc.JSGlobalObject, _: jsc.JSValue?, data: bun_test.BunTest.RefDataValue): bun.JSError!void {
         group.begin(@src());
-        defer group.end();
+        const _group_guard = GroupEndGuard{};
 
         let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
         const _formatter_guard = DeinitGuard<jsc.ConsoleObject.Formatter>{ ptr: unsafe { &formatter } };
@@ -124,7 +127,7 @@ pub struct QueuedDescribe {
 
     static fn step(buntest_strong: bun_test.BunTestPtr, globalThis: *jsc.JSGlobalObject, data: bun_test.BunTest.RefDataValue): bun.JSError!bun_test.StepResult {
         group.begin(@src());
-        defer group.end();
+        const _group_guard = GroupEndGuard{};
         const buntest: *bun_test.BunTest = buntest_strong.get();
         const client = &buntest.collection;
 
@@ -177,7 +180,7 @@ pub struct QueuedDescribe {
 
     fn handleUncaughtException(*_, _: bun_test.BunTest.RefDataValue): bun_test.HandleUncaughtExceptionResult {
         group.begin(@src());
-        defer group.end();
+        const _group_guard = GroupEndGuard{};
 
         _.active_scope.failed = true;
 

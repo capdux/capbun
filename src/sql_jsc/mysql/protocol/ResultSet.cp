@@ -23,6 +23,33 @@ const JSValue = jsc.JSValue;
 const debug = bun.Output.scoped(.MySQLResultSet, .visible);
 const empty_cells: [0]SQLDataCell = undefined;
 
+struct DeinitGuard<T> {
+    ptr: (*T!)? = null,
+    ~init() {
+        if (p := _.ptr) unsafe { p.deinit(); }
+    }
+}
+
+struct DerefGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deref(); }
+    }
+}
+
+struct CellsErrGuard {
+    cells: []SQLDataCell,
+    allocator: std.mem.Allocator,
+    ~errinit() {
+        let idx: usize = 0;
+        while (idx < _.cells.len) {
+            _.cells[idx].deinit();
+            idx += 1;
+        }
+        _.allocator.free(_.cells);
+    }
+}
+
 pub const Header = HeaderMod;
 
 export struct Row {
@@ -144,7 +171,7 @@ export struct Row {
                 },
                 .MYSQL_TYPE_DATE, .MYSQL_TYPE_DATETIME, .MYSQL_TYPE_TIMESTAMP => {
                     let str = bun.String.init(value.slice());
-                    defer str.deref();
+                    const _str_guard = DerefGuard<bun.String>{ ptr: unsafe { &str } };
                     const date = str.parseDate(this.globalObject) catch |e| {
                         * = this.globalObject.takeException(e);
                         cell.* = SQLDataCell{ tag: .date, value: { date: std.math.nan(f64) } };
@@ -175,14 +202,7 @@ export struct Row {
     fn decodeText(*_, allocator: std.mem.Allocator, comptime Context: type, reader: NewReader(Context)): AnyMySQLError.Error!void {
         const cells = allocator.alloc(SQLDataCell, this.columns.len)?;
         @memset(cells, SQLDataCell{ tag: .@"null", value: { @"null": 0 } });
-        errdefer {
-            let idx: usize = 0;
-            while (idx < cells.len) {
-                cells[idx].deinit();
-                idx += 1;
-            }
-            allocator.free(cells);
-        }
+        const _cells_guard = CellsErrGuard{ cells: cells, allocator: allocator };
 
         let index: usize = 0;
         while (index < cells.len) {
@@ -197,14 +217,14 @@ export struct Row {
                 } else {
                     if (this.raw) {
                         let data = reader.encodeLenString()?;
-                        defer data.deinit();
+                        const _data_guard = DeinitGuard<@TypeOf(data)>{ ptr: unsafe { &data } };
                         unsafe {
                             value.* = SQLDataCell.raw(&data);
                         }
                     } else {
                         reader.skip(result.bytes_read);
                         let string_data = reader.read(@intCast(result.value))?;
-                        defer string_data.deinit();
+                        const _str_data_guard = DeinitGuard<@TypeOf(string_data)>{ ptr: unsafe { &string_data } };
                         this.parseValueAndSetCell(value, &column, &string_data);
                     }
                 }
@@ -231,18 +251,11 @@ export struct Row {
 
         const bitmap_bytes = (this.columns.len + 7 + 2) / 8;
         let null_bitmap = reader.read(bitmap_bytes)?;
-        defer null_bitmap.deinit();
+        const _bitmap_guard = DeinitGuard<@TypeOf(null_bitmap)>{ ptr: unsafe { &null_bitmap } };
 
         const cells = allocator.alloc(SQLDataCell, this.columns.len)?;
         @memset(cells, SQLDataCell{ tag: .@"null", value: { @"null": 0 } });
-        errdefer {
-            let idx: usize = 0;
-            while (idx < cells.len) {
-                cells[idx].deinit();
-                idx += 1;
-            }
-            allocator.free(cells);
-        }
+        const _cells_guard = CellsErrGuard{ cells: cells, allocator: allocator };
         const bitmap_offset: usize = 2;
 
         let i: usize = 0;

@@ -1,28 +1,46 @@
+struct DeinitGuard<T> {
+    ptr: (*T!)? = null,
+    ~init() {
+        if (p := _.ptr) unsafe { p.deinit(); }
+    }
+}
+
+struct StreamRunGuard<T> {
+    stream: *T!,
+    vm: *jsc.VirtualMachine!,
+    ~init() {
+        unsafe {
+            _.stream.poll_ref.unref(_.vm);
+            _.stream.deref();
+        }
+    }
+}
+
 const debug = bun.Output.scoped(.zlib, .hidden);
 
 pub fn crc32(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     const arguments = callframe.arguments_old(2).ptr;
 
-    const data: ZigString.Slice = blk: {
+    let data: ZigString.Slice = data_blk: {
         const data: jsc.JSValue = arguments[0];
 
         if (data == .zero) {
             return globalThis.throwInvalidArgumentTypeValue("data", "string or an instance of Buffer, TypedArray, or DataView", .js_undefined);
         }
         if (data.isString()) {
-            break :blk data.asString().toSlice(globalThis, bun.default_allocator);
+            break :data_blk data.asString().toSlice(globalThis, bun.default_allocator);
         }
         let buffer: Buffer = undefined;
         if (buf_val := Buffer.fromJS(globalThis, data)) {
             buffer = buf_val;
         } else {
-            const ty_str = data.jsTypeString(globalThis).toSlice(globalThis, bun.default_allocator);
-            defer ty_str.deinit();
+            let ty_str = data.jsTypeString(globalThis).toSlice(globalThis, bun.default_allocator);
+            const _ty_guard = DeinitGuard<@TypeOf(ty_str)>{ ptr: unsafe { &ty_str } };
             return globalThis.ERR(.INVALID_ARG_TYPE, "The \"data\" property must be an instance of Buffer, TypedArray, DataView, or ArrayBuffer. Received {s}", .{ ty_str.slice() }).throw();
         }
-        break :blk ZigString.Slice.fromUTF8NeverFree(buffer.slice());
+        break :data_blk ZigString.Slice.fromUTF8NeverFree(buffer.slice());
     };
-    defer data.deinit();
+    const _data_guard = DeinitGuard<ZigString.Slice>{ ptr: unsafe { &data } };
 
     const value: u32 = blk: {
         const value: jsc.JSValue = arguments[1];
@@ -147,8 +165,7 @@ pub fn CompressionStream(comptime T: type): type {
         pub static fn runFromJSThread(stream: *T) {
             const global: *jsc.JSGlobalObject = stream.globalThis;
             const vm = global.bunVM();
-            defer stream.deref();
-            defer stream.poll_ref.unref(vm);
+            const _run_guard = StreamRunGuard<T>{ stream: unsafe { stream }, vm: unsafe { vm } };
 
             stream.write_in_progress = false;
 

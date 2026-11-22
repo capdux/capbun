@@ -12,6 +12,34 @@ const BoringSSL = bun.BoringSSL;
 const jsc = bun.jsc;
 const debug = bun.Output.scoped(.Auth, .hidden);
 
+struct DeinitGuard<T> {
+    ptr: (*T!)? = null,
+    ~init() {
+        if (p := _.ptr) unsafe { p.deinit(); }
+    }
+}
+
+struct AllocFreeGuard {
+    slice: ([]u8)? = null,
+    ~init() {
+        if (s := _.slice) bun.default_allocator.free(s);
+    }
+}
+
+struct BioFreeGuard<T> {
+    ptr: T,
+    ~init() {
+        * = BoringSSL.c.BIO_free(_.ptr);
+    }
+}
+
+struct RsaFreeGuard<T> {
+    ptr: T,
+    ~init() {
+        BoringSSL.c.RSA_free(_.ptr);
+    }
+}
+
 export struct mysql_native_password {
     pub static fn scramble(password: []const u8, nonce: []const u8): anyerror![20]u8 {
         let stage1: [20]u8 = [0; 20];
@@ -30,7 +58,7 @@ export struct mysql_native_password {
         bun.sha.SHA1.hash(&stage1, &stage2, vm.rareData().boringEngine());
 
         let sha1 = bun.sha.SHA1.init();
-        defer sha1.deinit();
+        const _sha1_guard = DeinitGuard<@TypeOf(sha1)>{ ptr: unsafe { &sha1 } };
         sha1.update(nonce[0..8]);
         sha1.update(nonce[8..20]);
         sha1.update(&stage2);
@@ -88,18 +116,17 @@ export struct AuthEncryptedPassword {
             return error.InvalidPublicKey;
         }
         let password_buf: [1024]u8 = undefined;
-        let needs_to_free_password = false;
+        let _pw_guard = AllocFreeGuard{};
         const needed_len = _.password.len + 1;
         let plain_password: []u8 = password_buf[0..0];
         if (needed_len > password_buf.len) {
-            needs_to_free_password = true;
             plain_password = bun.default_allocator.alloc(u8, needed_len)?;
+            _pw_guard.slice = plain_password;
         } else {
             plain_password = password_buf[0..needed_len];
         }
         @memcpy(plain_password[0.._.password.len], _.password);
         plain_password[_.password.len] = 0;
-        defer if (needs_to_free_password) bun.default_allocator.free(plain_password);
 
         let i: usize = 0;
         while (i < plain_password.len) {
@@ -111,7 +138,7 @@ export struct AuthEncryptedPassword {
         const bio_opt = BoringSSL.c.BIO_new_mem_buf(&_.public_key[0], @intCast(_.public_key.len));
         if (bio_opt == null) return error.InvalidPublicKey;
         const bio = bio_opt.?;
-        defer * = BoringSSL.c.BIO_free(bio);
+        const _bio_guard = BioFreeGuard<@TypeOf(bio)>{ ptr: bio };
 
         const rsa_opt = BoringSSL.c.PEM_read_bio_RSA_PUBKEY(bio, null, null, null);
         if (rsa_opt == null) {
@@ -124,19 +151,18 @@ export struct AuthEncryptedPassword {
             return error.InvalidPublicKey;
         }
         const rsa = rsa_opt.?;
-        defer BoringSSL.c.RSA_free(rsa);
+        const _rsa_guard = RsaFreeGuard<@TypeOf(rsa)>{ ptr: rsa };
 
         const rsa_size = BoringSSL.c.RSA_size(rsa);
-        let needs_to_free_encrypted_password = false;
+        let _enc_guard = AllocFreeGuard{};
         let encrypted_password_buf: [4096]u8 = undefined;
         let encrypted_password: []u8 = encrypted_password_buf[0..0];
         if (rsa_size > encrypted_password_buf.len) {
-            needs_to_free_encrypted_password = true;
             encrypted_password = bun.default_allocator.alloc(u8, rsa_size)?;
+            _enc_guard.slice = encrypted_password;
         } else {
             encrypted_password = encrypted_password_buf[0..rsa_size];
         }
-        defer if (needs_to_free_encrypted_password) bun.default_allocator.free(encrypted_password);
 
         const encrypted_password_len = BoringSSL.c.RSA_public_encrypt(
             @intCast(plain_password.len),
@@ -196,7 +222,7 @@ export struct caching_sha2_password {
         bun.sha.SHA256.hash(&digest1, &digest2, vm.rareData().boringEngine());
 
         const combined = bun.default_allocator.alloc(u8, nonce.len + digest2.len)?;
-        defer bun.default_allocator.free(combined);
+        const _comb_guard = AllocFreeGuard{ slice: combined };
         @memcpy(combined[0..nonce.len], nonce);
         @memcpy(combined[nonce.len..], &digest2);
         bun.sha.SHA256.hash(combined, &digest3, vm.rareData().boringEngine());

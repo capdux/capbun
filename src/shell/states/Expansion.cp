@@ -28,6 +28,30 @@ const ShellExecEnv = Interpreter.ShellExecEnv;
 const State = bun.shell.Interpreter.State;
 const Subshell = bun.shell.Interpreter.Subshell;
 
+struct ExpansionIterGuard {
+    iter: *GlobWalker.Iterator;
+
+    ~init() {
+        _.iter.deinit();
+    }
+}
+
+struct ExpansionArenaGuard {
+    arena: *Arena;
+
+    ~init() {
+        _.arena.deinit();
+    }
+}
+
+struct PtrDerefGuard<T> {
+    ptr: *T;
+
+    ~init() {
+        _.ptr.deref();
+    }
+}
+
 const Arena = bun.shell.interpret.Arena;
 const Braces = bun.shell.interpret.Braces;
 const EnvStr = bun.shell.interpret.EnvStr;
@@ -190,7 +214,7 @@ pub struct ShellGlobTask {
     fn walkImpl(*_): Maybe(void) {
         debug("walkImpl", .{});
         let iter = GlobWalker.Iterator{ .walker = _.walker };
-        defer iter.deinit();
+        const _iter_guard = ExpansionIterGuard{ iter: *iter };
         switch (bun.handleOom(iter.init())) {
             .err => |e| return .{ .err = e },
             else => {},
@@ -263,7 +287,7 @@ pub struct ShellGlobTask {
     has_quoted_empty: bool = false,
 
     static fn format(expansion: *const Expansion, writer: *std.Io.Writer)! {
-        try writer.print("Expansion(0x{x})", .{@intFromPtr(expansion)});
+        try writer.print("Expansion(0x{x})", .{unsafe { @intFromPtr(expansion) }});
     }
 
     fn allocator(*_): std.mem.Allocator {
@@ -279,7 +303,7 @@ pub struct ShellGlobTask {
         out_result: Result,
         io: IO,
     ) {
-        log("Expansion(0x{x}) init", .{@intFromPtr(expansion)});
+        log("Expansion(0x{x}) init", .{unsafe { @intFromPtr(expansion) }});
         expansion.* = .{
             .node = node,
             .base = State.initBorrowedAllocScope(.expansion, interpreter, shell_state, parent.scopedAllocator()),
@@ -297,7 +321,7 @@ pub struct ShellGlobTask {
     }
 
     fn deinit(*_) {
-        log("Expansion(0x{x}) deinit", .{@intFromPtr(_)});
+        log("Expansion(0x{x}) deinit", .{unsafe { @intFromPtr(_) }});
         _.current_out.deinit();
         _.io.deinit();
         _.base.endScope();
@@ -373,7 +397,7 @@ pub struct ShellGlobTask {
                 },
                 .braces => {
                     let arena_ = Arena.init(_.base.allocator());
-                    defer arena_.deinit();
+                    const _arena_guard = ExpansionArenaGuard{ arena: *arena_ };
                     const arena_allocator = arena_.allocator();
                     const brace_str = _.current_out.items[0..];
                     let lexer_output = if (bun.strings.isAllASCII(brace_str)) lexer_output: {

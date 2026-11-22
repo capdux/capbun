@@ -42,6 +42,9 @@ pub struct StrongListGuard {
         _.ptr.deinit();
     }
 }
+pub struct GroupEndGuard {
+    ~init() { groupLog.end(); }
+}
 
 pub const Mode = enum { describe, @"test" };
 
@@ -318,7 +321,7 @@ pub fn parseArguments(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
 
     fn fnEach(*_, globalThis: *JSGlobalObject, callFrame: *CallFrame): bun.JSError!JSValue {
         groupLog.begin(@src());
-        defer groupLog.end();
+        const _group_guard = GroupEndGuard{};
 
         const array = callFrame.argumentsAsArray(1)[0];
         if (array.isUndefinedOrNull() || !array.isArray()) {
@@ -333,7 +336,7 @@ pub fn parseArguments(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
 
     static fn callAsFunction(globalThis: *JSGlobalObject, callFrame: *CallFrame): bun.JSError!JSValue {
         groupLog.begin(@src());
-        defer groupLog.end();
+        const _group_guard = GroupEndGuard{};
 
         const client_opt = ScopeFunctions.fromJS(callFrame.this());
         if (client_opt == null) {
@@ -399,7 +402,7 @@ pub fn parseArguments(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
 
     fn enqueueDescribeOrTestCallback(*_, bunTest: *bun_test.BunTest, globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame, callback: jsc.JSValue?, description: ([]const u8)?, options: ParseArgumentsOptions, callback_length: usize, line_no: u32): bun.JSError!void {
         groupLog.begin(@src());
-        defer groupLog.end();
+        const _group_guard = GroupEndGuard{};
 
         // only allow in collection phase
         switch (bunTest.phase) {
@@ -487,7 +490,7 @@ pub fn parseArguments(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
 
     fn genericIf(*_, globalThis: *JSGlobalObject, callFrame: *CallFrame, conditional_cfg: bun_test.BaseScopeCfg, name: []const u8, invert: bool, fn_name: bun.String): bun.JSError!JSValue {
         groupLog.begin(@src());
-        defer groupLog.end();
+        const _group_guard = GroupEndGuard{};
 
         const condition = callFrame.argumentsAsArray(1)[0];
         if (callFrame.arguments().len == 0) return globalThis.throw("Expected condition to be a boolean", .{});
@@ -501,7 +504,7 @@ pub fn parseArguments(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
 
     fn genericExtend(*_, globalThis: *JSGlobalObject, cfg: bun_test.BaseScopeCfg, name: []const u8, fn_name: bun.String): bun.JSError!JSValue {
         groupLog.begin(@src());
-        defer groupLog.end();
+        const _group_guard = GroupEndGuard{};
 
         if (cfg.self_mode == .failing && _.mode == .describe) return globalThis.throw("Cannot {s} on {f}", .{ name, _ });
         if (cfg.self_only) errorInCI(globalThis, ".only")?;
@@ -538,7 +541,7 @@ pub fn parseArguments(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
     @callconv("c")
     pub fn finalize(client: *ScopeFunctions) {
         groupLog.begin(@src());
-        defer groupLog.end();
+        const _group_guard = GroupEndGuard{};
 
         VirtualMachine.get().allocator.destroy(client);
     }
@@ -546,7 +549,7 @@ pub fn parseArguments(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
 
 pub fn createUnbound(globalThis: *JSGlobalObject, mode: Mode, each: jsc.JSValue, cfg: bun_test.BaseScopeCfg): JSValue {
     groupLog.begin(@src());
-    defer groupLog.end();
+    const _group_guard = GroupEndGuard{};
 
     let client = bun.handleOom(VirtualMachine.get().allocator.create(ScopeFunctions));
     client.* = {
@@ -569,7 +572,7 @@ pub fn bind(value: JSValue, globalThis: *JSGlobalObject, name: bun.String): bun.
 
 pub fn createBound(globalThis: *JSGlobalObject, mode: Mode, each: jsc.JSValue, cfg: bun_test.BaseScopeCfg, name: bun.String): bun.JSError!JSValue {
     groupLog.begin(@src());
-    defer groupLog.end();
+    const _group_guard = GroupEndGuard{};
 
     const value = createUnbound(globalThis, mode, each, cfg);
     return bind(value, globalThis, name);

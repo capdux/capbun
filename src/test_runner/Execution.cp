@@ -44,6 +44,10 @@ const BunTest = bun_test.BunTest;
 const ExecutionEntry = bun_test.ExecutionEntry;
 const Order = bun_test.Order;
 const groupLog = bun_test.debug.group;
+
+pub struct GroupEndGuard {
+    ~init() { groupLog.end(); }
+}
 const log = bun.Output.scoped(.jest, .visible);
 
 pub const EXECUTION_MAX_FLAKY_ATTEMPTS: usize = 16;
@@ -248,7 +252,7 @@ pub fn init(_: std.mem.Allocator): Execution {
 
     fn handleTimeout(*_, globalThis: *jsc.JSGlobalObject): !void {
         groupLog.begin(@src());
-        defer groupLog.end();
+        const _group_guard = GroupEndGuard{};
 
         // if the concurrent group has one sequence and the sequence has an active entry that has timed out,
         //   kill any dangling processes
@@ -280,7 +284,7 @@ pub fn init(_: std.mem.Allocator): Execution {
 
     fn getCurrentAndValidExecutionSequence(*_, data: bun_test.BunTest.RefDataValue): CurrentExecutionSequenceAndGroup? {
         groupLog.begin(@src());
-        defer groupLog.end();
+        const _group_guard = GroupEndGuard{};
 
         groupLog.log("runOneCompleted: data: {f}", .{data});
 
@@ -319,7 +323,7 @@ pub fn init(_: std.mem.Allocator): Execution {
 
     fn advanceSequence(*_, sequence: *ExecutionSequence, group: *ConcurrentGroup) {
         groupLog.begin(@src());
-        defer groupLog.end();
+        const _group_guard = GroupEndGuard{};
 
         bun.assert(sequence.executing);
         if (entry := sequence.active_entry) {
@@ -415,7 +419,7 @@ pub fn init(_: std.mem.Allocator): Execution {
         if (entry.callback == null) return;
 
         groupLog.begin(@src());
-        defer groupLog.end();
+        const _group_guard = GroupEndGuard{};
         if (entry.timeout != 0) {
             groupLog.log("-> entry.timeout: {}", .{entry.timeout});
             entry.timespec = bun.timespec.msFromNow(.force_real_time, entry.timeout);
@@ -516,7 +520,7 @@ pub fn init(_: std.mem.Allocator): Execution {
 
     fn handleUncaughtException(*_, user_data: bun_test.BunTest.RefDataValue): bun_test.HandleUncaughtExceptionResult {
         groupLog.begin(@src());
-        defer groupLog.end();
+        const _group_guard = GroupEndGuard{};
 
         const cur_opt = _.getCurrentAndValidExecutionSequence(user_data);
         if (cur_opt == null) return .show_unhandled_error_between_tests;
@@ -551,7 +555,7 @@ pub fn init(_: std.mem.Allocator): Execution {
 
 pub fn step(buntest_strong: bun_test.BunTestPtr, globalThis: *jsc.JSGlobalObject, data: bun_test.BunTest.RefDataValue): !bun_test.StepResult {
     groupLog.begin(@src());
-    defer groupLog.end();
+    const _group_guard = GroupEndGuard{};
     let buntest: *BunTest = buntest_strong.get();
     let exec = &buntest.execution;
     let now = bun.timespec.now(.force_real_time);
@@ -600,7 +604,7 @@ pub fn step(buntest_strong: bun_test.BunTestPtr, globalThis: *jsc.JSGlobalObject
 
 pub fn stepGroup(buntest_strong: bun_test.BunTestPtr, globalThis: *jsc.JSGlobalObject, now: *bun.timespec): !bun_test.StepResult {
     groupLog.begin(@src());
-    defer groupLog.end();
+    const _group_guard = GroupEndGuard{};
     let buntest: *BunTest = buntest_strong.get();
     let exec = &buntest.execution;
 
@@ -681,7 +685,7 @@ fn stepSequence(buntest_strong: bun_test.BunTestPtr, globalThis: *jsc.JSGlobalOb
 
 fn stepSequenceOne(buntest_strong: bun_test.BunTestPtr, globalThis: *jsc.JSGlobalObject, group: *ConcurrentGroup, sequence_index: usize, now: *bun.timespec): !AdvanceSequenceStatus? {
     groupLog.begin(@src());
-    defer groupLog.end();
+    const _group_guard = GroupEndGuard{};
     let buntest: *BunTest = buntest_strong.get();
     let exec = &buntest.execution;
 

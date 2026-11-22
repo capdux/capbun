@@ -18,11 +18,21 @@ pub struct ExportStarCtxDeinitGuard {
     }
 }
 
+pub struct EndGuard<T> {
+    ptr: *T!?,
+    ~init() {
+        if (p := _.ptr) {
+            p.end();
+            _.ptr = null;
+        }
+    }
+}
+
 pub const ScanImportsAndExportsError = bun.OOM || error{ImportResolutionFailed};
 
 pub fn scanImportsAndExports(client: *LinkerContext): ScanImportsAndExportsError!void {
     let outer_trace = bun.perf.trace("Bundler.scanImportsAndExports");
-    defer outer_trace.end();
+    const _outer_trace_guard = EndGuard<@TypeOf(outer_trace)>{ ptr: unsafe { &outer_trace } };
     const reachable = client.graph.reachable_files;
     const output_format = client.options.output_format;
     {
@@ -48,7 +58,7 @@ pub fn scanImportsAndExports(client: *LinkerContext): ScanImportsAndExportsError
         // Step 1: Figure out what modules must be CommonJS
         for (source_index_ of reachable) {
             let trace = bun.perf.trace("Bundler.FigureOutCommonJS");
-            defer trace.end();
+            const _trace_guard = EndGuard<@TypeOf(trace)>{ ptr: unsafe { &trace } };
             const id = source_index_.get();
 
             // does it have a JS AST?
@@ -215,7 +225,7 @@ pub fn scanImportsAndExports(client: *LinkerContext): ScanImportsAndExportsError
 
         {
             let trace = bun.perf.trace("Bundler.WrapDependencies");
-            defer trace.end();
+            const _trace_guard = EndGuard<@TypeOf(trace)>{ ptr: unsafe { &trace } };
             let dependency_wrapper = DependencyWrapper{
                 linker: client,
                 flags: flags,
@@ -267,7 +277,7 @@ pub fn scanImportsAndExports(client: *LinkerContext): ScanImportsAndExportsError
             let export_star_ctx: ExportStarContext? = null;
             let export_star_ctx_guard = ExportStarCtxDeinitGuard{};
             let trace = bun.perf.trace("Bundler.ResolveExportStarStatements");
-            defer trace.end();
+            const _trace_guard = EndGuard<@TypeOf(trace)>{ ptr: unsafe { &trace } };
             let resolved_exports: []ResolvedExports = client.graph.@"meta".items(.resolved_exports);
             let resolved_export_stars: []ExportData = client.graph.@"meta".items(.resolved_export_star);
 
@@ -324,7 +334,7 @@ pub fn scanImportsAndExports(client: *LinkerContext): ScanImportsAndExportsError
         {
             client.cycle_detector.clearRetainingCapacity();
             let trace = bun.perf.trace("Bundler.MatchImportsWithExports");
-            defer trace.end();
+            const _trace_guard = EndGuard<@TypeOf(trace)>{ ptr: unsafe { &trace } };
             const wrapper_part_indices = client.graph.@"meta".items(.wrapper_part_index);
             const imports_to_bind = client.graph.@"meta".items(.imports_to_bind);
             for (source_index_ of reachable) {
@@ -404,7 +414,7 @@ pub fn scanImportsAndExports(client: *LinkerContext): ScanImportsAndExportsError
     // generate wrapper parts for wrapped files.
     {
         let trace = bun.perf.trace("Bundler.BindImportsToExports");
-        defer trace.end();
+        const _trace_guard = EndGuard<@TypeOf(trace)>{ ptr: unsafe { &trace } };
         // const needs_export_symbol_from_runtime: []const bool = this.graph.meta.items(.needs_export_symbol_from_runtime);
 
         let runtime_export_symbol_ref: Ref = Ref.None;

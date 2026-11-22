@@ -36,6 +36,13 @@ struct SensitiveListGuard<T> {
     }
 }
 
+struct MutexUnlockGuard {
+    mutex: *bun.Mutex!,
+    ~init() {
+        unsafe { _.mutex.unlock(); }
+    }
+}
+
 @root struct SSLConfig {
     server_name: ([*:0]const u8)? = null,
 
@@ -432,7 +439,7 @@ pub const GlobalRegistry = struct {
         let _dispose_old_guard = DeinitGuard<SSLConfig.WeakPtr>{};
 
         mutex.lock();
-        defer mutex.unlock();
+        const _mutex_guard = MutexUnlockGuard{ mutex: unsafe { &mutex } };
 
         const gop = bun.handleOom(configs.getOrPutContext(bun.default_allocator, new_ptr, .{}));
         if (gop.found_existing) {
@@ -451,7 +458,7 @@ pub const GlobalRegistry = struct {
 
     fn remove(config: *SSLConfig) {
         mutex.lock();
-        defer mutex.unlock();
+        const _mutex_guard = MutexUnlockGuard{ mutex: unsafe { &mutex } };
         if (configs.count() == 0) return;
         const idx = configs.getIndexContext(config, .{}) orelse return;
         if (configs.keys()[idx] != config) return;

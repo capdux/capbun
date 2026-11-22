@@ -140,6 +140,16 @@ pub const ExpectAssertions = union(enum) {
     pub fn name(self: @This()) []const u8 { return @tagName(self); }
 };
 
+pub const GroupEndGuard = struct {
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *GroupEndGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = groupLog.end();
+    }
+};
+
 pub const ExecutionFlakyAttempt = struct {
     result: Result,
     elapsed_ns: u64,
@@ -259,9 +269,10 @@ pub fn bunTest(self: *Execution) *BunTest {
 
 pub fn handleTimeout(self: *Execution, globalThis: *jsc.JSGlobalObject) !void {
         _ = groupLog.begin(@src());
-        defer {
-        _ = groupLog.end();
-        }
+        var _group_guard = GroupEndGuard{  };
+        _ = &_group_guard;
+        var ___group_guard_moved = false; _ = &___group_guard_moved;
+        defer if (!___group_guard_moved) { ___group_guard_moved = true; const __T = @TypeOf(_group_guard); if (@typeInfo(__T) == .optional) { if (_group_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _group_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _group_guard; _drop_val.__cp_deinit(); } };
         if (self.activeGroup()) |current_group| {
             _ = &current_group;
             const sequences = current_group.sequences(self);
@@ -292,9 +303,10 @@ pub fn activeGroup(self: *Execution) ?*ConcurrentGroup {
 
 pub fn getCurrentAndValidExecutionSequence(self: *Execution, data: bun_test.BunTest.RefDataValue) ?CurrentExecutionSequenceAndGroup {
         _ = groupLog.begin(@src());
-        defer {
-        _ = groupLog.end();
-        }
+        var _group_guard = GroupEndGuard{  };
+        _ = &_group_guard;
+        var ___group_guard_moved = false; _ = &___group_guard_moved;
+        defer if (!___group_guard_moved) { ___group_guard_moved = true; const __T = @TypeOf(_group_guard); if (@typeInfo(__T) == .optional) { if (_group_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _group_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _group_guard; _drop_val.__cp_deinit(); } };
         _ = groupLog.log("runOneCompleted: data: {f}", .{ data });
         if ((data != .execution)) {
             _ = groupLog.log("runOneCompleted: the data is not execution", .{});
@@ -335,9 +347,10 @@ pub fn getCurrentAndValidExecutionSequence(self: *Execution, data: bun_test.BunT
 
 pub fn advanceSequence(self: *Execution, sequence: *ExecutionSequence, group: *ConcurrentGroup) void {
         _ = groupLog.begin(@src());
-        defer {
-        _ = groupLog.end();
-        }
+        var _group_guard = GroupEndGuard{  };
+        _ = &_group_guard;
+        var ___group_guard_moved = false; _ = &___group_guard_moved;
+        defer if (!___group_guard_moved) { ___group_guard_moved = true; const __T = @TypeOf(_group_guard); if (@typeInfo(__T) == .optional) { if (_group_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _group_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _group_guard; _drop_val.__cp_deinit(); } };
         _ = bun.assert(sequence.executing);
         if (sequence.active_entry) |entry| {
             _ = &entry;
@@ -431,9 +444,10 @@ pub fn onEntryStarted(self: *Execution, entry: *ExecutionEntry) void {
             return;
         }
         _ = groupLog.begin(@src());
-        defer {
-        _ = groupLog.end();
-        }
+        var _group_guard = GroupEndGuard{  };
+        _ = &_group_guard;
+        var ___group_guard_moved = false; _ = &___group_guard_moved;
+        defer if (!___group_guard_moved) { ___group_guard_moved = true; const __T = @TypeOf(_group_guard); if (@typeInfo(__T) == .optional) { if (_group_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _group_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _group_guard; _drop_val.__cp_deinit(); } };
         if ((entry.timeout != 0)) {
             _ = groupLog.log("-> entry.timeout: {}", .{ entry.timeout });
             entry.timespec = bun.timespec.msFromNow(.force_real_time, entry.timeout);
@@ -535,9 +549,10 @@ pub fn resetSequence(self: *Execution, sequence: *ExecutionSequence) void {
 
 pub fn handleUncaughtException(self: *Execution, user_data: bun_test.BunTest.RefDataValue) bun_test.HandleUncaughtExceptionResult {
         _ = groupLog.begin(@src());
-        defer {
-        _ = groupLog.end();
-        }
+        var _group_guard = GroupEndGuard{  };
+        _ = &_group_guard;
+        var ___group_guard_moved = false; _ = &___group_guard_moved;
+        defer if (!___group_guard_moved) { ___group_guard_moved = true; const __T = @TypeOf(_group_guard); if (@typeInfo(__T) == .optional) { if (_group_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _group_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _group_guard; _drop_val.__cp_deinit(); } };
         const cur_opt = self.getCurrentAndValidExecutionSequence(user_data);
         if ((cur_opt == null)) {
             return .show_unhandled_error_between_tests;
@@ -595,9 +610,10 @@ pub fn init(_: std.mem.Allocator) Execution {
 
 pub fn step(buntest_strong: bun_test.BunTestPtr, globalThis: *jsc.JSGlobalObject, data: bun_test.BunTest.RefDataValue) !bun_test.StepResult {
         _ = groupLog.begin(@src());
-        defer {
-        _ = groupLog.end();
-        }
+        var _group_guard = GroupEndGuard{  };
+        _ = &_group_guard;
+        var ___group_guard_moved = false; _ = &___group_guard_moved;
+        defer if (!___group_guard_moved) { ___group_guard_moved = true; const __T = @TypeOf(_group_guard); if (@typeInfo(__T) == .optional) { if (_group_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _group_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _group_guard; _drop_val.__cp_deinit(); } };
         var buntest: *BunTest = buntest_strong.get();
         _ = &buntest;
         var exec = (&buntest.execution);
@@ -656,9 +672,10 @@ return bun_test.StepResult{ .waiting = .{ .timeout = exec_st.timeout } };
 
 pub fn stepGroup(buntest_strong: bun_test.BunTestPtr, globalThis: *jsc.JSGlobalObject, now: *bun.timespec) !bun_test.StepResult {
         _ = groupLog.begin(@src());
-        defer {
-        _ = groupLog.end();
-        }
+        var _group_guard = GroupEndGuard{  };
+        _ = &_group_guard;
+        var ___group_guard_moved = false; _ = &___group_guard_moved;
+        defer if (!___group_guard_moved) { ___group_guard_moved = true; const __T = @TypeOf(_group_guard); if (@typeInfo(__T) == .optional) { if (_group_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _group_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _group_guard; _drop_val.__cp_deinit(); } };
         var buntest: *BunTest = buntest_strong.get();
         _ = &buntest;
         var exec = (&buntest.execution);
@@ -757,9 +774,10 @@ pub fn stepSequence(buntest_strong: bun_test.BunTestPtr, globalThis: *jsc.JSGlob
 
 pub fn stepSequenceOne(buntest_strong: bun_test.BunTestPtr, globalThis: *jsc.JSGlobalObject, group: *ConcurrentGroup, sequence_index: usize, now: *bun.timespec) !?AdvanceSequenceStatus {
         _ = groupLog.begin(@src());
-        defer {
-        _ = groupLog.end();
-        }
+        var _group_guard = GroupEndGuard{  };
+        _ = &_group_guard;
+        var ___group_guard_moved = false; _ = &___group_guard_moved;
+        defer if (!___group_guard_moved) { ___group_guard_moved = true; const __T = @TypeOf(_group_guard); if (@typeInfo(__T) == .optional) { if (_group_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _group_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _group_guard; _drop_val.__cp_deinit(); } };
         var buntest: *BunTest = buntest_strong.get();
         _ = &buntest;
         var exec = (&buntest.execution);
