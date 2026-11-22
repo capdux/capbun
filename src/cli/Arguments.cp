@@ -1775,7 +1775,7 @@ export let Bun__Node__ZeroFillBuffers = false;
 export let Bun__Node__ProcessNoDeprecation = false;
 export let Bun__Node__ProcessThrowDeprecation = false;
 
-pub const BunCAStore = enum(u8) { bundled, openssl, system };
+pub enum BunCAStore: u8 { bundled, openssl, system }
 pub export let Bun__Node__CAStore: BunCAStore = .bundled;
 pub export let Bun__Node__UseSystemCA = false;
 

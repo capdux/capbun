@@ -66,21 +66,21 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 
 pub const bun = @import("bun");
 pub const comptime_string_map_jsc = @import("../jsc/comptime_string_map_jsc.zig");
+pub fn ComptimeStringMapKV(comptime KeyType: type, comptime V: type) type {
+    return struct {
+        key: []const KeyType,
+        value: V,
+    };
+}
+
 const strings = bun.strings;
 const mem = std.mem;
 
-pub fn ComptimeStringMapWithKeyType(comptime KeyType: type, comptime V: type, comptime kvs_list: anytype) type {
-        const KV = struct {
-    key: []const KeyType,
-    value: V,
-};
-        const precomputed = (comptime blk: {
-        _ = @setEvalBranchQuota(99999);
-        var sorted_kvs: [kvs_list . len]KV = undefined;
-        _ = &sorted_kvs;
-        const LenSort = struct {
+pub fn sortComptimeStringMapKVs(comptime KeyType: type, slice: anytype) void {
+        const KV = @typeInfo(@typeInfo(@TypeOf(slice)).pointer.child).array.child;
+        const lenAsc = (struct {
 
-pub fn lenAsc(context: void, a: KV, b: KV) bool {
+pub fn cmp(context: void, a: KV, b: KV) bool {
             _ = &context;
             if ((a.key.len != b.key.len)) {
                 return (a.key.len < b.key.len);
@@ -88,24 +88,31 @@ pub fn lenAsc(context: void, a: KV, b: KV) bool {
             _ = @setEvalBranchQuota(999999);
             return (std.mem.order(KeyType, a.key, b.key) == .lt);
     }
-};
-        const lenAsc = LenSort.lenAsc;
+}).cmp;
+        const void_ctx: void = undefined;
+        _ = std.sort.pdq(KV, slice, void_ctx, lenAsc);
+}
+
+pub fn ComptimeStringMapWithKeyType(comptime KeyType: type, comptime V: type, comptime kvs_list: anytype) type {
+        const precomputed = (comptime blk: {
+        _ = @setEvalBranchQuota(99999);
+        var sorted_kvs: [kvs_list . len]ComptimeStringMapKV(KeyType, V) = undefined;
+        _ = &sorted_kvs;
         if ((KeyType == u8)) {
             var idx: usize = 0;
             _ = &idx;
             while ((idx < kvs_list.len)) : (idx = (idx + 1)) {
                 const kv = kvs_list[@as(usize, @intCast(idx))];
                 if ((V != void)) {
-                    sorted_kvs[cp_cast_int(usize, idx)] = KV{ .key = @field(kv, "0"), .value = @field(kv, "1") };
+                    sorted_kvs[cp_cast_int(usize, idx)] = .{ .key = @field(kv, "0"), .value = @field(kv, "1") };
                 } else {
-                    sorted_kvs[cp_cast_int(usize, idx)] = KV{ .key = @field(kv, "0"), .value = undefined };
+                    sorted_kvs[cp_cast_int(usize, idx)] = .{ .key = @field(kv, "0"), .value = undefined };
                 }
             }
         } else {
             _ = @compileError("Not implemented for this key type");
         }
-        const void_ctx: void = undefined;
-        _ = std.sort.pdq(KV, (&sorted_kvs), void_ctx, lenAsc);
+        _ = sortComptimeStringMapKVs(KeyType, sorted_kvs[0..]);
         const min_len = sorted_kvs[0].key.len;
         const max_len = sorted_kvs[@as(usize, @intCast((sorted_kvs.len - 1)))].key.len;
         var len_indexes: [max_len + 1]usize = undefined;

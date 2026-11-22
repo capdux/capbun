@@ -74,6 +74,13 @@ const SelectorFlags = parser.SelectorFlags;
 const ArrayList = std.ArrayListUnmanaged;
 const Allocator = std.mem.Allocator;
 
+pub fn SelectorBuildResult(comptime T: type) type {
+        return struct {
+    specificity_and_flags: SpecificityAndFlags,
+    components: ArrayList(T),
+};
+}
+
 pub fn SelectorBuilder(comptime Impl: type) type {
         _ = ValidSelectorImpl(Impl);
         return struct {
@@ -174,9 +181,6 @@ pub fn splitFromEnd(comptime T: type, s: []const T, at: usize) struct { []const 
             return .{ s[0..midpoint], s[midpoint..] };
     }
     const This = @This();
-    const BuildResult = struct {
-        specificity_and_flags: SpecificityAndFlags,
-        components: ArrayList(GenericComponent(Impl)),
-    };
+    pub const BuildResult = SelectorBuildResult(GenericComponent(Impl));
 };
 }

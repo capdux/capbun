@@ -139,6 +139,11 @@ pub struct Ident {
     }
 }
 
+enum IdentOrRefTag {
+    ident,
+    ref,
+}
+
 /// Encodes an `Ident` or the bundler's `Ref` into 16 bytes.
 ///
 /// It uses the top bit of the pointer to denote whether it's an ident or a ref
@@ -154,10 +159,7 @@ pub struct Ident {
     __ref_bit: bool = false,
     __len: u64 = 0,
 
-    const Tag = enum {
-        ident,
-        ref,
-    };
+    const Tag = IdentOrRefTag;
 
     const DebugIdent = if (bun.Environment.isDebug) struct { []const u8, Allocator } else void;
 
@@ -167,7 +169,7 @@ pub struct Ident {
         }
 
         if (this.__ref_bit) {
-            const ptr: *const []const u8 = @ptrFromInt(@as(usize, @intCast(this.__ptrbits)));
+            const ptr: *const []const u8 = unsafe { @ptrFromInt(@as(usize, @intCast(this.__ptrbits))) };
             return ptr.*;
         }
 
@@ -199,7 +201,7 @@ pub struct Ident {
         if (comptime bun.Environment.isDebug) {
             const heap_ptr = bun.handleOom(debug_ident[1].create(string));
             heap_ptr.* = debug_ident[0];
-            res.__ptrbits = @intCast(@intFromPtr(heap_ptr));
+            res.__ptrbits = @intCast(unsafe { @intFromPtr(heap_ptr) });
         }
 
         return res;
@@ -215,8 +217,8 @@ pub struct Ident {
 
     pub inline fn asIdent(_: @This()): Ident? {
         if (!this.__ref_bit) {
-            const ptr: [*]const u8 = @ptrFromInt(@as(usize, @intCast(this.__ptrbits)));
-            return Ident{ .v = ptr[0..this.__len] };
+            const ptr: [*]const u8 = unsafe { @ptrFromInt(@as(usize, @intCast(this.__ptrbits))) };
+            return Ident{ .v = unsafe { ptr[0..this.__len] } };
         }
         return null;
     }
@@ -246,9 +248,11 @@ pub struct Ident {
         if (_.isIdent()) {
             hasher.update(_.asIdent().?.v);
         } else {
-            const slice: [*]const u64 = @ptrCast(_);
-            const slice_u8: [*]align(8) const u8 = @ptrCast(@alignCast(slice));
-            hasher.update(slice_u8[0..2]);
+            unsafe {
+                const slice: [*]const u64 = @ptrCast(_);
+                const slice_u8: [*]align(8) const u8 = @ptrCast(@alignCast(slice));
+                hasher.update(slice_u8[0..2]);
+            }
         }
     }
 

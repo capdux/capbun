@@ -488,6 +488,9 @@ const IO_COUNTERS = extern struct {
     OtherTransferCount: u64 = 0,
 };
 
+pub const SyncProcessPosix = opaque {
+};
+
 pub const ProcessExitHandler = struct {
     ptr: TaggedPointer = TaggedPointer.Null,
 
@@ -557,7 +560,6 @@ _ = @panic("Internal Bun error: ProcessExitHandler has an invalid tag. Please fi
 }
     }
     const SyncProcess = (if (Environment.isWindows) sync.SyncWindowsProcess else SyncProcessPosix);
-    const SyncProcessPosix = opaque {};
     pub const TaggedPointer = bun.TaggedPointerUnion(.{ Subprocess, LifecycleScriptSubprocess, ShellSubprocess, ProcessHandle, MultiRunProcessHandle, TestWorkerHandle, SecurityScanSubprocess, WebViewHostProcess, ChromeProcess, SyncProcess, CronRegisterJob, CronRemoveJob });
 };
 
@@ -1091,6 +1093,58 @@ else => false,
     }
 };
 
+pub fn WaiterTaskQueueEntry(comptime T: type) type {
+    return struct {
+        process: *T,
+        next: ?*WaiterTaskQueueEntry(T) = null,
+        const new = bun.TrivialNew(@This());
+        const deinit = bun.TrivialDeinit(@This());
+    };
+}
+
+pub fn WaiterResultTask(comptime T: type) type {
+    return struct {
+        result: bun.sys.Maybe(PosixSpawn.WaitPidResult),
+        subprocess: *T,
+        rusage: Rusage,
+
+pub fn runFromMainThread(self: *@This()) void {
+                const result = self.result;
+                const subprocess = self.subprocess;
+                const rusage = self.rusage;
+                _ = bun.destroy(self);
+                _ = subprocess.onWaitPidFromWaiterThread((&result), (&rusage));
+        }
+
+pub fn runFromMainThreadMini(self: *@This(), _: *void) void {
+                _ = self.runFromMainThread();
+        }
+        const new = bun.TrivialNew(@This());
+        pub const runFromJSThread = runFromMainThread;
+    };
+}
+
+pub fn WaiterResultTaskMini(comptime T: type) type {
+    return struct {
+        result: bun.sys.Maybe(PosixSpawn.WaitPidResult),
+        subprocess: *T,
+        task: jsc.AnyTaskWithExtraContext = .{},
+
+pub fn runFromMainThread(self: *@This()) void {
+                const result = self.result;
+                const subprocess = self.subprocess;
+                _ = bun.destroy(self);
+                _ = subprocess.onWaitPidFromWaiterThread((&result), (&std.mem.zeroes(Rusage)));
+        }
+
+pub fn runFromMainThreadMini(self: *@This(), _: *void) void {
+                _ = self.runFromMainThread();
+        }
+        const new = bun.TrivialNew(@This());
+        pub const runFromJSThread = runFromMainThread;
+    };
+}
+
 pub const WaiterThreadPosix = struct {
     started: std.atomic.Value(u32) = std.atomic.Value(u32).init(0),
     eventfd: if (Environment.isLinux) bun.FD else u0 = undefined,
@@ -1152,50 +1206,10 @@ const AnyTask = jsc.AnyTaskWithExtraContext.New(ResultTaskMini, void, ResultTask
                 }
             }
     }
-    const TaskQueueEntry = struct {
-        process: *T,
-        next: ?*TaskQueueEntry = null,
-        pub const new = bun.TrivialNew(@This());
-        pub const deinit = bun.TrivialDeinit(@This());
-    };
+    const TaskQueueEntry = WaiterTaskQueueEntry(T);
     pub const ConcurrentQueue = bun.UnboundedQueue(TaskQueueEntry, .next);
-    pub const ResultTask = struct {
-        result: bun.sys.Maybe(PosixSpawn.WaitPidResult),
-        subprocess: *T,
-        rusage: Rusage,
-    
-    pub fn runFromMainThread(self: *@This()) void {
-                const result = self.result;
-                const subprocess = self.subprocess;
-                const rusage = self.rusage;
-                _ = bun.destroy(self);
-                _ = subprocess.onWaitPidFromWaiterThread((&result), (&rusage));
-        }
-    
-    pub fn runFromMainThreadMini(self: *@This(), _: *void) void {
-                _ = self.runFromMainThread();
-        }
-        pub const new = bun.TrivialNew(@This());
-        pub const runFromJSThread = runFromMainThread;
-    };
-    pub const ResultTaskMini = struct {
-        result: bun.sys.Maybe(PosixSpawn.WaitPidResult),
-        subprocess: *T,
-        task: jsc.AnyTaskWithExtraContext = .{},
-    
-    pub fn runFromMainThread(self: *@This()) void {
-                const result = self.result;
-                const subprocess = self.subprocess;
-                _ = bun.destroy(self);
-                _ = subprocess.onWaitPidFromWaiterThread((&result), (&std.mem.zeroes(Rusage)));
-        }
-    
-    pub fn runFromMainThreadMini(self: *@This(), _: *void) void {
-                _ = self.runFromMainThread();
-        }
-        pub const new = bun.TrivialNew(@This());
-        pub const runFromJSThread = runFromMainThread;
-    };
+    pub const ResultTask = WaiterResultTask(T);
+    pub const ResultTaskMini = WaiterResultTaskMini(T);
 };
     }
 
@@ -1992,13 +2006,7 @@ pub fn waitMacKqueue(child: std.c.pid_t, ppid: std.c.pid_t, jc: *const JobContro
             _ = &changes_buf;
             var changes: []std.c.Kevent = changes_buf[0..0];
             _ = &changes;
-            const add = (struct {
-
-pub fn f(list: []std.c.Kevent, ident: usize, filter: i16, fflags: u32, udata: usize) void {
-            list.len = (list.len + 1);
-            list.*[cp_cast_int(usize, (list.len - 1))] = .{ .ident = ident, .filter = filter, .flags = ((std.c.EV.ADD | std.c.EV.RECEIPT) | std.c.EV.CLEAR), .fflags = fflags, .data = 0, .udata = udata };
-    }
-}).f;
+            const add = kqueueAddEvent;
             if ((ppid > 1)) {
                 _ = add((&changes), (if (comptime @typeInfo(@TypeOf(ppid)) == .@"enum") cp_cast_int(i32, @intFromEnum(ppid)) else cp_cast_int(i32, ppid)), std.c.EVFILT.PROC, std.c.NOTE.EXIT, TAG_PPID);
             }
@@ -2216,13 +2224,7 @@ _ = (if ((e.getErrno() == .SRCH)) bun.Global.exit(bun.ParentDeathWatchdog.exit_c
                 _ = &buf;
                 var pfds: []std.c.pollfd = buf[0..0];
                 _ = &pfds;
-                const push = (struct {
-
-pub fn f(l: *PollFdSlice, fd: bun.FD) void {
-            l.len = (l.len + 1);
-            l.*[cp_cast_int(usize, (l.len - 1))] = .{ .fd = (if (comptime @typeInfo(@TypeOf(fd.cast())) == .@"enum") cp_cast_int(i32, @intFromEnum(fd.cast())) else cp_cast_int(i32, fd.cast())), .events = ((std.posix.POLL.IN | std.posix.POLL.ERR) | std.posix.POLL.HUP), .revents = 0 };
-    }
-}).f;
+                const push = pushPollFd;
                 for (cp_iter_slice(out_fds_to_wait_for)) |fd| {
                     _ = &fd;
                     if ((fd != bun.invalid_fd)) {
@@ -2406,6 +2408,16 @@ pub fn uv_getrusage(process: *uv.uv_process_t) win_rusage {
         const memory = (blk_catch_11: { break :blk_catch_11 ((std.os.windows.GetProcessMemoryInfo(process_pid)) catch |__ce_11| { _ = &__ce_11; return usage_info; }); });
         usage_info.maxrss = (memory.PeakWorkingSetSize / 1024);
         return usage_info;
+}
+
+pub fn kqueueAddEvent(list: []std.c.Kevent, ident: usize, filter: i16, fflags: u32, udata: usize) void {
+        list.len = (list.len + 1);
+        list.*[cp_cast_int(usize, (list.len - 1))] = .{ .ident = ident, .filter = filter, .flags = ((std.c.EV.ADD | std.c.EV.RECEIPT) | std.c.EV.CLEAR), .fflags = fflags, .data = 0, .udata = udata };
+}
+
+pub fn pushPollFd(l: *PollFdSlice, fd: bun.FD) void {
+        l.len = (l.len + 1);
+        l.*[cp_cast_int(usize, (l.len - 1))] = .{ .fd = (if (comptime @typeInfo(@TypeOf(fd.cast())) == .@"enum") cp_cast_int(i32, @intFromEnum(fd.cast())) else cp_cast_int(i32, fd.cast())), .events = ((std.posix.POLL.IN | std.posix.POLL.ERR) | std.posix.POLL.HUP), .revents = 0 };
 }
 
 pub fn spawnProcess(options: *const SpawnOptions, argv: [*:null]OptCStr, envp: [*:null]OptCStr) !bun.sys.Maybe(SpawnProcessResult) {

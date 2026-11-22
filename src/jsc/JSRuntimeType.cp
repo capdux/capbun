@@ -1,5 +1,5 @@
 /// Represents JavaScript runtime value types
-pub const JSRuntimeType = enum(u16) {
+pub enum JSRuntimeType: u16 {
     Nothing = 0x0,
     Function = 0x1,
     Undefined = 0x2,
@@ -13,4 +13,4 @@ pub const JSRuntimeType = enum(u16) {
     BigInt = 0x200,
 
     _,
-};
+}

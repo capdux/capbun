@@ -3971,11 +3971,11 @@ pub const RefImportData = std.ArrayHashMapUnmanaged(Ref, ImportData, Ref.ArrayHa
 pub const ResolvedExports = bun.StringArrayHashMapUnmanaged(ExportData);
 pub const TopLevelSymbolToParts = js_ast.Ast.TopLevelSymbolToParts;
 
-pub const WrapKind = enum(u2) {
+pub enum WrapKind: u2 {
     none,
     cjs,
     esm,
-};
+}
 
 pub struct ImportData {
     // This is an array of intermediate statements that re-exported this symbol
@@ -4142,6 +4142,33 @@ pub union(enum) AdditionalFile {
     output_file: Index.Int,
 }
 
+pub enum EntryPointKind {
+    none,
+    user_specified,
+    dynamic_import,
+    html,
+
+    fn outputKind(): jsc.API.BuildArtifact.OutputKind {
+        return switch (_) {
+            .user_specified => .@"entry-point",
+            else => .chunk,
+        };
+    }
+
+    inline fn isEntryPoint(): bool {
+        return _ != .none;
+    }
+
+    inline fn isUserSpecifiedEntryPoint(): bool {
+        return _ == .user_specified;
+    }
+
+    // TODO: delete
+    inline fn isServerEntryPoint(): bool {
+        return _ == .user_specified;
+    }
+}
+
 pub struct EntryPoint {
     /// This may be an absolute path or a relative path. If absolute, it will
     /// eventually be turned into a relative path by computing the path relative
@@ -4160,32 +4187,7 @@ pub struct EntryPoint {
 
     pub const List = MultiArrayList(EntryPoint);
 
-    pub const Kind = enum {
-        none,
-        user_specified,
-        dynamic_import,
-        html,
-
-        pub fn outputKind(k: Kind): jsc.API.BuildArtifact.OutputKind {
-            return switch (k) {
-                .user_specified => .@"entry-point",
-                else => .chunk,
-            };
-        }
-
-        pub inline fn isEntryPoint(k: Kind): bool {
-            return k != .none;
-        }
-
-        pub inline fn isUserSpecifiedEntryPoint(k: Kind): bool {
-            return k == .user_specified;
-        }
-
-        // TODO: delete
-        pub inline fn isServerEntryPoint(k: Kind): bool {
-            return k == .user_specified;
-        }
-    };
+    pub const Kind = EntryPointKind;
 }
 
 struct AstSourceIDMapping {
@@ -4209,41 +4211,43 @@ pub struct PartRange {
     }
 }
 
+pub enum ImportTrackerStatus {
+    /// The imported file has no matching export
+    no_match,
+
+    /// The imported file has a matching export
+    found,
+
+    /// The imported file is CommonJS and has unknown exports
+    cjs,
+
+    /// The import is missing but there is a dynamic fallback object
+    dynamic_fallback,
+
+    /// The import is missing but there is a dynamic fallback object
+    /// and the file was originally CommonJS.
+    dynamic_fallback_interop_default,
+
+    /// The import was treated as a CommonJS import but the file is known to have no exports
+    cjs_without_exports,
+
+    /// The imported file was disabled by mapping it to false in the "browser"
+    /// field of package.json
+    disabled,
+
+    /// The imported file is external and has unknown exports
+    external,
+
+    /// This is a missing re-export in a TypeScript file, so it's probably a type
+    probably_typescript_type,
+}
+
 pub struct ImportTracker {
     source_index: Index = Index.invalid,
     name_loc: Logger.Loc = Logger.Loc.Empty,
     import_ref: Ref = Ref.None,
 
-    pub const Status = enum {
-        /// The imported file has no matching export
-        no_match,
-
-        /// The imported file has a matching export
-        found,
-
-        /// The imported file is CommonJS and has unknown exports
-        cjs,
-
-        /// The import is missing but there is a dynamic fallback object
-        dynamic_fallback,
-
-        /// The import is missing but there is a dynamic fallback object
-        /// and the file was originally CommonJS.
-        dynamic_fallback_interop_default,
-
-        /// The import was treated as a CommonJS import but the file is known to have no exports
-        cjs_without_exports,
-
-        /// The imported file was disabled by mapping it to false in the "browser"
-        /// field of package.json
-        disabled,
-
-        /// The imported file is external and has unknown exports
-        external,
-
-        /// This is a missing re-export in a TypeScript file, so it's probably a type
-        probably_typescript_type,
-    };
+    const Status = ImportTrackerStatus;
 
     pub const Iterator = ImportTrackerIterator_;
 }
@@ -4321,8 +4325,10 @@ pub struct CrossChunkImport {
     }
 }
 
+pub enum CompileResultDeclKind: u1 { declared, lexical }
+
 pub struct CompileResultDeclInfo {
-    pub const Kind = enum(u1) { declared, lexical };
+    pub const Kind = CompileResultDeclKind;
     name: []const u8,
     kind: Kind,
 }

@@ -83,9 +83,9 @@ pub fn Trampolines(comptime H: type): type {
     };
 }
 
-pub fn make(comptime H: type): *const VTable {
+fn VTableHolder(comptime H: type): type {
     const T = Trampolines(H);
-    const Holder = struct {
+    return struct {
         pub const vt: VTable = .{
             .on_open = if (@hasDecl(H, "onOpen")) T.on_open else null,
             .on_data = if (@hasDecl(H, "onData")) T.on_data else null,
@@ -100,5 +100,8 @@ pub fn make(comptime H: type): *const VTable {
             .on_handshake = if (@hasDecl(H, "onHandshake")) T.on_handshake else null,
         };
     };
-    return &Holder.vt;
+}
+
+pub fn make(comptime H: type): *const VTable {
+    return &VTableHolder(H).vt;
 }

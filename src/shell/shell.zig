@@ -401,6 +401,16 @@ pub const StringEncoding = enum {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
+pub const ShellCharIterState = enum {
+    Normal,
+    Single,
+    Double,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         ptr: *T,
@@ -2461,86 +2471,132 @@ pub fn next(self: *CmdEnvIter) !?Entry {
     const Key = _ShellCmdEnvIterKey;
 };
 
+pub const Test_TestToken = union(TokenTag) {
+    Pipe: void,
+    DoublePipe: void,
+    Ampersand: void,
+    DoubleAmpersand: void,
+    Redirect: AST.RedirectFlags,
+    Dollar: void,
+    Asterisk: void,
+    DoubleAsterisk: void,
+    Eq: void,
+    Semicolon: void,
+    Newline: void,
+    BraceBegin: void,
+    Comma: void,
+    BraceEnd: void,
+    CmdSubstBegin: void,
+    CmdSubstQuoted: void,
+    CmdSubstEnd: void,
+    OpenParen: void,
+    CloseParen: void,
+    Var: []const u8,
+    VarArgv: u8,
+    Text: []const u8,
+    SingleQuotedText: []const u8,
+    DoubleQuotedText: []const u8,
+    JSObjRef: u32,
+    DoubleBracketOpen: void,
+    DoubleBracketClose: void,
+    Delimit: void,
+    Eof: void,
+
+pub fn from_real(the_token: Token, buf: []const u8) Test_TestToken {
+            switch (the_token) {
+.Var => |txt| {
+return .{ .Var = buf[txt.start..txt.end] };
+},
+.VarArgv => |int| {
+return .{ .VarArgv = int };
+},
+.Text => |txt| {
+return .{ .Text = buf[txt.start..txt.end] };
+},
+.SingleQuotedText => |txt| {
+return .{ .SingleQuotedText = buf[txt.start..txt.end] };
+},
+.DoubleQuotedText => |txt| {
+return .{ .DoubleQuotedText = buf[txt.start..txt.end] };
+},
+.JSObjRef => |val| {
+return .{ .JSObjRef = val };
+},
+.Pipe => {
+return .Pipe;
+},
+.DoublePipe => {
+return .DoublePipe;
+},
+.Ampersand => {
+return .Ampersand;
+},
+.DoubleAmpersand => {
+return .DoubleAmpersand;
+},
+.Redirect => |r| {
+return .{ .Redirect = r };
+},
+.Dollar => {
+return .Dollar;
+},
+.Asterisk => {
+return .Asterisk;
+},
+.DoubleAsterisk => {
+return .DoubleAsterisk;
+},
+.Eq => {
+return .Eq;
+},
+.Semicolon => {
+return .Semicolon;
+},
+.Newline => {
+return .Newline;
+},
+.BraceBegin => {
+return .BraceBegin;
+},
+.Comma => {
+return .Comma;
+},
+.BraceEnd => {
+return .BraceEnd;
+},
+.CmdSubstBegin => {
+return .CmdSubstBegin;
+},
+.CmdSubstQuoted => {
+return .CmdSubstQuoted;
+},
+.CmdSubstEnd => {
+return .CmdSubstEnd;
+},
+.OpenParen => {
+return .OpenParen;
+},
+.CloseParen => {
+return .CloseParen;
+},
+.DoubleBracketOpen => {
+return .DoubleBracketOpen;
+},
+.DoubleBracketClose => {
+return .DoubleBracketClose;
+},
+.Delimit => {
+return .Delimit;
+},
+.Eof => {
+return .Eof;
+},
+}
+    }
+};
+
 pub const Test = struct {
-    pub const TestToken = union(TokenTag) {
-            // |
-            Pipe,
-            // ||
-            DoublePipe,
-            // &
-            Ampersand,
-            // &&
-            DoubleAmpersand,
-    
-            // >
-            Redirect: AST.RedirectFlags,
-    
-            // $
-            Dollar,
-            // *
-            Asterisk,
-            DoubleAsterisk,
-            // =
-            Eq,
-            Semicolon,
-            Newline,
-    
-            BraceBegin,
-            Comma,
-            BraceEnd,
-            CmdSubstBegin,
-            CmdSubstQuoted,
-            CmdSubstEnd,
-            OpenParen,
-            CloseParen,
-    
-            Var: []const u8,
-            VarArgv: u8,
-            Text: []const u8,
-            SingleQuotedText: []const u8,
-            DoubleQuotedText: []const u8,
-            JSObjRef: u32,
-    
-            DoubleBracketOpen,
-            DoubleBracketClose,
-    
-            Delimit,
-            Eof,
-    
-            pub fn from_real(the_token: Token, buf: []const u8) TestToken {
-                switch (the_token) {
-                    .Var => |txt| return .{ .Var = buf[txt.start..txt.end] },
-                    .VarArgv => |int| return .{ .VarArgv = int },
-                    .Text => |txt| return .{ .Text = buf[txt.start..txt.end] },
-                    .SingleQuotedText => |txt| return .{ .SingleQuotedText = buf[txt.start..txt.end] },
-                    .DoubleQuotedText => |txt| return .{ .DoubleQuotedText = buf[txt.start..txt.end] },
-                    .JSObjRef => |val| return .{ .JSObjRef = val },
-                    .Pipe => return .Pipe,
-                    .DoublePipe => return .DoublePipe,
-                    .Ampersand => return .Ampersand,
-                    .DoubleAmpersand => return .DoubleAmpersand,
-                    .Redirect => |r| return .{ .Redirect = r },
-                    .Dollar => return .Dollar,
-                    .Asterisk => return .Asterisk,
-                    .DoubleAsterisk => return .DoubleAsterisk,
-                    .Eq => return .Eq,
-                    .Semicolon => return .Semicolon,
-                    .Newline => return .Newline,
-                    .BraceBegin => return .BraceBegin,
-                    .Comma => return .Comma,
-                    .BraceEnd => return .BraceEnd,
-                    .CmdSubstBegin => return .CmdSubstBegin,
-                    .CmdSubstQuoted => return .CmdSubstQuoted,
-                    .CmdSubstEnd => return .CmdSubstEnd,
-                    .OpenParen => return .OpenParen,
-                    .CloseParen => return .CloseParen,
-                    .DoubleBracketOpen => return .DoubleBracketOpen,
-                    .DoubleBracketClose => return .DoubleBracketClose,
-                    .Delimit => return .Delimit,
-                    .Eof => return .Eof,
-                }
-            }
-        };
+    pub const TestToken = Test_TestToken;
 };
 
 pub const ShellSrcBuilder = struct {
@@ -4098,11 +4154,7 @@ _ = unreachable;
         char: u32,
         escaped: bool = false,
     });
-    pub const State = enum {
-                Normal,
-                Single,
-                Double,
-            };
+    pub const State = ShellCharIterState;
 };
 }
 
@@ -4451,6 +4503,53 @@ pub fn needsEscapeUtf8AsciiLatin1(str: []const u8) bool {
         return false;
 }
 
+pub fn SmolListInlined(comptime T: type, comptime INLINED_MAX: comptime_int) type {
+        return struct {
+    items: [INLINED_MAX]T = undefined,
+    len: u32 = 0,
+
+pub fn slice(self: *const @This()) []const T {
+            return self.items[0..self.len];
+    }
+
+pub fn allocatedSlice(self: *const @This()) []const T {
+            return (&self.items);
+    }
+
+pub fn promote(self: *@This(), n: usize, val: T) bun.BabyList(T) {
+            var list = bun.handleOom(bun.BabyList(T).initCapacity(bun.default_allocator, n));
+            _ = &list;
+            _ = bun.handleOom(list.appendSlice(bun.default_allocator, self.items[0..INLINED_MAX]));
+            _ = bun.handleOom(list.append(bun.default_allocator, val));
+            return list;
+    }
+
+pub fn orderedRemove(self: *@This(), idx: usize) T {
+            if (((self.len - 1) == idx)) {
+                return self.pop();
+            }
+            const slice_to_shift = self.items[(idx + 1)..self.len];
+            _ = std.mem.copyForwards(T, self.items[idx..(self.len - 1)], slice_to_shift);
+            self.len = (self.len - 1);
+    }
+
+pub fn swapRemove(self: *@This(), idx: usize) T {
+            if (((self.len - 1) == idx)) {
+                return self.pop();
+            }
+            const old_item = self.items[@as(usize, @intCast(idx))];
+            self.items[cp_cast_int(usize, idx)] = self.pop();
+            return old_item;
+    }
+
+pub fn pop(self: *@This()) T {
+            const ret = self.items[@as(usize, @intCast((self.len - 1)))];
+            self.len = (self.len - 1);
+            return ret;
+    }
+};
+}
+
 pub fn SmolList(comptime T: type, comptime INLINED_MAX: comptime_int) type {
         return union(enum) {
     inlined: Inlined,
@@ -4710,49 +4809,6 @@ pub fn lastUncheckedConst(self: *const @This()) *const T {
     }
     const ByteList = bun.BabyList(T);
     pub const zeroes: @This() = .{ .inlined = .{} };
-    pub const Inlined = struct {
-        items: [INLINED_MAX]T = undefined,
-        len: u32 = 0,
-    
-    pub fn slice(self: *const @This()) []const T {
-                return self.items[0..self.len];
-        }
-    
-    pub fn allocatedSlice(self: *const @This()) []const T {
-                return (&self.items);
-        }
-    
-    pub fn promote(self: *@This(), n: usize, val: T) bun.BabyList(T) {
-                var list = bun.handleOom(bun.BabyList(T).initCapacity(bun.default_allocator, n));
-                _ = &list;
-                _ = bun.handleOom(list.appendSlice(bun.default_allocator, self.items[0..INLINED_MAX]));
-                _ = bun.handleOom(list.append(bun.default_allocator, val));
-                return list;
-        }
-    
-    pub fn orderedRemove(self: *@This(), idx: usize) T {
-                if (((self.len - 1) == idx)) {
-                    return self.pop();
-                }
-                const slice_to_shift = self.items[(idx + 1)..self.len];
-                _ = std.mem.copyForwards(T, self.items[idx..(self.len - 1)], slice_to_shift);
-                self.len = (self.len - 1);
-        }
-    
-    pub fn swapRemove(self: *@This(), idx: usize) T {
-                if (((self.len - 1) == idx)) {
-                    return self.pop();
-                }
-                const old_item = self.items[@as(usize, @intCast(idx))];
-                self.items[cp_cast_int(usize, idx)] = self.pop();
-                return old_item;
-        }
-    
-    pub fn pop(self: *@This()) T {
-                const ret = self.items[@as(usize, @intCast((self.len - 1)))];
-                self.len = (self.len - 1);
-                return ret;
-        }
-    };
+    pub const Inlined = SmolListInlined(T, INLINED_MAX);
 };
 }

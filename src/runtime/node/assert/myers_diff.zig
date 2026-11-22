@@ -158,6 +158,33 @@ pub fn __cp_errdeinit(self: *@This()) void {
     };
 }
 
+pub fn CharEql(comptime Line: type) type {
+    return struct {
+
+pub fn eql(a: Line, b: Line) bool {
+                return (a == b);
+        }
+    };
+}
+
+pub fn StrLineEqlStrict(comptime Line: type) type {
+    return struct {
+
+pub fn eql(a: Line, b: Line) bool {
+                return areStrLinesEqual(Line, a, b, false);
+        }
+    };
+}
+
+pub fn StrLineEqlComma(comptime Line: type) type {
+    return struct {
+
+pub fn eql(a: Line, b: Line) bool {
+                return areStrLinesEqual(Line, a, b, true);
+        }
+    };
+}
+
 const StringConst = []const u8;
 const StringMut = []u8;
 const StringZConst = [:0]const u8;
@@ -180,23 +207,7 @@ const mem = std.mem;
 const Allocator = mem.Allocator;
 
 pub fn Differ(comptime Line: type, comptime opts: Options) type {
-        const eql: LineCmp(Line) = (if ((Line == u8) or (Line == u16)) blk: {
-        const gen = struct {
-
-pub fn eql(a: Line, b: Line) bool {
-            return (a == b);
-    }
-};
-        break :blk gen.eql;
-} else if ((Line == StringConst) or (Line == StringMut) or (Line == StringZConst) or (Line == StringZMut) or (Line == String16Const) or (Line == String16Mut) or (Line == String16ZConst) or (Line == String16ZMut)) blk: {
-        const gen = struct {
-
-pub fn eql(a: Line, b: Line) bool {
-            return areStrLinesEqual(Line, a, b, opts.check_comma_disparity);
-    }
-};
-        break :blk gen.eql;
-} else @compileError("Differ can only compare lines of chars or strings."));
+        const eql: LineCmp(Line) = (if ((Line == u8) or (Line == u16)) CharEql(Line).eql else if ((Line == StringConst) or (Line == StringMut) or (Line == StringZConst) or (Line == StringZMut) or (Line == String16Const) or (Line == String16Mut) or (Line == String16ZConst) or (Line == String16ZMut)) (if (opts.check_comma_disparity) StrLineEqlComma(Line).eql else StrLineEqlStrict(Line).eql) else @compileError("Differ can only compare lines of chars or strings."));
         return DifferWithEql(Line, opts, eql);
 }
 

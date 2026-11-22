@@ -190,16 +190,8 @@ pub fn closeAllGroups(self: *PosixLoop) bool {
     }
 
 pub fn nextTick(self: *PosixLoop, comptime UserType: type, user_data: UserType, comptime deferCallback: anytype) void {
-            const Handler = struct {
-
-pub fn callback(data: *anyopaque) callconv(.c) void {
             {
-                _ = deferCallback(@as(UserType, @ptrCast(@alignCast(data))));
-            }
-    }
-};
-            {
-                _ = uws_loop_defer(@as(*Loop, @ptrCast(@alignCast(self))), @as(*anyopaque, @ptrCast(@alignCast(user_data))), Handler.callback);
+                _ = uws_loop_defer(@as(*Loop, @ptrCast(@alignCast(self))), @as(*anyopaque, @ptrCast(@alignCast(user_data))), LoopDeferHandler(UserType, deferCallback).callback);
             }
     }
 
@@ -302,16 +294,8 @@ pub fn closeAllGroups(self: *WindowsLoop) bool {
     }
 
 pub fn nextTick(self: *WindowsLoop, comptime UserType: type, user_data: UserType, comptime deferCallback: anytype) void {
-            const Handler = struct {
-
-pub fn callback(data: *anyopaque) callconv(.c) void {
             {
-                _ = deferCallback(@as(UserType, @ptrCast(@alignCast(data))));
-            }
-    }
-};
-            {
-                _ = uws_loop_defer(@as(*Loop, @ptrCast(@alignCast(self))), @as(*anyopaque, @ptrCast(@alignCast(user_data))), Handler.callback);
+                _ = uws_loop_defer(@as(*Loop, @ptrCast(@alignCast(self))), @as(*anyopaque, @ptrCast(@alignCast(user_data))), LoopDeferHandler(UserType, deferCallback).callback);
             }
     }
 
@@ -381,3 +365,14 @@ extern "c" fn uws_loop_defer(loop: *Loop, ctx: *anyopaque, cb: *const fn (*anyop
 extern "c" fn uws_res_clear_corked_socket(loop: *Loop) callconv(.c) void;
 
 extern "c" fn uws_loop_date_header_timer_update(loop: *Loop) callconv(.c) void;
+
+pub fn LoopDeferHandler(comptime UserType: type, comptime deferCallback: anytype) type {
+        return struct {
+
+pub fn callback(data: *anyopaque) callconv(.c) void {
+            {
+                _ = deferCallback(@as(UserType, @ptrCast(@alignCast(data))));
+            }
+    }
+};
+}

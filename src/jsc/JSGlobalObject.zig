@@ -627,14 +627,8 @@ pub fn throwPretty(self: *JSGlobalObject, comptime fmt: [:0]const u8, args: anyt
 
 pub fn queueMicrotaskCallback(self: *JSGlobalObject, ctx_val: anytype, comptime Function: *const fn (@TypeOf(ctx_val)) void) void {
             _ = jsc.markBinding(@src());
-            const Fn = Function;
             const ContextType = @TypeOf(ctx_val);
-            const Wrapper = struct {
-
-pub fn call(p: *anyopaque) callconv(.c) void {
-            _ = Fn(bun.cast(ContextType, p));
-    }
-};
+            const Wrapper = QueueMicrotaskWrapper(ContextType, Function);
             _ = JSC__JSGlobalObject__queueMicrotaskCallback(self, ctx_val, (&Wrapper.call));
     }
 
@@ -1131,6 +1125,15 @@ const ErrorableString = jsc.ErrorableString;
 const JSValue = jsc.JSValue;
 const VM = jsc.VM;
 const ZigString = jsc.ZigString;
+
+pub fn QueueMicrotaskWrapper(comptime ContextType: type, comptime Function: anytype) type {
+        return struct {
+
+pub fn call(p: *anyopaque) callconv(.c) void {
+            _ = Function(bun.cast(ContextType, p));
+    }
+};
+}
 
 extern "c" fn JSGlobalObject__throwStackOverflow(global: *JSGlobalObject) callconv(.c) void;
 

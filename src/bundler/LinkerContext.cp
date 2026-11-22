@@ -58,6 +58,10 @@ pub enum ScanCSSImportsResult {
     ok,
     errors,
 }
+pub enum _LinkerOptionsMode {
+    passthrough,
+    bundle,
+}
 pub struct _LinkerOptions {
     generate_bytecode_cache: bool = false,
     output_format: options.Format = .esm,
@@ -84,10 +88,7 @@ pub struct _LinkerOptions {
 
     public_path: []const u8 = "",
 
-    pub const Mode = enum {
-        passthrough,
-        bundle,
-    };
+    pub const Mode = _LinkerOptionsMode;
 }
 pub struct _SourceMapTask {
     ctx: *LinkerContext,
@@ -178,6 +179,28 @@ pub struct _SourceMapData {
         quoted_source_contents.* = mutableOwned.toOptional();
     }
 }
+pub enum _MatchImportKind {
+    /// The import is either external or undefined
+    ignore,
+
+    /// "sourceIndex" and "ref" are in use
+    normal,
+
+    /// "namespaceRef" and "alias" are in use
+    namespace,
+
+    /// Both "normal" and "namespace"
+    normal_and_namespace,
+
+    /// The import could not be evaluated due to a cycle
+    cycle,
+
+    /// The import is missing but came from a TypeScript file
+    probably_typescript_type,
+
+    /// The import resolved to multiple symbols via "export * from"
+    ambiguous,
+}
 struct _MatchImport {
     alias: string = "",
     kind: _MatchImport.Kind = _MatchImport.Kind.ignore,
@@ -188,28 +211,7 @@ struct _MatchImport {
     other_name_loc: Logger.Loc = Logger.Loc.Empty, // Optional, goes with otherSourceIndex, ignore if zero,
     ref: Ref = Ref.None,
 
-    pub const Kind = enum {
-        /// The import is either external or undefined
-        ignore,
-
-        /// "sourceIndex" and "ref" are in use
-        normal,
-
-        /// "namespaceRef" and "alias" are in use
-        namespace,
-
-        /// Both "normal" and "namespace"
-        normal_and_namespace,
-
-        /// The import could not be evaluated due to a cycle
-        cycle,
-
-        /// The import is missing but came from a TypeScript file
-        probably_typescript_type,
-
-        /// The import resolved to multiple symbols via "export * from"
-        ambiguous,
-    };
+    pub const Kind = _MatchImportKind;
 }
 pub struct _ChunkMeta {
     imports: Map,
@@ -296,6 +298,11 @@ struct _InsideWrapperPrefix {
         }
     }
 }
+pub enum _StmtListList {
+    outside_wrapper_prefix,
+    inside_wrapper_suffix,
+    all_stmts,
+}
 pub struct _StmtList {
     const InsideWrapperPrefix = _InsideWrapperPrefix;
 
@@ -329,11 +336,7 @@ pub struct _StmtList {
         };
     }
 
-    const List = enum {
-        outside_wrapper_prefix,
-        inside_wrapper_suffix,
-        all_stmts,
-    };
+    pub const List = _StmtListList;
 
     pub fn appendSlice(*_, list: List, stmts: []const Stmt): OOM!void {
         try switch (list) {

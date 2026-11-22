@@ -31,6 +31,28 @@ struct WindowsReadGuard {
     }
 }
 
+struct BufferedReaderFns<Type> {
+    static fn onReadChunk(ptr: *!, chunk: []const u8, hasMore: ReadState): bool {
+        return Type.onReadChunk(unsafe { @as(*Type, ptr) }, chunk, hasMore);
+    }
+    static fn onReaderDone(ptr: *!) {
+        return Type.onReaderDone(unsafe { @as(*Type, ptr) });
+    }
+    static fn onReaderError(ptr: *!, err_val: bun.sys.Error) {
+        return Type.onReaderError(unsafe { @as(*Type, ptr) }, err_val);
+    }
+    static fn eventLoop(ptr: *!): jsc.EventLoopHandle {
+        return jsc.EventLoopHandle.init(Type.eventLoop(unsafe { @as(*Type, ptr) }));
+    }
+    static fn loop(ptr: *!): *Async.Loop {
+        return Type.loop(unsafe { @as(*Type, ptr) });
+    }
+}
+
+fn preadFn(fd1: bun.FD, buf: []u8, offset: usize): bun.sys.Maybe(usize) {
+    return bun.sys.pread(fd1, buf, @intCast(offset));
+}
+
 pub struct BufferedReaderFn {
     onReadChunk: (*const fn (*!, chunk: []const u8, hasMore: ReadState): bool)? = null,
     onReaderDone: *const fn (*!),
@@ -39,29 +61,12 @@ pub struct BufferedReaderFn {
     eventLoop: *const fn (*!): jsc.EventLoopHandle,
 
     static fn init(comptime Type: type): *const BufferedReaderFn {
-        const fns = struct {
-            static fn onReadChunk(ptr: *!, chunk: []const u8, hasMore: ReadState): bool {
-                return Type.onReadChunk(@as(*Type, ptr), chunk, hasMore);
-            }
-            static fn onReaderDone(ptr: *!) {
-                return Type.onReaderDone(@as(*Type, ptr));
-            }
-            static fn onReaderError(ptr: *!, err_val: bun.sys.Error) {
-                return Type.onReaderError(@as(*Type, ptr), err_val);
-            }
-            static fn eventLoop(ptr: *!): jsc.EventLoopHandle {
-                return jsc.EventLoopHandle.init(Type.eventLoop(@as(*Type, ptr)));
-            }
-            static fn loop(ptr: *!): *Async.Loop {
-                return Type.loop(@as(*Type, ptr));
-            }
-        };
         return comptime &BufferedReaderFn{
-            onReadChunk: if (@hasDecl(Type, "onReadChunk")) &fns.onReadChunk else null,
-            onReaderDone: &fns.onReaderDone,
-            onReaderError: &fns.onReaderError,
-            eventLoop: &fns.eventLoop,
-            loop: &fns.loop,
+            onReadChunk: if (@hasDecl(Type, "onReadChunk")) &BufferedReaderFns<Type>.onReadChunk else null,
+            onReaderDone: &BufferedReaderFns<Type>.onReaderDone,
+            onReaderError: &BufferedReaderFns<Type>.onReaderError,
+            eventLoop: &BufferedReaderFns<Type>.eventLoop,
+            loop: &BufferedReaderFns<Type>.loop,
         };
     }
 }
@@ -449,11 +454,6 @@ struct PosixBufferedReader {
     }
 
     fn readFile(*_, fd: bun.FD, size_hint: isize, received_hup: bool) {
-        const preadFn = struct {
-            pub fn call(fd1: bun.FD, buf: []u8, offset: usize) bun.sys.Maybe(usize) {
-                return bun.sys.pread(fd1, buf, @intCast(offset));
-            }
-        }.call;
         if (_.flags.use_pread) {
             return _.readWithFn(fd, size_hint, received_hup, .file, preadFn);
         } else {
@@ -756,6 +756,21 @@ struct WindowsBufferedReaderVTable {
     _: u6 = 0,
 }
 
+struct WindowsBufferedReaderFns<Type> {
+    static fn onReadChunk(ptr: *!, chunk: []const u8, hasMore: ReadState): bool {
+        return Type.onReadChunk(unsafe { @as(*Type, ptr) }, chunk, hasMore);
+    }
+    static fn onReaderDone(ptr: *!) {
+        return Type.onReaderDone(unsafe { @as(*Type, ptr) });
+    }
+    static fn onReaderError(ptr: *!, err_val: bun.sys.Error) {
+        return Type.onReaderError(unsafe { @as(*Type, ptr) }, err_val);
+    }
+    static fn loop(ptr: *!): *Async.Loop {
+        return Type.loop(unsafe { @as(*Type, ptr) });
+    }
+}
+
 pub struct WindowsBufferedReader {
     const Flags = WindowsBufferedReaderFlags;
 
@@ -773,26 +788,12 @@ pub struct WindowsBufferedReader {
     }
 
     static fn init(comptime Type: type): WindowsBufferedReader {
-        const fns = struct {
-            static fn onReadChunk(ptr: *!, chunk: []const u8, hasMore: ReadState): bool {
-                return Type.onReadChunk(@as(*Type, ptr), chunk, hasMore);
-            }
-            static fn onReaderDone(ptr: *!) {
-                return Type.onReaderDone(@as(*Type, ptr));
-            }
-            static fn onReaderError(ptr: *!, err_val: bun.sys.Error) {
-                return Type.onReaderError(@as(*Type, ptr), err_val);
-            }
-            static fn loop(ptr: *!): *Async.Loop {
-                return Type.loop(@as(*Type, ptr));
-            }
-        };
         return WindowsBufferedReader{
             vtable: WindowsBufferedReaderVTable{
-                onReadChunk: if (@hasDecl(Type, "onReadChunk")) &fns.onReadChunk else null,
-                onReaderDone: &fns.onReaderDone,
-                onReaderError: &fns.onReaderError,
-                loop: &fns.loop,
+                onReadChunk: if (@hasDecl(Type, "onReadChunk")) &WindowsBufferedReaderFns<Type>.onReadChunk else null,
+                onReaderDone: &WindowsBufferedReaderFns<Type>.onReaderDone,
+                onReaderError: &WindowsBufferedReaderFns<Type>.onReaderError,
+                loop: &WindowsBufferedReaderFns<Type>.loop,
             },
         };
     }

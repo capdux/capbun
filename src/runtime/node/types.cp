@@ -580,15 +580,24 @@ pub fn jsAssertEncodingValid(global: *jsc.JSGlobalObject, call_frame: *jsc.CallF
     return jsc.JSValue.js_undefined;
 }
 
-union(Tag) PathOrBuffer {
+pub enum PathOrBufferTag { path, buffer }
+
+union(PathOrBufferTag) PathOrBuffer {
     path: bun.PathString,
     buffer: Buffer,
 
-    pub const Tag = enum { path, buffer };
+    pub const Tag = PathOrBufferTag;
 
     pub inline fn slice(): []const u8 {
         return _.path.slice();
     }
+}
+
+pub fn CallbackTaskOption(comptime Result: type): type {
+    return union {
+        e: jsc.SystemError,
+        result: Result,
+    };
 }
 
 pub fn CallbackTask(comptime Result: type): type {
@@ -597,10 +606,7 @@ pub fn CallbackTask(comptime Result: type): type {
         option: Option,
         success: bool = false,
 
-        pub const Option = union {
-            e: jsc.SystemError,
-            result: Result,
-        };
+        pub const Option = CallbackTaskOption(Result);
     };
 }
 

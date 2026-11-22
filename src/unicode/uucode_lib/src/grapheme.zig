@@ -117,6 +117,13 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub fn GraphemeBreakResult(comptime State: type) type {
+    return packed struct {
+        result: bool,
+        state: State,
+    };
+}
+
 const FieldEnum = getpkg.FieldEnum;
 
 pub fn CustomIterator(comptime CodePointIterator: type, comptime GB: type, comptime State: type, comptime grapheme_break_field: FieldEnum, comptime customIsBreak: *const fn (GB, GB, *State) bool) type {
@@ -167,7 +174,11 @@ pub fn peekCodePoint(self: @This()) ?IteratorResult {
 
 pub fn nextGrapheme(self: *@This()) ?Grapheme {
             const start = self.i;
-            _ = &start;
+            return (while (self.nextCodePoint()) |result| {
+                if (result.is_break) {
+                    break .{ .start = start, .end = self.i };
+                }
+            } else null);
     }
 
 pub fn peekGrapheme(self: @This()) ?Grapheme {
@@ -507,10 +518,6 @@ pub fn testGraphemebreaktestTxtComputegraphemebreak() !void {
 }
 
 pub fn GraphemeBreakTable(comptime GB: type, comptime State: type) type {
-        const Result = packed struct {
-        result: bool,
-        state: State,
-    };
         const gb_fields = @typeInfo(GB).@"enum".fields;
         const state_fields = @typeInfo(State).@"enum".fields;
         const n_gb = gb_fields.len;
@@ -520,17 +527,17 @@ pub fn GraphemeBreakTable(comptime GB: type, comptime State: type) type {
         _ = std.debug.assert(((if (@typeInfo(@TypeOf(gb_fields[@as(usize, @intCast((gb_fields.len - 1)))])) == .@"enum") @intFromEnum(gb_fields[@as(usize, @intCast((gb_fields.len - 1)))]) else gb_fields[@as(usize, @intCast((gb_fields.len - 1)))].value) == (n_gb - 1)));
         _ = std.debug.assert(((if (@typeInfo(@TypeOf(state_fields[@as(usize, @intCast((state_fields.len - 1)))])) == .@"enum") @intFromEnum(state_fields[@as(usize, @intCast((state_fields.len - 1)))]) else state_fields[@as(usize, @intCast((state_fields.len - 1)))].value) == (n_state - 1)));
         return struct {
-    data: [n]Result,
+    data: [n]GraphemeBreakResult(State),
 
 pub inline fn index(gb1: GB, gb2: GB, state: State) usize {
             return (((@intFromEnum(state) * n_gb_2) + (@intFromEnum(gb1) * n_gb)) + @intFromEnum(gb2));
     }
 
-pub fn set(self: *@This(), gb1: GB, gb2: GB, state: State, result: Result) void {
+pub fn set(self: *@This(), gb1: GB, gb2: GB, state: State, result: GraphemeBreakResult(State)) void {
             self.data[cp_cast_int(usize, index(gb1, gb2, state))] = result;
     }
 
-pub fn get(self: @This(), gb1: GB, gb2: GB, state: State) Result {
+pub fn get(self: @This(), gb1: GB, gb2: GB, state: State) GraphemeBreakResult(State) {
             return self.data[@as(usize, @intCast(index(gb1, gb2, state)))];
     }
 };

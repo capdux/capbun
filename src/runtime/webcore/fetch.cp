@@ -26,6 +26,12 @@ const PosixToWinNormalizer = bun.path.PosixToWinNormalizer;
 const s3 = bun.S3;
 const ZigURL = bun.URL;
 
+enum URLType {
+    remote,
+    file,
+    blob,
+}
+
 pub struct DeinitGuard<T> {
     val: T,
     ~init() {
@@ -120,7 +126,7 @@ pub const fetch_type_error_strings: JSTypeErrorEnum = brk: {
 
 fn dataURLResponse(
     _data_url: DataURL,
-    globalThis: **JSGlobalObject,
+    globalThis: *JSGlobalObject,
     allocator: std.mem.Allocator,
 ): JSValue {
     let data_url = _data_url;
@@ -215,14 +221,14 @@ comptime {
 }
 
 pub fn Bun__fetch_(
-    globalThis: **JSGlobalObject,
+    globalThis: *JSGlobalObject,
     callframe: *CallFrame,
 ): JSError!JSValue {
     return fetchImpl(false, globalThis, callframe);
 }
 
 pub fn nodeHttpClient(
-    globalThis: **JSGlobalObject,
+    globalThis: *JSGlobalObject,
     callframe: *CallFrame,
 ): JSError!JSValue {
     return fetchImpl(true, globalThis, callframe);
@@ -230,7 +236,7 @@ pub fn nodeHttpClient(
 
 fn fetchImpl(
     @comptime allow_get_body: bool,
-    globalThis: **JSGlobalObject,
+    globalThis: *JSGlobalObject,
     callframe: *CallFrame,
 ): JSError!JSValue {
     let arguments = callframe.arguments_old(2);
@@ -272,11 +278,6 @@ fn fetchImpl(
     let unix_socket_path = ZigString.Slice.empty;
     let url_proxy_buffer: string = "";
 
-    const URLType = enum {
-        remote,
-        file,
-        blob,
-    };
     let url_type = URLType.remote;
 
     let ssl_config: ServerConfig.SSLConfig.SharedPtr? = null;

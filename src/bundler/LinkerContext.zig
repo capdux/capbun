@@ -122,6 +122,39 @@ pub const ScanCSSImportsResult = enum {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
+pub const _LinkerOptionsMode = enum {
+    passthrough,
+    bundle,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const _MatchImportKind = enum {
+    ignore,
+    normal,
+    namespace,
+    normal_and_namespace,
+    cycle,
+    probably_typescript_type,
+    ambiguous,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const _StmtListList = enum {
+    outside_wrapper_prefix,
+    inside_wrapper_suffix,
+    all_stmts,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         ptr: *T,
@@ -203,10 +236,7 @@ pub const _LinkerOptions = struct {
     metafile_markdown_path: []const u8 = "",
     mode: Mode = .bundle,
     public_path: []const u8 = "",
-    pub const Mode = enum {
-            passthrough,
-            bundle,
-        };
+    pub const Mode = _LinkerOptionsMode;
 };
 
 pub const _SourceMapTask = struct {
@@ -307,28 +337,7 @@ pub const _MatchImport = struct {
     other_source_index: u32 = 0,
     other_name_loc: Logger.Loc = Logger.Loc.Empty,
     ref: Ref = Ref.None,
-    pub const Kind = enum {
-            /// The import is either external or undefined
-            ignore,
-    
-            /// "sourceIndex" and "ref" are in use
-            normal,
-    
-            /// "namespaceRef" and "alias" are in use
-            namespace,
-    
-            /// Both "normal" and "namespace"
-            normal_and_namespace,
-    
-            /// The import could not be evaluated due to a cycle
-            cycle,
-    
-            /// The import is missing but came from a TypeScript file
-            probably_typescript_type,
-    
-            /// The import resolved to multiple symbols via "export * from"
-            ambiguous,
-        };
+    pub const Kind = _MatchImportKind;
 };
 
 pub const _ChunkMeta = struct {
@@ -444,11 +453,7 @@ pub fn append(self: *_StmtList, list: List, stmt: Stmt) OOM!void {
 });
     }
     const InsideWrapperPrefix = _InsideWrapperPrefix;
-    const List = enum {
-            outside_wrapper_prefix,
-            inside_wrapper_suffix,
-            all_stmts,
-        };
+    pub const List = _StmtListList;
 };
 
 pub const _PendingPartRange = struct {
@@ -1774,7 +1779,6 @@ pub fn matchImportsWithExportsForFile(self: *LinkerContext, named_imports_ptr: *
             named_imports_ptr.* = named_imports;
             }
             const Sorter = _NamedImportsSorter;
-            _ = &Sorter;
             const sorter = Sorter{ .imports = (&named_imports) };
             _ = named_imports.sort(sorter);
             var _ni_i: usize = 0;

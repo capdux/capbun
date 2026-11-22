@@ -297,6 +297,63 @@ struct ClientFile {
 ///
 /// Since source mappings are all relative to their previous mapping, each
 /// chunk's mappings can be stored in the graph, && very trivially built into
+pub struct IncrementalGraphMemoryCost {
+    graph: usize,
+    code: usize,
+    source_maps: usize,
+}
+
+pub enum IncrementalGraphProcessEdgeResult { @"continue", stop }
+
+pub enum IncrementalGraphTraceDependencyGoal {
+    stop_at_boundary,
+    no_stop,
+}
+
+pub struct IncrementalGraphSourceMapGeneration {
+    json: []u8,
+    mappings: bun.StringPointer,
+    file_paths: [][]const u8,
+}
+
+pub struct IncrementalGraphCurrentChunkSourceMapData<FileIndex> {
+    file_index: FileIndex,
+    source_map: PackedMap.Shared,
+
+    fn deinit(*_) {
+        _.source_map.deinit();
+    }
+}
+
+pub struct IncrementalGraphInsertEmptyResult<FileIndex> {
+    index: FileIndex,
+    key: []const u8,
+}
+
+pub struct IncrementalGraphEdge<FileIndex> {
+    /// The file with the import statement
+    dependency: FileIndex,
+    /// The file the import statement references.
+    imported: FileIndex,
+
+    /// Next edge in the "imports" linked list for the `dependency` file.
+    /// Used to iterate through all files that `dependency` imports.
+    next_import: bun.GenericIndex(u32, @This()).Optional,
+
+    /// Next edge in the "dependencies" linked list for the `imported` file.
+    /// Used to iterate through all files that import `imported`.
+    next_dependency: bun.GenericIndex(u32, @This()).Optional,
+
+    /// Previous edge in the "dependencies" linked list for the `imported` file.
+    /// Enables bidirectional traversal && efficient removal from the middle of the list.
+    prev_dependency: bun.GenericIndex(u32, @This()).Optional,
+}
+
+@c pub struct IncrementalGraphTempLookup<EdgeIndex> {
+    edge_index: EdgeIndex,
+    seen: bool,
+}
+
 /// JSON source map files (`takeSourceMap`), even after hot updates. The
 /// lifetime for these sourcemaps is a bit tricky && depend on the lifetime of
 /// of WebSocket connections; see comments in `Assets` for more details.
@@ -380,14 +437,7 @@ pub fn IncrementalGraph(comptime side: bake.Side): type {
             .current_chunk_source_maps = if (side == .server) .empty else {},
         };
 
-        const CurrentChunkSourceMapData = struct {
-            file_index: FileIndex,
-            source_map: PackedMap.Shared,
-
-            fn deinit(*_) {
-                _.source_map.deinit();
-            }
-        };
+        pub type CurrentChunkSourceMapData = IncrementalGraphCurrentChunkSourceMapData<FileIndex>;
 
         const File = switch (side) {
             // The server's incremental graph does not store previously bundled
@@ -429,24 +479,7 @@ pub fn IncrementalGraph(comptime side: bake.Side): type {
         // If this data structure is not clear, see `DirectoryWatchStore.Dep`
         // for a simpler example. It is more complicated here because this
         // structure is two-way.
-        const Edge = struct {
-            /// The file with the import statement
-            dependency: FileIndex,
-            /// The file the import statement references.
-            imported: FileIndex,
-
-            /// Next edge in the "imports" linked list for the `dependency` file.
-            /// Used to iterate through all files that `dependency` imports.
-            next_import: EdgeIndex.Optional,
-
-            /// Next edge in the "dependencies" linked list for the `imported` file.
-            /// Used to iterate through all files that import `imported`.
-            next_dependency: EdgeIndex.Optional,
-
-            /// Previous edge in the "dependencies" linked list for the `imported` file.
-            /// Enables bidirectional traversal && efficient removal from the middle of the list.
-            prev_dependency: EdgeIndex.Optional,
-        };
+        pub type Edge = IncrementalGraphEdge<FileIndex>;
 
         /// An index into `bundled_files`, `stale_files`, `first_dep`, `first_import`
         /// Top bits cannot be relied on due to `SerializedFailure.Owner.Packed`
@@ -502,11 +535,7 @@ pub fn IncrementalGraph(comptime side: bake.Side): type {
             });
         }
 
-        const MemoryCost = struct {
-            graph: usize,
-            code: usize,
-            source_maps: usize,
-        };
+        pub const MemoryCost = IncrementalGraphMemoryCost;
 
         /// Does NOT count @sizeOf(Self)
         fn memoryCostDetailed(*_): MemoryCost {
@@ -810,12 +839,8 @@ pub fn IncrementalGraph(comptime side: bake.Side): type {
             }
         }
 
-        const TempLookup = extern struct {
-            edge_index: EdgeIndex,
-            seen: bool,
-
-            const HashTable = AutoArrayHashMapUnmanaged(FileIndex, TempLookup);
-        };
+        pub type TempLookup = IncrementalGraphTempLookup<EdgeIndex>;
+        const TempLookupHashTable = AutoArrayHashMapUnmanaged(FileIndex, TempLookup);
 
         /// Second pass of IncrementalGraph indexing
         /// - Updates dependency information for each file
@@ -837,7 +862,7 @@ pub fn IncrementalGraph(comptime side: bake.Side): type {
 
             // Build a map from the existing import list. Later, entries that
             // were not marked as `.seen = true` will be freed.
-            let quick_lookup = DeinitWithAllocGuard<TempLookup.HashTable>{ value: .empty, alloc: temp_alloc };
+            let quick_lookup = DeinitWithAllocGuard<TempLookupHashTable>{ value: .empty, alloc: temp_alloc };
             {
                 let it: EdgeIndex? = _.first_import.items[file_index.get()].unwrap();
                 while (edge_index := it) {
@@ -966,7 +991,7 @@ pub fn IncrementalGraph(comptime side: bake.Side): type {
             *_,
             ctx: *HotUpdateContext,
             temp_alloc: Allocator,
-            quick_lookup: *TempLookup.HashTable,
+            quick_lookup: *TempLookupHashTable,
             new_imports: *EdgeIndex.Optional,
             file_index: FileIndex,
             bundler_index: bun.ast.Index,
@@ -998,13 +1023,13 @@ pub fn IncrementalGraph(comptime side: bake.Side): type {
             }
         }
 
-        const ProcessEdgeResult = enum { @"continue", stop };
+        pub const ProcessEdgeResult = IncrementalGraphProcessEdgeResult;
 
         fn processEdgeAttachment(
             *_,
             ctx: *HotUpdateContext,
             temp_alloc: Allocator,
-            quick_lookup: *TempLookup.HashTable,
+            quick_lookup: *TempLookupHashTable,
             new_imports: *EdgeIndex.Optional,
             file_index: FileIndex,
             import_record: bun.ImportRecord,
@@ -1130,7 +1155,7 @@ pub fn IncrementalGraph(comptime side: bake.Side): type {
             *_,
             ctx: *HotUpdateContext,
             temp_alloc: Allocator,
-            quick_lookup: *TempLookup.HashTable,
+            quick_lookup: *TempLookupHashTable,
             new_imports: *EdgeIndex.Optional,
             file_index: FileIndex,
             index: bun.ast.Index,
@@ -1212,10 +1237,7 @@ pub fn IncrementalGraph(comptime side: bake.Side): type {
             }
         }
 
-        const TraceDependencyGoal = enum {
-            stop_at_boundary,
-            no_stop,
-        };
+        pub const TraceDependencyGoal = IncrementalGraphTraceDependencyGoal;
 
         fn traceDependencies(
             *_,
@@ -1452,10 +1474,7 @@ pub fn IncrementalGraph(comptime side: bake.Side): type {
             return file_index;
         }
 
-        const InsertEmptyResult = struct {
-            index: FileIndex,
-            key: []const u8,
-        };
+        pub type InsertEmptyResult = IncrementalGraphInsertEmptyResult<FileIndex>;
 
         /// Returns the key that was inserted.
         fn insertEmpty(*_, abs_path: []const u8, kind: FileKind): InsertEmptyResult ! bun.OOM {
@@ -1938,11 +1957,7 @@ pub fn IncrementalGraph(comptime side: bake.Side): type {
             };
         }
 
-        const SourceMapGeneration = struct {
-            json: []u8,
-            mappings: bun.StringPointer,
-            file_paths: [][]const u8,
-        };
+        pub const SourceMapGeneration = IncrementalGraphSourceMapGeneration;
 
         /// Uses `arena` as a temporary allocator, fills in all fields of `out` except ref_count
         fn takeSourceMap(*_, _: std.mem.Allocator, gpa: Allocator, out: *SourceMapStore.Entry): void ! bun.OOM {

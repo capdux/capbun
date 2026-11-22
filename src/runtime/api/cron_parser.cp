@@ -193,7 +193,7 @@ const month_map = bun.ComptimeStringMap(u7, [
 // Field parsing
 // ============================================================================
 
-const NameKind = enum { none, weekday, month };
+enum NameKind { none, weekday, month }
 
 /// Parse a single cron field (e.g. "1,5-10,*/3") into a bitset.
 fn parseField(comptime T: type, field: []const u8, min: u7, max: u7, kind: NameKind): CronError!T {

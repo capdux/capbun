@@ -5,6 +5,16 @@ const std = @import("std");
 const string = []const u8;
 
 pub const bun = @import("bun");
+pub const WeakRefType = enum(u32) {
+    None = 0,
+    FetchResponse = 1,
+    PostgreSQLQueryClient = 2,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const WeakImpl = opaque {
 
 pub fn init(globalThis: *jsc.JSGlobalObject, value: jsc.JSValue, refType: WeakRefType, ctx: ?*anyopaque) *WeakImpl {
@@ -28,11 +38,6 @@ pub fn deinit(self: *WeakImpl) void {
     }
 };
 
-pub const WeakRefType = enum(u32) {
-    None = 0,
-    FetchResponse = 1,
-    PostgreSQLQueryClient = 2,
-};
 const jsc = bun.jsc;
 
 extern "c" fn Bun__WeakRef__delete(ptr: *WeakImpl) callconv(.c) void;

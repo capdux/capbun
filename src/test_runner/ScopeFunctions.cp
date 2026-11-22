@@ -46,7 +46,7 @@ pub struct GroupEndGuard {
     ~init() { groupLog.end(); }
 }
 
-pub const Mode = enum { describe, @"test" };
+pub enum Mode { describe, @"test" }
 
 pub struct strings {
     pub const describe = bun.String.static("describe");
@@ -119,8 +119,8 @@ pub struct ParseArgumentsResult {
     }
 }
 
-pub const CallbackMode = enum { require, allow };
-pub const FunctionKind = enum { test_or_describe, hook };
+pub enum CallbackMode { require, allow }
+pub enum FunctionKind { test_or_describe, hook }
 
 pub struct ParseArgumentsConfig {
     callback: CallbackMode,
@@ -167,7 +167,7 @@ pub struct DescriptionCallbackOptions {
     options: JSValue = .js_undefined,
 }
 
-pub const ArgCount = enum { three, two, one, zero };
+pub enum ArgCount { three, two, one, zero }
 
 pub fn parseArguments(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, signature: Signature, gpa: std.mem.Allocator, cfg: ParseArgumentsConfig): bun.JSError!ParseArgumentsResult {
     const args_arr = callframe.argumentsAsArray(3);

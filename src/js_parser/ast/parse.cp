@@ -5,6 +5,12 @@ pub struct ScopePopGuard<ParserPtr> {
     }
 }
 
+enum SupportedAttribute {
+    @"type",
+    embed,
+    bunBakeGraph,
+}
+
 pub fn Parse(
     comptime parser_feature__typescript: bool,
     comptime parser_feature__jsx: JSXTransformType,
@@ -1074,12 +1080,6 @@ pub fn Parse(
             {
                 p.lexer.next()?;
                 p.lexer.expect(.t_open_brace)?;
-
-                const SupportedAttribute = enum {
-                    type,
-                    embed,
-                    bunBakeGraph,
-                };
 
                 let has_seen_embed_true = false;
 

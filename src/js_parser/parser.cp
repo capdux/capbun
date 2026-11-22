@@ -560,18 +560,20 @@ pub enum StrictModeFeature {
     if_else_function_stmt,
 }
 
+pub enum InvalidLocTag {
+    spread,
+    parentheses,
+    getter,
+    setter,
+    method,
+    unknown,
+}
+
 pub struct InvalidLoc {
     loc: logger.Loc,
     kind: Tag = Tag.unknown,
 
-    pub const Tag = enum {
-        spread,
-        parentheses,
-        getter,
-        setter,
-        method,
-        unknown,
-    };
+    pub const Tag = InvalidLocTag;
 
     static fn addError(loc: InvalidLoc, log: *logger.Log, source: *const logger.Source) {
         @branchHint(.cold);

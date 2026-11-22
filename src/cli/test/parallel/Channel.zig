@@ -64,11 +64,82 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 
 pub const Frame = @import("./Frame.zig");
 pub const bun = @import("bun");
+pub const ChannelPosixBackend = struct {
+    socket: ChannelSocket = .detached,
+};
+
+pub const ChannelWindowsBackend = struct {
+    pipe: ?*uv.Pipe = null,
+    read_chunk: [16 * 1024]u8 = std.mem.zeroes([16 * 1024]u8),
+    inflight: std.ArrayListUnmanaged(u8) = .empty,
+    write_req: uv.uv_write_t = std.mem.zeroes(uv.uv_write_t),
+    write_buf: uv.uv_buf_t = uv.uv_buf_t.init(""),
+};
+
+pub fn ChannelPosixHandlers(comptime Self: type) type {
+    return struct {
+
+pub fn onData(ch: Ext, _: *uws.us_socket_t, data: []const u8) void {
+                _ = ch.*.ingest(data);
+        }
+
+pub fn onWritable(ch: Ext, _: *uws.us_socket_t) void {
+                _ = ch.*.flush();
+        }
+
+pub fn onClose(ch: Ext, _: *uws.us_socket_t, _: i32, _: ?*anyopaque) void {
+                ch.*.backend.socket = .detached;
+                _ = ch.*.markDone();
+        }
+
+pub fn onEnd(_: Ext, s: *uws.us_socket_t) void {
+                _ = s.close(.normal);
+        }
+        const SelfPtr = *Self;
+        pub const Ext = *SelfPtr;
+    };
+}
+
+pub fn ChannelWindowsHandlers(comptime Self: type) type {
+    return struct {
+
+pub fn onAlloc(ch: *Self, _: usize) []u8 {
+                return ch.backend.read_chunk[0..];
+        }
+
+pub fn onRead(ch: *Self, data: []const u8) void {
+                _ = ch.ingest(data);
+        }
+
+pub fn onError(ch: *Self, _: bun.sys.E) void {
+                if (ch.backend.pipe) |p| {
+                    _ = &p;
+                    ch.backend.pipe = null;
+                    _ = p.closeAndDestroy();
+                }
+                _ = ch.markDone();
+        }
+
+pub fn onWrite(ch: *Self, status: uv.ReturnCode) void {
+                _ = ch.backend.inflight.clearRetainingCapacity();
+                if (ch.done) {
+                    return;
+                }
+                if ((status.toError(.write) != null)) {
+                    _ = ch.markDone();
+                    return;
+                }
+                _ = ch.submitWindowsWrite();
+        }
+    };
+}
+
 const Environment = bun.Environment;
 const jsc = bun.jsc;
 const uws = bun.uws;
 const uv = (if (Environment.isWindows) bun.windows.libuv else struct {
 });
+const ChannelSocket = (if (Environment.isWindows) void else uws.NewSocketHandler(false));
 
 pub fn Channel(comptime Owner: type, comptime owner_field: []const u8) type {
         return struct {
@@ -292,72 +363,10 @@ pub fn markDone(self: *@This()) void {
     }
     const Self = @This();
     const Backend = (if (Environment.isWindows) WindowsBackend else PosixBackend);
-    pub const Socket = (if (Environment.isWindows) void else uws.NewSocketHandler(false));
-    const PosixBackend = struct {
-        socket: Socket = .detached,
-    };
-    const WindowsBackend = struct {
-                pipe: ?*uv.Pipe = null,
-                /// Read scratch — libuv asks us to allocate before each read.
-                read_chunk: [16 * 1024]u8 = [_]u8{0} ** (16 * 1024),
-                /// Payload owned by the in-flight uv_write; must stay stable until
-                /// the callback. New writes go to `out` until this completes, then
-                /// the buffers swap.
-                inflight: std.ArrayListUnmanaged(u8) = .empty,
-                write_req: uv.uv_write_t = std.mem.zeroes(uv.uv_write_t),
-                write_buf: uv.uv_buf_t = uv.uv_buf_t.init(""),
-            };
-    const PosixHandlers = struct {
-    
-    pub fn onData(ch: Ext, _: *uws.us_socket_t, data: []const u8) void {
-                _ = ch.*.ingest(data);
-        }
-    
-    pub fn onWritable(ch: Ext, _: *uws.us_socket_t) void {
-                _ = ch.*.flush();
-        }
-    
-    pub fn onClose(ch: Ext, _: *uws.us_socket_t, _: i32, _: ?*anyopaque) void {
-                ch.*.backend.socket = .detached;
-                _ = ch.*.markDone();
-        }
-    
-    pub fn onEnd(_: Ext, s: *uws.us_socket_t) void {
-                _ = s.close(.normal);
-        }
-        const SelfPtr = *Self;
-        pub const Ext = *SelfPtr;
-    };
-    const WindowsHandlers = struct {
-    
-    pub fn onAlloc(ch: *Self, _: usize) []u8 {
-                return ch.backend.read_chunk[0..];
-        }
-    
-    pub fn onRead(ch: *Self, data: []const u8) void {
-                _ = ch.ingest(data);
-        }
-    
-    pub fn onError(ch: *Self, _: bun.sys.E) void {
-                if (ch.backend.pipe) |p| {
-                    _ = &p;
-                    ch.backend.pipe = null;
-                    _ = p.closeAndDestroy();
-                }
-                _ = ch.markDone();
-        }
-    
-    pub fn onWrite(ch: *Self, status: uv.ReturnCode) void {
-                _ = ch.backend.inflight.clearRetainingCapacity();
-                if (ch.done) {
-                    return;
-                }
-                if (status.toError(.write)) |_| {
-                    _ = ch.markDone();
-                    return;
-                }
-                _ = ch.submitWindowsWrite();
-        }
-    };
+    pub const Socket = ChannelSocket;
+    const PosixBackend = ChannelPosixBackend;
+    const WindowsBackend = ChannelWindowsBackend;
+    const PosixHandlers = ChannelPosixHandlers(Self);
+    const WindowsHandlers = ChannelWindowsHandlers(Self);
 };
 }

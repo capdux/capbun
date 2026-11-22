@@ -121,7 +121,7 @@ pub union(enum) CopyOnWriteStr {
 
 pub const Opts = ParserOptions;
 pub struct NthResult { a: i32, b: i32 }
-pub const SeenStatus = enum { dont_care, looking_for_them, seen };
+pub enum SeenStatus { dont_care, looking_for_them, seen }
 pub const ColorError = error{ parse };
 @packed(u6) pub struct _CssRefTag {
     class: bool = false,

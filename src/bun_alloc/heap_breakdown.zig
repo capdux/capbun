@@ -4,105 +4,126 @@
 const std = @import("std");
 const string = []const u8;
 
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 pub const bun = @import("bun");
+pub const Zone = opaque {
+
+pub fn init(comptime name: [:0]const u8) *Zone {
+            const zone = malloc_create_zone(0, 0);
+            _ = malloc_set_zone_name(zone, name.ptr);
+            return zone;
+    }
+
+pub fn alignedAlloc(zone: *Zone, len: usize, alignment: std.mem.Alignment) ?[*]u8 {
+            const eff_alignment = @max(alignment.toByteUnits(), @sizeOf(usize));
+            const ptr = malloc_zone_memalign(zone, eff_alignment, len);
+            return (blk: {
+            break :blk @as(?[*]u8, @ptrCast(ptr));
+
+});
+    }
+
+pub fn alignedAllocSize(ptr: [*]u8) usize {
+            return std.c.malloc_size(ptr);
+    }
+
+pub fn rawAlloc(zone: *anyopaque, len: usize, alignment: std.mem.Alignment, _: usize) ?[*]u8 {
+            return alignedAlloc((blk: {
+            break :blk @ptrCast(zone);
+
+}), len, alignment);
+    }
+
+pub fn resize(_: *anyopaque, buf: []u8, _: std.mem.Alignment, new_len: usize, _: usize) bool {
+            if ((new_len <= buf.len)) {
+                return true;
+            }
+            const full_len = alignedAllocSize(buf.ptr);
+            if ((new_len <= full_len)) {
+                return true;
+            }
+            return false;
+    }
+
+pub fn rawFree(zone: *anyopaque, buf: []u8, _: std.mem.Alignment, _: usize) void {
+            {
+                _ = malloc_zone_free(@ptrCast(zone), @ptrCast(buf.ptr));
+            }
+    }
+
+pub fn allocator(zone: *Zone) std.mem.Allocator {
+            return std.mem.Allocator{ .vtable = (&Zone.vtable), .ptr = zone };
+    }
+
+pub inline fn create(zone: *Zone, comptime T: type, data: T) *T {
+            return bun.handleOom(zone.tryCreate(T, data));
+    }
+
+pub inline fn tryCreate(zone: *Zone, comptime T: type, data: T) !*T {
+            const alignment: std.mem.Alignment = .fromByteUnits(@alignOf(T));
+            {
+                const ptr: *T = @ptrCast(@alignCast(((rawAlloc(zone, @sizeOf(T), alignment, @returnAddress())) orelse { return error.OutOfMemory; })));
+                ptr.* = data;
+                return ptr;
+            }
+    }
+
+pub inline fn destroy(zone: *Zone, comptime T: type, ptr: *T) void {
+            {
+                _ = malloc_zone_free(zone, @ptrCast(ptr));
+            }
+    }
+
+pub fn isInstance(allocator_: std.mem.Allocator) bool {
+            return (allocator_.vtable == (&Zone.vtable));
+    }
+
+pub extern "c" fn malloc_default_zone() callconv(.c) *Zone;
+
+pub extern "c" fn malloc_create_zone(start_size: vm_size_t, flags: c_uint) callconv(.c) *Zone;
+
+pub extern "c" fn malloc_destroy_zone(zone: *Zone) callconv(.c) void;
+
+pub extern "c" fn malloc_zone_malloc(zone: *Zone, size: usize) callconv(.c) ?*anyopaque;
+
+pub extern "c" fn malloc_zone_calloc(zone: *Zone, num_items: usize, size: usize) callconv(.c) ?*anyopaque;
+
+pub extern "c" fn malloc_zone_valloc(zone: *Zone, size: usize) callconv(.c) ?*anyopaque;
+
+pub extern "c" fn malloc_zone_free(zone: *Zone, ptr: ?*anyopaque) callconv(.c) void;
+
+pub extern "c" fn malloc_zone_realloc(zone: *Zone, ptr: ?*anyopaque, size: usize) callconv(.c) ?*anyopaque;
+
+pub extern "c" fn malloc_zone_from_ptr(ptr: ?*anyopaque) callconv(.c) *Zone;
+
+pub extern "c" fn malloc_zone_memalign(zone: *Zone, alignment: usize, size: usize) callconv(.c) ?*anyopaque;
+
+pub extern "c" fn malloc_zone_batch_malloc(zone: *Zone, size: usize, results: ?[*]*anyopaque, num_requested: c_uint) callconv(.c) c_uint;
+
+pub extern "c" fn malloc_zone_batch_free(zone: *Zone, to_be_freed: ?[*]*anyopaque, num: c_uint) callconv(.c) void;
+
+pub extern "c" fn malloc_default_purgeable_zone() callconv(.c) *Zone;
+
+pub extern "c" fn malloc_make_purgeable(ptr: ?*anyopaque) callconv(.c) void;
+
+pub extern "c" fn malloc_make_nonpurgeable(ptr: ?*anyopaque) callconv(.c) c_int;
+
+pub extern "c" fn malloc_zone_register(zone: *Zone) callconv(.c) void;
+
+pub extern "c" fn malloc_zone_unregister(zone: *Zone) callconv(.c) void;
+
+pub extern "c" fn malloc_set_zone_name(zone: *Zone, name: ?[*:0]const u8) callconv(.c) void;
+
+pub extern "c" fn malloc_get_zone_name(zone: *Zone) callconv(.c) ?[*:0]const u8;
+
+pub extern "c" fn malloc_zone_pressure_relief(zone: *Zone, goal: usize) callconv(.c) usize;
+    const vtable = std.mem.Allocator.VTable{ .alloc = (&rawAlloc), .resize = (&resize), .remap = (&std.mem.Allocator.noRemap), .free = (&rawFree) };
+};
+
 const Environment = bun.Environment;
 const Allocator = std.mem.Allocator;
 const vm_size_t = usize;
 pub const enabled = ((Environment.allow_assert and Environment.isMac) and (!Environment.enable_asan));
-pub const Zone = opaque {
-    pub fn init(comptime name: [:0]const u8) *Zone {
-        const zone = malloc_create_zone(0, 0);
-        malloc_set_zone_name(zone, name.ptr);
-        return zone;
-    }
-
-    fn alignedAlloc(zone: *Zone, len: usize, alignment: std.mem.Alignment) ?[*]u8 {
-        const eff_alignment = @max(alignment.toByteUnits(), @sizeOf(usize));
-        const ptr = malloc_zone_memalign(zone, eff_alignment, len);
-        return @as(?[*]u8, @ptrCast(ptr));
-    }
-
-    fn alignedAllocSize(ptr: [*]u8) usize {
-        return std.c.malloc_size(ptr);
-    }
-
-    fn rawAlloc(zone: *anyopaque, len: usize, alignment: std.mem.Alignment, _: usize) ?[*]u8 {
-        return alignedAlloc(@ptrCast(zone), len, alignment);
-    }
-
-    fn resize(_: *anyopaque, buf: []u8, _: std.mem.Alignment, new_len: usize, _: usize) bool {
-        if (new_len <= buf.len) {
-            return true;
-        }
-
-        const full_len = alignedAllocSize(buf.ptr);
-        if (new_len <= full_len) {
-            return true;
-        }
-
-        return false;
-    }
-
-    fn rawFree(zone: *anyopaque, buf: []u8, _: std.mem.Alignment, _: usize) void {
-        malloc_zone_free(@ptrCast(zone), @ptrCast(buf.ptr));
-    }
-
-    pub const vtable = std.mem.Allocator.VTable{
-        .alloc = &rawAlloc,
-        .resize = &resize,
-        .remap = &std.mem.Allocator.noRemap,
-        .free = &rawFree,
-    };
-
-    pub fn allocator(zone: *Zone) std.mem.Allocator {
-        return std.mem.Allocator{
-            .vtable = &Zone.vtable,
-            .ptr = zone,
-        };
-    }
-
-    pub inline fn create(zone: *Zone, comptime T: type, data: T) *T {
-        return bun.handleOom(zone.tryCreate(T, data));
-    }
-
-    pub inline fn tryCreate(zone: *Zone, comptime T: type, data: T) !*T {
-        const alignment: std.mem.Alignment = .fromByteUnits(@alignOf(T));
-        const ptr: *T = @ptrCast(@alignCast(
-            rawAlloc(zone, @sizeOf(T), alignment, @returnAddress()) orelse return error.OutOfMemory,
-        ));
-        ptr.* = data;
-        return ptr;
-    }
-
-    pub inline fn destroy(zone: *Zone, comptime T: type, ptr: *T) void {
-        malloc_zone_free(zone, @ptrCast(ptr));
-    }
-
-    pub fn isInstance(allocator_: std.mem.Allocator) bool {
-        return allocator_.vtable == &Zone.vtable;
-    }
-
-    pub extern fn malloc_default_zone() *Zone;
-    pub extern fn malloc_create_zone(start_size: vm_size_t, flags: c_uint) *Zone;
-    pub extern fn malloc_destroy_zone(zone: *Zone) void;
-    pub extern fn malloc_zone_malloc(zone: *Zone, size: usize) ?*anyopaque;
-    pub extern fn malloc_zone_calloc(zone: *Zone, num_items: usize, size: usize) ?*anyopaque;
-    pub extern fn malloc_zone_valloc(zone: *Zone, size: usize) ?*anyopaque;
-    pub extern fn malloc_zone_free(zone: *Zone, ptr: ?*anyopaque) void;
-    pub extern fn malloc_zone_realloc(zone: *Zone, ptr: ?*anyopaque, size: usize) ?*anyopaque;
-    pub extern fn malloc_zone_from_ptr(ptr: ?*anyopaque) *Zone;
-    pub extern fn malloc_zone_memalign(zone: *Zone, alignment: usize, size: usize) ?*anyopaque;
-    pub extern fn malloc_zone_batch_malloc(zone: *Zone, size: usize, results: [*]?*anyopaque, num_requested: c_uint) c_uint;
-    pub extern fn malloc_zone_batch_free(zone: *Zone, to_be_freed: [*]?*anyopaque, num: c_uint) void;
-    pub extern fn malloc_default_purgeable_zone() *Zone;
-    pub extern fn malloc_make_purgeable(ptr: ?*anyopaque) void;
-    pub extern fn malloc_make_nonpurgeable(ptr: ?*anyopaque) c_int;
-    pub extern fn malloc_zone_register(zone: *Zone) void;
-    pub extern fn malloc_zone_unregister(zone: *Zone) void;
-    pub extern fn malloc_set_zone_name(zone: *Zone, name: ?[*:0]const u8) void;
-    pub extern fn malloc_get_zone_name(zone: *Zone) ?[*:0]const u8;
-    pub extern fn malloc_zone_pressure_relief(zone: *Zone, goal: usize) usize;
-};
 
 pub fn heapLabel(comptime T: type) [:0]const u8 {
         if (comptime bun.meta.hasDecl(T, "heap_label")) {

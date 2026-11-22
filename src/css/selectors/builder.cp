@@ -29,6 +29,13 @@ pub struct DeinitPtrGuard<T> {
     }
 }
 
+pub fn SelectorBuildResult(comptime T: type): type {
+    return struct {
+        specificity_and_flags: SpecificityAndFlags,
+        components: ArrayList(T),
+    };
+}
+
 const parser = css.selector.parser;
 
 const ValidSelectorImpl = parser.ValidSelectorImpl;
@@ -71,10 +78,7 @@ pub fn SelectorBuilder(comptime Impl: type): type {
 
         const This = @This();
 
-        const BuildResult = struct {
-            specificity_and_flags: SpecificityAndFlags,
-            components: ArrayList(GenericComponent(Impl)),
-        };
+        pub const BuildResult = SelectorBuildResult(GenericComponent(Impl));
 
         inline fn init(allocator: Allocator): This {
             return This{

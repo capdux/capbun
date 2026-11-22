@@ -6,11 +6,13 @@
 /// ************************************
 import bun from "bun";
 const jsc = bun.jsc;
-const generic = opaque {
-    pub fn value(ptr: *const generic): jsc.JSValue {
-        return @enumFromInt(@as(jsc.JSValue.backing_int, @bitCast(@intFromPtr(ptr))));
+@opaque struct generic {
+    fn value(ptr: *const generic): jsc.JSValue {
+        unsafe {
+            return @enumFromInt(@as(jsc.JSValue.backing_int, @bitCast(@intFromPtr(ptr))));
+        }
     }
-};
+}
 pub const Private = anyopaque;
 pub const struct_OpaqueJSContextGroup = generic;
 pub type JSContextGroupRef = (*const struct_OpaqueJSContextGroup)?;
@@ -24,7 +26,7 @@ pub const OpaqueJSValue = generic;
 pub type JSValueRef = (*OpaqueJSValue)?;
 pub type JSObjectRef = (*OpaqueJSValue)?;
 
-pub const JSType = enum(c_uint) {
+pub enum JSType: c_uint {
     kJSTypeUndefined,
     kJSTypeNull,
     kJSTypeBoolean,
@@ -33,7 +35,7 @@ pub const JSType = enum(c_uint) {
     kJSTypeObject,
     kJSTypeSymbol,
     kJSTypeBigInt,
-};
+}
 pub const kJSTypeUndefined = @intFromEnum(JSType.kJSTypeUndefined);
 pub const kJSTypeNull = @intFromEnum(JSType.kJSTypeNull);
 pub const kJSTypeBoolean = @intFromEnum(JSType.kJSTypeBoolean);
@@ -43,7 +45,7 @@ pub const kJSTypeObject = @intFromEnum(JSType.kJSTypeObject);
 pub const kJSTypeSymbol = @intFromEnum(JSType.kJSTypeSymbol);
 pub const kJSTypeBigInt = @intFromEnum(JSType.kJSTypeBigInt);
 /// From JSValueRef.h:81
-pub const JSTypedArrayType = enum(c_uint) {
+pub enum JSTypedArrayType: c_uint {
     kJSTypedArrayTypeInt8Array,
     kJSTypedArrayTypeInt16Array,
     kJSTypedArrayTypeInt32Array,
@@ -58,7 +60,7 @@ pub const JSTypedArrayType = enum(c_uint) {
     kJSTypedArrayTypeBigInt64Array,
     kJSTypedArrayTypeBigUint64Array,
     _,
-};
+}
 pub const kJSTypedArrayTypeInt8Array = @intFromEnum(JSTypedArrayType.kJSTypedArrayTypeInt8Array);
 pub const kJSTypedArrayTypeInt16Array = @intFromEnum(JSTypedArrayType.kJSTypedArrayTypeInt16Array);
 pub const kJSTypedArrayTypeInt32Array = @intFromEnum(JSTypedArrayType.kJSTypedArrayTypeInt32Array);
@@ -71,22 +73,22 @@ pub const kJSTypedArrayTypeFloat64Array = @intFromEnum(JSTypedArrayType.kJSTyped
 pub const kJSTypedArrayTypeArrayBuffer = @intFromEnum(JSTypedArrayType.kJSTypedArrayTypeArrayBuffer);
 pub const kJSTypedArrayTypeNone = @intFromEnum(JSTypedArrayType.kJSTypedArrayTypeNone);
 
-pub const JSPropertyAttributes = enum(c_uint) {
+pub enum JSPropertyAttributes: c_uint {
     kJSPropertyAttributeNone = 0,
     kJSPropertyAttributeReadOnly = 2,
     kJSPropertyAttributeDontEnum = 4,
     kJSPropertyAttributeDontDelete = 8,
     _,
-};
+}
 pub const kJSPropertyAttributeNone = @intFromEnum(JSPropertyAttributes.kJSPropertyAttributeNone);
 pub const kJSPropertyAttributeReadOnly = @intFromEnum(JSPropertyAttributes.kJSPropertyAttributeReadOnly);
 pub const kJSPropertyAttributeDontEnum = @intFromEnum(JSPropertyAttributes.kJSPropertyAttributeDontEnum);
 pub const kJSPropertyAttributeDontDelete = @intFromEnum(JSPropertyAttributes.kJSPropertyAttributeDontDelete);
-pub const JSClassAttributes = enum(c_uint) {
+pub enum JSClassAttributes: c_uint {
     kJSClassAttributeNone = 0,
     kJSClassAttributeNoAutomaticPrototype = 2,
     _,
-};
+}
 
 pub const kJSClassAttributeNone = @intFromEnum(JSClassAttributes.kJSClassAttributeNone);
 pub const kJSClassAttributeNoAutomaticPrototype = @intFromEnum(JSClassAttributes.kJSClassAttributeNoAutomaticPrototype);

@@ -174,15 +174,8 @@ export @c struct PosixLoop {
     }
 
     fn nextTick(*_, comptime UserType: type, user_data: UserType, comptime deferCallback: auto) {
-        const Handler = struct {
-            pub fn callback(data: *!) callconv(.c) void {
-                unsafe {
-                    deferCallback(@as(UserType, @ptrCast(@alignCast(data))));
-                }
-            }
-        };
         unsafe {
-            uws_loop_defer(_ as *Loop, user_data as *!, Handler.callback);
+            uws_loop_defer(_ as *Loop, user_data as *!, LoopDeferHandler(UserType, deferCallback).callback);
         }
     }
 
@@ -201,6 +194,16 @@ export @c struct PosixLoop {
     fn deinit(*_) {
         us_loop_free(_ as *Loop);
     }
+}
+
+fn LoopDeferHandler(comptime UserType: type, comptime deferCallback: auto): type {
+    return struct {
+        static fn callback(data: *!) callconv(.c) {
+            unsafe {
+                deferCallback(@as(UserType, @ptrCast(@alignCast(data))));
+            }
+        }
+    };
 }
 
 export @c struct WindowsLoop {
@@ -289,15 +292,8 @@ export @c struct WindowsLoop {
     }
 
     fn nextTick(*_, comptime UserType: type, user_data: UserType, comptime deferCallback: auto) {
-        const Handler = struct {
-            pub fn callback(data: *!) callconv(.c) void {
-                unsafe {
-                    deferCallback(@as(UserType, @ptrCast(@alignCast(data))));
-                }
-            }
-        };
         unsafe {
-            uws_loop_defer(_ as *Loop, user_data as *!, Handler.callback);
+            uws_loop_defer(_ as *Loop, user_data as *!, LoopDeferHandler(UserType, deferCallback).callback);
         }
     }
 

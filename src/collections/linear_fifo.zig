@@ -81,10 +81,7 @@ pub const LinearFifoBufferType = union(enum) {
 pub fn BufferType(comptime buffer_type: @This(), comptime T: type) type {
             switch (buffer_type) {
 .Static => |n| {
-const S = struct {
-    b: [n]T,
-};
-            return @FieldType(S, "b");
+return [n]T;
 },
 .Slice => {
 return @FieldType(struct {

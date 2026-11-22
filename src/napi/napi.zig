@@ -100,6 +100,23 @@ pub fn create(env: *NapiEnv, val: jsc.JSValue) napi_value {
     }
 };
 
+pub const napi_valuetype = enum(c_uint) {
+    @"undefined" = 0,
+    @"null" = 1,
+    boolean = 2,
+    number = 3,
+    string = 4,
+    symbol = 5,
+    object = 6,
+    function = 7,
+    external = 8,
+    bigint = 9,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const napi_typedarray_type = enum(c_uint) {
     int8_array = 0,
     uint8_array = 1,
@@ -153,6 +170,77 @@ pub fn toJSType(self: napi_typedarray_type) jsc.JSValue.JSType {
 pub fn toC(self: napi_typedarray_type) jsc.C.JSTypedArrayType {
             return self.toJSType().toC();
     }
+};
+
+pub const NapiStatus = enum(c_uint) {
+    ok = 0,
+    invalid_arg = 1,
+    object_expected = 2,
+    string_expected = 3,
+    name_expected = 4,
+    function_expected = 5,
+    number_expected = 6,
+    boolean_expected = 7,
+    array_expected = 8,
+    generic_failure = 9,
+    pending_exception = 10,
+    cancelled = 11,
+    escape_called_twice = 12,
+    handle_scope_mismatch = 13,
+    callback_scope_mismatch = 14,
+    queue_full = 15,
+    closing = 16,
+    bigint_expected = 17,
+    date_expected = 18,
+    arraybuffer_expected = 19,
+    detachable_arraybuffer_expected = 20,
+    would_deadlock = 21,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const NapiAsyncWorkStatus = enum(u32) {
+    pending = 0,
+    started = 1,
+    completed = 2,
+    cancelled = 3,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const napi_threadsafe_function_release_mode = enum(c_uint) {
+    release = 0,
+    abort = 1,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const TSFNClosingState = enum(u8) {
+    not_closing,
+    closing,
+    closed,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const TSFNDispatchState = enum(u8) {
+    idle,
+    running,
+    pending,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+    
+    pub const Atomic = std.atomic.Value(TSFNDispatchState);
 };
 
 pub fn DerefGuard(comptime T: type) type {
@@ -416,12 +504,7 @@ pub fn runFromJS(self: *napi_async_work, vm: *jsc.VirtualMachine, global: *jsc.J
                 }
             }
     }
-    pub const Status = enum(u32) {
-            pending = 0,
-            started = 1,
-            completed = 2,
-            cancelled = 3,
-        };
+    pub const Status = NapiAsyncWorkStatus;
 };
 
 pub const napi_node_version = extern struct {
@@ -778,18 +861,8 @@ pub fn release(self: *ThreadSafeFunction, mode: napi_threadsafe_function_release
     pub const Callback = ThreadSafeFunctionCallback;
     pub const Queue = ThreadSafeFunctionQueue;
     pub const new = bun.TrivialNew(ThreadSafeFunction);
-    const ClosingState = enum(u8) {
-            not_closing,
-            closing,
-            closed,
-        };
-    pub const DispatchState = enum(u8) {
-            idle,
-            running,
-            pending,
-    
-            pub const Atomic = std.atomic.Value(DispatchState);
-        };
+    const ClosingState = TSFNClosingState;
+    pub const DispatchState = TSFNDispatchState;
 };
 
 pub const NapiFinalizerTask = struct {
@@ -861,51 +934,11 @@ pub const napi_callback_info = *jsc.CallFrame;
 pub const napi_deferred = *jsc.JSPromise.Strong;
 const char16_t = u16;
 pub const napi_property_attributes = c_uint;
-pub const napi_valuetype = enum(c_uint) {
-    undefined = 0,
-    null = 1,
-    boolean = 2,
-    number = 3,
-    string = 4,
-    symbol = 5,
-    object = 6,
-    function = 7,
-    external = 8,
-    bigint = 9,
-};
-pub const NapiStatus = enum(c_uint) {
-    ok = 0,
-    invalid_arg = 1,
-    object_expected = 2,
-    string_expected = 3,
-    name_expected = 4,
-    function_expected = 5,
-    number_expected = 6,
-    boolean_expected = 7,
-    array_expected = 8,
-    generic_failure = 9,
-    pending_exception = 10,
-    cancelled = 11,
-    escape_called_twice = 12,
-    handle_scope_mismatch = 13,
-    callback_scope_mismatch = 14,
-    queue_full = 15,
-    closing = 16,
-    bigint_expected = 17,
-    date_expected = 18,
-    arraybuffer_expected = 19,
-    detachable_arraybuffer_expected = 20,
-    would_deadlock = 21,
-};
 pub const napi_status = c_uint;
 const napi_key_collection_mode = c_uint;
 const napi_key_filter = c_uint;
 const napi_key_conversion = c_uint;
 pub const napi_threadsafe_function = *ThreadSafeFunction;
-pub const napi_threadsafe_function_release_mode = enum(c_uint) {
-    release = 0,
-    abort = 1,
-};
 pub const napi_tsfn_nonblocking = 0;
 pub const napi_tsfn_blocking = 1;
 pub const napi_threadsafe_function_call_mode = c_uint;

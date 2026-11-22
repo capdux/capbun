@@ -101,6 +101,43 @@ pub struct AdditionalOnAbortCallback {
     }
 }
 
+struct RequestStreamPair<RC> {
+    this: *RC!,
+    stream: jsc.WebCore.ReadableStream,
+}
+
+struct RequestHeaderResponseSizePair<RC> {
+    this: *RC!,
+    size: usize,
+}
+
+struct RequestHeaderResponsePair<RC> {
+    this: *RC!,
+    response: *jsc.WebCore.Response!,
+}
+
+struct RequestPathnameFormatter<RC> {
+    ctx: *RC!,
+
+    fn format(writer: *std.Io.Writer!): void! {
+        let rc = _.ctx;
+
+        if (!rc.pathname.isEmpty()) {
+            rc.pathname.format(writer)?;
+            return;
+        }
+
+        if (!rc.flags.has_abort_handler) {
+            if (req := rc.req) {
+                writer.writeAll(req.url())?;
+                return;
+            }
+        }
+
+        writer.writeAll("/")?;
+    }
+}
+
 pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, comptime ThisServer: type, comptime http3: bool): type {
     return struct {
         const RequestContext = @This();
@@ -1103,7 +1140,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             this.doRenderBlob();
         }
 
-        const StreamPair = struct { this: *RequestContext, stream: jsc.WebCore.ReadableStream };
+        const StreamPair = RequestStreamPair(RequestContext);
 
         static fn handleFirstStreamWrite(this: *@This()) void {
             if (!this.flags.has_written_status) {
@@ -1411,7 +1448,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             // resp == null or aborted or server.stop(true)
             return this.resp == null or this.flags.aborted or this.server == null or this.server.?.flags.terminated;
         }
-        const HeaderResponseSizePair = struct { this: *RequestContext, size: usize };
+        const HeaderResponseSizePair = RequestHeaderResponseSizePair(RequestContext);
         static fn doRenderHeadResponseAfterS3SizeResolved(pair: *HeaderResponseSizePair) void {
             let this = pair.this;
             this.renderMetadata();
@@ -1432,7 +1469,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 resp.runCorkedWithType(&pair, doRenderHeadResponseAfterS3SizeResolved);
             }
         }
-        const HeaderResponsePair = struct { this: *RequestContext, response: *jsc.WebCore.Response };
+        const HeaderResponsePair = RequestHeaderResponsePair(RequestContext);
 
         static fn doRenderHeadResponse(pair: *HeaderResponsePair) void {
             let this = pair.this;
@@ -2076,27 +2113,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             runErrorHandlerWithStatusCode(this, value, 500);
         }
 
-        const PathnameFormatter = struct {
-            ctx: *RequestContext,
-
-            static fn format(formatter: @This(), writer: *std.Io.Writer) !void {
-                let this = formatter.ctx;
-
-                if (!this.pathname.isEmpty()) {
-                    try this.pathname.format(writer);
-                    return;
-                }
-
-                if (!this.flags.has_abort_handler) {
-                    if (this.req) |req| {
-                        try writer.writeAll(req.url());
-                        return;
-                    }
-                }
-
-                try writer.writeAll("/");
-            }
-        };
+        const PathnameFormatter = RequestPathnameFormatter(RequestContext);
 
         static fn ensurePathname(this: *RequestContext) PathnameFormatter {
             return .{ .ctx = this };

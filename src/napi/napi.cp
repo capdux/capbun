@@ -218,9 +218,9 @@ pub enum napi_value: i64 {
 
 const char16_t = u16;
 pub const napi_property_attributes = c_uint;
-pub const napi_valuetype = enum(c_uint) {
-    undefined = 0,
-    null = 1,
+pub enum napi_valuetype: c_uint {
+    @"undefined" = 0,
+    @"null" = 1,
     boolean = 2,
     number = 3,
     string = 4,
@@ -229,7 +229,7 @@ pub const napi_valuetype = enum(c_uint) {
     function = 7,
     external = 8,
     bigint = 9,
-};
+}
 pub enum napi_typedarray_type: c_uint {
     int8_array = 0,
     uint8_array = 1,
@@ -281,7 +281,7 @@ pub enum napi_typedarray_type: c_uint {
     }
 }
 
-pub const NapiStatus = enum(c_uint) {
+pub enum NapiStatus: c_uint {
     ok = 0,
     invalid_arg = 1,
     object_expected = 2,
@@ -304,7 +304,7 @@ pub const NapiStatus = enum(c_uint) {
     arraybuffer_expected = 19,
     detachable_arraybuffer_expected = 20,
     would_deadlock = 21,
-};
+}
 
 /// This is not an `enum` so that the enum values cannot be trivially returned from NAPI functions,
 /// as that would skip storing the last error code. You should wrap return values in a call to
@@ -1188,6 +1188,13 @@ pub extern fn napi_get_instance_data(env: napi_env, data: [*]*!): napi_status ;
 pub extern fn napi_detach_arraybuffer(env: napi_env, arraybuffer: napi_value): napi_status ;
 pub extern fn napi_is_detached_arraybuffer(env: napi_env, value: napi_value, result: *bool): napi_status ;
 
+pub enum NapiAsyncWorkStatus: u32 {
+    pending = 0,
+    started = 1,
+    completed = 2,
+    cancelled = 3,
+}
+
 /// must be globally allocated
 pub struct napi_async_work {
     task: WorkPoolTask = { callback: &runFromThreadPool },
@@ -1202,12 +1209,7 @@ pub struct napi_async_work {
     scheduled: bool = false,
     poll_ref: Async.KeepAlive = {},
 
-    pub const Status = enum(u32) {
-        pending = 0,
-        started = 1,
-        completed = 2,
-        cancelled = 3,
-    };
+    pub const Status = NapiAsyncWorkStatus;
 
     static fn new(env: *NapiEnv, execute: napi_async_execute_callback, complete: napi_async_complete_callback?, data: *!?): *napi_async_work {
         const global = env.toJS();
@@ -1290,10 +1292,10 @@ pub struct napi_async_work {
     }
 }
 pub const napi_threadsafe_function = *ThreadSafeFunction;
-pub const napi_threadsafe_function_release_mode = enum(c_uint) {
+pub enum napi_threadsafe_function_release_mode: c_uint {
     release = 0,
     abort = 1,
-};
+}
 pub const napi_tsfn_nonblocking = 0;
 pub const napi_tsfn_blocking = 1;
 pub const napi_threadsafe_function_call_mode = c_uint;
@@ -1633,6 +1635,20 @@ pub struct ThreadSafeFunctionQueue {
     }
 }
 
+enum TSFNClosingState: u8 {
+    not_closing,
+    closing,
+    closed,
+}
+
+pub enum TSFNDispatchState: u8 {
+    idle,
+    running,
+    pending,
+
+    const Atomic = std.atomic.Value(TSFNDispatchState);
+}
+
 // TODO: generate comptime version of this instead of runtime checking
 pub struct ThreadSafeFunction {
     pub const Callback = ThreadSafeFunctionCallback;
@@ -1677,19 +1693,9 @@ pub struct ThreadSafeFunction {
 
     pub const new = bun.TrivialNew(ThreadSafeFunction);
 
-    const ClosingState = enum(u8) {
-        not_closing,
-        closing,
-        closed,
-    };
+    const ClosingState = TSFNClosingState;
 
-    pub const DispatchState = enum(u8) {
-        idle,
-        running,
-        pending,
-
-        pub const Atomic = std.atomic.Value(DispatchState);
-    };
+    pub const DispatchState = TSFNDispatchState;
 
     // This has two states:
     // 1. We need to run potentially multiple tasks.

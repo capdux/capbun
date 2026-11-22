@@ -4,6 +4,8 @@
 const std = @import("std");
 const string = []const u8;
 
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 const bun = @import("bun");
 const Allocator = std.mem.Allocator;
 const css = @import("./css_parser.zig");
@@ -16,27 +18,51 @@ const generic = css.generic;
 const voidWrap = css.voidWrap;
 const TextShadow = css.css_properties.text.TextShadow;
 
+pub fn SmallListHeapData(comptime T: type) type {
+        return struct {
+    len: u32,
+    ptr: [*]T,
+
+pub fn initCapacity(allocator: Allocator, capacity: u32) @This() {
+            return .{ .len = 0, .ptr = bun.handleOom(allocator.alloc(T, capacity)).ptr };
+    }
+};
+}
+
+pub fn SmallListData(comptime T: type, comptime N: comptime_int) type {
+        return union {
+    inlined: [N]T,
+    heap: SmallListHeapData(T),
+};
+}
+
+pub inline fn smallListPrefixHelper(comptime T: type, comptime prefix: []const u8, pfs: *css.VendorPrefix, pfi: *const SmallList(T, 1), r: *bun.BabyList(SmallList(T, 1)), alloc: Allocator) void {
+        if (bun.bits.contains(css.VendorPrefix, pfs.*, .fromName(prefix))) {
+            var images = SmallList(T, 1).initCapacity(alloc, pfi.len());
+            _ = &images;
+            _ = images.setLen(pfi.len());
+            const in_slice = pfi.slice();
+            var idx: usize = 0;
+            _ = &idx;
+            for (cp_mut_slice(&images.slice_mut())) |*out| {
+                _ = &out;
+                const item = (&in_slice[@as(usize, @intCast(idx))]);
+                const image = item.getImage().getPrefixed(alloc, css.VendorPrefix.fromName(prefix));
+                (out.*) = item.withImage(alloc, image);
+                idx = (idx + 1);
+            }
+            _ = bun.handleOom(r.append(alloc, images));
+        }
+}
+
 pub fn SmallList(comptime T: type, comptime N: comptime_int) type {
         return struct {
         capacity: u32 = 0,
         data: Data = .{ .inlined = undefined },
 
-        const Data = union {
-            inlined: [N]T,
-            heap: HeapData,
-        };
+        const HeapData = SmallListHeapData(T);
 
-        const HeapData = struct {
-            len: u32,
-            ptr: [*]T,
-
-            pub fn initCapacity(allocator: Allocator, capacity: u32) HeapData {
-                return .{
-                    .len = 0,
-                    .ptr = bun.handleOom(allocator.alloc(T, capacity)).ptr,
-                };
-            }
-        };
+        const Data = SmallListData(T, N);
 
         const This = @This();
 
@@ -251,23 +277,9 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int) type {
                     }
                 }
 
-                const prefix = struct {
-                    pub inline fn helper(comptime prefix: []const u8, pfs: *css.VendorPrefix, pfi: *const SmallList(T, 1), r: *bun.BabyList(This), alloc: Allocator) void {
-                        if (bun.bits.contains(css.VendorPrefix, pfs.*, .fromName(prefix))) {
-                            var images = SmallList(T, 1).initCapacity(alloc, pfi.len());
-                            images.setLen(pfi.len());
-                            for (images.slice_mut(), pfi.slice()) |*out, *in| {
-                                const image = in.getImage().getPrefixed(alloc, css.VendorPrefix.fromName(prefix));
-                                out.* = in.withImage(alloc, image);
-                            }
-                            bun.handleOom(r.append(alloc, images));
-                        }
-                    }
-                }.helper;
-
-                prefix("webkit", &prefixes, prefix_images, &res, allocator);
-                prefix("moz", &prefixes, prefix_images, &res, allocator);
-                prefix("o", &prefixes, prefix_images, &res, allocator);
+                smallListPrefixHelper(T, "webkit", &prefixes, prefix_images, &res, allocator);
+                smallListPrefixHelper(T, "moz", &prefixes, prefix_images, &res, allocator);
+                smallListPrefixHelper(T, "o", &prefixes, prefix_images, &res, allocator);
 
                 if (prefixes.none) {
                     if (rgb) |r| {

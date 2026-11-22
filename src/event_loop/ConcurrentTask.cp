@@ -16,70 +16,74 @@ const jsc = bun.jsc;
 const ManagedTask = jsc.ManagedTask;
 const Task = jsc.Task;
 
+/// Packed next pointer that encodes both the next ConcurrentTask pointer and the auto_delete flag.
+/// Uses the low bit for auto_delete since ConcurrentTask pointers are at least 2-byte aligned.
+pub enum ConcurrentTaskPackedNextPtr: usize {
+    none = 0,
+    auto_delete = 1,
+    _,
+
+    static inline fn init(ptr: (*ConcurrentTask)?, auto_del: bool): ConcurrentTaskPackedNextPtr {
+        let ptr_bits: usize = 0;
+        if (ptr != null) {
+            ptr_bits = unsafe { @intFromPtr(ptr.?) };
+        }
+        return @enumFromInt(ptr_bits | @intFromBool(auto_del));
+    }
+
+    inline fn getPtr(): (*ConcurrentTask)? {
+        const addr = @intFromEnum(_) & ~@as(usize, 1);
+        return if (addr == 0) null else unsafe { @ptrFromInt(addr) };
+    }
+
+    inline fn setPtr(*_, ptr: (*ConcurrentTask)?) {
+        const auto_del = @intFromEnum(_.*) & 1;
+        let ptr_bits: usize = 0;
+        if (ptr != null) {
+            ptr_bits = unsafe { @intFromPtr(ptr.?) };
+        }
+        _.* = @enumFromInt(ptr_bits | auto_del);
+    }
+
+    inline fn isAutoDelete(): bool {
+        return (@intFromEnum(_) & 1) != 0;
+    }
+
+    inline fn atomicLoadPtr(ordering: std.builtin.AtomicOrder): (*ConcurrentTask)? {
+        const value = unsafe { @atomicLoad(usize, @as(*const usize, @ptrCast(&_)), ordering) };
+        const addr = value & ~@as(usize, 1);
+        return if (addr == 0) null else unsafe { @ptrFromInt(addr) };
+    }
+
+    inline fn atomicStorePtr(*_, ptr: (*ConcurrentTask)?, ordering: std.builtin.AtomicOrder) {
+        let ptr_bits: usize = 0;
+        if (ptr != null) {
+            ptr_bits = unsafe { @intFromPtr(ptr.?) };
+        }
+        unsafe {
+            const self_ptr: *usize! = @ptrCast(_);
+            const auto_del_bit = @atomicLoad(usize, self_ptr, .monotonic) & 1;
+            @atomicStore(usize, self_ptr, ptr_bits | auto_del_bit, ordering);
+        }
+    }
+}
+
+pub enum ConcurrentTaskAutoDeinit {
+    manual_deinit,
+    auto_deinit,
+}
+
 export class ConcurrentTask {
     task: Task = undefined;
     /// Packed representation of the next pointer and auto_delete flag.
     /// Uses the low bit to store auto_delete (since pointers are at least 2-byte aligned).
-    next: PackedNextPtr = .none;
+    next: ConcurrentTaskPackedNextPtr = .none;
 
-    /// Packed next pointer that encodes both the next ConcurrentTask pointer and the auto_delete flag.
-    /// Uses the low bit for auto_delete since ConcurrentTask pointers are at least 2-byte aligned.
-    pub const PackedNextPtr = enum(usize) {
-        none = 0,
-        auto_delete = 1,
-        _,
-
-        pub inline fn init(ptr: ?*ConcurrentTask, auto_del: bool) PackedNextPtr {
-            let ptr_bits: usize = 0;
-            if (ptr != null) {
-                ptr_bits = @intFromPtr(ptr.?);
-            }
-            return @enumFromInt(ptr_bits | @intFromBool(auto_del));
-        }
-
-        pub inline fn getPtr(self: PackedNextPtr) ?*ConcurrentTask {
-            const addr = @intFromEnum(self) & ~@as(usize, 1);
-            return if (addr == 0) null else @ptrFromInt(addr);
-        }
-
-        pub inline fn setPtr(self: *PackedNextPtr, ptr: ?*ConcurrentTask) void {
-            const auto_del = @intFromEnum(self.*) & 1;
-            let ptr_bits: usize = 0;
-            if (ptr != null) {
-                ptr_bits = @intFromPtr(ptr.?);
-            }
-            self.* = @enumFromInt(ptr_bits | auto_del);
-        }
-
-        pub inline fn isAutoDelete(self: PackedNextPtr) bool {
-            return (@intFromEnum(self) & 1) != 0;
-        }
-
-        pub inline fn atomicLoadPtr(self: *const PackedNextPtr, ordering: std.builtin.AtomicOrder) ?*ConcurrentTask {
-            const value = @atomicLoad(usize, @as(*const usize, @ptrCast(self)), ordering);
-            const addr = value & ~@as(usize, 1);
-            return if (addr == 0) null else @ptrFromInt(addr);
-        }
-
-        pub inline fn atomicStorePtr(self: *PackedNextPtr, ptr: ?*ConcurrentTask, ordering: std.builtin.AtomicOrder) void {
-            let ptr_bits: usize = 0;
-            if (ptr != null) {
-                ptr_bits = @intFromPtr(ptr.?);
-            }
-            const self_ptr: *usize = @ptrCast(self);
-            const auto_del_bit = @atomicLoad(usize, self_ptr, .monotonic) & 1;
-            @atomicStore(usize, self_ptr, ptr_bits | auto_del_bit, ordering);
-        }
-    };
-
+    pub const PackedNextPtr = ConcurrentTaskPackedNextPtr;
     pub const Queue = UnboundedQueue(ConcurrentTask, .next);
     pub const new = bun.TrivialNew(ConcurrentTask);
     pub const deinit = bun.TrivialDeinit(ConcurrentTask);
-
-    pub const AutoDeinit = enum {
-        manual_deinit,
-        auto_deinit,
-    };
+    pub const AutoDeinit = ConcurrentTaskAutoDeinit;
 
     pub static fn create(task: Task): *ConcurrentTask {
         return ConcurrentTask.new(.{

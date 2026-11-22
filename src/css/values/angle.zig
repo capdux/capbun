@@ -63,6 +63,17 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 
 pub const css = @import("../css_parser.zig");
 pub const bun = @import("bun");
+pub const Tag = enum(u8) {
+    deg = 1,
+    rad = 2,
+    grad = 4,
+    turn = 8,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const AngleAddFn = struct {
 
 pub fn add(_: u8, a: f32, b: f32) f32 {
@@ -240,7 +251,6 @@ pub fn isZero(self: Angle) bool {
 
 pub fn intoCalc(self: Angle, allocator: std.mem.Allocator) Calc(Angle) {
             const R = Calc(Angle);
-            _ = &R;
             return R{ .value = bun.create(allocator, Angle, self) };
     }
 
@@ -360,10 +370,4 @@ const PrintErr = css.PrintErr;
 const CSSNumber = css.css_values.number.CSSNumber;
 const CSSNumberFns = css.css_values.number.CSSNumberFns;
 const Calc = css.css_values.calc.Calc;
-const Tag = enum(u8) {
-    deg = 1,
-    rad = 2,
-    grad = 4,
-    turn = 8,
-};
 pub const AnglePercentage = css.css_values.percentage.DimensionPercentage(Angle);

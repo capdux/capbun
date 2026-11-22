@@ -6413,6 +6413,53 @@ const linux = std.os.linux;
 const posix = std.posix;
 const system = std.posix.system;
 
+pub fn NewAsyncCpSingleTask(comptime ThisAsyncCpTask: type) type {
+        return struct {
+    cp_task: *ThisAsyncCpTask,
+    src: bun.OSPathSliceZ,
+    dest: bun.OSPathSliceZ,
+    task: jsc.WorkPoolTask = .{ .callback = (&workPoolCallback) },
+
+pub fn create(parent: *ThisAsyncCpTask, src: bun.OSPathSliceZ, dest: bun.OSPathSliceZ) void {
+            var task = bun.new(ThisSingleTask, .{ .cp_task = parent, .src = src, .dest = dest });
+            _ = &task;
+            _ = jsc.WorkPool.schedule((&task.task));
+    }
+
+pub fn workPoolCallback(task: *jsc.WorkPoolTask) void {
+            var st: *ThisSingleTask = @fieldParentPtr("task", task);
+            _ = &st;
+            const parent = st.cp_task;
+            var node_fs = NodeFS{  };
+            _ = &node_fs;
+            const args = parent.args;
+            const result = node_fs._copySingleFileSync(st.src, st.dest, @enumFromInt((if ((args.flags.errorOnExist or (!args.flags.force))) constants.COPYFILE_EXCL else (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(u8, @intFromEnum(0)) else cp_cast_int(u8, 0)))), null, parent.args);
+            _ = brk: {
+            break :brk (switch (result) {
+.err => |e| {
+{
+                if (((e.errno == @intFromEnum(E.EXIST)) and (!args.flags.errorOnExist))) {
+                    break :brk;
+                }
+                _ = parent.finishConcurrently(result);
+            }
+},
+.result => parent.onCopy(st.src, st.dest),
+});
+
+};
+            _ = st.deinit();
+            _ = parent.onSubtaskDone();
+    }
+
+pub fn deinit(self: *@This()) void {
+            _ = bun.default_allocator.free(self.src.ptr[0..((self.src.len + self.dest.len) + 2)]);
+            _ = bun.destroy(self);
+    }
+    const ThisSingleTask = @This();
+};
+}
+
 pub fn NewAsyncCpTask(comptime is_shell: bool) type {
         const ShellTask = bun.shell.Interpreter.Builtin.Cp.ShellCpTask;
         const ShellTaskT = (if (is_shell) ShellCpTaskPtr else u0);
@@ -6743,50 +6790,7 @@ _ = this_.subtask_count.fetchAdd(1, .monotonic);
             return true;
     }
     const ThisAsyncCpTask = @This();
-    pub const SingleTask = struct {
-        cp_task: *ThisAsyncCpTask,
-        src: bun.OSPathSliceZ,
-        dest: bun.OSPathSliceZ,
-        task: jsc.WorkPoolTask = .{ .callback = (&SingleTask.workPoolCallback) },
-    
-    pub fn create(parent: *ThisAsyncCpTask, src: bun.OSPathSliceZ, dest: bun.OSPathSliceZ) void {
-                var task = bun.new(ThisSingleTask, .{ .cp_task = parent, .src = src, .dest = dest });
-                _ = &task;
-                _ = jsc.WorkPool.schedule((&task.task));
-        }
-    
-    pub fn workPoolCallback(task: *jsc.WorkPoolTask) void {
-                var st: *ThisSingleTask = @fieldParentPtr("task", task);
-                _ = &st;
-                const parent = st.cp_task;
-                var node_fs = NodeFS{  };
-                _ = &node_fs;
-                const args = parent.args;
-                const result = node_fs._copySingleFileSync(st.src, st.dest, @enumFromInt((if ((args.flags.errorOnExist or (!args.flags.force))) constants.COPYFILE_EXCL else (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(u8, @intFromEnum(0)) else cp_cast_int(u8, 0)))), null, parent.args);
-                _ = brk: {
-                break :brk (switch (result) {
-    .err => |e| {
-    {
-                    if (((e.errno == @intFromEnum(E.EXIST)) and (!args.flags.errorOnExist))) {
-                        break :brk;
-                    }
-                    _ = parent.finishConcurrently(result);
-                }
-    },
-    .result => parent.onCopy(st.src, st.dest),
-    });
-    
-    };
-                _ = st.deinit();
-                _ = parent.onSubtaskDone();
-        }
-    
-    pub fn deinit(self: *@This()) void {
-                _ = bun.default_allocator.free(self.src.ptr[0..((self.src.len + self.dest.len) + 2)]);
-                _ = bun.destroy(self);
-        }
-        const ThisSingleTask = @This();
-    };
+    pub const SingleTask = NewAsyncCpSingleTask(ThisAsyncCpTask);
 };
 }
 

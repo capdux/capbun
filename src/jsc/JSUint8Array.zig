@@ -7,33 +7,48 @@ const string = []const u8;
 pub const Sizes = @import("./sizes.zig");
 pub const bun = @import("bun");
 pub const JSUint8Array = opaque {
-    pub fn ptr(this: *JSUint8Array) [*]u8 {
-        return @as(*[*]u8, @ptrFromInt(@intFromPtr(this) + Sizes.Bun_FFI_PointerOffsetToTypedArrayVector)).*;
+
+pub fn ptr(self: *JSUint8Array) [*]u8 {
+            {
+                const p: *[*]u8 = @ptrFromInt((@intFromPtr(self) + Sizes.Bun_FFI_PointerOffsetToTypedArrayVector));
+                return p.*;
+            }
     }
 
-    pub fn len(this: *JSUint8Array) usize {
-        return @as(*usize, @ptrFromInt(@intFromPtr(this) + Sizes.Bun_FFI_PointerOffsetToTypedArrayLength)).*;
+pub fn len(self: *JSUint8Array) usize {
+            {
+                const p: *usize = @ptrFromInt((@intFromPtr(self) + Sizes.Bun_FFI_PointerOffsetToTypedArrayLength));
+                return p.*;
+            }
     }
 
-    pub fn slice(this: *JSUint8Array) []u8 {
-        return this.ptr()[0..this.len()];
+pub fn slice(self: *JSUint8Array) []u8 {
+            return (blk: {
+            break :blk self.ptr()[0..self.len()];
+
+});
     }
 
-    extern fn JSUint8Array__fromDefaultAllocator(*jsc.JSGlobalObject, ptr: [*]u8, len: usize) jsc.JSValue ;
-    /// *bytes* must come from bun.default_allocator
-    pub fn fromBytes(globalThis: *JSGlobalObject, bytes: []u8) jsc.JSValue {
-        return JSUint8Array__fromDefaultAllocator(globalThis, bytes.ptr, bytes.len);
+pub fn fromBytes(globalThis: *JSGlobalObject, bytes: []u8) jsc.JSValue {
+            return JSUint8Array__fromDefaultAllocator(globalThis, bytes.ptr, bytes.len);
     }
 
-    extern fn Bun__createUint8ArrayForCopy(*jsc.JSGlobalObject, ptr: ?*const void, len: usize, buffer: bool) JSValue ;
-    pub fn fromBytesCopy(globalThis: *JSGlobalObject, bytes: []const u8) JSValue {
-        return Bun__createUint8ArrayForCopy(globalThis, @ptrCast(bytes.ptr), bytes.len, false);
+pub fn fromBytesCopy(globalThis: *JSGlobalObject, bytes: []const u8) JSValue {
+            return (blk: {
+            break :blk Bun__createUint8ArrayForCopy(globalThis, @ptrCast(bytes.ptr), bytes.len, false);
+
+});
     }
 
-    pub fn createEmpty(globalThis: *JSGlobalObject) JSValue {
-        return Bun__createUint8ArrayForCopy(globalThis, null, 0, false);
+pub fn createEmpty(globalThis: *JSGlobalObject) JSValue {
+            return Bun__createUint8ArrayForCopy(globalThis, null, 0, false);
     }
 };
+
 const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
+
+extern "c" fn JSUint8Array__fromDefaultAllocator(globalThis: *jsc.JSGlobalObject, ptr: [*]u8, len: usize) callconv(.c) jsc.JSValue;
+
+extern "c" fn Bun__createUint8ArrayForCopy(globalThis: *jsc.JSGlobalObject, ptr: ?*const void, len: usize, buffer: bool) callconv(.c) JSValue;

@@ -221,20 +221,23 @@ inline fn wrapFnType(comptime F: auto): type {
     return T;
 }
 
+fn WrapImplWrapper(comptime Args: type, comptime Fn: auto): type {
+    return struct {
+        args: Args,
+
+        pub fn call(*_, g: *jsc.JSGlobalObject) callconv(.c) jsc.JSValue {
+            return jsc.toJSHostCall(g, @src(), Fn, _.args);
+        }
+    };
+}
+
 fn wrapImpl(
     globalObject: *JSGlobalObject,
     comptime Function: auto,
     args: std.@"meta".ArgsTuple(wrapFnType(Function)),
 ): JSValue!bun.JSTerminated {
     const Args = std.@"meta".ArgsTuple(wrapFnType(Function));
-    const Fn = Function;
-    const Wrapper = struct {
-        args: Args,
-
-        pub fn call(this: *@This(), g: *jsc.JSGlobalObject) callconv(.c) jsc.JSValue {
-            return jsc.toJSHostCall(g, @src(), Fn, this.args);
-        }
-    };
+    const Wrapper = WrapImplWrapper(Args, Function);
 
     let scope: jsc.TopExceptionScope = undefined;
     scope.init(globalObject, @src());

@@ -79,6 +79,29 @@ pub const CallUnwrap = enum(u2) {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
+pub const CommonJSExportIdentifierBase = enum {
+    exports,
+    module_dot_exports,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const JSXElementSpecialProp = enum {
+    __self,
+    __source,
+    key,
+    ref,
+    any,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+    
+    pub const Map = ComptimeStringMap(JSXElementSpecialProp, .{ .{ "__self", .__self }, .{ "__source", .__source }, .{ "key", .key }, .{ "ref", .ref } });
+};
+
 pub const ObjectSetError = error{
     OutOfMemory,
     Clobber,
@@ -121,6 +144,15 @@ pub fn isLessThan(ctx: void, lhs: G.Property, rhs: G.Property) bool {
     }
     
     pub const Map = ComptimeStringMap(PackageJSONFields, .{ .{ "name", PackageJSONFields.name }, .{ "version", PackageJSONFields.version }, .{ "author", PackageJSONFields.author }, .{ "repository", PackageJSONFields.repository }, .{ "config", PackageJSONFields.config }, .{ "main", PackageJSONFields.main }, .{ "module", PackageJSONFields.module }, .{ "dependencies", PackageJSONFields.dependencies }, .{ "devDependencies", PackageJSONFields.devDependencies }, .{ "optionalDependencies", PackageJSONFields.optionalDependencies }, .{ "peerDependencies", PackageJSONFields.peerDependencies }, .{ "exports", PackageJSONFields.exports } });
+};
+
+pub const TemplateContentsTag = enum {
+    cooked,
+    raw,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
 pub const NameOfSymbol = struct {
@@ -333,10 +365,7 @@ pub const ImportIdentifier = struct {
 pub const CommonJSExportIdentifier = struct {
     ref: Ref = Ref.None,
     base: Base = .exports,
-    pub const Base = enum {
-            exports,
-            module_dot_exports,
-        };
+    pub const Base = CommonJSExportIdentifierBase;
 };
 
 pub const PrivateIdentifier = struct {
@@ -350,20 +379,7 @@ pub const JSXElement = struct {
     key_prop_index: i32 = -1,
     flags: Flags.JSXElement.Bitset = Flags.JSXElement.Bitset{  },
     close_tag_loc: logger.Loc = logger.Loc.Empty,
-    pub const SpecialProp = enum {
-            __self, // old react transform used this as a prop
-            __source,
-            key,
-            ref,
-            any,
-    
-            pub const Map = ComptimeStringMap(SpecialProp, .{
-                .{ "__self", .__self },
-                .{ "__source", .__source },
-                .{ "key", .key },
-                .{ "ref", .ref },
-            });
-        };
+    pub const SpecialProp = JSXElementSpecialProp;
 };
 
 pub const Missing = struct {
@@ -1059,17 +1075,14 @@ pub const TemplatePart = struct {
     tail: Template.Contents,
 };
 
-pub const TemplateContents = union(Tag) {
+pub const TemplateContents = union(TemplateContentsTag) {
     cooked: E.String,
     raw: []const u8,
 
 pub fn isUTF8(self: TemplateContents) bool {
             return ((self == .cooked) and self.cooked.isUTF8());
     }
-    const Tag = enum {
-            cooked,
-            raw,
-        };
+    const Tag = TemplateContentsTag;
 };
 
 pub const Template = struct {

@@ -83,20 +83,22 @@ fn makeAborted(comptime T: type): T {
     } };
 }
 
+pub enum MaybeTag { err, result }
+
 pub fn Maybe(comptime ReturnTypeT: type, comptime ErrorTypeT: type): type {
     // can't call @hasDecl on void, anyerror, etc
     const has_any_decls = ErrorTypeT != void && ErrorTypeT != AnyError;
     const has_retry = has_any_decls && @hasDecl(ErrorTypeT, "retry");
     const has_todo = has_any_decls && @hasDecl(ErrorTypeT, "todo");
 
-    return union(Tag) {
+    return union(MaybeTag) {
         pub const ErrorType = ErrorTypeT;
         pub const ReturnType = ReturnTypeT;
 
         err: ErrorType,
         result: ReturnType,
 
-        pub const Tag = enum { err, result };
+        pub const Tag = MaybeTag;
 
         pub const retry: @This() = makeRetry(has_retry, ErrorType, @This());
         pub const success: @This() = makeSuccess(ReturnType, @This());
@@ -123,7 +125,7 @@ pub fn Maybe(comptime ReturnTypeT: type, comptime ErrorTypeT: type): type {
             };
         }
 
-        pub fn unwrap(this: @This()) !ReturnType {
+        pub fn unwrap(this: @This()) anyerror!ReturnType {
             return switch (this) {
                 .result => |r| r,
                 .err => |e| bun.errnoToZigErr(e.errno),

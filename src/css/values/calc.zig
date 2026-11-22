@@ -241,6 +241,18 @@ pub fn needsDeepclone(comptime V: type) bool {
         _ = @compileError((("Can't tell if " ++ @typeName(V)) ++ " needs deepclone, please add it to the switch statement."));
 }
 
+pub fn calcSignMapFn(s: f32) f32 {
+        return std.math.sign(s);
+}
+
+pub fn calcAtan2OpToFn(_: void, x: f32, y: f32) Angle {
+        return .{ .rad = std.math.atan2(x, y) };
+}
+
+pub fn calcHypotApplyOpFn(_: void, a: f32, b: f32) f32 {
+        return (a + bun.powf(b, 2));
+}
+
 pub fn Calc(comptime V: type) type {
         const needs_deinit = needsDeinit(V);
         const needs_deepclone = needsDeepclone(V);
@@ -846,13 +858,7 @@ return .{ .err = e };
 return .{ .result = This{ .number = std.math.sign(n.*) } };
 },
 .value => |v2| {
-const MapFn = struct {
-
-pub fn sign(s: f32) f32 {
-            return std.math.sign(s);
-    }
-};
-            if (css.generic.tryMap(V, v2, MapFn.sign)) |new_v| {
+if (css.generic.tryMap(V, v2, calcSignMapFn)) |new_v| {
                 _ = &new_v;
                 return .{ .result = This{ .number = ((css.generic.trySign(V, (&new_v))) orelse (@panic("sign() always resolves to a number."))) } };
             }
@@ -1239,13 +1245,7 @@ return .{ .err = e };
 },
 });
             if (((a == .value) and (b == .value))) {
-                const Fn = struct {
-
-pub fn opToFn(_: void, x: f32, y: f32) Angle {
-            return .{ .rad = std.math.atan2(x, y) };
-    }
-};
-                if (css.generic.tryOpTo(V, Angle, (if (@typeInfo(@TypeOf(a)) == .@"enum") @intFromEnum(a) else a.value), (if (@typeInfo(@TypeOf(b)) == .@"enum") @intFromEnum(b) else b.value), @as(void, undefined), Fn.opToFn)) |v| {
+                if (css.generic.tryOpTo(V, Angle, (if (@typeInfo(@TypeOf(a)) == .@"enum") @intFromEnum(a) else a.value), (if (@typeInfo(@TypeOf(b)) == .@"enum") @intFromEnum(b) else b.value), @as(void, undefined), calcAtan2OpToFn)) |v| {
                     _ = &v;
                     return .{ .result = v };
                 }
@@ -1307,13 +1307,7 @@ pub fn parseHypot(allocator: Allocator, args: *ArrayList(This)) Result(?This) {
             _ = &sum;
             for (args.items[i..]) |*arg| {
                 _ = &arg;
-                const Fn = struct {
-
-pub fn applyOpFn(_: void, a: f32, b: f32) f32 {
-            return (a + bun.powf(b, 2));
-    }
-};
-                sum = ((This.applyOp((&sum), arg, allocator, @as(void, undefined), Fn.applyOpFn)) orelse {
+                sum = ((This.applyOp((&sum), arg, allocator, @as(void, undefined), calcHypotApplyOpFn)) orelse {
                 errored = true;
                 break;
 });

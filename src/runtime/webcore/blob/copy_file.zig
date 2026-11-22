@@ -77,6 +77,26 @@ const sys = @import("bun").sys;
 const errnoToZigErr = @import("bun").errnoToZigErr;
 const JSTerminated = @import("bun").JSTerminated;
 const canUseCopyFileRangeSyscall = @import("bun").canUseCopyFileRangeSyscall;
+pub const IOWhich = enum {
+    source,
+    destination,
+    both,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const CopyFileTryWith = enum {
+    sendfile,
+    copy_file_range,
+    splice,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const CopyFileReadLenGuard = struct {
     copy_file: *CopyFile,
     total_written: usize = 0,
@@ -674,11 +694,7 @@ self.system_error = err.toSystemError();
     }
     pub const ResultType = anyerror!SizeType;
     pub const Callback = *const fn(ctx: *anyopaque, len: ResultType) void;
-    pub const TryWith = enum {
-            sendfile,
-            copy_file_range,
-            splice,
-        };
+    pub const TryWith = CopyFileTryWith;
 };
 
 pub const CopyFileWindowsReadWriteLoop = struct {
@@ -710,12 +726,12 @@ pub fn init(self: *CopyFileWindowsReadWriteLoop, source_fd: FD, must_close_sourc
             self.uv_buf = uv_buf;
     }
 
-pub fn start(self: *CopyFileWindowsReadWriteLoop, parent: *CopyFileWindows) sys.Maybe(void) {
+pub fn start(self: *CopyFileWindowsReadWriteLoop, parent: **CopyFileWindows) sys.Maybe(void) {
             _ = handleOom(self.read_buf.ensureTotalCapacityPrecise((64 * 1024)));
             return self.read(parent);
     }
 
-pub fn read(self: *CopyFileWindowsReadWriteLoop, parent: *CopyFileWindows) sys.Maybe(void) {
+pub fn read(self: *CopyFileWindowsReadWriteLoop, parent: **CopyFileWindows) sys.Maybe(void) {
             self.read_buf.items.len = 0;
             self.uv_buf = libuv.uv_buf_t.init(self.read_buf.allocatedSlice());
             var loop = parent.event_loop.virtual_machine.event_loop_handle.?;
@@ -1031,11 +1047,6 @@ const libuv = bun.windows.libuv;
 const Blob = WebCore.Blob;
 const SizeType = Blob.SizeType;
 const Store = Blob.Store;
-pub const IOWhich = enum {
-    source,
-    destination,
-    both,
-};
 const unsupported_directory_error = SystemError{ .errno = @as(c_int, @intCast(@intFromEnum(sys.SystemErrno.EISDIR))), .message = BunString.static("That doesn't work on folders"), .syscall = BunString.static("fstat") };
 const unsupported_non_regular_file_error = SystemError{ .errno = @as(c_int, @intCast(@intFromEnum(sys.SystemErrno.ENOTSUP))), .message = BunString.static("Non-regular files aren't supported yet"), .syscall = BunString.static("fstat") };
 pub const CopyFilePromiseTask = ConcurrentPromiseTask(CopyFile);

@@ -61,6 +61,147 @@ fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub fn BacktrackingImpl(comptime P: type) type {
+    return struct {
+
+pub fn lexerBacktracker(p: *P, func: anytype, comptime ReturnType: type) ReturnType {
+                _ = p.markTypeScriptOnly();
+                const old_lexer = p.lexer;
+                const old_log_disabled = p.lexer.is_log_disabled;
+                p.lexer.is_log_disabled = true;
+                defer {
+                p.lexer.is_log_disabled = old_log_disabled;
+                }
+                var backtrack = false;
+                _ = &backtrack;
+                const FnReturnType = bun.@"meta".ReturnOf(func);
+                const Payload = @typeInfo(FnReturnType).error_union.payload;
+                if (comptime ((Payload == bool) or (Payload == void))) {
+                    const ok = (blk_catch_0: { break :blk_catch_0 ((func(p)) catch |e| { _ = &e; break :blk_catch_0 brk: {
+                    if (((e == error.Backtrack) or p.lexer.did_panic)) {
+                        backtrack = true;
+                    }
+                    break :brk (if (comptime (Payload == bool)) false else ({
+}));
+}; }); });
+                    _ = &ok;
+                    if (backtrack) {
+                        _ = p.lexer.restore((&old_lexer));
+                        if (comptime (Payload == bool)) {
+                            return false;
+                        }
+                    }
+                    if (comptime (Payload == bool)) {
+                        return true;
+                    }
+                    return (!backtrack);
+                } else {
+                    const result = (blk_catch_1: { break :blk_catch_1 ((func(p)) catch |e| { _ = &e; break :blk_catch_1 brk: {
+                    if (((e == error.Backtrack) or p.lexer.did_panic)) {
+                        backtrack = true;
+                    }
+                    break :brk SkipTypeParameterResult.did_not_skip_anything;
+}; }); });
+                    if (backtrack) {
+                        _ = p.lexer.restore((&old_lexer));
+                    }
+                    if (comptime ((ReturnType == void) or (ReturnType == bool))) {
+                        return (!backtrack);
+                    }
+                    return result;
+                }
+        }
+
+pub fn lexerBacktrackerWithArgs(p: *P, func: anytype, args: anytype, comptime ReturnType: type) ReturnType {
+                _ = p.markTypeScriptOnly();
+                const old_lexer = p.lexer;
+                const old_log_disabled = p.lexer.is_log_disabled;
+                p.lexer.is_log_disabled = true;
+                defer {
+                p.lexer.is_log_disabled = old_log_disabled;
+                }
+                var backtrack = false;
+                _ = &backtrack;
+                const FnReturnType = bun.@"meta".ReturnOf(func);
+                const Payload = @typeInfo(FnReturnType).error_union.payload;
+                if (comptime ((Payload == bool) or (Payload == void))) {
+                    const ok = (blk_catch_2: { break :blk_catch_2 ((@call(.auto, func, args)) catch |e| { _ = &e; break :blk_catch_2 brk: {
+                    if ((e == error.Backtrack)) {
+                        backtrack = true;
+                    }
+                    break :brk (if (comptime (Payload == bool)) false else ({
+}));
+}; }); });
+                    _ = &ok;
+                    if (backtrack) {
+                        _ = p.lexer.restore((&old_lexer));
+                        if (comptime (Payload == bool)) {
+                            return false;
+                        }
+                    }
+                    if (comptime (Payload == bool)) {
+                        return true;
+                    }
+                    return backtrack;
+                } else {
+                    const result = (blk_catch_3: { break :blk_catch_3 ((@call(.auto, func, args)) catch |e| { _ = &e; break :blk_catch_3 brk: {
+                    if ((e == error.Backtrack)) {
+                        backtrack = true;
+                    }
+                    break :brk SkipTypeParameterResult.did_not_skip_anything;
+}; }); });
+                    if (backtrack) {
+                        _ = p.lexer.restore((&old_lexer));
+                    }
+                    if (comptime ((ReturnType == void) or (ReturnType == bool))) {
+                        return backtrack;
+                    }
+                    return result;
+                }
+        }
+
+pub fn skipTypeScriptTypeParametersThenOpenParenWithBacktracking(p: *P) !SkipTypeParameterResult {
+                const result = try p.skipTypeScriptTypeParameters(.{ .allow_const_modifier = true });
+                if ((p.lexer.token != .t_open_paren)) {
+                    return error.Backtrack;
+                }
+                return result;
+        }
+
+pub fn skipTypeScriptConstraintOfInferTypeWithBacktracking(p: *P, flags: TypeScript.SkipTypeOptions.Bitset) !bool {
+                _ = try p.lexer.expect(.t_extends);
+                _ = try p.skipTypeScriptTypeWithOpts(.prefix, TypeScript.SkipTypeOptions.Bitset.initOne(.disallow_conditional_types), false, undefined);
+                if (((!flags.contains(.disallow_conditional_types)) and (p.lexer.token == .t_question))) {
+                    return error.Backtrack;
+                }
+                return true;
+        }
+
+pub fn skipTypeScriptArrowArgsWithBacktracking(p: *P) !bool {
+                _ = try p.skipTypescriptFnArgs();
+                _ = (blk_catch_4: { break :blk_catch_4 ((p.lexer.expect(.t_equals_greater_than)) catch |__ce_4| { _ = &__ce_4; return error.Backtrack; }); });
+                return true;
+        }
+
+pub fn skipTypeScriptTypeArgumentsWithBacktracking(p: *P) !bool {
+                if (try p.skipTypeScriptTypeArguments(false)) {
+                    if ((!TypeScript.canFollowTypeArgumentsInExpression(p))) {
+                        return error.Backtrack;
+                    }
+                }
+                return true;
+        }
+
+pub fn skipTypeScriptArrowReturnTypeWithBacktracking(p: *P) !void {
+                _ = try p.lexer.expect(.t_colon);
+                _ = try p.skipTypescriptReturnType();
+                if ((p.lexer.token != .t_equals_greater_than)) {
+                    return error.Backtrack;
+                }
+        }
+    };
+}
+
 const string = []const u8;
 const assert = bun.assert;
 const logger = bun.logger;
@@ -971,143 +1112,6 @@ pub fn trySkipTypeScriptConstraintOfInferTypeWithBacktracking(p: *P, flags: Type
             return Backtracking.lexerBacktrackerWithArgs(p, Backtracking.skipTypeScriptConstraintOfInferTypeWithBacktracking, .{ p, flags }, bool);
     }
     const P = js_parser.NewParser_(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only);
-    pub const Backtracking = struct {
-    
-    pub fn lexerBacktracker(p: *P, func: anytype, comptime ReturnType: type) ReturnType {
-                _ = p.markTypeScriptOnly();
-                const old_lexer = p.lexer;
-                const old_log_disabled = p.lexer.is_log_disabled;
-                p.lexer.is_log_disabled = true;
-                defer {
-                p.lexer.is_log_disabled = old_log_disabled;
-                }
-                var backtrack = false;
-                _ = &backtrack;
-                const FnReturnType = bun.@"meta".ReturnOf(func);
-                const Payload = @typeInfo(FnReturnType).error_union.payload;
-                if (comptime ((Payload == bool) or (Payload == void))) {
-                    const ok = (blk_catch_0: { break :blk_catch_0 ((func(p)) catch |e| { _ = &e; break :blk_catch_0 brk: {
-                    if (((e == error.Backtrack) or p.lexer.did_panic)) {
-                        backtrack = true;
-                    }
-                    break :brk (if (comptime (Payload == bool)) false else ({
-    }));
-    }; }); });
-                    _ = &ok;
-                    if (backtrack) {
-                        _ = p.lexer.restore((&old_lexer));
-                        if (comptime (Payload == bool)) {
-                            return false;
-                        }
-                    }
-                    if (comptime (Payload == bool)) {
-                        return true;
-                    }
-                    return (!backtrack);
-                } else {
-                    const result = (blk_catch_1: { break :blk_catch_1 ((func(p)) catch |e| { _ = &e; break :blk_catch_1 brk: {
-                    if (((e == error.Backtrack) or p.lexer.did_panic)) {
-                        backtrack = true;
-                    }
-                    break :brk SkipTypeParameterResult.did_not_skip_anything;
-    }; }); });
-                    if (backtrack) {
-                        _ = p.lexer.restore((&old_lexer));
-                    }
-                    if (comptime ((ReturnType == void) or (ReturnType == bool))) {
-                        return (!backtrack);
-                    }
-                    return result;
-                }
-        }
-    
-    pub fn lexerBacktrackerWithArgs(p: *P, func: anytype, args: anytype, comptime ReturnType: type) ReturnType {
-                _ = p.markTypeScriptOnly();
-                const old_lexer = p.lexer;
-                const old_log_disabled = p.lexer.is_log_disabled;
-                p.lexer.is_log_disabled = true;
-                defer {
-                p.lexer.is_log_disabled = old_log_disabled;
-                }
-                var backtrack = false;
-                _ = &backtrack;
-                const FnReturnType = bun.@"meta".ReturnOf(func);
-                const Payload = @typeInfo(FnReturnType).error_union.payload;
-                if (comptime ((Payload == bool) or (Payload == void))) {
-                    const ok = (blk_catch_2: { break :blk_catch_2 ((@call(.auto, func, args)) catch |e| { _ = &e; break :blk_catch_2 brk: {
-                    if ((e == error.Backtrack)) {
-                        backtrack = true;
-                    }
-                    break :brk (if (comptime (Payload == bool)) false else ({
-    }));
-    }; }); });
-                    _ = &ok;
-                    if (backtrack) {
-                        _ = p.lexer.restore((&old_lexer));
-                        if (comptime (Payload == bool)) {
-                            return false;
-                        }
-                    }
-                    if (comptime (Payload == bool)) {
-                        return true;
-                    }
-                    return backtrack;
-                } else {
-                    const result = (blk_catch_3: { break :blk_catch_3 ((@call(.auto, func, args)) catch |e| { _ = &e; break :blk_catch_3 brk: {
-                    if ((e == error.Backtrack)) {
-                        backtrack = true;
-                    }
-                    break :brk SkipTypeParameterResult.did_not_skip_anything;
-    }; }); });
-                    if (backtrack) {
-                        _ = p.lexer.restore((&old_lexer));
-                    }
-                    if (comptime ((ReturnType == void) or (ReturnType == bool))) {
-                        return backtrack;
-                    }
-                    return result;
-                }
-        }
-    
-    pub fn skipTypeScriptTypeParametersThenOpenParenWithBacktracking(p: *P) !SkipTypeParameterResult {
-                const result = try p.skipTypeScriptTypeParameters(.{ .allow_const_modifier = true });
-                if ((p.lexer.token != .t_open_paren)) {
-                    return error.Backtrack;
-                }
-                return result;
-        }
-    
-    pub fn skipTypeScriptConstraintOfInferTypeWithBacktracking(p: *P, flags: TypeScript.SkipTypeOptions.Bitset) !bool {
-                _ = try p.lexer.expect(.t_extends);
-                _ = try p.skipTypeScriptTypeWithOpts(.prefix, TypeScript.SkipTypeOptions.Bitset.initOne(.disallow_conditional_types), false, undefined);
-                if (((!flags.contains(.disallow_conditional_types)) and (p.lexer.token == .t_question))) {
-                    return error.Backtrack;
-                }
-                return true;
-        }
-    
-    pub fn skipTypeScriptArrowArgsWithBacktracking(p: *P) !bool {
-                _ = try p.skipTypescriptFnArgs();
-                _ = (blk_catch_4: { break :blk_catch_4 ((p.lexer.expect(.t_equals_greater_than)) catch |__ce_4| { _ = &__ce_4; return error.Backtrack; }); });
-                return true;
-        }
-    
-    pub fn skipTypeScriptTypeArgumentsWithBacktracking(p: *P) !bool {
-                if (try p.skipTypeScriptTypeArguments(false)) {
-                    if ((!TypeScript.canFollowTypeArgumentsInExpression(p))) {
-                        return error.Backtrack;
-                    }
-                }
-                return true;
-        }
-    
-    pub fn skipTypeScriptArrowReturnTypeWithBacktracking(p: *P) !void {
-                _ = try p.lexer.expect(.t_colon);
-                _ = try p.skipTypescriptReturnType();
-                if ((p.lexer.token != .t_equals_greater_than)) {
-                    return error.Backtrack;
-                }
-        }
-    };
+    pub const Backtracking = BacktrackingImpl(P);
 };
 }

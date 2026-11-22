@@ -1,26 +1,26 @@
-pub const WeakRefType = enum(u32) {
+pub enum WeakRefType: u32 {
     None = 0,
     FetchResponse = 1,
     PostgreSQLQueryClient = 2,
-};
+}
 
 @opaque struct WeakImpl {
-    pub fn init(globalThis: *jsc.JSGlobalObject, value: jsc.JSValue, refType: WeakRefType, ctx: *!?): *WeakImpl {
+    static fn init(globalThis: *jsc.JSGlobalObject, value: jsc.JSValue, refType: WeakRefType, ctx: *!?): *WeakImpl {
         jsc.markBinding(@src());
         return Bun__WeakRef__new(globalThis, value, refType, ctx);
     }
 
-    pub fn get(*_): jsc.JSValue {
+    fn get(*_): jsc.JSValue {
         jsc.markBinding(@src());
         return Bun__WeakRef__get(_);
     }
 
-    pub fn clear(*_) {
+    fn clear(*_) {
         jsc.markBinding(@src());
         Bun__WeakRef__clear(_);
     }
 
-    pub fn deinit(*_) {
+    fn deinit(*_) {
         jsc.markBinding(@src());
         Bun__WeakRef__delete(_);
     }

@@ -27,19 +27,7 @@ next: ?*AnyTaskWithExtraContext = null,
 
 pub fn fromCallbackAutoDeinit(ptr: anytype, comptime fieldName: [:0]const u8) *AnyTaskWithExtraContext {
         const Ptr = std.meta.Child(@TypeOf(ptr));
-        const Wrapper = struct {
-    any_task: AnyTaskWithExtraContext,
-    wrapped: *Ptr,
-
-pub fn function(raw: *anyopaque, extra: *anyopaque) void {
-            {
-                const that: *@This() = @ptrCast(@alignCast(raw));
-                _ = DestroyDefaultGuard(@This()){ .ptr = that };
-                const ctx = that.wrapped;
-                _ = @field(Ptr, fieldName)(ctx, extra);
-            }
-    }
-};
+        const Wrapper = AutoDeinitWrapper(Ptr, fieldName);
         const task = bun.handleOom(bun.default_allocator.create(Wrapper));
         task.* = Wrapper{ .any_task = AnyTaskWithExtraContext{ .callback = (&Wrapper.function), .ctx = task }, .wrapped = ptr };
         {
@@ -77,3 +65,19 @@ pub fn wrap(raw: ?*anyopaque, extra: ?*anyopaque) void {
 const CallbackFn = *const fn (*anyopaque, *anyopaque) void;
 const jsc = bun.jsc;
 const Task = jsc.Task;
+
+pub fn AutoDeinitWrapper(comptime Ptr: type, comptime fieldName: [:0]const u8) type {
+        return struct {
+    any_task: AnyTaskWithExtraContext,
+    wrapped: *Ptr,
+
+pub fn function(raw: *anyopaque, extra: *anyopaque) void {
+            {
+                const that: *@This() = @ptrCast(@alignCast(raw));
+                _ = DestroyDefaultGuard(@This()){ .ptr = that };
+                const ctx = that.wrapped;
+                _ = @field(Ptr, fieldName)(ctx, extra);
+            }
+    }
+};
+}

@@ -1,5 +1,5 @@
-pub const CacheDirectoryAndAbsPath = struct { FD, bun.AbsPath(.{}) };
-pub const GlobalLinkDirAndPath = struct { std.fs.Dir, []const u8 };
+pub type CacheDirectoryAndAbsPath = [FD, bun.AbsPath(.{})];
+pub type GlobalLinkDirAndPath = [std.fs.Dir, []const u8];
 pub struct CacheDirAndSubpath {
     cache_dir: std.fs.Dir,
     cache_dir_subpath: stringZ,

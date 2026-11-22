@@ -604,6 +604,8 @@ fn getHashes(global: *JSGlobalObject, _: *jsc.CallFrame): JSError!JSValue {
     return array;
 }
 
+pub type ScryptAsyncResult = struct { Scrypt, JSValue };
+
 pub struct Scrypt {
     password: Node.StringOrBuffer,
     salt: Node.StringOrBuffer,
@@ -618,7 +620,7 @@ pub struct Scrypt {
     result: []u8 = [],
     e: u32? = null,
 
-    pub const AsyncResult = struct { Scrypt, JSValue };
+    pub const AsyncResult = ScryptAsyncResult;
 
     pub const Job = CryptoJob(Scrypt);
 

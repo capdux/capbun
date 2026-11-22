@@ -138,24 +138,20 @@ struct Whitespacer {
 }
 
 fn ws(comptime str: []const u8): Whitespacer {
-    const Static = struct {
-        pub const with = str;
-
-        pub const without = brk: {
-            let buf = std.mem.zeroes([str.len]u8);
-            let buf_i: usize = 0;
-            for (c of str) {
-                if (c != ' ') {
-                    buf[buf_i] = c;
-                    buf_i += 1;
-                }
+    const without: []const u8 = comptime brk: {
+        let buf = std.mem.zeroes([str.len]u8);
+        let buf_i: usize = 0;
+        for (c of str) {
+            if (c != ' ') {
+                buf[buf_i] = c;
+                buf_i += 1;
             }
-            const final = buf[0..buf_i].*;
-            break :brk &final;
-        };
+        }
+        const final = buf[0..buf_i].*;
+        break :brk &final;
     };
 
-    return { normal: Static.with, minify: Static.without };
+    return { normal: str, minify: without };
 }
 
 pub fn estimateLengthForUTF8(input: []const u8, comptime ascii_only: bool, comptime quote_char: u8): usize {

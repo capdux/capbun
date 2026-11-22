@@ -266,6 +266,50 @@ pub fn deref(self: AdditionalOnAbortCallback) void {
     }
 };
 
+pub fn RequestStreamPair(comptime RC: type) type {
+    return struct {
+        this: *RC,
+        stream: jsc.WebCore.ReadableStream,
+    };
+}
+
+pub fn RequestHeaderResponseSizePair(comptime RC: type) type {
+    return struct {
+        this: *RC,
+        size: usize,
+    };
+}
+
+pub fn RequestHeaderResponsePair(comptime RC: type) type {
+    return struct {
+        this: *RC,
+        response: *jsc.WebCore.Response,
+    };
+}
+
+pub fn RequestPathnameFormatter(comptime RC: type) type {
+    return struct {
+        ctx: *RC,
+
+pub fn format(self: @This(), writer: *std.Io.Writer) !void {
+                var rc = self.ctx;
+                _ = &rc;
+                if ((!rc.pathname.isEmpty())) {
+                    _ = try rc.pathname.format(writer);
+                    return;
+                }
+                if ((!rc.flags.has_abort_handler)) {
+                    if (rc.req) |req| {
+                        _ = &req;
+                        _ = try writer.writeAll(req.url());
+                        return;
+                    }
+                }
+                _ = try writer.writeAll("/");
+        }
+    };
+}
+
 pub const SendfileContext = struct {
     remain: Blob.SizeType = 0,
     offset: Blob.SizeType = 0,
@@ -2514,39 +2558,11 @@ pub fn setTimeout(self: *RequestContext, seconds: c_uint) bool {
     pub threadlocal var pool: ?*RequestContext.RequestContextStackAllocator = null;
     pub const ResponseStream = jsc.WebCore.HTTPServerWritable(ssl_enabled, http3);
     pub const RequestContextStackAllocator = bun.HiveArray(RequestContext, (if (bun.heap_breakdown.enabled) 0 else 2048)).Fallback;
-    const StreamPair = struct {
-        this: *RequestContext,
-        stream: jsc.WebCore.ReadableStream,
-    };
+    const StreamPair = RequestStreamPair(RequestContext);
     const streamLog = Output.scoped(.ReadableStream, .visible);
-    const HeaderResponseSizePair = struct {
-        this: *RequestContext,
-        size: usize,
-    };
-    const HeaderResponsePair = struct {
-        this: *RequestContext,
-        response: *jsc.WebCore.Response,
-    };
-    const PathnameFormatter = struct {
-        ctx: *RequestContext,
-    
-    pub fn format(formatter: @This(), writer: *std.Io.Writer) !void {
-                var this = formatter.ctx;
-                _ = &this;
-                if ((!this.pathname.isEmpty())) {
-                    _ = try this.pathname.format(writer);
-                    return;
-                }
-                if ((!this.flags.has_abort_handler)) {
-                    if (this.req) |req| {
-                        _ = &req;
-                        _ = try writer.writeAll(req.url());
-                        return;
-                    }
-                }
-                _ = try writer.writeAll("/");
-        }
-    };
+    const HeaderResponseSizePair = RequestHeaderResponseSizePair(RequestContext);
+    const HeaderResponsePair = RequestHeaderResponsePair(RequestContext);
+    const PathnameFormatter = RequestPathnameFormatter(RequestContext);
     const max_request_body_preallocate_length = (1024 * 256);
     comptime {
                 const export_prefix = "Bun__HTTPRequestContext" ++ (if (debug_mode) "Debug" else "") ++ (if (http3) "H3" else if (ThisServer.ssl_enabled) "TLS" else "");

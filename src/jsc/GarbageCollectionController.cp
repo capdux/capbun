@@ -61,7 +61,9 @@ const bun = @import("bun");
     }
 
     pub fn bunVM(_: *GarbageCollectionController): *VirtualMachine {
-        return @alignCast(@fieldParentPtr("gc_controller", _));
+        unsafe {
+            return @alignCast(@fieldParentPtr("gc_controller", _));
+        }
     }
 
     @callconv("c")
@@ -150,8 +152,8 @@ const bun = @import("bun");
     }
 }
 
-pub const GCTimerState = enum {
+pub enum GCTimerState {
     pending,
     scheduled,
     run_on_next_tick,
-};
+}

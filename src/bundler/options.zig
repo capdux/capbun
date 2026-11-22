@@ -82,6 +82,27 @@ pub const resolver = @import("../resolver/resolver.zig");
 pub const runtime_pkg = @import("../js_parser/runtime.zig");
 pub const url_pkg = @import("../url/url.zig");
 pub const package_json_pkg = @import("../resolver/package_json.zig");
+pub const _ForceNodeEnv = enum {
+    unspecified,
+    development,
+    production,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const _ImportPathFormat = enum {
+    relative,
+    absolute_url,
+    absolute_path,
+    package_path,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const WriteDestination = enum {
     stdout,
     disk,
@@ -1365,19 +1386,9 @@ else => {
             analytics.Features.external = (analytics.Features.external + (if (comptime @typeInfo(@TypeOf(@intFromBool((transform.external.len > 0)))) == .@"enum") cp_cast_int(usize, @intFromEnum(@intFromBool((transform.external.len > 0)))) else cp_cast_int(usize, @intFromBool((transform.external.len > 0)))));
             return opts;
     }
-    pub const ForceNodeEnv = enum {
-            unspecified,
-            development,
-            production,
-        };
+    pub const ForceNodeEnv = _ForceNodeEnv;
     pub const default_unwrap_commonjs_packages: [7][]const u8 = .{ "react", "react-is", "react-dom", "scheduler", "react-client", "react-server", "react-refresh" };
-    pub const ImportPathFormat = enum {
-            relative,
-            absolute_url,
-            // omit file extension
-            absolute_path,
-            package_path,
-        };
+    pub const ImportPathFormat = _ImportPathFormat;
     pub const Defaults = _BundleOptionsDefaults;
 };
 

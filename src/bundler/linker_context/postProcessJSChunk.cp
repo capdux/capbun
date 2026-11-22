@@ -29,6 +29,11 @@ pub struct DeinitWithAllocGuard<T> {
     }
 }
 
+pub enum CommentType {
+    multiline,
+    single,
+}
+
 /// This runs after we've already populated the compile results
 pub fn postProcessJSChunk(ctx: GenerateChunkCtx, worker: *ThreadPool.Worker, chunk: *Chunk, chunk_index: usize)! {
     let trace = bun.perf.trace("Bundler.postProcessJSChunk");
@@ -450,11 +455,6 @@ pub fn postProcessJSChunk(ctx: GenerateChunkCtx, worker: *ThreadPool.Worker, chu
             }
 
             // Make sure newlines in the path can't cause a syntax error.
-            const CommentType = enum {
-                multiline,
-                single,
-            };
-
             const pretty = sources[source_index].path.pretty;
 
             // TODO: quote this. This is really janky.

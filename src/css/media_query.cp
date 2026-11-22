@@ -339,6 +339,8 @@ pub enum Qualifier {
     }
 }
 
+enum MediaTypeEnumerations { all, print, screen }
+
 /// A [media type](https://drafts.csswg.org/mediaqueries/#media-types) within a media query.
 pub enum MediaType {
     /// Matches all devices.
@@ -360,8 +362,7 @@ pub enum MediaType {
     }
 
     static fn fromStr(ident: []const u8): MediaType {
-        const Enumerations = enum { all, print, screen };
-        const Map = comptime bun.ComptimeEnumMap(Enumerations);
+        const Map = comptime bun.ComptimeEnumMap(MediaTypeEnumerations);
         if (x := Map.getASCIIICaseInsensitive(ident)) return switch (x) {
             .all => .all,
             .print => .print,
@@ -622,30 +623,30 @@ pub fn parseParensOrFunction(
     return { err: location.newUnexpectedTokenError(t.*) };
 }
 
+struct ParenBlockClosure<QueryCondition> {
+    flags: QueryConditionFlags,
+    fn parseNestedBlockFn(*_, i: *css.Parser): Result(QueryCondition) {
+        if (inner := i.tryParse(@This().tryParseFn, .{_}).asValue()) {
+            return { result: inner };
+        }
+
+        return QueryCondition.parseFeature(i);
+    }
+
+    static fn tryParseFn(i: *css.Parser, ctx: *@This()): Result(QueryCondition) {
+        return parseQueryCondition(QueryCondition, i, ctx.flags);
+    }
+}
+
 fn parseParenBlock(
     comptime QueryCondition: type,
     input: *css.Parser,
     flags: QueryConditionFlags,
 ): Result(QueryCondition) {
-    const Closure = struct {
-        flags: QueryConditionFlags,
-        pub fn parseNestedBlockFn(this: *@This(), i: *css.Parser): Result(QueryCondition) {
-            if (inner := i.tryParse(@This().tryParseFn, .{this}).asValue()) {
-                return { result: inner };
-            }
-
-            return QueryCondition.parseFeature(i);
-        }
-
-        pub static fn tryParseFn(i: *css.Parser, this: *@This()): Result(QueryCondition) {
-            return parseQueryCondition(QueryCondition, i, this.flags);
-        }
-    };
-
-    let closure = Closure{
+    let closure: ParenBlockClosure<QueryCondition> = {
         flags: flags,
     };
-    return input.parseNestedBlock(QueryCondition, &closure, Closure.parseNestedBlockFn);
+    return input.parseNestedBlock(QueryCondition, &closure, @TypeOf(closure).parseNestedBlockFn);
 }
 
 /// A [media feature](https://drafts.csswg.org/mediaqueries/#typedef-media-feature)

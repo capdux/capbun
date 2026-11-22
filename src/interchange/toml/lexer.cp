@@ -1,4 +1,4 @@
-pub const TokenType = enum {
+pub enum TokenType {
     t_end_of_file,
 
     t_open_paren,
@@ -32,7 +32,7 @@ pub const TokenType = enum {
     t_minus,
 
     t_empty_array,
-};
+}
 
 pub err Error {
     UTF8Fail,

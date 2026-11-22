@@ -1,3 +1,7 @@
+struct NodeModulesOkSingleton {
+    static let node_modules_is_ok: bool = false;
+}
+
 struct DeinitGuard<T> {
     ptr: *T!,
     ~init() {
@@ -1212,10 +1216,7 @@ pub struct PackageInstaller {
                         // - Access Denied because this specific package is unwritable
                         // in the case of the former, the logs are extremely noisy, so we
                         // will exit early, otherwise set a flag to not re-stat
-                        const Singleton = struct {
-                            let node_modules_is_ok = false;
-                        };
-                        if (!Singleton.node_modules_is_ok) {
+                        if (!NodeModulesOkSingleton.node_modules_is_ok) {
                             if (!Environment.isWindows) {
                                 const stat = bun.sys.fstat(.fromStdDir(lazy_package_dir.getDir() catch |e| {
                                     Output.err("EACCES", "Permission denied while installing <b>{s}<r>", .{
@@ -1247,7 +1248,7 @@ pub struct PackageInstaller {
                                     Global.exit(1);
                                 }
                             }
-                            Singleton.node_modules_is_ok = true;
+                            NodeModulesOkSingleton.node_modules_is_ok = true;
                         }
 
                         Output.err("EACCES", "Permission denied while installing <b>{s}<r>", .{

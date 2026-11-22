@@ -431,6 +431,449 @@ pub fn tryFromPropertyId(property_id: css.PropertyIdTag) ?@This() {
     const border = BorderProperty{ .@"left-width" = true, .@"right-width" = true, .@"top-width" = true, .@"bottom-width" = true, .@"left-style" = true, .@"right-style" = true, .@"top-style" = true, .@"bottom-style" = true, .@"left-color" = true, .@"right-color" = true, .@"top-color" = true, .@"bottom-color" = true };
 };
 
+pub const BorderFlushState = struct {
+    f: *BorderFlushContext,
+    block_start: *BorderShorthand,
+    block_end: *BorderShorthand,
+    inline_start: *BorderShorthand,
+    inline_end: *BorderShorthand,
+
+pub inline fn shorthand(s: *@This(), comptime P: type, comptime prop_name: []const u8, comptime key: []const u8, comptime is_logical: bool) void {
+            const PType = P;
+            const has_prop = ((((@field(s.block_start, key) != null) and (@field(s.block_end, key) != null)) and (@field(s.inline_start, key) != null)) and (@field(s.inline_end, key) != null));
+            if (has_prop) {
+                if (((!is_logical) or ((css.generic.eql(@TypeOf(@field(s.block_start, key)), (&@field(s.block_start, key)), (&@field(s.block_end, key))) and css.generic.eql(@TypeOf(@field(s.block_end, key)), (&@field(s.block_end, key)), (&@field(s.inline_start, key)))) and css.generic.eql(@TypeOf(@field(s.inline_start, key)), (&@field(s.inline_start, key)), (&@field(s.inline_end, key)))))) {
+                    const rect = PType{ .top = (bun.take((&@field(s.block_start, key)))).?, .right = (bun.take((&@field(s.inline_end, key)))).?, .bottom = (bun.take((&@field(s.block_end, key)))).?, .left = (bun.take((&@field(s.inline_start, key)))).? };
+                    _ = s.f.prop(prop_name, rect);
+                }
+            }
+    }
+
+pub inline fn logicalShorthand(s: *@This(), comptime P: type, comptime prop_name: []const u8, comptime key: []const u8, start: anytype, end: anytype) void {
+            const PType = P;
+            const has_prop = ((@field(start, key) != null) and (@field(end, key) != null));
+            if (has_prop) {
+                _ = s.f.prop(prop_name, PType{ .start = (bun.take((&@field(start, key)))).?, .end = (bun.take((&@field(end, key)))).? });
+                _ = bun.clear((&@field(end, key)), s.f.ctx.allocator);
+            }
+    }
+
+pub inline fn is_eq(s: *@This(), comptime key: []const u8) bool {
+            return ((css.generic.eql(@TypeOf(@field(s.block_start, key)), (&@field(s.block_start, key)), (&@field(s.block_end, key))) and css.generic.eql(@TypeOf(@field(s.inline_start, key)), (&@field(s.inline_start, key)), (&@field(s.inline_end, key)))) and css.generic.eql(@TypeOf(@field(s.inline_start, key)), (&@field(s.inline_start, key)), (&@field(s.block_start, key))));
+    }
+
+pub inline fn prop_diff(s: *@This(), border: anytype, fallback: anytype, border_fallback: anytype, comptime is_logical: bool) void {
+            if ((((!is_logical) and s.is_eq("color")) and s.is_eq("style"))) {
+                _ = s.f.prop("border", border.toBorder(s.f.ctx.allocator));
+                _ = s.shorthand(BorderWidth, "border-width", "width", is_logical);
+            } else {
+                if ((((!is_logical) and s.is_eq("width")) and s.is_eq("style"))) {
+                    _ = s.f.prop("border", border.toBorder(s.f.ctx.allocator));
+                    _ = s.shorthand(BorderColor, "border-color", "color", is_logical);
+                } else {
+                    if ((((!is_logical) and s.is_eq("width")) and s.is_eq("color"))) {
+                        _ = s.f.prop("border", border.toBorder(s.f.ctx.allocator));
+                        _ = s.shorthand(BorderStyle, "border-style", "style", is_logical);
+                    } else {
+                        if (border_fallback) {
+                            _ = s.f.prop("border", border.toBorder(s.f.ctx.allocator));
+                        }
+                        _ = fallback(s);
+                    }
+                }
+            }
+    }
+
+pub inline fn side_diff(s: *@This(), border: anytype, other: anytype, comptime prop_name: []const u8, width: anytype, style: anytype, comptime color: []const u8) void {
+            const eq_width = css.generic.eql(@TypeOf(border.width), (&border.width), (&other.width));
+            const eq_style = css.generic.eql(@TypeOf(border.style), (&border.style), (&other.style));
+            const eq_color = css.generic.eql(@TypeOf(border.color), (&border.color), (&other.color));
+            if ((eq_width and eq_style)) {
+                _ = s.f.prop(color, (css.generic.deepClone(@TypeOf(other.color), (&other.color), s.f.ctx.allocator)).?);
+            } else {
+                if ((eq_width and eq_color)) {
+                    _ = s.f.prop(style, (css.generic.deepClone(@TypeOf(other.style), (&other.style), s.f.ctx.allocator)).?);
+                } else {
+                    if ((eq_style and eq_color)) {
+                        _ = s.f.prop(width, (css.generic.deepClone(@TypeOf(other.width), (&other.width), s.f.ctx.allocator)).?);
+                    } else {
+                        _ = s.f.prop(prop_name, other.toBorder(s.f.ctx.allocator));
+                    }
+                }
+            }
+    }
+
+pub inline fn side(s: *@This(), val: anytype, comptime short: []const u8, comptime width: []const u8, comptime style: []const u8, comptime color: []const u8) void {
+            if (val.isValid()) {
+                _ = s.f.prop(short, val.toBorder(s.f.ctx.allocator));
+            } else {
+                if (val.style) |*sty| {
+                    _ = &sty;
+                    _ = s.f.prop(style, (sty.*).deepClone(s.f.ctx.allocator));
+                }
+                if (val.width) |*w| {
+                    _ = &w;
+                    _ = s.f.prop(width, (w.*).deepClone(s.f.ctx.allocator));
+                }
+                if (val.color) |*c| {
+                    _ = &c;
+                    _ = s.f.prop(color, (c.*).deepClone(s.f.ctx.allocator));
+                }
+            }
+    }
+
+pub inline fn inlineProp(s: *@This(), comptime key: []const u8, comptime left: []const u8, comptime right: []const u8) void {
+            if (((@field(s.inline_start, key) != null) and css.generic.eql(@TypeOf(@field(s.inline_start, key)), (&@field(s.inline_start, key)), (&@field(s.inline_end, key))))) {
+                _ = s.f.prop(left, (bun.take((&@field(s.inline_start, key)))).?);
+                _ = s.f.prop(right, (bun.take((&@field(s.inline_end, key)))).?);
+            }
+    }
+};
+
+pub const BorderFlushContext = struct {
+    self: *BorderHandler,
+    dest: *css.DeclarationList,
+    ctx: *css.PropertyHandlerContext,
+    logical_supported: bool,
+    logical_shorthand_supported: bool,
+
+pub inline fn logicalProp(f: *BorderFlushContext, comptime ltr: []const u8, comptime rtl: []const u8, val: anytype) void {
+            const cloned = (if (comptime (@typeInfo(@TypeOf(val)) == .pointer)) css.generic.deepClone(@TypeOf(val.*), val, f.ctx.allocator) else css.generic.deepClone(@TypeOf(val), (&val), f.ctx.allocator));
+            const LtrType = @FieldType(css.Property, ltr);
+            const RtlType = @FieldType(css.Property, rtl);
+            const ltr_val: LtrType = (if (comptime (LtrType == @TypeOf(cloned))) cloned else LtrType{ .width = cloned.width, .style = cloned.style, .color = cloned.color });
+            const rtl_val: RtlType = (if (comptime (RtlType == @TypeOf(cloned))) cloned else RtlType{ .width = cloned.width, .style = cloned.style, .color = cloned.color });
+            _ = f.ctx.addLogicalRule(f.ctx.allocator, @unionInit(css.Property, ltr, ltr_val), @unionInit(css.Property, rtl, rtl_val));
+    }
+
+pub inline fn push(f: *BorderFlushContext, comptime p: []const u8, val: anytype) void {
+            _ = bun.bits.insert(BorderProperty, (&f.self.flushed_properties), @field(BorderProperty, p));
+            const cloned = (if (comptime (@typeInfo(@TypeOf(val)) == .pointer)) css.generic.deepClone(@TypeOf(val.*), val, f.ctx.allocator) else css.generic.deepClone(@TypeOf(val), (&val), f.ctx.allocator));
+            const TargetType = @FieldType(css.Property, p);
+            const final_val: TargetType = (if (comptime (TargetType == @TypeOf(cloned))) cloned else TargetType{ .width = cloned.width, .style = cloned.style, .color = cloned.color });
+            _ = bun.handleOom(f.dest.append(f.ctx.allocator, @unionInit(css.Property, p, final_val)));
+    }
+
+pub inline fn fallbacks(f: *BorderFlushContext, comptime p: []const u8, _val: anytype) void {
+            var val = _val;
+            _ = &val;
+            const TargetType = @FieldType(css.Property, p);
+            if ((!bun.bits.contains(BorderProperty, f.self.flushed_properties, @field(BorderProperty, p)))) {
+                const fbs = val.getFallbacks(f.ctx.allocator, f.ctx.targets);
+                for (cp_iter_slice(css.generic.slice(@TypeOf(fbs), (&fbs)))) |fallback| {
+                    _ = &fallback;
+                    const final_fb: TargetType = (if (comptime (TargetType == @TypeOf(fallback))) fallback else TargetType{ .width = fallback.width, .style = fallback.style, .color = fallback.color });
+                    _ = bun.handleOom(f.dest.append(f.ctx.allocator, @unionInit(css.Property, p, final_fb)));
+                }
+            }
+            _ = push(f, p, val);
+    }
+
+pub inline fn prop(f: *BorderFlushContext, comptime prop_name: []const u8, val: anytype) void {
+            _ = @setEvalBranchQuota(10000);
+            if (comptime std.mem.eql(u8, prop_name, "border-inline-start")) {
+                if (f.logical_supported) {
+                    _ = fallbacks(f, "border-inline-start", val);
+                } else {
+                    _ = logicalProp(f, "border-left", "border-right", val);
+                }
+            } else {
+                if (comptime std.mem.eql(u8, prop_name, "border-inline-start-width")) {
+                    if (f.logical_supported) {
+                        _ = push(f, "border-inline-start-width", val);
+                    } else {
+                        _ = logicalProp(f, "border-left-width", "border-right-width", val);
+                    }
+                } else {
+                    if (comptime std.mem.eql(u8, prop_name, "border-inline-start-color")) {
+                        if (f.logical_supported) {
+                            _ = fallbacks(f, "border-inline-start-color", val);
+                        } else {
+                            _ = logicalProp(f, "border-left-color", "border-right-color", val);
+                        }
+                    } else {
+                        if (comptime std.mem.eql(u8, prop_name, "border-inline-start-style")) {
+                            if (f.logical_supported) {
+                                _ = push(f, "border-inline-start-style", val);
+                            } else {
+                                _ = logicalProp(f, "border-left-style", "border-right-style", val);
+                            }
+                        } else {
+                            if (comptime std.mem.eql(u8, prop_name, "border-inline-end")) {
+                                if (f.logical_supported) {
+                                    _ = fallbacks(f, "border-inline-end", val);
+                                } else {
+                                    _ = logicalProp(f, "border-right", "border-left", val);
+                                }
+                            } else {
+                                if (comptime std.mem.eql(u8, prop_name, "border-inline-end-width")) {
+                                    if (f.logical_supported) {
+                                        _ = push(f, "border-inline-end-width", val);
+                                    } else {
+                                        _ = logicalProp(f, "border-right-width", "border-left-width", val);
+                                    }
+                                } else {
+                                    if (comptime std.mem.eql(u8, prop_name, "border-inline-end-color")) {
+                                        if (f.logical_supported) {
+                                            _ = fallbacks(f, "border-inline-end-color", val);
+                                        } else {
+                                            _ = logicalProp(f, "border-right-color", "border-left-color", val);
+                                        }
+                                    } else {
+                                        if (comptime std.mem.eql(u8, prop_name, "border-inline-end-style")) {
+                                            if (f.logical_supported) {
+                                                _ = push(f, "border-inline-end-style", val);
+                                            } else {
+                                                _ = logicalProp(f, "border-right-style", "border-left-style", val);
+                                            }
+                                        } else {
+                                            if (comptime std.mem.eql(u8, prop_name, "border-block-start")) {
+                                                if (f.logical_supported) {
+                                                    _ = fallbacks(f, "border-block-start", val);
+                                                } else {
+                                                    _ = fallbacks(f, "border-top", val);
+                                                }
+                                            } else {
+                                                if (comptime std.mem.eql(u8, prop_name, "border-block-start-width")) {
+                                                    if (f.logical_supported) {
+                                                        _ = push(f, "border-block-start-width", val);
+                                                    } else {
+                                                        _ = push(f, "border-top-width", val);
+                                                    }
+                                                } else {
+                                                    if (comptime std.mem.eql(u8, prop_name, "border-block-start-color")) {
+                                                        if (f.logical_supported) {
+                                                            _ = fallbacks(f, "border-block-start-color", val);
+                                                        } else {
+                                                            _ = fallbacks(f, "border-top-color", val);
+                                                        }
+                                                    } else {
+                                                        if (comptime std.mem.eql(u8, prop_name, "border-block-start-style")) {
+                                                            if (f.logical_supported) {
+                                                                _ = push(f, "border-block-start-style", val);
+                                                            } else {
+                                                                _ = push(f, "border-top-style", val);
+                                                            }
+                                                        } else {
+                                                            if (comptime std.mem.eql(u8, prop_name, "border-block-end")) {
+                                                                if (f.logical_supported) {
+                                                                    _ = fallbacks(f, "border-block-end", val);
+                                                                } else {
+                                                                    _ = fallbacks(f, "border-bottom", val);
+                                                                }
+                                                            } else {
+                                                                if (comptime std.mem.eql(u8, prop_name, "border-block-end-width")) {
+                                                                    if (f.logical_supported) {
+                                                                        _ = push(f, "border-block-end-width", val);
+                                                                    } else {
+                                                                        _ = push(f, "border-bottom-width", val);
+                                                                    }
+                                                                } else {
+                                                                    if (comptime std.mem.eql(u8, prop_name, "border-block-end-color")) {
+                                                                        if (f.logical_supported) {
+                                                                            _ = fallbacks(f, "border-block-end-color", val);
+                                                                        } else {
+                                                                            _ = fallbacks(f, "border-bottom-color", val);
+                                                                        }
+                                                                    } else {
+                                                                        if (comptime std.mem.eql(u8, prop_name, "border-block-end-style")) {
+                                                                            if (f.logical_supported) {
+                                                                                _ = push(f, "border-block-end-style", val);
+                                                                            } else {
+                                                                                _ = push(f, "border-bottom-style", val);
+                                                                            }
+                                                                        } else {
+                                                                            if (comptime (((((((((((((((((std.mem.eql(u8, prop_name, "border-left-color") or std.mem.eql(u8, prop_name, "border-right-color")) or std.mem.eql(u8, prop_name, "border-top-color")) or std.mem.eql(u8, prop_name, "border-bottom-color")) or std.mem.eql(u8, prop_name, "border-color")) or std.mem.eql(u8, prop_name, "border-block-color")) or std.mem.eql(u8, prop_name, "border-inline-color")) or std.mem.eql(u8, prop_name, "border-left")) or std.mem.eql(u8, prop_name, "border-right")) or std.mem.eql(u8, prop_name, "border-top")) or std.mem.eql(u8, prop_name, "border-bottom")) or std.mem.eql(u8, prop_name, "border-block-start")) or std.mem.eql(u8, prop_name, "border-block-end")) or std.mem.eql(u8, prop_name, "border-inline-start")) or std.mem.eql(u8, prop_name, "border-inline-end")) or std.mem.eql(u8, prop_name, "border-inline")) or std.mem.eql(u8, prop_name, "border-block")) or std.mem.eql(u8, prop_name, "border"))) {
+                                                                                _ = fallbacks(f, prop_name, val);
+                                                                            } else {
+                                                                                _ = push(f, prop_name, val);
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+    }
+
+pub fn flushCategory(f: *BorderFlushContext, comptime block_start_prop: []const u8, comptime block_start_width: []const u8, comptime block_start_style: []const u8, comptime block_start_color: []const u8, block_start: *BorderShorthand, comptime block_end_prop: []const u8, comptime block_end_width: []const u8, comptime block_end_style: []const u8, comptime block_end_color: []const u8, block_end: *BorderShorthand, comptime inline_start_prop: []const u8, comptime inline_start_width: []const u8, comptime inline_start_style: []const u8, comptime inline_start_color: []const u8, inline_start: *BorderShorthand, comptime inline_end_prop: []const u8, comptime inline_end_width: []const u8, comptime inline_end_style: []const u8, comptime inline_end_color: []const u8, inline_end: *BorderShorthand, comptime is_logical: bool) void {
+            const State = BorderFlushState;
+            var state = State{ .f = f, .block_start = block_start, .block_end = block_end, .inline_start = inline_start, .inline_end = inline_end };
+            _ = &state;
+            if ((((block_start.isValid() and block_end.isValid()) and inline_start.isValid()) and inline_end.isValid())) {
+                const top_eq_bottom = block_start.eql(block_end);
+                const left_eq_right = inline_start.eql(inline_end);
+                const top_eq_left = block_start.eql(inline_start);
+                const top_eq_right = block_start.eql(inline_end);
+                const bottom_eq_left = block_end.eql(inline_start);
+                const bottom_eq_right = block_end.eql(inline_end);
+                if (((top_eq_bottom and top_eq_left) and top_eq_right)) {
+                    _ = state.f.prop("border", block_start.toBorder(f.ctx.allocator));
+                } else {
+                    if ((top_eq_bottom and top_eq_left)) {
+                        _ = state.f.prop("border", block_start.toBorder(f.ctx.allocator));
+                        _ = state.side_diff(block_start, inline_end, inline_end_prop, inline_end_width, inline_end_style, inline_end_color);
+                    } else {
+                        if ((top_eq_bottom and top_eq_right)) {
+                            _ = state.f.prop("border", block_start.toBorder(f.ctx.allocator));
+                            _ = state.side_diff(block_start, inline_start, inline_start_prop, inline_start_width, inline_start_style, inline_start_color);
+                        } else {
+                            if ((left_eq_right and bottom_eq_left)) {
+                                _ = state.f.prop("border", inline_start.toBorder(f.ctx.allocator));
+                                _ = state.side_diff(inline_start, block_start, block_start_prop, block_start_width, block_start_style, block_start_color);
+                            } else {
+                                if ((left_eq_right and top_eq_left)) {
+                                    _ = state.f.prop("border", inline_start.toBorder(f.ctx.allocator));
+                                    _ = state.side_diff(inline_start, block_end, block_end_prop, block_end_width, block_end_style, block_end_color);
+                                } else {
+                                    if (top_eq_bottom) {
+                                        _ = state.prop_diff(block_start, (struct {
+
+pub fn fallback(s: *State) void {
+            var handled = false;
+            _ = &handled;
+            if (is_logical) {
+                var diff: u32 = 0;
+                _ = &diff;
+                if (((!css.generic.eql(@TypeOf(s.inline_start.width), (&s.inline_start.width), (&s.block_start.width))) or (!css.generic.eql(@TypeOf(s.inline_end.width), (&s.inline_end.width), (&s.block_start.width))))) {
+                    diff = (diff + 1);
+                }
+                if (((!css.generic.eql(@TypeOf(s.inline_start.style), (&s.inline_start.style), (&s.block_start.style))) or (!css.generic.eql(@TypeOf(s.inline_end.style), (&s.inline_end.style), (&s.block_start.style))))) {
+                    diff = (diff + 1);
+                }
+                if (((!css.generic.eql(@TypeOf(s.inline_start.color), (&s.inline_start.color), (&s.block_start.color))) or (!css.generic.eql(@TypeOf(s.inline_end.color), (&s.inline_end.color), (&s.block_start.color))))) {
+                    diff = (diff + 1);
+                }
+                if ((diff == 1)) {
+                    if ((!css.generic.eql(@TypeOf(s.inline_start.width), (&s.inline_start.width), (&s.block_start.width)))) {
+                        _ = s.f.prop("border-inline-width", BorderInlineWidth{ .start = s.inline_start.width.?.deepClone(s.f.ctx.allocator), .end = s.inline_end.width.?.deepClone(s.f.ctx.allocator) });
+                        handled = true;
+                    } else {
+                        if ((!css.generic.eql(@TypeOf(s.inline_start.style), (&s.inline_start.style), (&s.block_start.style)))) {
+                            _ = s.f.prop("border-inline-style", BorderInlineStyle{ .start = s.inline_start.style.?.deepClone(s.f.ctx.allocator), .end = s.inline_end.style.?.deepClone(s.f.ctx.allocator) });
+                            handled = true;
+                        } else {
+                            if ((!css.generic.eql(@TypeOf(s.inline_start.color), (&s.inline_start.color), (&s.block_start.color)))) {
+                                _ = s.f.prop("border-inline-color", BorderInlineColor{ .start = s.inline_start.color.?.deepClone(s.f.ctx.allocator), .end = s.inline_end.color.?.deepClone(s.f.ctx.allocator) });
+                                handled = true;
+                            }
+                        }
+                    }
+                } else {
+                    if (((((diff > 1) and css.generic.eql(@TypeOf(s.inline_start.width), (&s.inline_start.width), (&s.inline_end.width))) and css.generic.eql(@TypeOf(s.inline_start.style), (&s.inline_start.style), (&s.inline_end.style))) and css.generic.eql(@TypeOf(s.inline_start.color), (&s.inline_start.color), (&s.inline_end.color)))) {
+                        _ = s.f.prop("border-inline", s.inline_start.toBorder(s.f.ctx.allocator));
+                        handled = true;
+                    }
+                }
+            }
+            if ((!handled)) {
+                _ = s.side_diff(s.block_start, s.inline_start, inline_start_prop, inline_start_width, inline_start_style, inline_start_color);
+                _ = s.side_diff(s.block_start, s.inline_end, inline_end_prop, inline_end_width, inline_end_style, inline_end_color);
+            }
+    }
+}).fallback, true, is_logical);
+                                    } else {
+                                        if (left_eq_right) {
+                                            _ = state.prop_diff(inline_start, (struct {
+
+pub fn fallback(s: *State) void {
+            _ = s.side_diff(s.inline_start, s.block_start, block_start_prop, block_start_width, block_start_style, block_start_color);
+            _ = s.side_diff(s.inline_start, s.block_end, block_end_prop, block_end_width, block_end_style, block_end_color);
+    }
+}).fallback, true, is_logical);
+                                        } else {
+                                            if (bottom_eq_right) {
+                                                _ = state.prop_diff(block_end, (struct {
+
+pub fn fallback(s: *State) void {
+            _ = s.side_diff(s.block_end, s.block_start, block_start_prop, block_start_width, block_start_style, block_start_color);
+            _ = s.side_diff(s.block_end, s.inline_start, inline_start_prop, inline_start_width, inline_start_style, inline_start_color);
+    }
+}).fallback, true, is_logical);
+                                            } else {
+                                                _ = state.prop_diff(block_start, (struct {
+
+pub fn fallback(s: *State) void {
+            _ = s.f.prop(block_start_prop, s.block_start.toBorder(s.f.ctx.allocator));
+            _ = s.f.prop(block_end_prop, s.block_end.toBorder(s.f.ctx.allocator));
+            _ = s.f.prop(inline_start_prop, s.inline_start.toBorder(s.f.ctx.allocator));
+            _ = s.f.prop(inline_end_prop, s.inline_end.toBorder(s.f.ctx.allocator));
+    }
+}).fallback, false, is_logical);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                _ = state.shorthand(BorderStyle, "border-style", "style", is_logical);
+                _ = state.shorthand(BorderWidth, "border-width", "width", is_logical);
+                _ = state.shorthand(BorderColor, "border-color", "color", is_logical);
+                if (((is_logical and block_start.eql(block_end)) and block_start.isValid())) {
+                    if (f.logical_supported) {
+                        if (f.logical_shorthand_supported) {
+                            _ = state.f.prop("border-block", block_start.toBorder(f.ctx.allocator));
+                        } else {
+                            _ = state.f.prop("border-block-start", block_start.toBorder(f.ctx.allocator));
+                            _ = state.f.prop("border-block-end", block_start.toBorder(f.ctx.allocator));
+                        }
+                    } else {
+                        _ = state.f.prop("border-top", block_start.toBorder(f.ctx.allocator));
+                        _ = state.f.prop("border-bottom", block_start.toBorder(f.ctx.allocator));
+                    }
+                } else {
+                    if ((((is_logical and f.logical_shorthand_supported) and (!block_start.isValid())) and (!block_end.isValid()))) {
+                        _ = state.logicalShorthand(BorderBlockStyle, "border-block-style", "style", block_start, block_end);
+                        _ = state.logicalShorthand(BorderBlockWidth, "border-block-width", "width", block_start, block_end);
+                        _ = state.logicalShorthand(BorderBlockColor, "border-block-color", "color", block_start, block_end);
+                    }
+                    _ = state.side(block_start, block_start_prop, block_start_width, block_start_style, block_start_color);
+                    _ = state.side(block_end, block_end_prop, block_end_width, block_end_style, block_end_color);
+                }
+                if (((is_logical and inline_start.eql(inline_end)) and inline_start.isValid())) {
+                    if (f.logical_supported) {
+                        if (f.logical_shorthand_supported) {
+                            _ = state.f.prop("border-inline", inline_start.toBorder(f.ctx.allocator));
+                        } else {
+                            _ = state.f.prop("border-inline-start", inline_start.toBorder(f.ctx.allocator));
+                            _ = state.f.prop("border-inline-end", inline_start.toBorder(f.ctx.allocator));
+                        }
+                    } else {
+                        _ = state.f.prop("border-left", inline_start.toBorder(f.ctx.allocator));
+                        _ = state.f.prop("border-right", inline_start.toBorder(f.ctx.allocator));
+                    }
+                } else {
+                    if (((is_logical and (!inline_start.isValid())) and (!inline_end.isValid()))) {
+                        if (f.logical_shorthand_supported) {
+                            _ = state.logicalShorthand(BorderInlineStyle, "border-inline-style", "style", inline_start, inline_end);
+                            _ = state.logicalShorthand(BorderInlineWidth, "border-inline-width", "width", inline_start, inline_end);
+                            _ = state.logicalShorthand(BorderInlineColor, "border-inline-color", "color", inline_start, inline_end);
+                        } else {
+                            _ = state.inlineProp("style", "border-left-style", "border-right-style");
+                            _ = state.inlineProp("width", "border-left-width", "border-right-width");
+                            _ = state.inlineProp("color", "border-left-color", "border-right-color");
+                        }
+                    }
+                    _ = state.side(inline_start, inline_start_prop, inline_start_width, inline_start_style, inline_start_color);
+                    _ = state.side(inline_end, inline_end_prop, inline_end_width, inline_end_style, inline_end_color);
+                }
+            }
+    }
+};
+
 pub const BorderHandler = struct {
     border_top: BorderShorthand = .{},
     border_bottom: BorderShorthand = .{},
@@ -775,448 +1218,7 @@ var up = unparsed.deepClone(context.allocator);
 },
 }
     }
-    const FlushContext = struct {
-        self: *BorderHandler,
-        dest: *css.DeclarationList,
-        ctx: *css.PropertyHandlerContext,
-        logical_supported: bool,
-        logical_shorthand_supported: bool,
-    
-    pub inline fn logicalProp(f: *FlushContext, comptime ltr: []const u8, comptime rtl: []const u8, val: anytype) void {
-                const cloned = (if (comptime (@typeInfo(@TypeOf(val)) == .pointer)) css.generic.deepClone(@TypeOf(val.*), val, f.ctx.allocator) else css.generic.deepClone(@TypeOf(val), (&val), f.ctx.allocator));
-                const LtrType = @FieldType(css.Property, ltr);
-                const RtlType = @FieldType(css.Property, rtl);
-                const ltr_val: LtrType = (if (comptime (LtrType == @TypeOf(cloned))) cloned else LtrType{ .width = cloned.width, .style = cloned.style, .color = cloned.color });
-                const rtl_val: RtlType = (if (comptime (RtlType == @TypeOf(cloned))) cloned else RtlType{ .width = cloned.width, .style = cloned.style, .color = cloned.color });
-                _ = f.ctx.addLogicalRule(f.ctx.allocator, @unionInit(css.Property, ltr, ltr_val), @unionInit(css.Property, rtl, rtl_val));
-        }
-    
-    pub inline fn push(f: *FlushContext, comptime p: []const u8, val: anytype) void {
-                _ = bun.bits.insert(BorderProperty, (&f.self.flushed_properties), @field(BorderProperty, p));
-                const cloned = (if (comptime (@typeInfo(@TypeOf(val)) == .pointer)) css.generic.deepClone(@TypeOf(val.*), val, f.ctx.allocator) else css.generic.deepClone(@TypeOf(val), (&val), f.ctx.allocator));
-                const TargetType = @FieldType(css.Property, p);
-                const final_val: TargetType = (if (comptime (TargetType == @TypeOf(cloned))) cloned else TargetType{ .width = cloned.width, .style = cloned.style, .color = cloned.color });
-                _ = bun.handleOom(f.dest.append(f.ctx.allocator, @unionInit(css.Property, p, final_val)));
-        }
-    
-    pub inline fn fallbacks(f: *FlushContext, comptime p: []const u8, _val: anytype) void {
-                var val = _val;
-                _ = &val;
-                const TargetType = @FieldType(css.Property, p);
-                if ((!bun.bits.contains(BorderProperty, f.self.flushed_properties, @field(BorderProperty, p)))) {
-                    const fbs = val.getFallbacks(f.ctx.allocator, f.ctx.targets);
-                    for (css.generic.slice(@TypeOf(fbs), &fbs)) |fallback| {
-                        _ = &fallback;
-                        const final_fb: TargetType = (if (comptime (TargetType == @TypeOf(fallback))) fallback else TargetType{ .width = fallback.width, .style = fallback.style, .color = fallback.color });
-                        _ = bun.handleOom(f.dest.append(f.ctx.allocator, @unionInit(css.Property, p, final_fb)));
-                    }
-                }
-                _ = push(f, p, val);
-        }
-    
-    pub inline fn prop(f: *FlushContext, comptime prop_name: []const u8, val: anytype) void {
-                _ = @setEvalBranchQuota(10000);
-                if (comptime std.mem.eql(u8, prop_name, "border-inline-start")) {
-                    if (f.logical_supported) {
-                        _ = fallbacks(f, "border-inline-start", val);
-                    } else {
-                        _ = logicalProp(f, "border-left", "border-right", val);
-                    }
-                } else {
-                    if (comptime std.mem.eql(u8, prop_name, "border-inline-start-width")) {
-                        if (f.logical_supported) {
-                            _ = push(f, "border-inline-start-width", val);
-                        } else {
-                            _ = logicalProp(f, "border-left-width", "border-right-width", val);
-                        }
-                    } else {
-                        if (comptime std.mem.eql(u8, prop_name, "border-inline-start-color")) {
-                            if (f.logical_supported) {
-                                _ = fallbacks(f, "border-inline-start-color", val);
-                            } else {
-                                _ = logicalProp(f, "border-left-color", "border-right-color", val);
-                            }
-                        } else {
-                            if (comptime std.mem.eql(u8, prop_name, "border-inline-start-style")) {
-                                if (f.logical_supported) {
-                                    _ = push(f, "border-inline-start-style", val);
-                                } else {
-                                    _ = logicalProp(f, "border-left-style", "border-right-style", val);
-                                }
-                            } else {
-                                if (comptime std.mem.eql(u8, prop_name, "border-inline-end")) {
-                                    if (f.logical_supported) {
-                                        _ = fallbacks(f, "border-inline-end", val);
-                                    } else {
-                                        _ = logicalProp(f, "border-right", "border-left", val);
-                                    }
-                                } else {
-                                    if (comptime std.mem.eql(u8, prop_name, "border-inline-end-width")) {
-                                        if (f.logical_supported) {
-                                            _ = push(f, "border-inline-end-width", val);
-                                        } else {
-                                            _ = logicalProp(f, "border-right-width", "border-left-width", val);
-                                        }
-                                    } else {
-                                        if (comptime std.mem.eql(u8, prop_name, "border-inline-end-color")) {
-                                            if (f.logical_supported) {
-                                                _ = fallbacks(f, "border-inline-end-color", val);
-                                            } else {
-                                                _ = logicalProp(f, "border-right-color", "border-left-color", val);
-                                            }
-                                        } else {
-                                            if (comptime std.mem.eql(u8, prop_name, "border-inline-end-style")) {
-                                                if (f.logical_supported) {
-                                                    _ = push(f, "border-inline-end-style", val);
-                                                } else {
-                                                    _ = logicalProp(f, "border-right-style", "border-left-style", val);
-                                                }
-                                            } else {
-                                                if (comptime std.mem.eql(u8, prop_name, "border-block-start")) {
-                                                    if (f.logical_supported) {
-                                                        _ = fallbacks(f, "border-block-start", val);
-                                                    } else {
-                                                        _ = fallbacks(f, "border-top", val);
-                                                    }
-                                                } else {
-                                                    if (comptime std.mem.eql(u8, prop_name, "border-block-start-width")) {
-                                                        if (f.logical_supported) {
-                                                            _ = push(f, "border-block-start-width", val);
-                                                        } else {
-                                                            _ = push(f, "border-top-width", val);
-                                                        }
-                                                    } else {
-                                                        if (comptime std.mem.eql(u8, prop_name, "border-block-start-color")) {
-                                                            if (f.logical_supported) {
-                                                                _ = fallbacks(f, "border-block-start-color", val);
-                                                            } else {
-                                                                _ = fallbacks(f, "border-top-color", val);
-                                                            }
-                                                        } else {
-                                                            if (comptime std.mem.eql(u8, prop_name, "border-block-start-style")) {
-                                                                if (f.logical_supported) {
-                                                                    _ = push(f, "border-block-start-style", val);
-                                                                } else {
-                                                                    _ = push(f, "border-top-style", val);
-                                                                }
-                                                            } else {
-                                                                if (comptime std.mem.eql(u8, prop_name, "border-block-end")) {
-                                                                    if (f.logical_supported) {
-                                                                        _ = fallbacks(f, "border-block-end", val);
-                                                                    } else {
-                                                                        _ = fallbacks(f, "border-bottom", val);
-                                                                    }
-                                                                } else {
-                                                                    if (comptime std.mem.eql(u8, prop_name, "border-block-end-width")) {
-                                                                        if (f.logical_supported) {
-                                                                            _ = push(f, "border-block-end-width", val);
-                                                                        } else {
-                                                                            _ = push(f, "border-bottom-width", val);
-                                                                        }
-                                                                    } else {
-                                                                        if (comptime std.mem.eql(u8, prop_name, "border-block-end-color")) {
-                                                                            if (f.logical_supported) {
-                                                                                _ = fallbacks(f, "border-block-end-color", val);
-                                                                            } else {
-                                                                                _ = fallbacks(f, "border-bottom-color", val);
-                                                                            }
-                                                                        } else {
-                                                                            if (comptime std.mem.eql(u8, prop_name, "border-block-end-style")) {
-                                                                                if (f.logical_supported) {
-                                                                                    _ = push(f, "border-block-end-style", val);
-                                                                                } else {
-                                                                                    _ = push(f, "border-bottom-style", val);
-                                                                                }
-                                                                            } else {
-                                                                                if (comptime (((((((((((((((((std.mem.eql(u8, prop_name, "border-left-color") or std.mem.eql(u8, prop_name, "border-right-color")) or std.mem.eql(u8, prop_name, "border-top-color")) or std.mem.eql(u8, prop_name, "border-bottom-color")) or std.mem.eql(u8, prop_name, "border-color")) or std.mem.eql(u8, prop_name, "border-block-color")) or std.mem.eql(u8, prop_name, "border-inline-color")) or std.mem.eql(u8, prop_name, "border-left")) or std.mem.eql(u8, prop_name, "border-right")) or std.mem.eql(u8, prop_name, "border-top")) or std.mem.eql(u8, prop_name, "border-bottom")) or std.mem.eql(u8, prop_name, "border-block-start")) or std.mem.eql(u8, prop_name, "border-block-end")) or std.mem.eql(u8, prop_name, "border-inline-start")) or std.mem.eql(u8, prop_name, "border-inline-end")) or std.mem.eql(u8, prop_name, "border-inline")) or std.mem.eql(u8, prop_name, "border-block")) or std.mem.eql(u8, prop_name, "border"))) {
-                                                                                    _ = fallbacks(f, prop_name, val);
-                                                                                } else {
-                                                                                    _ = push(f, prop_name, val);
-                                                                                }
-                                                                            }
-                                                                        }
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-        }
-    
-    pub fn flushCategory(f: *FlushContext, comptime block_start_prop: []const u8, comptime block_start_width: []const u8, comptime block_start_style: []const u8, comptime block_start_color: []const u8, block_start: *BorderShorthand, comptime block_end_prop: []const u8, comptime block_end_width: []const u8, comptime block_end_style: []const u8, comptime block_end_color: []const u8, block_end: *BorderShorthand, comptime inline_start_prop: []const u8, comptime inline_start_width: []const u8, comptime inline_start_style: []const u8, comptime inline_start_color: []const u8, inline_start: *BorderShorthand, comptime inline_end_prop: []const u8, comptime inline_end_width: []const u8, comptime inline_end_style: []const u8, comptime inline_end_color: []const u8, inline_end: *BorderShorthand, comptime is_logical: bool) void {
-                const State = struct {
-        f: *FlushContext,
-        block_start: *BorderShorthand,
-        block_end: *BorderShorthand,
-        inline_start: *BorderShorthand,
-        inline_end: *BorderShorthand,
-    
-    pub inline fn shorthand(s: *@This(), comptime P: type, comptime prop_name: []const u8, comptime key: []const u8) void {
-                const PType = P;
-                _ = &PType;
-                const has_prop = ((((@field(s.block_start, key) != null) and (@field(s.block_end, key) != null)) and (@field(s.inline_start, key) != null)) and (@field(s.inline_end, key) != null));
-                if (has_prop) {
-                    if (((!is_logical) or ((css.generic.eql(@TypeOf(@field(s.block_start, key)), (&@field(s.block_start, key)), (&@field(s.block_end, key))) and css.generic.eql(@TypeOf(@field(s.block_end, key)), (&@field(s.block_end, key)), (&@field(s.inline_start, key)))) and css.generic.eql(@TypeOf(@field(s.inline_start, key)), (&@field(s.inline_start, key)), (&@field(s.inline_end, key)))))) {
-                        const rect = PType{ .top = (bun.take((&@field(s.block_start, key)))).?, .right = (bun.take((&@field(s.inline_end, key)))).?, .bottom = (bun.take((&@field(s.block_end, key)))).?, .left = (bun.take((&@field(s.inline_start, key)))).? };
-                        _ = prop(s.f, prop_name, rect);
-                    }
-                }
-        }
-    
-    pub inline fn logicalShorthand(s: *@This(), comptime P: type, comptime prop_name: []const u8, comptime key: []const u8, start: anytype, end: anytype) void {
-                const PType = P;
-                _ = &PType;
-                const has_prop = ((@field(start, key) != null) and (@field(end, key) != null));
-                if (has_prop) {
-                    _ = prop(s.f, prop_name, PType{ .start = (bun.take((&@field(start, key)))).?, .end = (bun.take((&@field(end, key)))).? });
-                    _ = bun.clear((&@field(end, key)), s.f.ctx.allocator);
-                }
-        }
-    
-    pub inline fn is_eq(s: *@This(), comptime key: []const u8) bool {
-                return ((css.generic.eql(@TypeOf(@field(s.block_start, key)), (&@field(s.block_start, key)), (&@field(s.block_end, key))) and css.generic.eql(@TypeOf(@field(s.inline_start, key)), (&@field(s.inline_start, key)), (&@field(s.inline_end, key)))) and css.generic.eql(@TypeOf(@field(s.inline_start, key)), (&@field(s.inline_start, key)), (&@field(s.block_start, key))));
-        }
-    
-    pub inline fn prop_diff(s: *@This(), border: anytype, fallback: anytype, border_fallback: anytype) void {
-                if ((((!is_logical) and s.is_eq("color")) and s.is_eq("style"))) {
-                    _ = prop(s.f, "border", border.toBorder(s.f.ctx.allocator));
-                    _ = shorthand(s, BorderWidth, "border-width", "width");
-                } else {
-                    if ((((!is_logical) and s.is_eq("width")) and s.is_eq("style"))) {
-                        _ = prop(s.f, "border", border.toBorder(s.f.ctx.allocator));
-                        _ = shorthand(s, BorderColor, "border-color", "color");
-                    } else {
-                        if ((((!is_logical) and s.is_eq("width")) and s.is_eq("color"))) {
-                            _ = prop(s.f, "border", border.toBorder(s.f.ctx.allocator));
-                            _ = shorthand(s, BorderStyle, "border-style", "style");
-                        } else {
-                            if (border_fallback) {
-                                _ = prop(s.f, "border", border.toBorder(s.f.ctx.allocator));
-                            }
-                            _ = fallback(s);
-                        }
-                    }
-                }
-        }
-    
-    pub inline fn side_diff(s: *@This(), border: anytype, other: anytype, comptime prop_name: []const u8, width: anytype, style: anytype, comptime color: []const u8) void {
-                const eq_width = css.generic.eql(@TypeOf(border.width), (&border.width), (&other.width));
-                const eq_style = css.generic.eql(@TypeOf(border.style), (&border.style), (&other.style));
-                const eq_color = css.generic.eql(@TypeOf(border.color), (&border.color), (&other.color));
-                if ((eq_width and eq_style)) {
-                    _ = s.f.prop(color, (css.generic.deepClone(@TypeOf(other.color), (&other.color), s.f.ctx.allocator)).?);
-                } else {
-                    if ((eq_width and eq_color)) {
-                        _ = s.f.prop(style, (css.generic.deepClone(@TypeOf(other.style), (&other.style), s.f.ctx.allocator)).?);
-                    } else {
-                        if ((eq_style and eq_color)) {
-                            _ = s.f.prop(width, (css.generic.deepClone(@TypeOf(other.width), (&other.width), s.f.ctx.allocator)).?);
-                        } else {
-                            _ = s.f.prop(prop_name, other.toBorder(s.f.ctx.allocator));
-                        }
-                    }
-                }
-        }
-    
-    pub inline fn side(s: *@This(), val: anytype, comptime short: []const u8, comptime width: []const u8, comptime style: []const u8, comptime color: []const u8) void {
-                if (val.isValid()) {
-                    _ = s.f.prop(short, val.toBorder(s.f.ctx.allocator));
-                } else {
-                    if (val.style) |*sty| {
-                        _ = &sty;
-                        _ = s.f.prop(style, (sty.*).deepClone(s.f.ctx.allocator));
-                    }
-                    if (val.width) |*w| {
-                        _ = &w;
-                        _ = s.f.prop(width, (w.*).deepClone(s.f.ctx.allocator));
-                    }
-                    if (val.color) |*c| {
-                        _ = &c;
-                        _ = s.f.prop(color, (c.*).deepClone(s.f.ctx.allocator));
-                    }
-                }
-        }
-    
-    pub inline fn inlineProp(s: *@This(), comptime key: []const u8, comptime left: []const u8, comptime right: []const u8) void {
-                if (((@field(s.inline_start, key) != null) and css.generic.eql(@TypeOf(@field(s.inline_start, key)), (&@field(s.inline_start, key)), (&@field(s.inline_end, key))))) {
-                    _ = s.f.prop(left, (bun.take((&@field(s.inline_start, key)))).?);
-                    _ = s.f.prop(right, (bun.take((&@field(s.inline_end, key)))).?);
-                }
-        }
-    };
-                var state = State{ .f = f, .block_start = block_start, .block_end = block_end, .inline_start = inline_start, .inline_end = inline_end };
-                _ = &state;
-                if ((((block_start.isValid() and block_end.isValid()) and inline_start.isValid()) and inline_end.isValid())) {
-                    const top_eq_bottom = block_start.eql(block_end);
-                    const left_eq_right = inline_start.eql(inline_end);
-                    const top_eq_left = block_start.eql(inline_start);
-                    const top_eq_right = block_start.eql(inline_end);
-                    const bottom_eq_left = block_end.eql(inline_start);
-                    const bottom_eq_right = block_end.eql(inline_end);
-                    if (((top_eq_bottom and top_eq_left) and top_eq_right)) {
-                        _ = state.f.prop("border", block_start.toBorder(f.ctx.allocator));
-                    } else {
-                        if ((top_eq_bottom and top_eq_left)) {
-                            _ = state.f.prop("border", block_start.toBorder(f.ctx.allocator));
-                            _ = state.side_diff(block_start, inline_end, inline_end_prop, inline_end_width, inline_end_style, inline_end_color);
-                        } else {
-                            if ((top_eq_bottom and top_eq_right)) {
-                                _ = state.f.prop("border", block_start.toBorder(f.ctx.allocator));
-                                _ = state.side_diff(block_start, inline_start, inline_start_prop, inline_start_width, inline_start_style, inline_start_color);
-                            } else {
-                                if ((left_eq_right and bottom_eq_left)) {
-                                    _ = state.f.prop("border", inline_start.toBorder(f.ctx.allocator));
-                                    _ = state.side_diff(inline_start, block_start, block_start_prop, block_start_width, block_start_style, block_start_color);
-                                } else {
-                                    if ((left_eq_right and top_eq_left)) {
-                                        _ = state.f.prop("border", inline_start.toBorder(f.ctx.allocator));
-                                        _ = state.side_diff(inline_start, block_end, block_end_prop, block_end_width, block_end_style, block_end_color);
-                                    } else {
-                                        if (top_eq_bottom) {
-                                            _ = state.prop_diff(block_start, (struct {
-    
-    pub fn fallback(s: *State) void {
-                var handled = false;
-                _ = &handled;
-                if (is_logical) {
-                    var diff: u32 = 0;
-                    _ = &diff;
-                    if (((!css.generic.eql(@TypeOf(s.inline_start.width), (&s.inline_start.width), (&s.block_start.width))) or (!css.generic.eql(@TypeOf(s.inline_end.width), (&s.inline_end.width), (&s.block_start.width))))) {
-                        diff = (diff + 1);
-                    }
-                    if (((!css.generic.eql(@TypeOf(s.inline_start.style), (&s.inline_start.style), (&s.block_start.style))) or (!css.generic.eql(@TypeOf(s.inline_end.style), (&s.inline_end.style), (&s.block_start.style))))) {
-                        diff = (diff + 1);
-                    }
-                    if (((!css.generic.eql(@TypeOf(s.inline_start.color), (&s.inline_start.color), (&s.block_start.color))) or (!css.generic.eql(@TypeOf(s.inline_end.color), (&s.inline_end.color), (&s.block_start.color))))) {
-                        diff = (diff + 1);
-                    }
-                    if ((diff == 1)) {
-                        if ((!css.generic.eql(@TypeOf(s.inline_start.width), (&s.inline_start.width), (&s.block_start.width)))) {
-                            _ = s.f.prop("border-inline-width", BorderInlineWidth{ .start = s.inline_start.width.?.deepClone(s.f.ctx.allocator), .end = s.inline_end.width.?.deepClone(s.f.ctx.allocator) });
-                            handled = true;
-                        } else {
-                            if ((!css.generic.eql(@TypeOf(s.inline_start.style), (&s.inline_start.style), (&s.block_start.style)))) {
-                                _ = s.f.prop("border-inline-style", BorderInlineStyle{ .start = s.inline_start.style.?.deepClone(s.f.ctx.allocator), .end = s.inline_end.style.?.deepClone(s.f.ctx.allocator) });
-                                handled = true;
-                            } else {
-                                if ((!css.generic.eql(@TypeOf(s.inline_start.color), (&s.inline_start.color), (&s.block_start.color)))) {
-                                    _ = s.f.prop("border-inline-color", BorderInlineColor{ .start = s.inline_start.color.?.deepClone(s.f.ctx.allocator), .end = s.inline_end.color.?.deepClone(s.f.ctx.allocator) });
-                                    handled = true;
-                                }
-                            }
-                        }
-                    } else {
-                        if (((((diff > 1) and css.generic.eql(@TypeOf(s.inline_start.width), (&s.inline_start.width), (&s.inline_end.width))) and css.generic.eql(@TypeOf(s.inline_start.style), (&s.inline_start.style), (&s.inline_end.style))) and css.generic.eql(@TypeOf(s.inline_start.color), (&s.inline_start.color), (&s.inline_end.color)))) {
-                            _ = s.f.prop("border-inline", s.inline_start.toBorder(s.f.ctx.allocator));
-                            handled = true;
-                        }
-                    }
-                }
-                if ((!handled)) {
-                    _ = s.side_diff(s.block_start, s.inline_start, inline_start_prop, inline_start_width, inline_start_style, inline_start_color);
-                    _ = s.side_diff(s.block_start, s.inline_end, inline_end_prop, inline_end_width, inline_end_style, inline_end_color);
-                }
-        }
-    }).fallback, true);
-                                        } else {
-                                            if (left_eq_right) {
-                                                _ = state.prop_diff(inline_start, (struct {
-    
-    pub fn fallback(s: *State) void {
-                _ = s.side_diff(s.inline_start, s.block_start, block_start_prop, block_start_width, block_start_style, block_start_color);
-                _ = s.side_diff(s.inline_start, s.block_end, block_end_prop, block_end_width, block_end_style, block_end_color);
-        }
-    }).fallback, true);
-                                            } else {
-                                                if (bottom_eq_right) {
-                                                    _ = state.prop_diff(block_end, (struct {
-    
-    pub fn fallback(s: *State) void {
-                _ = s.side_diff(s.block_end, s.block_start, block_start_prop, block_start_width, block_start_style, block_start_color);
-                _ = s.side_diff(s.block_end, s.inline_start, inline_start_prop, inline_start_width, inline_start_style, inline_start_color);
-        }
-    }).fallback, true);
-                                                } else {
-                                                    _ = state.prop_diff(block_start, (struct {
-    
-    pub fn fallback(s: *State) void {
-                _ = s.f.prop(block_start_prop, s.block_start.toBorder(s.f.ctx.allocator));
-                _ = s.f.prop(block_end_prop, s.block_end.toBorder(s.f.ctx.allocator));
-                _ = s.f.prop(inline_start_prop, s.inline_start.toBorder(s.f.ctx.allocator));
-                _ = s.f.prop(inline_end_prop, s.inline_end.toBorder(s.f.ctx.allocator));
-        }
-    }).fallback, false);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    _ = state.shorthand(BorderStyle, "border-style", "style");
-                    _ = state.shorthand(BorderWidth, "border-width", "width");
-                    _ = state.shorthand(BorderColor, "border-color", "color");
-                    if (((is_logical and block_start.eql(block_end)) and block_start.isValid())) {
-                        if (f.logical_supported) {
-                            if (f.logical_shorthand_supported) {
-                                _ = state.f.prop("border-block", block_start.toBorder(f.ctx.allocator));
-                            } else {
-                                _ = state.f.prop("border-block-start", block_start.toBorder(f.ctx.allocator));
-                                _ = state.f.prop("border-block-end", block_start.toBorder(f.ctx.allocator));
-                            }
-                        } else {
-                            _ = state.f.prop("border-top", block_start.toBorder(f.ctx.allocator));
-                            _ = state.f.prop("border-bottom", block_start.toBorder(f.ctx.allocator));
-                        }
-                    } else {
-                        if ((((is_logical and f.logical_shorthand_supported) and (!block_start.isValid())) and (!block_end.isValid()))) {
-                            _ = state.logicalShorthand(BorderBlockStyle, "border-block-style", "style", block_start, block_end);
-                            _ = state.logicalShorthand(BorderBlockWidth, "border-block-width", "width", block_start, block_end);
-                            _ = state.logicalShorthand(BorderBlockColor, "border-block-color", "color", block_start, block_end);
-                        }
-                        _ = state.side(block_start, block_start_prop, block_start_width, block_start_style, block_start_color);
-                        _ = state.side(block_end, block_end_prop, block_end_width, block_end_style, block_end_color);
-                    }
-                    if (((is_logical and inline_start.eql(inline_end)) and inline_start.isValid())) {
-                        if (f.logical_supported) {
-                            if (f.logical_shorthand_supported) {
-                                _ = state.f.prop("border-inline", inline_start.toBorder(f.ctx.allocator));
-                            } else {
-                                _ = state.f.prop("border-inline-start", inline_start.toBorder(f.ctx.allocator));
-                                _ = state.f.prop("border-inline-end", inline_start.toBorder(f.ctx.allocator));
-                            }
-                        } else {
-                            _ = state.f.prop("border-left", inline_start.toBorder(f.ctx.allocator));
-                            _ = state.f.prop("border-right", inline_start.toBorder(f.ctx.allocator));
-                        }
-                    } else {
-                        if (((is_logical and (!inline_start.isValid())) and (!inline_end.isValid()))) {
-                            if (f.logical_shorthand_supported) {
-                                _ = state.logicalShorthand(BorderInlineStyle, "border-inline-style", "style", inline_start, inline_end);
-                                _ = state.logicalShorthand(BorderInlineWidth, "border-inline-width", "width", inline_start, inline_end);
-                                _ = state.logicalShorthand(BorderInlineColor, "border-inline-color", "color", inline_start, inline_end);
-                            } else {
-                                _ = state.inlineProp("style", "border-left-style", "border-right-style");
-                                _ = state.inlineProp("width", "border-left-width", "border-right-width");
-                                _ = state.inlineProp("color", "border-left-color", "border-right-color");
-                            }
-                        }
-                        _ = state.side(inline_start, inline_start_prop, inline_start_width, inline_start_style, inline_start_color);
-                        _ = state.side(inline_end, inline_end_prop, inline_end_width, inline_end_style, inline_end_color);
-                    }
-                }
-        }
-    };
+    pub const FlushContext = BorderFlushContext;
 };
 
 const SmallList = css.SmallList;

@@ -2,6 +2,17 @@ import css from "./css_parser.zig";
 
 const VendorPrefix = css.VendorPrefix;
 
+enum TargetsBrowser {
+    chrome,
+    edge,
+    firefox,
+    ie,
+    ios_saf,
+    opera,
+    safari,
+    no_mapping,
+}
+
 /// Target browsers and features to compile.
 pub struct Targets {
     /// Browser targets to compile the CSS for.
@@ -249,16 +260,7 @@ pub struct Browsers {
                 };
 
                 if (idx := maybe_idx) {
-                    const Browser = enum {
-                        chrome,
-                        edge,
-                        firefox,
-                        ie,
-                        ios_saf,
-                        opera,
-                        safari,
-                        no_mapping,
-                    };
+                    const Browser = TargetsBrowser;
                     const Map = bun.ComptimeStringMap(Browser, .{
                         .{ "chrome", Browser.chrome },
                         .{ "edge", Browser.edge },

@@ -503,10 +503,15 @@ struct TrackedDeref {
     released_at: bun.crash_handler.StoredTrace;
 }
 
+enum DebugData_Magic: u128 {
+    valid = 0x2f84e51d,
+    _,
+}
+
 /// Provides Ref tracking. This is not generic over the pointer T to reduce analysis complexity.
 pub fn DebugData(comptime thread_safe: bool): type {
     const Count = if (thread_safe) std.atomic.Value(u32) else u32;
-    const Magic = enum(u128) { valid = 0x2f84e51d, _ };
+    const Magic = DebugData_Magic;
     const LockField = if (thread_safe) std.debug.SafetyLock else bun.Mutex;
 
     return struct {

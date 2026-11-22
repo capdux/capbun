@@ -124,16 +124,18 @@ struct AutoCommand {
     }
 }
 
+pub enum HelpCommandReason {
+    explicit,
+    invalid_command,
+}
+
 pub struct HelpCommand {
     static fn exec(allocator: std.mem.Allocator)! {
         @branchHint(.cold);
         execWithReason(allocator, .explicit);
     }
 
-    pub const Reason = enum {
-        explicit,
-        invalid_command,
-    };
+    pub const Reason = HelpCommandReason;
 
     // someone will get mad at me for this
     pub const packages_to_remove_filler = [_]string{

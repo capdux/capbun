@@ -75,6 +75,42 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 pub const production = @import("./production.zig");
 pub const DevServer = @import("./DevServer.zig");
 pub const FrameworkRouter = @import("./FrameworkRouter.zig");
+pub const Mode = enum {
+    development,
+    production_dynamic,
+    production_static,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const Side = enum(u1) {
+    client,
+    server,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub fn graph(self: Side) Graph {
+            return (switch (self) {
+.client => .client,
+.server => .server,
+});
+    }
+};
+
+pub const Graph = enum(u2) {
+    client,
+    server,
+    ssr,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         ptr: ?*T = null,
@@ -677,28 +713,6 @@ pub fn slice(self: *PatternBuffer) []u8 {
 pub const api_name = "app";
 var empty_str_slices: [0][]const u8 = undefined;
 var empty_fsr_types: [0]BakeFileSystemRouterType = undefined;
-pub const Mode = enum {
-    development,
-    production_dynamic,
-    production_static,
-};
-pub const Side = enum(u1) {
-    client,
-    server,
-
-    pub fn graph(s: Side) Graph {
-        return switch (s) {
-            .client => .client,
-            .server => .server,
-        };
-    }
-};
-pub const Graph = enum(u2) {
-    client,
-    server,
-    /// Only used when Framework has .server_components.separate_ssr_graph set
-    ssr,
-};
 pub const server_virtual_source: bun.logger.Source = .{ .path = bun.fs.Path.initForKitBuiltIn("bun", "bake/server"), .contents = "", .index = bun.ast.Index.bake_server_data };
 pub const client_virtual_source: bun.logger.Source = .{ .path = bun.fs.Path.initForKitBuiltIn("bun", "bake/client"), .contents = "", .index = bun.ast.Index.bake_client_data };
 const Allocator = std.mem.Allocator;

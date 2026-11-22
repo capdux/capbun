@@ -78,6 +78,17 @@ pub const Result = union(enum) {
     pub fn name(self: @This()) []const u8 { return @tagName(self); }
 };
 
+pub const ZstdReaderState = enum {
+    Uninitialized,
+    Inflating,
+    End,
+    Error,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub fn DeinitPtrGuard(comptime T: type) type {
     return struct {
         ptr: *T,
@@ -243,12 +254,7 @@ pub fn readAll(self: *ZstdReaderArrayList, is_done: bool) !void {
                 }
             }
     }
-    const State = enum {
-            Uninitialized,
-            Inflating,
-            End,
-            Error,
-        };
+    pub const State = ZstdReaderState;
     pub const new = bun.TrivialNew(ZstdReaderArrayList);
 };
 
@@ -284,7 +290,6 @@ pub fn decompressAlloc(allocator: std.mem.Allocator, src: []const u8) ![]u8 {
         }
         if (((size == ZSTD_CONTENTSIZE_UNKNOWN) or (size > MAX_PREALLOCATE_SIZE))) {
             const ByteList = std.ArrayListUnmanaged(u8);
-            _ = &ByteList;
             var list = ByteList{  };
             _ = &list;
             var list_guard = ErrDeinitWithAllocGuard(ByteList){ .ptr = (blk: {

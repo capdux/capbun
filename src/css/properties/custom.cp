@@ -28,6 +28,197 @@ pub const AnimationName = css.css_properties.animation.AnimationName;
 const ComponentParser = css.css_values.color.ComponentParser;
 
 const SupportsCondition = css.SupportsCondition;
+
+pub type TokenListFallbacks = [SupportsCondition, TokenList];
+
+pub struct ParseRawClosure {
+    options: *const css.ParserOptions,
+    depth: usize,
+    tokens: *ArrayList(TokenOrValue),
+    static fn parsefn(c: *@This(), input2: *css.Parser): Result(void) {
+        return TokenListFns.parseRaw(
+            input2,
+            c.tokens,
+            c.options,
+            c.depth + 1,
+        );
+    }
+}
+
+pub struct ParseVarClosure {
+    options: *const css.ParserOptions,
+    depth: usize,
+    tokens: *ArrayList(TokenOrValue),
+    static fn parsefn(c: *@This(), input2: *css.Parser): Result(TokenOrValue) {
+        const thevar = switch (Variable.parse(input2, c.options, c.depth + 1)) {
+            .result => |vv| vv,
+            .err => |e| return { err: e },
+        };
+        return { result: TokenOrValue{ .@"var" = thevar } };
+    }
+}
+
+pub struct ParseEnvClosure {
+    options: *const css.ParserOptions,
+    depth: usize,
+    static fn parsefn(c: *@This(), input2: *css.Parser): Result(TokenOrValue) {
+        const env = switch (EnvironmentVariable.parseNested(input2, c.options, c.depth + 1)) {
+            .result => |vv| vv,
+            .err => |e| return { err: e },
+        };
+        return { result: TokenOrValue{ .env = env } };
+    }
+}
+
+pub struct ParseArgsClosure {
+    options: *const css.ParserOptions,
+    depth: usize,
+    static fn parsefn(c: *@This(), input2: *css.Parser): Result(TokenList) {
+        const args = switch (TokenListFns.parse(input2, c.options, c.depth + 1)) {
+            .result => |vv| vv,
+            .err => |e| return { err: e },
+        };
+        return { result: args };
+    }
+}
+
+pub struct ParseIntoClosure {
+    options: *const css.ParserOptions,
+    depth: usize,
+    tokens: *ArrayList(TokenOrValue),
+    static fn parsefn(c: *@This(), input2: *css.Parser): Result(void) {
+        return TokenListFns.parseInto(
+            input2,
+            c.tokens,
+            c.options,
+            c.depth + 1,
+        );
+    }
+}
+
+pub struct UnresolvedColorRgbClosure {
+    options: *const css.ParserOptions,
+    parser: *ComponentParser,
+    static fn parsefn(c: *@This(), input2: *css.Parser): Result(UnresolvedColor) {
+        return c.parser.parseRelative(input2, SRGB, UnresolvedColor, @This().innerParseFn, .{c.options});
+    }
+    static fn innerParseFn(i: *css.Parser, p: *ComponentParser, opts: *const css.ParserOptions): Result(UnresolvedColor) {
+        const rgb = switch (css.css_values.color.parseRGBComponents(i, p)) {
+            .result vv => vv,
+            .err e => return { err: e },
+        };
+        const r = rgb[0];
+        const g = rgb[1];
+        const b = rgb[2];
+        const is_legacy = rgb[3];
+        if (is_legacy) {
+            return { err: i.newCustomError(css.ParserError.invalid_value) };
+        }
+        if (e := i.expectDelim('/').asErr()) return { err: e };
+        const alpha = switch (TokenListFns.parse(i, opts, 0)) {
+            .result vv => vv,
+            .err e => return { err: e },
+        };
+        return { result: UnresolvedColor{
+            RGB: {
+                r: r,
+                g: g,
+                b: b,
+                alpha: alpha,
+            },
+        } };
+    }
+}
+
+pub struct UnresolvedColorHslClosure {
+    options: *const css.ParserOptions,
+    parser: *ComponentParser,
+    static fn parsefn(c: *@This(), input2: *css.Parser): Result(UnresolvedColor) {
+        return c.parser.parseRelative(input2, HSL, UnresolvedColor, @This().innerParseFn, .{c.options});
+    }
+    static fn innerParseFn(i: *css.Parser, p: *ComponentParser, opts: *const css.ParserOptions): Result(UnresolvedColor) {
+        const hsl = switch (css.css_values.color.parseHSLHWBComponents(HSL, i, p, false)) {
+            .result vv => vv,
+            .err e => return { err: e },
+        };
+        const h = hsl[0];
+        const s = hsl[1];
+        const l = hsl[2];
+        const is_legacy = hsl[3];
+        if (is_legacy) {
+            return { err: i.newCustomError(css.ParserError.invalid_value) };
+        }
+        if (e := i.expectDelim('/').asErr()) return { err: e };
+        const alpha = switch (TokenListFns.parse(i, opts, 0)) {
+            .result vv => vv,
+            .err e => return { err: e },
+        };
+        return { result: UnresolvedColor{
+            HSL: {
+                h: h,
+                s: s,
+                l: l,
+                alpha: alpha,
+            },
+        } };
+    }
+}
+
+pub struct UnresolvedColorLightDarkClosure {
+    options: *const css.ParserOptions,
+    parser: *ComponentParser,
+    static fn parsefn(c: *@This(), input2: *css.Parser): Result(UnresolvedColor) {
+        // errdefer doesn't fire on `return .{ .err = ... }` — Result(T) is a
+        // tagged union, not an error union. Clean up `light` inline.
+        let light = switch (input2.parseUntilBefore(css.Delimiters{ comma: true }, TokenList, c, @This().parsefn2)) {
+            .result vv => vv,
+            .err e => return { err: e },
+        };
+        if (e := input2.expectComma().asErr()) {
+            light.deinit(input2.allocator());
+            return { err: e };
+        }
+        const dark = switch (TokenListFns.parse(input2, c.options, 0)) {
+            .result vv => vv,
+            .err e => {
+                light.deinit(input2.allocator());
+                return { err: e };
+            },
+        };
+        return { result: UnresolvedColor{
+            light_dark: {
+                light: light,
+                dark: dark,
+            },
+        } };
+    }
+
+    static fn parsefn2(c: *@This(), input2: *css.Parser): Result(TokenList) {
+        return TokenListFns.parse(input2, c.options, 1);
+    }
+}
+
+pub struct EnvVarParseClosure {
+    options: *const css.ParserOptions,
+    depth: usize,
+    static fn parsefn(c: *@This(), i: *css.Parser): Result(EnvironmentVariable) {
+        return EnvironmentVariable.parseNested(i, c.options, c.depth);
+    }
+}
+
+pub struct UnparsedPropertyClosure {
+    options: *const css.ParserOptions,
+    static fn parseFn(closure: *const @This(), i: *css.Parser): Result(TokenList) {
+        return TokenList.parse(i, closure.options, 0);
+    }
+}
+
+pub struct CustomPropertyClosure {
+    options: *const css.ParserOptions,
+    static fn parsefn(c: *@This(), input2: *css.Parser): Result(TokenList) {
+        return TokenListFns.parse(input2, c.options, 0);
+    }
+}
 const ColorFallbackKind = css.ColorFallbackKind;
 
 /// PERF: nullable optimization
@@ -239,25 +430,12 @@ pub struct TokenList {
                         .open_curly => .close_curly,
                         else => unreachable,
                     };
-                    const Closure = struct {
-                        options: *const css.ParserOptions,
-                        depth: usize,
-                        tokens: *ArrayList(TokenOrValue),
-                        static fn parsefn(this: *@This(), input2: *css.Parser): Result(void) {
-                            return TokenListFns.parseRaw(
-                                input2,
-                                this.tokens,
-                                this.options,
-                                this.depth + 1,
-                            );
-                        }
-                    };
-                    let closure = Closure{
+                    let closure = ParseRawClosure{
                         options: options,
                         depth: depth,
                         tokens: tokens,
                     };
-                    if (e := input.parseNestedBlock(void, &closure, Closure.parsefn).asErr()) return { err: e };
+                    if (e := input.parseNestedBlock(void, &closure, ParseRawClosure.parsefn).asErr()) return { err: e };
                     tokens.append(
                         input.allocator(),
                         { token: closing_delimiter },
@@ -268,25 +446,12 @@ pub struct TokenList {
                         input.allocator(),
                         { token: token.* },
                     ) catch unreachable;
-                    const Closure = struct {
-                        options: *const css.ParserOptions,
-                        depth: usize,
-                        tokens: *ArrayList(TokenOrValue),
-                        static fn parsefn(this: *@This(), input2: *css.Parser): Result(void) {
-                            return TokenListFns.parseRaw(
-                                input2,
-                                this.tokens,
-                                this.options,
-                                this.depth + 1,
-                            );
-                        }
-                    };
-                    let closure = Closure{
+                    let closure = ParseRawClosure{
                         options: options,
                         depth: depth,
                         tokens: tokens,
                     };
-                    if (e := input.parseNestedBlock(void, &closure, Closure.parsefn).asErr()) return { err: e };
+                    if (e := input.parseNestedBlock(void, &closure, ParseRawClosure.parsefn).asErr()) return { err: e };
                     tokens.append(
                         input.allocator(),
                         { token: .close_paren },
@@ -372,24 +537,12 @@ pub struct TokenList {
                         last_is_delim = false;
                         last_is_whitespace = false;
                     } else if (bun.strings.eql(f, "var")) {
-                        const Closure = struct {
-                            options: *const css.ParserOptions,
-                            depth: usize,
-                            tokens: *ArrayList(TokenOrValue),
-                            static fn parsefn(this: *@This(), input2: *css.Parser): Result(TokenOrValue) {
-                                const thevar = switch (Variable.parse(input2, this.options, this.depth + 1)) {
-                                    .result => |vv| vv,
-                                    .err => |e| return { err: e },
-                                };
-                                return { result: TokenOrValue{ .@"var" = thevar } };
-                            }
-                        };
-                        let closure = Closure{
+                        let closure = ParseVarClosure{
                             options: options,
                             depth: depth,
                             tokens: tokens,
                         };
-                        const var_val = switch (input.parseNestedBlock(TokenOrValue, &closure, Closure.parsefn)) {
+                        const var_val = switch (input.parseNestedBlock(TokenOrValue, &closure, ParseVarClosure.parsefn)) {
                             .result => |vv| vv,
                             .err => |e| return { err: e },
                         };
@@ -400,22 +553,11 @@ pub struct TokenList {
                         last_is_delim = true;
                         last_is_whitespace = false;
                     } else if (bun.strings.eql(f, "env")) {
-                        const Closure = struct {
-                            options: *const css.ParserOptions,
-                            depth: usize,
-                            static fn parsefn(this: *@This(), input2: *css.Parser): Result(TokenOrValue) {
-                                const env = switch (EnvironmentVariable.parseNested(input2, this.options, this.depth + 1)) {
-                                    .result => |vv| vv,
-                                    .err => |e| return { err: e },
-                                };
-                                return { result: TokenOrValue{ .env = env } };
-                            }
-                        };
-                        let closure = Closure{
+                        let closure = ParseEnvClosure{
                             options: options,
                             depth: depth,
                         };
-                        const env = switch (input.parseNestedBlock(TokenOrValue, &closure, Closure.parsefn)) {
+                        const env = switch (input.parseNestedBlock(TokenOrValue, &closure, ParseEnvClosure.parsefn)) {
                             .result => |vv| vv,
                             .err => |e| return { err: e },
                         };
@@ -426,22 +568,11 @@ pub struct TokenList {
                         last_is_delim = true;
                         last_is_whitespace = false;
                     } else {
-                        const Closure = struct {
-                            options: *const css.ParserOptions,
-                            depth: usize,
-                            static fn parsefn(this: *@This(), input2: *css.Parser): Result(TokenList) {
-                                const args = switch (TokenListFns.parse(input2, this.options, this.depth + 1)) {
-                                    .result => |vv| vv,
-                                    .err => |e| return { err: e },
-                                };
-                                return { result: args };
-                            }
-                        };
-                        let closure = Closure{
+                        let closure = ParseArgsClosure{
                             options: options,
                             depth: depth,
                         };
-                        const arguments = switch (input.parseNestedBlock(TokenList, &closure, Closure.parsefn)) {
+                        const arguments = switch (input.parseNestedBlock(TokenList, &closure, ParseArgsClosure.parsefn)) {
                             .result => |vv| vv,
                             .err => |e| return { err: e },
                         };
@@ -517,25 +648,12 @@ pub struct TokenList {
                         .open_curly => .close_curly,
                         else => unreachable,
                     };
-                    const Closure = struct {
-                        options: *const css.ParserOptions,
-                        depth: usize,
-                        tokens: *ArrayList(TokenOrValue),
-                        static fn parsefn(this: *@This(), input2: *css.Parser): Result(void) {
-                            return TokenListFns.parseInto(
-                                input2,
-                                this.tokens,
-                                this.options,
-                                this.depth + 1,
-                            );
-                        }
-                    };
-                    let closure = Closure{
+                    let closure = ParseIntoClosure{
                         options: options,
                         depth: depth,
                         tokens: tokens,
                     };
-                    if (e := input.parseNestedBlock(void, &closure, Closure.parsefn).asErr()) return { err: e };
+                    if (e := input.parseNestedBlock(void, &closure, ParseIntoClosure.parsefn).asErr()) return { err: e };
                     tokens.append(
                         input.allocator(),
                         { token: closing_delimiter },
@@ -619,7 +737,7 @@ pub struct TokenList {
         return tokens;
     }
 
-    pub const Fallbacks = struct { SupportsCondition, TokenList };
+    pub const Fallbacks = TokenListFallbacks;
     fn getFallbacks(*_, allocator: Allocator, targets: css.targets.Targets): css.SmallList(Fallbacks, 2) {
         // Get the full list of possible fallbacks, and remove the lowest one, which will replace
         // the original declaration. The remaining fallbacks need to be added as @supports rules.
@@ -895,122 +1013,23 @@ pub union(enum) UnresolvedColor {
         let parser = ComponentParser.new(false);
         // css.todo_stuff.match_ignore_ascii_case
         if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(f, "rgb")) {
-            const Closure = struct {
-                options: *const css.ParserOptions,
-                parser: *ComponentParser,
-                static fn parsefn(c: *@This(), input2: *css.Parser): Result(UnresolvedColor) {
-                    return c.parser.parseRelative(input2, SRGB, UnresolvedColor, @This().innerParseFn, .{c.options});
-                }
-                static fn innerParseFn(i: *css.Parser, p: *ComponentParser, opts: *const css.ParserOptions): Result(UnresolvedColor) {
-                    const rgb = switch (css.css_values.color.parseRGBComponents(i, p)) {
-                        .result vv => vv,
-                        .err e => return { err: e },
-                    };
-                    const r = rgb[0];
-                    const g = rgb[1];
-                    const b = rgb[2];
-                    const is_legacy = rgb[3];
-                    if (is_legacy) {
-                        return { err: i.newCustomError(css.ParserError.invalid_value) };
-                    }
-                    if (e := i.expectDelim('/').asErr()) return { err: e };
-                    const alpha = switch (TokenListFns.parse(i, opts, 0)) {
-                        .result vv => vv,
-                        .err e => return { err: e },
-                    };
-                    return { result: UnresolvedColor{
-                        RGB: {
-                            r: r,
-                            g: g,
-                            b: b,
-                            alpha: alpha,
-                        },
-                    } };
-                }
-            };
-            let closure = Closure{
+            let closure = UnresolvedColorRgbClosure{
                 options: options,
                 parser: &parser,
             };
-            return input.parseNestedBlock(UnresolvedColor, &closure, Closure.parsefn);
+            return input.parseNestedBlock(UnresolvedColor, &closure, UnresolvedColorRgbClosure.parsefn);
         } else if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(f, "hsl")) {
-            const Closure = struct {
-                options: *const css.ParserOptions,
-                parser: *ComponentParser,
-                static fn parsefn(c: *@This(), input2: *css.Parser): Result(UnresolvedColor) {
-                    return c.parser.parseRelative(input2, HSL, UnresolvedColor, @This().innerParseFn, .{c.options});
-                }
-                static fn innerParseFn(i: *css.Parser, p: *ComponentParser, opts: *const css.ParserOptions): Result(UnresolvedColor) {
-                    const hsl = switch (css.css_values.color.parseHSLHWBComponents(HSL, i, p, false)) {
-                        .result vv => vv,
-                        .err e => return { err: e },
-                    };
-                    const h = hsl[0];
-                    const s = hsl[1];
-                    const l = hsl[2];
-                    const is_legacy = hsl[3];
-                    if (is_legacy) {
-                        return { err: i.newCustomError(css.ParserError.invalid_value) };
-                    }
-                    if (e := i.expectDelim('/').asErr()) return { err: e };
-                    const alpha = switch (TokenListFns.parse(i, opts, 0)) {
-                        .result vv => vv,
-                        .err e => return { err: e },
-                    };
-                    return { result: UnresolvedColor{
-                        HSL: {
-                            h: h,
-                            s: s,
-                            l: l,
-                            alpha: alpha,
-                        },
-                    } };
-                }
-            };
-            let closure = Closure{
+            let closure = UnresolvedColorHslClosure{
                 options: options,
                 parser: &parser,
             };
-            return input.parseNestedBlock(UnresolvedColor, &closure, Closure.parsefn);
+            return input.parseNestedBlock(UnresolvedColor, &closure, UnresolvedColorHslClosure.parsefn);
         } else if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(f, "light-dark")) {
-            const Closure = struct {
-                options: *const css.ParserOptions,
-                parser: *ComponentParser,
-                static fn parsefn(c: *@This(), input2: *css.Parser): Result(UnresolvedColor) {
-                    // errdefer doesn't fire on `return .{ .err = ... }` — Result(T) is a
-                    // tagged union, not an error union. Clean up `light` inline.
-                    let light = switch (input2.parseUntilBefore(css.Delimiters{ comma: true }, TokenList, c, @This().parsefn2)) {
-                        .result vv => vv,
-                        .err e => return { err: e },
-                    };
-                    if (e := input2.expectComma().asErr()) {
-                        light.deinit(input2.allocator());
-                        return { err: e };
-                    }
-                    const dark = switch (TokenListFns.parse(input2, c.options, 0)) {
-                        .result vv => vv,
-                        .err e => {
-                            light.deinit(input2.allocator());
-                            return { err: e };
-                        },
-                    };
-                    return { result: UnresolvedColor{
-                        light_dark: {
-                            light: light,
-                            dark: dark,
-                        },
-                    } };
-                }
-
-                static fn parsefn2(c: *@This(), input2: *css.Parser): Result(TokenList) {
-                    return TokenListFns.parse(input2, c.options, 1);
-                }
-            };
-            let closure = Closure{
+            let closure = UnresolvedColorLightDarkClosure{
                 options: options,
                 parser: &parser,
             };
-            return input.parseNestedBlock(UnresolvedColor, &closure, Closure.parsefn);
+            return input.parseNestedBlock(UnresolvedColor, &closure, UnresolvedColorLightDarkClosure.parsefn);
         } else {
             return { err: input.newCustomError(css.ParserError.invalid_value) };
         }
@@ -1129,18 +1148,11 @@ pub struct EnvironmentVariable {
 
     static fn parse(input: *css.Parser, options: *const css.ParserOptions, depth: usize): Result(EnvironmentVariable) {
         if (e := input.expectFunctionMatching("env").asErr()) return { err: e };
-        const Closure = struct {
-            options: *const css.ParserOptions,
-            depth: usize,
-            static fn parsefn(this: *@This(), i: *css.Parser): Result(EnvironmentVariable) {
-                return EnvironmentVariable.parseNested(i, this.options, this.depth);
-            }
-        };
-        let closure = Closure{
+        let closure = EnvVarParseClosure{
             options: options,
             depth: depth,
         };
-        return input.parseNestedBlock(EnvironmentVariable, &closure, Closure.parsefn);
+        return input.parseNestedBlock(EnvironmentVariable, &closure, EnvVarParseClosure.parsefn);
     }
 
     static fn parseNested(input: *css.Parser, options: *const css.ParserOptions, depth: usize): Result(EnvironmentVariable) {
@@ -1445,12 +1457,7 @@ pub struct UnparsedProperty {
     value: TokenList,
 
     static fn parse(property_id: css.PropertyId, input: *css.Parser, options: *const css.ParserOptions): Result(UnparsedProperty) {
-        const Closure = struct { options: *const css.ParserOptions };
-        const value = switch (input.parseUntilBefore(css.Delimiters{ .bang = true, .semicolon = true }, TokenList, &Closure{ options: options }, struct {
-            static fn parseFn(closure: *const Closure, i: *css.Parser): Result(TokenList) {
-                return TokenList.parse(i, closure.options, 0);
-            }
-        }.parseFn)) {
+        const value = switch (input.parseUntilBefore(css.Delimiters{ .bang = true, .semicolon = true }, TokenList, &UnparsedPropertyClosure{ options: options }, UnparsedPropertyClosure.parseFn)) {
             .result => |v| v,
             .err => |e| return { err: e },
         };
@@ -1488,15 +1495,7 @@ pub struct CustomProperty {
     value: TokenList,
 
     static fn parse(name: CustomPropertyName, input: *css.Parser, options: *const css.ParserOptions): Result(CustomProperty) {
-        const Closure = struct {
-            options: *const css.ParserOptions,
-
-            static fn parsefn(this: *@This(), input2: *css.Parser): Result(TokenList) {
-                return TokenListFns.parse(input2, this.options, 0);
-            }
-        };
-
-        let closure = Closure{
+        let closure = CustomPropertyClosure{
             options: options,
         };
 
@@ -1507,7 +1506,7 @@ pub struct CustomProperty {
             },
             TokenList,
             &closure,
-            Closure.parsefn,
+            CustomPropertyClosure.parsefn,
         )) {
             .result => |v| v,
             .err => |e| return { err: e },

@@ -9,7 +9,7 @@ import std from "std";
 
 /// Grapheme break property for codepoints, excluding control/CR/LF
 /// which are assumed to be handled externally.
-pub const GraphemeBreakNoControl = enum(u5) {
+pub enum GraphemeBreakNoControl: u5 {
     other,
     prepend,
     regional_indicator,
@@ -31,16 +31,16 @@ pub const GraphemeBreakNoControl = enum(u5) {
     indic_conjunct_break_extend,
     indic_conjunct_break_linker,
     indic_conjunct_break_consonant,
-};
+}
 
 /// State maintained between sequential calls to graphemeBreak.
-pub const BreakState = enum(u3) {
+pub enum BreakState: u3 {
     default,
     regional_indicator,
     extended_pictographic,
     indic_conjunct_break_consonant,
     indic_conjunct_break_linker,
-};
+}
 
 /// 3-level lookup table for codepoint → element mapping.
 /// stage1 maps high byte → stage2 offset (u16)

@@ -76,14 +76,14 @@ pub const embedded_executable_data = @embedFile("bun_shim_impl.exe");
 fn wU8(comptime s: []const u8): []const u8 {
     @setEvalBranchQuota(1_000_000);
     const str = std.unicode.utf8ToUtf16LeStringLiteral(s);
-    return @alignCast(std.mem.sliceAsBytes(str));
+    return unsafe { @alignCast(std.mem.sliceAsBytes(str)) };
 }
 
-const ExtensionType = enum {
+enum ExtensionType {
     run_with_bun,
     run_with_cmd,
     run_with_powershell,
-};
+}
 
 const BunExtensions = std.StaticStringMap(ExtensionType).initComptime([
     [wU8(".js"), ExtensionType.run_with_bun],
@@ -156,7 +156,7 @@ pub struct Shebang {
     }
 
     pub static fn parseFromBinPath(bin_path: []const u16): Shebang? {
-        if (i := BunExtensions.get(@alignCast(std.mem.sliceAsBytes(Shebang.extensionW(bin_path))))) {
+        if (i := BunExtensions.get(unsafe { @alignCast(std.mem.sliceAsBytes(Shebang.extensionW(bin_path))) })) {
             return switch (i) {
                 ExtensionType.run_with_bun => comptime Shebang.init("bun run", true) catch unreachable,
                 ExtensionType.run_with_cmd => comptime Shebang.init("cmd /c", false) catch unreachable,

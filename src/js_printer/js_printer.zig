@@ -911,26 +911,22 @@ else => {
 }
 
 pub fn ws(comptime str: []const u8) Whitespacer {
-        const Static = struct {
-    pub const with = str;
-    pub const without = brk: {
-            var buf = std.mem.zeroes([str.len]u8);
-            _ = &buf;
-            var buf_i: usize = 0;
-            _ = &buf_i;
-            for (cp_iter_slice(str)) |c| {
-                _ = &c;
-                if ((c != 32)) {
-                    buf[cp_cast_int(usize, buf_i)] = c;
-                    buf_i = (buf_i + 1);
-                }
+        const without: []const u8 = (comptime brk: {
+        var buf = std.mem.zeroes([str.len]u8);
+        _ = &buf;
+        var buf_i: usize = 0;
+        _ = &buf_i;
+        for (cp_iter_slice(str)) |c| {
+            _ = &c;
+            if ((c != 32)) {
+                buf[cp_cast_int(usize, buf_i)] = c;
+                buf_i = (buf_i + 1);
             }
-            const final = (buf[0..buf_i]).*;
-            _ = &final;
-            break :brk (&final);
-    };
-};
-        return .{ .normal = Static.with, .minify = Static.without };
+        }
+        const final = (buf[0..buf_i]).*;
+        break :brk (&final);
+});
+        return .{ .normal = str, .minify = without };
 }
 
 pub fn estimateLengthForUTF8(input: []const u8, comptime ascii_only: bool, comptime quote_char: u8) usize {

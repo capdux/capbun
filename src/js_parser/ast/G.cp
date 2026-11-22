@@ -85,7 +85,7 @@ pub struct ClassStaticBlock {
     loc: logger.Loc,
 }
 
-pub const PropertyKind = enum(u3) {
+pub enum PropertyKind: u3 {
     normal,
     get,
     set,
@@ -95,10 +95,10 @@ pub const PropertyKind = enum(u3) {
     class_static_block,
     auto_accessor,
 
-    pub fn jsonStringify(self: @This(), writer: anytype) !void {
-        return try writer.write(@tagName(self));
+    fn jsonStringify(writer: auto)! {
+        return writer.write(@tagName(_))?;
     }
-};
+}
 
 pub struct Property {
     /// This is used when parsing a pattern that uses default values:

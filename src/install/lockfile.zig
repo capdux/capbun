@@ -87,6 +87,20 @@ pub const StaticHashMapMod = @import("../collections/StaticHashMap.zig");
 pub const WhichMod = @import("../which/which.zig");
 pub const IdentityContextMod = @import("../collections/identity_context.zig");
 pub const RunCommandMod = @import("../cli/run_command.zig");
+pub const LockfileFormatVersion = enum(u32) {
+    v0 = 0,
+    v1 = 1,
+    v2 = 2,
+    v3 = 3,
+    _,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+    
+    pub const current = LockfileFormatVersion.v3;
+};
+
 pub const LoadResultFormat = enum {
     text,
     binary,
@@ -1995,19 +2009,7 @@ const StreamByteSlice = []u8;
 pub const Stream = std.io.FixedBufferStream(StreamByteSlice);
 pub const default_filename = "bun.lockb";
 const PendingResolutions = std.array_list.Managed(PendingResolution);
-pub const FormatVersion = enum(u32) {
-    v0 = 0,
-    // bun v0.0.x - bun v0.1.6
-    v1 = 1,
-    // bun v0.1.7+
-    // This change added tarball URLs to npm-resolved packages
-    v2 = 2,
-    // Changed semver major/minor/patch to each use u64 instead of u32
-    v3 = 3,
-
-    _,
-    pub const current = FormatVersion.v3;
-};
+pub const FormatVersion = LockfileFormatVersion;
 pub const PackageIDSlice = ExternalSlice(PackageID);
 pub const DependencySlice = ExternalSlice(Dependency);
 pub const DependencyIDSlice = ExternalSlice(DependencyID);

@@ -389,6 +389,27 @@ pub type uv_close_cb = uv_close_cb_fn?;
     fd: c_int,
     reserved: [4]*!?,
 }
+pub enum HandleType: c_uint {
+    unknown = 0,
+    @"async" = 1,
+    check = 2,
+    fs_event = 3,
+    fs_poll = 4,
+    handle = 5,
+    idle = 6,
+    named_pipe = 7,
+    poll = 8,
+    prepare = 9,
+    process = 10,
+    stream = 11,
+    tcp = 12,
+    timer = 13,
+    tty = 14,
+    udp = 15,
+    signal = 16,
+    file = 17,
+}
+
 @c pub struct Handle {
     data: *!?,
     loop: *uv_loop_t,
@@ -412,26 +433,7 @@ pub type uv_close_cb = uv_close_cb_fn?;
     pub const isActive = handle_impl.isActive;
     pub const fd = handle_impl.fd;
 
-    pub const Type = enum(c_uint) {
-        unknown = 0,
-        async = 1,
-        check = 2,
-        fs_event = 3,
-        fs_poll = 4,
-        handle = 5,
-        idle = 6,
-        named_pipe = 7,
-        poll = 8,
-        prepare = 9,
-        process = 10,
-        stream = 11,
-        tcp = 12,
-        timer = 13,
-        tty = 14,
-        udp = 15,
-        signal = 16,
-        file = 17,
-    };
+    pub const Type = HandleType;
 }
 
 fn HandleMixin(comptime Type: type): type {
@@ -1534,6 +1536,13 @@ pub const uv_write_t = struct_uv_write_s;
     rd: struct_unnamed_421,
     wr: struct_unnamed_422,
 }
+pub enum TtyMode: c_uint {
+    normal = 0,
+    raw = 1,
+    io = 2,
+    vt = 3,
+}
+
 @c pub struct struct_uv_tty_s {
     data: *!?,
     loop: *uv_loop_t,
@@ -1561,12 +1570,7 @@ pub const uv_write_t = struct_uv_write_s;
         return .success;
     }
 
-    const Mode = enum(c_uint) {
-        normal = 0,
-        raw = 1,
-        io = 2,
-        vt = 3,
-    };
+    pub const Mode = TtyMode;
 
     pub fn setMode(*_, mode: Mode): ReturnCode {
         return uv_tty_set_mode(_, @intFromEnum(mode));

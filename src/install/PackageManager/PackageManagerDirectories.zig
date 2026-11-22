@@ -108,9 +108,9 @@ pub fn format(self: PatchHashFmt, writer: *std.Io.Writer) !void {
     }
 };
 
-const stringZ = [:0]const u8;
 pub const CacheDirectoryAndAbsPath = struct { FD, bun.AbsPath(.{}) };
 pub const GlobalLinkDirAndPath = struct { std.fs.Dir, []const u8 };
+const stringZ = [:0]const u8;
 var getTemporaryDirectoryOnce = bun.once((struct {
 
 pub fn run(manager: *PackageManager) TemporaryDirectory {

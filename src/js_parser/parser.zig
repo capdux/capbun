@@ -172,6 +172,19 @@ pub const StrictModeFeature = enum {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
+pub const InvalidLocTag = enum {
+    spread,
+    parentheses,
+    getter,
+    setter,
+    method,
+    unknown,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const AwaitOrYield = enum(u3) {
     allow_ident,
     allow_expr,
@@ -511,14 +524,7 @@ pub fn addError(loc: InvalidLoc, log: *logger.Log, source: *const logger.Source)
 });
             _ = ((log.addError(source, loc.loc, text)) catch unreachable);
     }
-    pub const Tag = enum {
-            spread,
-            parentheses,
-            getter,
-            setter,
-            method,
-            unknown,
-        };
+    pub const Tag = InvalidLocTag;
 };
 
 pub const StringVoidMap = struct {

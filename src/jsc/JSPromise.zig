@@ -431,16 +431,19 @@ pub inline fn wrapFnType(comptime F: anytype) type {
         return T;
 }
 
-pub fn wrapImpl(globalObject: *JSGlobalObject, comptime Function: anytype, args: std.@"meta".ArgsTuple(wrapFnType(Function))) bun.JSTerminated!JSValue {
-        const Args = std.@"meta".ArgsTuple(wrapFnType(Function));
-        const Fn = Function;
-        const Wrapper = struct {
+pub fn WrapImplWrapper(comptime Args: type, comptime Fn: anytype) type {
+        return struct {
     args: Args,
 
 pub fn call(self: *@This(), g: *jsc.JSGlobalObject) callconv(.c) jsc.JSValue {
             return jsc.toJSHostCall(g, @src(), Fn, self.args);
     }
 };
+}
+
+pub fn wrapImpl(globalObject: *JSGlobalObject, comptime Function: anytype, args: std.@"meta".ArgsTuple(wrapFnType(Function))) bun.JSTerminated!JSValue {
+        const Args = std.@"meta".ArgsTuple(wrapFnType(Function));
+        const Wrapper = WrapImplWrapper(Args, Function);
         var scope: jsc.TopExceptionScope = undefined;
         _ = &scope;
         _ = scope.init(globalObject, @src());

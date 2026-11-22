@@ -18,6 +18,15 @@ const ZigString = jsc.ZigString;
 type str_slice = []const u8;
 type string = []const u8;
 
+fn QueueMicrotaskWrapper(comptime ContextType: type, comptime Function: auto): type {
+    return struct {
+        @callconv("c")
+        fn call(p: *!) {
+            Function(bun.cast(ContextType, p));
+        }
+    };
+}
+
 pub struct DerefGuard<T> {
     ptr: *const T!,
     active: bool = true,
@@ -579,14 +588,8 @@ inline fn argsIsEmpty(comptime T: type): bool {
         comptime Function: fn (ctx: @TypeOf(ctx_val)) void,
     ) {
         jsc.markBinding(@src());
-        const Fn = Function;
         const ContextType = @TypeOf(ctx_val);
-        const Wrapper = struct {
-            @callconv("c")
-            pub fn call(p: *!) {
-                Fn(bun.cast(ContextType, p));
-            }
-        };
+        const Wrapper = QueueMicrotaskWrapper(ContextType, Function);
 
         JSC__JSGlobalObject__queueMicrotaskCallback(_, ctx_val, &Wrapper.call);
     }

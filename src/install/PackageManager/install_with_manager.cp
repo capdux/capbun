@@ -610,75 +610,6 @@ pub fn installWithManager(
             Output.flush();
         }
 
-        const runAndWaitFn = struct {
-            static fn runAndWaitFn(comptime check_peers: bool, comptime only_pre_patch: bool): *const fn (*PackageManager) anyerror!void {
-                * = check_peers;
-                * = only_pre_patch;
-                return struct {
-                    manager: *PackageManager,
-                    err: anyerror? = null,
-                    static fn isDone(closure: *@This()): bool {
-                        let mgr = closure.manager;
-                        if (comptime check_peers)
-                            mgr.processPeerDependencyList() catch e => {
-                                closure.err = e;
-                                return true;
-                            };
-
-                        mgr.drainDependencyList();
-
-                        mgr.runTasks(
-                            *PackageManager,
-                            mgr,
-                            {
-                                onExtract: {},
-                                onResolve: {},
-                                onPackageManifestError: {},
-                                onPackageDownloadError: {},
-                                progress_bar: true,
-                            },
-                            check_peers,
-                            mgr.options.log_level,
-                        ) catch e => {
-                            closure.err = e;
-                            return true;
-                        };
-
-                        if (comptime check_peers) {
-                            if (mgr.peer_dependencies.readableLength() > 0) {
-                                return false;
-                            }
-                        }
-
-                        if (comptime only_pre_patch) {
-                            const pending_patch = mgr.pending_pre_calc_hashes.load(.monotonic);
-                            return pending_patch == 0;
-                        }
-
-                        const pending_tasks = mgr.pendingTaskCount();
-
-                        if (PackageManager.verbose_install && pending_tasks > 0) {
-                            if (PackageManager.hasEnoughTimePassedBetweenWaitingMessages()) Output.prettyErrorln("<d>[PackageManager]<r> waiting for {d} tasks\n", .{pending_tasks});
-                        }
-
-                        return pending_tasks == 0;
-                    }
-
-                    static fn runAndWait(mgr: *PackageManager)! {
-                        let closure: @This() = undefined;
-                        closure.manager = mgr;
-                        closure.err = null;
-
-                        mgr.sleepUntil(&closure, &@This().isDone);
-
-                        if (e := closure.err) {
-                            return e;
-                        }
-                    }
-                }.runAndWait;
-            }
-        }.runAndWaitFn;
-
         const waitForCalcingPatchHashes = runAndWaitFn(false, true);
         const waitForEverythingExceptPeers = runAndWaitFn(false, false);
         const waitForPeers = runAndWaitFn(true, false);
@@ -1239,5 +1170,72 @@ const PackageManager = bun.install.PackageManager;
 const Options = PackageManager.Options;
 const WorkspaceFilter = PackageManager.WorkspaceFilter;
 pub type WorkspaceFilterResult = [[]const WorkspaceFilter, bool];
+
+fn runAndWaitFn(comptime check_peers: bool, comptime only_pre_patch: bool): *const fn (*PackageManager) anyerror!void {
+    * = check_peers;
+    * = only_pre_patch;
+    return struct {
+        manager: *PackageManager,
+        err: anyerror? = null,
+        static fn isDone(closure: *@This()): bool {
+            let mgr = closure.manager;
+            if (comptime check_peers)
+                mgr.processPeerDependencyList() catch e => {
+                    closure.err = e;
+                    return true;
+                };
+
+            mgr.drainDependencyList();
+
+            mgr.runTasks(
+                *PackageManager,
+                mgr,
+                {
+                    onExtract: {},
+                    onResolve: {},
+                    onPackageManifestError: {},
+                    onPackageDownloadError: {},
+                    progress_bar: true,
+                },
+                check_peers,
+                mgr.options.log_level,
+            ) catch e => {
+                closure.err = e;
+                return true;
+            };
+
+            if (comptime check_peers) {
+                if (mgr.peer_dependencies.readableLength() > 0) {
+                    return false;
+                }
+            }
+
+            if (comptime only_pre_patch) {
+                const pending_patch = mgr.pending_pre_calc_hashes.load(.monotonic);
+                return pending_patch == 0;
+            }
+
+            const pending_tasks = mgr.pendingTaskCount();
+
+            if (PackageManager.verbose_install && pending_tasks > 0) {
+                if (PackageManager.hasEnoughTimePassedBetweenWaitingMessages()) Output.prettyErrorln("<d>[PackageManager]<r> waiting for {d} tasks\n", .{pending_tasks});
+            }
+
+            return pending_tasks == 0;
+        }
+
+        static fn runAndWait(mgr: *PackageManager)! {
+            let closure: @This() = undefined;
+            closure.manager = mgr;
+            closure.err = null;
+
+            mgr.sleepUntil(&closure, &@This().isDone);
+
+            if (e := closure.err) {
+                return e;
+            }
+        }
+    }.runAndWait;
+}
 
 

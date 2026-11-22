@@ -4,12 +4,18 @@
 const std = @import("std");
 
 pub const bun = @import("bun");
+pub const NPMClientTag = enum {
+    bun,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const NPMClient = struct {
     bin: []const u8,
     tag: Tag,
-    pub const Tag = enum {
-            bun,
-        };
+    pub const Tag = NPMClientTag;
 };
 
 const string = []const u8;

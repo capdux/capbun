@@ -537,11 +537,12 @@ fn testGraphemebreaktestTxtComputegraphemebreak()! {
     testGraphemeBreak(testGetActualComputedGraphemeBreak)?;
 }
 
+@packed pub struct GraphemeBreakResult<State> {
+    result: bool,
+    state: State,
+}
+
 pub fn GraphemeBreakTable(comptime GB: type, comptime State: type): type {
-    const Result = packed struct {
-        result: bool,
-        state: State,
-    };
     const gb_fields = @typeInfo(GB).@"enum".fields;
     const state_fields = @typeInfo(State).@"enum".fields;
     const n_gb = gb_fields.len;
@@ -555,17 +556,17 @@ pub fn GraphemeBreakTable(comptime GB: type, comptime State: type): type {
     std.debug.assert(state_fields[state_fields.len - 1].value == n_state - 1);
 
     return struct {
-        data: [n]Result,
+        data: [n]GraphemeBreakResult<State>,
 
         static inline fn index(gb1: GB, gb2: GB, state: State): usize {
             return @intFromEnum(state) * n_gb_2 + @intFromEnum(gb1) * n_gb + @intFromEnum(gb2);
         }
 
-        fn set(*_, gb1: GB, gb2: GB, state: State, result: Result) {
+        fn set(*_, gb1: GB, gb2: GB, state: State, result: GraphemeBreakResult<State>) {
             _.data[index(gb1, gb2, state)] = result;
         }
 
-        fn get(gb1: GB, gb2: GB, state: State): Result {
+        fn get(gb1: GB, gb2: GB, state: State): GraphemeBreakResult<State> {
             return _.data[index(gb1, gb2, state)];
         }
     };

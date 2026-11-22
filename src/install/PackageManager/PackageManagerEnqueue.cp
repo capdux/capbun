@@ -394,48 +394,12 @@ pub fn enqueueDependencyToRoot(
     if (resolution_id == invalid_package_id) {
         mgr.drainDependencyList();
 
-        const Closure = struct {
-            // https://github.com/ziglang/zig/issues/19586
-            pub fn issue_19586_workaround(): type {
-                return struct {
-                    e: anyerror? = null,
-                    manager: *PackageManager,
-                    pub fn isDone(closure: *@This()): bool {
-                        const manager = closure.manager;
-                        if (manager.pendingTaskCount() > 0) {
-                            manager.runTasks(
-                                void,
-                                undefined,
-                                {
-                                    onExtract: {},
-                                    onResolve: {},
-                                    onPackageManifestError: {},
-                                    onPackageDownloadError: {},
-                                },
-                                false,
-                                manager.options.log_level,
-                            ) catch |e| {
-                                closure.e = e;
-                                return true;
-                            };
-
-                            if (PackageManager.verbose_install && manager.pendingTaskCount() > 0) {
-                                if (PackageManager.hasEnoughTimePassedBetweenWaitingMessages()) Output.prettyErrorln("<d>[PackageManager]<r> waiting for {d} tasks\n", .{closure.manager.pendingTaskCount()});
-                            }
-                        }
-
-                        return manager.pendingTaskCount() == 0;
-                    }
-                };
-            }
-        }.issue_19586_workaround();
-
         if (mgr.options.log_level.showProgress()) {
             mgr.startProgressBarIfNone();
         }
 
-        let closure = Closure{ .manager = mgr };
-        mgr.sleepUntil(&closure, &Closure.isDone);
+        let closure = EnqueueClosure{ manager: mgr };
+        mgr.sleepUntil(&closure, &EnqueueClosure.isDone);
 
         if (mgr.options.log_level.showProgress()) {
             mgr.endProgressBar();
@@ -1485,7 +1449,39 @@ fn enqueueLocalTarball(
     return unsafe { &task.threadpool_task };
 }
 
-const NameAndNameHash = struct { String, PackageNameHash };
+struct EnqueueClosure {
+    e: anyerror? = null,
+    manager: *PackageManager,
+
+    static fn isDone(closure: *EnqueueClosure): bool {
+        const manager = closure.manager;
+        if (manager.pendingTaskCount() > 0) {
+            manager.runTasks(
+                void,
+                undefined,
+                {
+                    onExtract: {},
+                    onResolve: {},
+                    onPackageManifestError: {},
+                    onPackageDownloadError: {},
+                },
+                false,
+                manager.options.log_level,
+            ) catch |e| {
+                closure.e = e;
+                return true;
+            };
+
+            if (PackageManager.verbose_install && manager.pendingTaskCount() > 0) {
+                if (PackageManager.hasEnoughTimePassedBetweenWaitingMessages()) Output.prettyErrorln("<d>[PackageManager]<r> waiting for {d} tasks\n", .{closure.manager.pendingTaskCount()});
+            }
+        }
+
+        return manager.pendingTaskCount() == 0;
+    }
+}
+
+type NameAndNameHash = [String, PackageNameHash];
 
 fn updateNameAndNameHashFromVersionReplacement(
     lockfile: *const Lockfile,

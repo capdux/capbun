@@ -2925,6 +2925,33 @@ pub fn printErrorLikeObjectToConsole(client: *VirtualMachine, value: JSValue) {
     client.runErrorHandler(value, null);
 }
 
+pub struct AggregateErrorIterator<Writer> {
+    writer: Writer,
+    current_exception_list: (*ExceptionList)? = null,
+    formatter: *ConsoleObject.Formatter,
+
+    @callconv("c")
+    static fn iteratorWithColorAndSideEffects(vm: *VM, globalObject: *JSGlobalObject, ctx: *!?, nextValue: JSValue) {
+        iterator(vm, globalObject, nextValue, ctx.?, true, true);
+    }
+    @callconv("c")
+    static fn iteratorWithColorNoSideEffects(vm: *VM, globalObject: *JSGlobalObject, ctx: *!?, nextValue: JSValue) {
+        iterator(vm, globalObject, nextValue, ctx.?, true, false);
+    }
+    @callconv("c")
+    static fn iteratorWithoutColorAndSideEffects(vm: *VM, globalObject: *JSGlobalObject, ctx: *!?, nextValue: JSValue) {
+        iterator(vm, globalObject, nextValue, ctx.?, false, true);
+    }
+    @callconv("c")
+    static fn iteratorWithoutColorNoSideEffects(vm: *VM, globalObject: *JSGlobalObject, ctx: *!?, nextValue: JSValue) {
+        iterator(vm, globalObject, nextValue, ctx.?, false, false);
+    }
+    static fn iterator(_: *VM, _: *JSGlobalObject, nextValue: JSValue, ctx: *!?, comptime color: bool, comptime allow_side_effects: bool) {
+        const this_: *AggregateErrorIterator<Writer> = unsafe { @ptrCast(@alignCast(ctx)) };
+        VirtualMachine.get().printErrorlikeObject(nextValue, null, this_.current_exception_list, this_.formatter, Writer, this_.writer, color, allow_side_effects);
+    }
+}
+
 // When the Error-like object is one of our own, it's best to rely on the object directly instead of serializing it to a ZigException.
 // This is for:
 // - BuildMessage
@@ -2955,29 +2982,19 @@ pub fn printErrorlikeObject(
     };
 
     if (value.isAggregateError(this.global)) {
-        const AggregateErrorIterator = struct {
-            writer: Writer,
-            current_exception_list: (*ExceptionList)? = null,
-            formatter: *ConsoleObject.Formatter,
-
-            @callconv("c")
-            static fn iteratorWithColor(vm: *VM, globalObject: *JSGlobalObject, ctx: *!?, nextValue: JSValue) {
-                iterator(vm, globalObject, nextValue, ctx.?, true);
-            }
-            @callconv("c")
-            static fn iteratorWithOutColor(vm: *VM, globalObject: *JSGlobalObject, ctx: *!?, nextValue: JSValue) {
-                iterator(vm, globalObject, nextValue, ctx.?, false);
-            }
-            static fn iterator(_: *VM, _: *JSGlobalObject, nextValue: JSValue, ctx: *!?, comptime color: bool) {
-                const this_: *@This() = unsafe { @ptrCast(@alignCast(ctx)) };
-                VirtualMachine.get().printErrorlikeObject(nextValue, null, this_.current_exception_list, this_.formatter, Writer, this_.writer, color, allow_side_effects);
-            }
-        };
-        let iter = AggregateErrorIterator{ writer: writer, current_exception_list: exception_list, formatter: formatter };
+        let iter = AggregateErrorIterator<Writer>{ writer: writer, current_exception_list: exception_list, formatter: formatter };
         if (comptime allow_ansi_color) {
-            value.getErrorsProperty(this.global).forEach(this.global, &iter, AggregateErrorIterator.iteratorWithColor) catch return; // TODO: properly propagate exception upwards
+            if (comptime allow_side_effects) {
+                value.getErrorsProperty(this.global).forEach(this.global, &iter, AggregateErrorIterator<Writer>.iteratorWithColorAndSideEffects) catch return; // TODO: properly propagate exception upwards
+            } else {
+                value.getErrorsProperty(this.global).forEach(this.global, &iter, AggregateErrorIterator<Writer>.iteratorWithColorNoSideEffects) catch return; // TODO: properly propagate exception upwards
+            }
         } else {
-            value.getErrorsProperty(this.global).forEach(this.global, &iter, AggregateErrorIterator.iteratorWithOutColor) catch return; // TODO: properly propagate exception upwards
+            if (comptime allow_side_effects) {
+                value.getErrorsProperty(this.global).forEach(this.global, &iter, AggregateErrorIterator<Writer>.iteratorWithoutColorAndSideEffects) catch return; // TODO: properly propagate exception upwards
+            } else {
+                value.getErrorsProperty(this.global).forEach(this.global, &iter, AggregateErrorIterator<Writer>.iteratorWithoutColorNoSideEffects) catch return; // TODO: properly propagate exception upwards
+            }
         }
         return;
     }

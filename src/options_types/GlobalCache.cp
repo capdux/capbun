@@ -1,6 +1,6 @@
-const bun = @import("bun");
+import bun from "bun";
 
-pub const GlobalCache = enum {
+pub enum GlobalCache {
     allow_install,
     read_only,
     @"auto",
@@ -8,39 +8,39 @@ pub const GlobalCache = enum {
     fallback,
     disable,
 
-    pub const Map = bun.ComptimeStringMap(GlobalCache, .{
+    const Map = bun.ComptimeStringMap(GlobalCache, .{
         .{ "auto", GlobalCache.@"auto" },
         .{ "force", GlobalCache.force },
         .{ "disable", GlobalCache.disable },
         .{ "fallback", GlobalCache.fallback },
     });
 
-    pub fn allowVersionSpecifier(this: GlobalCache) bool {
-        return this == .force;
+    fn allowVersionSpecifier(): bool {
+        return _ == .force;
     }
 
-    pub fn canUse(this: GlobalCache, has_a_node_modules_folder: bool) bool {
+    fn canUse(has_a_node_modules_folder: bool): bool {
         if (has_a_node_modules_folder) {
-            return switch (this) {
+            return switch (_) {
                 .fallback, .allow_install, .force => true,
                 .read_only, .disable, .@"auto" => false,
             };
         } else {
-            return switch (this) {
+            return switch (_) {
                 .read_only, .fallback, .allow_install, .@"auto", .force => true,
                 .disable => false,
             };
         }
     }
 
-    pub fn isEnabled(this: GlobalCache) bool {
-        return this != .disable;
+    fn isEnabled(): bool {
+        return _ != .disable;
     }
 
-    pub fn canInstall(this: GlobalCache) bool {
-        return switch (this) {
+    fn canInstall(): bool {
+        return switch (_) {
             .@"auto", .allow_install, .force, .fallback => true,
             else => false,
         };
     }
-};
+}

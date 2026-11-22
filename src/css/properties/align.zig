@@ -64,6 +64,55 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 
 pub const css = @import("../css_parser.zig");
 pub const bun = @import("bun");
+pub const BaselinePositionIdent = enum {
+    baseline,
+    first,
+    last,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const JustifyContentIdent = enum {
+    left,
+    right,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const AlignLeftRightEnum = enum {
+    left,
+    right,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const LegacyJustifyIdent = enum {
+    legacy,
+    left,
+    right,
+    center,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const LegacyJustifyInnerEnum = enum {
+    left,
+    right,
+    center,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const BaselinePosition = enum {
     first,
     last,
@@ -80,11 +129,6 @@ return .{ .err = e };
 },
 .result => |v| v,
 });
-            const BaselinePositionIdent = enum {
-            baseline,
-            first,
-            last,
-        };
             const BaselinePositionMap = bun.ComptimeEnumMap(BaselinePositionIdent);
             if (BaselinePositionMap.getASCIIICaseInsensitive(ident)) |value| {
                 _ = &value;
@@ -149,12 +193,6 @@ return .{ .err = e };
 },
 .result => |v| v,
 });
-            const LegacyJustifyIdent = enum {
-            legacy,
-            left,
-            right,
-            center,
-        };
             const LegacyJustifyMap = bun.ComptimeEnumMap(LegacyJustifyIdent);
             if (LegacyJustifyMap.getASCIIICaseInsensitive(ident)) |value| {
                 _ = &value;
@@ -167,8 +205,7 @@ return .{ .err = e };
 },
 .result => |v| v,
 });
-                const InnerEnum = enum { left, right, center };
-                const InnerLegacyJustifyMap = bun.ComptimeEnumMap(InnerEnum);
+                const InnerLegacyJustifyMap = bun.ComptimeEnumMap(LegacyJustifyInnerEnum);
                 if (InnerLegacyJustifyMap.getASCIIICaseInsensitive(inner_ident)) |inner_value| {
                     _ = &inner_value;
                     return (switch (inner_value) {
@@ -285,7 +322,7 @@ pub const ContentDistribution = enum {
 
 pub const OverflowPosition = enum {
     safe,
-    unsafe,
+    @"unsafe",
     pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
     pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
     pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
@@ -480,10 +517,6 @@ pub fn parse(input: *css.Parser) css.Result(@This()) {
 return .{ .err = e };
 },
 });
-            const JustifyContentIdent = enum {
-            left,
-            right,
-        };
             const JustifyContentIdentMap = bun.ComptimeEnumMap(JustifyContentIdent);
             if (JustifyContentIdentMap.getASCIIICaseInsensitive(ident)) |value| {
                 _ = &value;
@@ -599,8 +632,7 @@ pub fn parse(input: *css.Parser) css.Result(@This()) {
 return .{ .err = e };
 },
 });
-            const Enum = enum { left, right };
-            const Map = bun.ComptimeEnumMap(Enum);
+            const Map = bun.ComptimeEnumMap(AlignLeftRightEnum);
             if (Map.getASCIIICaseInsensitive(ident)) |val| {
                 _ = &val;
                 switch (val) {
@@ -716,8 +748,7 @@ pub fn parse(input: *css.Parser) css.Result(@This()) {
 return .{ .err = e };
 },
 });
-            const Enum = enum { left, right };
-            const Map = bun.ComptimeEnumMap(Enum);
+            const Map = bun.ComptimeEnumMap(AlignLeftRightEnum);
             if (Map.getASCIIICaseInsensitive(ident)) |val| {
                 _ = &val;
                 switch (val) {
@@ -1380,12 +1411,10 @@ pub fn flushShorthandHelper(dest: *css.DeclarationList, context: *css.PropertyHa
                                 _ = (blk_catch_4: { break :blk_catch_4 ((dest.append(context.allocator, @unionInit(Property, justify_prop.prop, .{ css.generic.deepClone(@TypeOf(justify_actual.*), justify_actual, context.allocator), justify_prefix.* }))) catch |e| { _ = &e; break :blk_catch_4 bun.handleOom(e); }); });
                             }
                             const PropTy = prop.ty;
-                            _ = &PropTy;
                             const payload = PropTy{ .@"align" = css.generic.deepClone(@TypeOf(align_val.*), align_val, context.allocator), .justify = css.generic.deepClone(@TypeOf(justify_actual.*), justify_actual, context.allocator) };
                             _ = (blk_catch_5: { break :blk_catch_5 ((dest.append(context.allocator, @unionInit(Property, prop.prop, payload))) catch |e| { _ = &e; break :blk_catch_5 bun.handleOom(e); }); });
                         } else {
                             const PropTy = prop.ty;
-                            _ = &PropTy;
                             const payload = PropTy{ .@"align" = css.generic.deepClone(@TypeOf(align_val.*), align_val, context.allocator), .justify = css.generic.deepClone(@TypeOf(justify.*), justify, context.allocator) };
                             _ = (blk_catch_6: { break :blk_catch_6 ((dest.append(context.allocator, @unionInit(Property, prop.prop, payload))) catch |e| { _ = &e; break :blk_catch_6 bun.handleOom(e); }); });
                         }

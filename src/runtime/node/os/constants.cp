@@ -4,7 +4,7 @@ import bun from "bun";
 const Environment = bun.Environment;
 const jsc = bun.jsc;
 
-const ConstantType = enum { ERRNO, ERRNO_WIN, SIG, DLOPEN, OTHER };
+enum ConstantType { ERRNO, ERRNO_WIN, SIG, DLOPEN, OTHER }
 
 fn getErrnoConstant(comptime name: []const u8): comptime_int? {
     if (@hasField(std.posix.E, name)) {

@@ -1,25 +1,28 @@
 // Safe handle to a JavaScript execution environment in CP
-const bun = @import("bun");
+import bun from "bun";
 
-extern fn ScriptExecutionContextIdentifier__getGlobalObject(id: u32): *bun.jsc.JSGlobalObject?;
+extern fn ScriptExecutionContextIdentifier__getGlobalObject(id: u32): (*bun.jsc.JSGlobalObject)?;
 
 /// Safe handle to a JavaScript execution environment that may have exited.
 /// Obtain with global_object.scriptExecutionContextIdentifier()
-pub const Identifier = enum(u32) {
+pub enum Identifier: u32 {
     _,
 
     /// Returns null if the context referred to by `this` no longer exists
-    pub fn globalObject(this: Identifier) ?*bun.jsc.JSGlobalObject {
-        return ScriptExecutionContextIdentifier__getGlobalObject(@intFromEnum(this));
+    fn globalObject(): (*bun.jsc.JSGlobalObject)? {
+        return ScriptExecutionContextIdentifier__getGlobalObject(@intFromEnum(_));
     }
 
     /// Returns null if the context referred to by `this` no longer exists
-    pub fn bunVM(this: Identifier) ?*bun.jsc.VirtualMachine {
+    fn bunVM(): (*bun.jsc.VirtualMachine)? {
         // concurrently because we expect these identifiers are mostly used by off-thread tasks
-        return (this.globalObject() orelse return null).bunVMConcurrently();
+        if (obj := _.globalObject()) {
+            return obj.bunVMConcurrently();
+        }
+        return null;
     }
 
-    pub fn valid(this: Identifier) bool {
-        return this.globalObject() != null;
+    fn valid(): bool {
+        return _.globalObject() != null;
     }
-};
+}

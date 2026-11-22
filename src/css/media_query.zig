@@ -131,6 +131,16 @@ pub fn hash(self: Qualifier, hasher: anytype) void {
     }
 };
 
+pub const MediaTypeEnumerations = enum {
+    all,
+    print,
+    screen,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const MediaType = union(enum) {
     all,
     print,
@@ -150,8 +160,7 @@ return .{ .err = e };
     }
 
 pub fn fromStr(ident: []const u8) MediaType {
-            const Enumerations = enum { all, print, screen };
-            const Map = (comptime bun.ComptimeEnumMap(Enumerations));
+            const Map = (comptime bun.ComptimeEnumMap(MediaTypeEnumerations));
             if (Map.getASCIIICaseInsensitive(ident)) |x| {
                 _ = &x;
                 return (switch (x) {
@@ -661,7 +670,6 @@ pub const MediaList = struct {
 
 pub fn parse(input: *css.Parser) Result(MediaList) {
             const MediaQueryList = ArrayList(MediaQuery);
-            _ = &MediaQueryList;
             var media_queries = MediaQueryList{  };
             _ = &media_queries;
             while (true) {
@@ -867,6 +875,24 @@ pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
     }
 };
 
+pub fn ParenBlockClosure(comptime QueryCondition: type) type {
+    return struct {
+        flags: QueryConditionFlags,
+
+pub fn parseNestedBlockFn(self: *@This(), i: *css.Parser) Result(QueryCondition) {
+                if (i.tryParse(@This().tryParseFn, .{ self }).asValue()) |inner| {
+                    _ = &inner;
+                    return .{ .result = inner };
+                }
+                return QueryCondition.parseFeature(i);
+        }
+
+pub fn tryParseFn(i: *css.Parser, ctx: *@This()) Result(QueryCondition) {
+                return parseQueryCondition(QueryCondition, i, ctx.flags);
+        }
+    };
+}
+
 pub const Error = css.Error;
 const Length = css.css_values.length.Length;
 const CSSNumber = css.css_values.number.CSSNumber;
@@ -1004,7 +1030,6 @@ else => unreachable,
             return .{ .err = location.newUnexpectedTokenError(css.Token{ .ident = "or" }) };
         }
         const QueryConditionList = ArrayList(QueryCondition);
-        _ = &QueryConditionList;
         var conditions = QueryConditionList{  };
         _ = &conditions;
         _ = ((conditions.append(input.allocator(), first_condition)) catch unreachable);
@@ -1056,24 +1081,9 @@ else => {
 }
 
 pub fn parseParenBlock(comptime QueryCondition: type, input: *css.Parser, flags: QueryConditionFlags) Result(QueryCondition) {
-        const Closure = struct {
-    flags: QueryConditionFlags,
-
-pub fn parseNestedBlockFn(self: *@This(), i: *css.Parser) Result(QueryCondition) {
-            if (i.tryParse(@This().tryParseFn, .{ self }).asValue()) |inner| {
-                _ = &inner;
-                return .{ .result = inner };
-            }
-            return QueryCondition.parseFeature(i);
-    }
-
-pub fn tryParseFn(i: *css.Parser, self: *@This()) Result(QueryCondition) {
-            return parseQueryCondition(QueryCondition, i, self.flags);
-    }
-};
-        var closure = Closure{ .flags = flags };
+        var closure: ParenBlockClosure(QueryCondition) = .{ .flags = flags };
         _ = &closure;
-        return input.parseNestedBlock(QueryCondition, (&closure), Closure.parseNestedBlockFn);
+        return input.parseNestedBlock(QueryCondition, (&closure), @TypeOf(closure).parseNestedBlockFn);
 }
 
 pub fn QueryFeature(comptime FeatureId: type) type {

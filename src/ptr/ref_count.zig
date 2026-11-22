@@ -63,6 +63,15 @@ fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub const DebugData_Magic = enum(u128) {
+    valid = 797238557,
+    _,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const Options = struct {
     debug_name: ?[]const u8 = null,
     destructor_ctx: ?type = null,
@@ -107,7 +116,7 @@ pub fn RefCount(comptime T: type, comptime field_name: []const u8, comptime dest
         const DebugField = (if (enable_debug) DebugData(false) else void);
         const debug_name = ((options.debug_name) orelse (bun.meta.typeBaseName(@typeName(T))));
         const Ctx = ((options.destructor_ctx) orelse (void));
-        const Destructor = (if ((options.destructor_ctx != null)) *const fn(ptr: *T, ctx: Ctx) void else *const fn(ptr: *T) void);
+        const Destructor = (if ((options.destructor_ctx != null)) *const fn (*T, Ctx) void else *const fn (*T) void);
         return struct {
     raw_count: u32,
     thread: bun.safety.ThreadLock,
@@ -416,7 +425,7 @@ pub fn uncheckedAndUnsafeInit(raw_ptr: *T, ret_addr: ?usize) Self {
 
 pub fn DebugData(comptime thread_safe: bool) type {
         const Count = (if (thread_safe) std.atomic.Value(u32) else u32);
-        const Magic = enum(u128) { valid = 0x2f84e51d, _ };
+        const Magic = DebugData_Magic;
         const LockField = (if (thread_safe) std.debug.SafetyLock else bun.Mutex);
         return struct {
     magic: Magic align(@alignOf(u32)),

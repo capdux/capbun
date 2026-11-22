@@ -104,6 +104,46 @@ pub fn __cp_deinit(self: *WindowsReadGuard) void {
     }
 };
 
+pub fn BufferedReaderFns(comptime Type: type) type {
+    return struct {
+
+pub fn onReadChunk(ptr: *anyopaque, chunk: []const u8, hasMore: ReadState) bool {
+                return Type.onReadChunk((blk: {
+                break :blk @as(*Type, @ptrCast(@alignCast(ptr)));
+
+}), chunk, hasMore);
+        }
+
+pub fn onReaderDone(ptr: *anyopaque) void {
+                return Type.onReaderDone((blk: {
+                break :blk @as(*Type, @ptrCast(@alignCast(ptr)));
+
+}));
+        }
+
+pub fn onReaderError(ptr: *anyopaque, err_val: bun.sys.Error) void {
+                return Type.onReaderError((blk: {
+                break :blk @as(*Type, @ptrCast(@alignCast(ptr)));
+
+}), err_val);
+        }
+
+pub fn eventLoop(ptr: *anyopaque) jsc.EventLoopHandle {
+                return jsc.EventLoopHandle.init(Type.eventLoop((blk: {
+                break :blk @as(*Type, @ptrCast(@alignCast(ptr)));
+
+})));
+        }
+
+pub fn loop(ptr: *anyopaque) *Async.Loop {
+                return Type.loop((blk: {
+                break :blk @as(*Type, @ptrCast(@alignCast(ptr)));
+
+}));
+        }
+    };
+}
+
 pub const BufferedReaderFn = struct {
     onReadChunk: ?*const fn (*anyopaque, []const u8, ReadState) bool = null,
     onReaderDone: *const fn (*anyopaque) void,
@@ -112,29 +152,7 @@ pub const BufferedReaderFn = struct {
     eventLoop: *const fn (*anyopaque) jsc.EventLoopHandle,
 
 pub fn init(comptime Type: type) *const BufferedReaderFn {
-            const fns = struct {
-
-pub fn onReadChunk(ptr: *anyopaque, chunk: []const u8, hasMore: ReadState) bool {
-            return Type.onReadChunk(@as(*Type, @ptrCast(@alignCast(ptr))), chunk, hasMore);
-    }
-
-pub fn onReaderDone(ptr: *anyopaque) void {
-            return Type.onReaderDone(@as(*Type, @ptrCast(@alignCast(ptr))));
-    }
-
-pub fn onReaderError(ptr: *anyopaque, err_val: bun.sys.Error) void {
-            return Type.onReaderError(@as(*Type, @ptrCast(@alignCast(ptr))), err_val);
-    }
-
-pub fn eventLoop(ptr: *anyopaque) jsc.EventLoopHandle {
-            return jsc.EventLoopHandle.init(Type.eventLoop(@as(*Type, @ptrCast(@alignCast(ptr)))));
-    }
-
-pub fn loop(ptr: *anyopaque) *Async.Loop {
-            return Type.loop(@as(*Type, @ptrCast(@alignCast(ptr))));
-    }
-};
-            return (comptime (&BufferedReaderFn{ .onReadChunk = (if (@hasDecl(Type, "onReadChunk")) (&fns.onReadChunk) else null), .onReaderDone = (&fns.onReaderDone), .onReaderError = (&fns.onReaderError), .eventLoop = (&fns.eventLoop), .loop = (&fns.loop) }));
+            return (comptime (&BufferedReaderFn{ .onReadChunk = (if (@hasDecl(Type, "onReadChunk")) (&BufferedReaderFns(Type).onReadChunk) else null), .onReaderDone = (&BufferedReaderFns(Type).onReaderDone), .onReaderError = (&BufferedReaderFns(Type).onReaderError), .eventLoop = (&BufferedReaderFns(Type).eventLoop), .loop = (&BufferedReaderFns(Type).loop) }));
     }
 };
 
@@ -508,12 +526,6 @@ pub fn call(fd: bun.FD, buf: []u8, offset: usize) bun.sys.Maybe(usize) {
     }
 
 pub fn readFile(self: *PosixBufferedReader, fd: bun.FD, size_hint: isize, received_hup: bool) void {
-            const preadFn = (struct {
-
-pub fn call(fd1: bun.FD, buf: []u8, offset: usize) bun.sys.Maybe(usize) {
-            return bun.sys.pread(fd1, buf, @intCast(offset));
-    }
-}).call;
             if (self.flags.use_pread) {
                 return self.readWithFn(fd, size_hint, received_hup, .file, preadFn);
             } else {
@@ -820,6 +832,39 @@ pub const WindowsBufferedReaderFlags = packed struct(u16) {
     _: u6 = 0,
 };
 
+pub fn WindowsBufferedReaderFns(comptime Type: type) type {
+    return struct {
+
+pub fn onReadChunk(ptr: *anyopaque, chunk: []const u8, hasMore: ReadState) bool {
+                return Type.onReadChunk((blk: {
+                break :blk @as(*Type, @ptrCast(@alignCast(ptr)));
+
+}), chunk, hasMore);
+        }
+
+pub fn onReaderDone(ptr: *anyopaque) void {
+                return Type.onReaderDone((blk: {
+                break :blk @as(*Type, @ptrCast(@alignCast(ptr)));
+
+}));
+        }
+
+pub fn onReaderError(ptr: *anyopaque, err_val: bun.sys.Error) void {
+                return Type.onReaderError((blk: {
+                break :blk @as(*Type, @ptrCast(@alignCast(ptr)));
+
+}), err_val);
+        }
+
+pub fn loop(ptr: *anyopaque) *Async.Loop {
+                return Type.loop((blk: {
+                break :blk @as(*Type, @ptrCast(@alignCast(ptr)));
+
+}));
+        }
+    };
+}
+
 pub const WindowsBufferedReader = struct {
     source: ?Source = null,
     _offset: usize = 0,
@@ -834,25 +879,7 @@ pub fn memoryCost(self: WindowsBufferedReader) usize {
     }
 
 pub fn init(comptime Type: type) WindowsBufferedReader {
-            const fns = struct {
-
-pub fn onReadChunk(ptr: *anyopaque, chunk: []const u8, hasMore: ReadState) bool {
-            return Type.onReadChunk(@as(*Type, @ptrCast(@alignCast(ptr))), chunk, hasMore);
-    }
-
-pub fn onReaderDone(ptr: *anyopaque) void {
-            return Type.onReaderDone(@as(*Type, @ptrCast(@alignCast(ptr))));
-    }
-
-pub fn onReaderError(ptr: *anyopaque, err_val: bun.sys.Error) void {
-            return Type.onReaderError(@as(*Type, @ptrCast(@alignCast(ptr))), err_val);
-    }
-
-pub fn loop(ptr: *anyopaque) *Async.Loop {
-            return Type.loop(@as(*Type, @ptrCast(@alignCast(ptr))));
-    }
-};
-            return WindowsBufferedReader{ .vtable = WindowsBufferedReaderVTable{ .onReadChunk = (if (@hasDecl(Type, "onReadChunk")) (&fns.onReadChunk) else null), .onReaderDone = (&fns.onReaderDone), .onReaderError = (&fns.onReaderError), .loop = (&fns.loop) } };
+            return WindowsBufferedReader{ .vtable = WindowsBufferedReaderVTable{ .onReadChunk = (if (@hasDecl(Type, "onReadChunk")) (&WindowsBufferedReaderFns(Type).onReadChunk) else null), .onReaderDone = (&WindowsBufferedReaderFns(Type).onReaderDone), .onReaderError = (&WindowsBufferedReaderFns(Type).onReaderError), .loop = (&WindowsBufferedReaderFns(Type).loop) } };
     }
 
 pub fn isDone(self: *WindowsBufferedReader) bool {
@@ -1319,3 +1346,7 @@ const jsc = bun.jsc;
 const uv = bun.windows.libuv;
 pub const BufferedReader = (if (bun.Environment.isPosix) PosixBufferedReader else (if (bun.Environment.isWindows) WindowsBufferedReader else @compileError("Unsupported platform")));
 pub const PipeReader = BufferedReader;
+
+pub fn preadFn(fd1: bun.FD, buf: []u8, offset: usize) bun.sys.Maybe(usize) {
+        return bun.sys.pread(fd1, buf, @intCast(offset));
+}

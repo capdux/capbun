@@ -1333,28 +1333,7 @@ pub fn toEnumFromMap(self: JSValue, globalThis: *JSGlobalObject, comptime proper
                 _ = &res;
                 return res;
             } else {
-                const one_of = (struct {
-    pub const list = brk: {
-            var str: []const u8 = "'";
-            _ = &str;
-            const field_names = bun.meta.enumFieldNames(Enum);
-            _ = &field_names;
-            for (field_names, 0..) |entry, i| {
-                _ = &entry;
-                _ = &i;
-                str = ((str ++ entry) ++ "'");
-                if ((i < (field_names.len - 2))) {
-                    str = (str ++ ", '");
-                } else {
-                    if ((i == (field_names.len - 2))) {
-                        str = (str ++ " or '");
-                    }
-                }
-            }
-            break :brk str;
-    };
-    pub const label = ((property_name ++ " must be one of ") ++ list);
-}).label;
+                const one_of = (comptime enumOneOfLabel(property_name, Enum));
                 return globalThis.throwInvalidArguments(one_of, .{});
             }
     }
@@ -2152,6 +2131,27 @@ const ZigException = jsc.ZigException;
 const ZigString = jsc.ZigString;
 const fromJSHostCall = jsc.fromJSHostCall;
 const toJSHostFunction = jsc.toJSHostFn;
+
+pub fn enumOneOfLabel(comptime property_name: []const u8, comptime Enum: type) [:0]const u8 {
+        var str: []const u8 = "'";
+        _ = &str;
+        const field_names = bun.meta.enumFieldNames(Enum);
+        var i: usize = 0;
+        _ = &i;
+        for (cp_iter_slice(field_names)) |entry| {
+            _ = &entry;
+            str = ((str ++ entry) ++ "'");
+            if ((i < (field_names.len - 2))) {
+                str = (str ++ ", '");
+            } else {
+                if ((i == (field_names.len - 2))) {
+                    str = (str ++ " or '");
+                }
+            }
+            i = (i + 1);
+        }
+        return (((property_name ++ " must be one of ") ++ str) ++ "");
+}
 
 extern "c" fn JSC__JSValue__unwrapBoxedPrimitive(global: *JSGlobalObject, val: JSValue) callconv(.c) JSValue;
 

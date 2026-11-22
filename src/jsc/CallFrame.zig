@@ -64,6 +64,25 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 
 pub const bun = @import("bun");
 const VM = @import("./VM.zig").VM;
+const CallFrameRegisterAsBits = extern struct {
+    payload: i32,
+    tag: i32,
+};
+
+const CallFrameEncodedValueDescriptor = extern union {
+    ptr: JSValue,
+    as_bits: CallFrameRegisterAsBits,
+};
+
+const CallFrameRegister = extern union {
+    value: JSValue,
+    call_frame: *CallFrame,
+    code_block: *anyopaque,
+    encoded_value: CallFrameEncodedValueDescriptor,
+    number: f64,
+    integer: i64,
+};
+
 pub const CallFrameCallerSrcLoc = struct {
     str: bun.String,
     line: c_uint,
@@ -219,22 +238,7 @@ pub inline fn asUnsafeJSValueArray(self: *const CallFrame) [*]const jsc.JSValue 
     }
 
 pub fn argumentCountIncludingThis(frame: *const CallFrame) u32 {
-            const Register = extern union {
-            value: JSValue, // EncodedJSValue
-            call_frame: *CallFrame,
-            code_block: *anyopaque, // CodeBlock*
-            /// EncodedValueDescriptor defined in JavaScriptCore/runtime/JSCJSValue.h
-            encoded_value: extern union {
-                ptr: JSValue, // JSCell*
-                as_bits: extern struct {
-                    payload: i32,
-                    tag: i32,
-                },
-            },
-            number: f64, // double
-            integer: i64, // integer
-        };
-            const registers: [*]const Register = (blk: {
+            const registers: [*]const CallFrameRegister = (blk: {
             break :blk @ptrCast(@alignCast(frame));
 
 });

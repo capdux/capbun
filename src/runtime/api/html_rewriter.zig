@@ -1570,15 +1570,8 @@ const JSValue = jsc.JSValue;
 const ZigString = jsc.ZigString;
 const host_fn = jsc.host_fn;
 
-pub fn HandlerCallback(comptime HandlerType: type, comptime ZigType: type, comptime LOLHTMLType: type, comptime field_name: []const u8, comptime callback_name: []const u8) *const fn (*HandlerType, *LOLHTMLType) bool {
-        return (struct {
-
-pub fn callback(handler: *HandlerType, value: *LOLHTMLType) bool {
-            _ = jsc.markBinding(@src());
-            var wrapper = ZigType.init(value);
-            _ = &wrapper;
-            _ = wrapper.ref();
-            const WrapperGuard = struct {
+pub fn WrapperGuardType(comptime ZigType: type, comptime field_name: []const u8) type {
+        return struct {
     w: *ZigType,
     __cp_dropped: bool = false,
 
@@ -1595,6 +1588,17 @@ pub fn __cp_deinit(self: *@This()) void {
             }
     }
 };
+}
+
+pub fn HandlerCallback(comptime HandlerType: type, comptime ZigType: type, comptime LOLHTMLType: type, comptime field_name: []const u8, comptime callback_name: []const u8) *const fn (*HandlerType, *LOLHTMLType) bool {
+        return (struct {
+
+pub fn callback(handler: *HandlerType, value: *LOLHTMLType) bool {
+            _ = jsc.markBinding(@src());
+            var wrapper = ZigType.init(value);
+            _ = &wrapper;
+            _ = wrapper.ref();
+            const WrapperGuard = WrapperGuardType(ZigType, field_name);
             const _guard_wrapper = WrapperGuard{ .w = wrapper };
             _ = &_guard_wrapper;
             var scope: bun.jsc.TopExceptionScope = undefined;

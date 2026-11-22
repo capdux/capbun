@@ -4,14 +4,99 @@
 const std = @import("std");
 const string = []const u8;
 
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 pub const bun = @import("bun");
+pub const ConcurrentTaskPackedNextPtr = enum(usize) {
+    none = 0,
+    auto_delete = 1,
+    _,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub inline fn init(ptr: ?*ConcurrentTask, auto_del: bool) ConcurrentTaskPackedNextPtr {
+            var ptr_bits: usize = 0;
+            _ = &ptr_bits;
+            if ((ptr != null)) {
+                ptr_bits = (blk: {
+                break :blk @intFromPtr(ptr.?);
+
+});
+            }
+            return @enumFromInt((ptr_bits | @intFromBool(auto_del)));
+    }
+
+pub inline fn getPtr(self: ConcurrentTaskPackedNextPtr) ?*ConcurrentTask {
+            const addr = (@intFromEnum(self) & (~(if (comptime @typeInfo(@TypeOf(1)) == .@"enum") cp_cast_int(usize, @intFromEnum(1)) else cp_cast_int(usize, 1))));
+            return (if ((addr == 0)) null else (blk: {
+            break :blk @ptrFromInt(addr);
+
+}));
+    }
+
+pub inline fn setPtr(self: *ConcurrentTaskPackedNextPtr, ptr: ?*ConcurrentTask) void {
+            const auto_del = (@intFromEnum(self.*) & 1);
+            var ptr_bits: usize = 0;
+            _ = &ptr_bits;
+            if ((ptr != null)) {
+                ptr_bits = (blk: {
+                break :blk @intFromPtr(ptr.?);
+
+});
+            }
+            self.* = @enumFromInt((ptr_bits | auto_del));
+    }
+
+pub inline fn isAutoDelete(self: ConcurrentTaskPackedNextPtr) bool {
+            return ((@intFromEnum(self) & 1) != 0);
+    }
+
+pub inline fn atomicLoadPtr(self: ConcurrentTaskPackedNextPtr, ordering: std.builtin.AtomicOrder) ?*ConcurrentTask {
+            const value = (blk: {
+            break :blk @atomicLoad(usize, @as(*const usize, @alignCast(@ptrCast((&self)))), ordering);
+
+});
+            const addr = (value & (~(if (comptime @typeInfo(@TypeOf(1)) == .@"enum") cp_cast_int(usize, @intFromEnum(1)) else cp_cast_int(usize, 1))));
+            return (if ((addr == 0)) null else (blk: {
+            break :blk @ptrFromInt(addr);
+
+}));
+    }
+
+pub inline fn atomicStorePtr(self: *ConcurrentTaskPackedNextPtr, ptr: ?*ConcurrentTask, ordering: std.builtin.AtomicOrder) void {
+            var ptr_bits: usize = 0;
+            _ = &ptr_bits;
+            if ((ptr != null)) {
+                ptr_bits = (blk: {
+                break :blk @intFromPtr(ptr.?);
+
+});
+            }
+            {
+                const self_ptr: *usize = @ptrCast(self);
+                const auto_del_bit = (@atomicLoad(usize, self_ptr, .monotonic) & 1);
+                _ = @atomicStore(usize, self_ptr, (ptr_bits | auto_del_bit), ordering);
+            }
+    }
+};
+
+pub const ConcurrentTaskAutoDeinit = enum {
+    manual_deinit,
+    auto_deinit,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const ConcurrentTask = struct {
     task: Task = undefined,
-    next: PackedNextPtr = .none,
+    next: ConcurrentTaskPackedNextPtr = .none,
     
 pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.task = undefined; self_ptr.next = .none; return self_ptr; }
 
-pub fn init(self: *ConcurrentTask, task: Task, next: PackedNextPtr) void {
+pub fn init(self: *ConcurrentTask, task: Task, next: ConcurrentTaskPackedNextPtr) void {
         var __task_moved = false; _ = &__task_moved;
         defer if (!__task_moved) { __task_moved = true; const __T = @TypeOf(task); if (@typeInfo(__T) == .optional) { if (task) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { task.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = task; _drop_val.__cp_deinit(); } };
         var __next_moved = false; _ = &__next_moved;
@@ -47,60 +132,11 @@ pub fn release(self: *ConcurrentTask) void {
 pub fn autoDelete(self: *const ConcurrentTask) bool {
             return self.next.isAutoDelete();
     }
-    pub const PackedNextPtr = enum(usize) {
-            none = 0,
-            auto_delete = 1,
-            _,
-    
-            pub inline fn init(ptr: ?*ConcurrentTask, auto_del: bool) PackedNextPtr {
-                var ptr_bits: usize = 0;
-                if (ptr != null) {
-                    ptr_bits = @intFromPtr(ptr.?);
-                }
-                return @enumFromInt(ptr_bits | @intFromBool(auto_del));
-            }
-    
-            pub inline fn getPtr(self: PackedNextPtr) ?*ConcurrentTask {
-                const addr = @intFromEnum(self) & ~@as(usize, 1);
-                return if (addr == 0) null else @ptrFromInt(addr);
-            }
-    
-            pub inline fn setPtr(self: *PackedNextPtr, ptr: ?*ConcurrentTask) void {
-                const auto_del = @intFromEnum(self.*) & 1;
-                var ptr_bits: usize = 0;
-                if (ptr != null) {
-                    ptr_bits = @intFromPtr(ptr.?);
-                }
-                self.* = @enumFromInt(ptr_bits | auto_del);
-            }
-    
-            pub inline fn isAutoDelete(self: PackedNextPtr) bool {
-                return (@intFromEnum(self) & 1) != 0;
-            }
-    
-            pub inline fn atomicLoadPtr(self: *const PackedNextPtr, ordering: std.builtin.AtomicOrder) ?*ConcurrentTask {
-                const value = @atomicLoad(usize, @as(*const usize, @ptrCast(self)), ordering);
-                const addr = value & ~@as(usize, 1);
-                return if (addr == 0) null else @ptrFromInt(addr);
-            }
-    
-            pub inline fn atomicStorePtr(self: *PackedNextPtr, ptr: ?*ConcurrentTask, ordering: std.builtin.AtomicOrder) void {
-                var ptr_bits: usize = 0;
-                if (ptr != null) {
-                    ptr_bits = @intFromPtr(ptr.?);
-                }
-                const self_ptr: *usize = @ptrCast(self);
-                const auto_del_bit = @atomicLoad(usize, self_ptr, .monotonic) & 1;
-                @atomicStore(usize, self_ptr, ptr_bits | auto_del_bit, ordering);
-            }
-        };
+    pub const PackedNextPtr = ConcurrentTaskPackedNextPtr;
     pub const Queue = UnboundedQueue(ConcurrentTask, .next);
     pub const new = bun.TrivialNew(ConcurrentTask);
     pub const deinit = bun.TrivialDeinit(ConcurrentTask);
-    pub const AutoDeinit = enum {
-            manual_deinit,
-            auto_deinit,
-        };
+    pub const AutoDeinit = ConcurrentTaskAutoDeinit;
 };
 
 const UnboundedQueue = bun.UnboundedQueue;

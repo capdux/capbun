@@ -161,6 +161,28 @@ pub union(enum) AlignContent {
     }
 }
 
+enum BaselinePositionIdent {
+    baseline,
+    first,
+    last,
+}
+
+enum JustifyContentIdent {
+    left,
+    right,
+}
+
+enum AlignLeftRightEnum { left, right }
+
+enum LegacyJustifyIdent {
+    legacy,
+    left,
+    right,
+    center,
+}
+
+enum LegacyJustifyInnerEnum { left, right, center }
+
 /// A [`<baseline-position>`](https://www.w3.org/TR/css-align-3/#typedef-baseline-position) value,
 /// as used in the alignment properties.
 pub enum BaselinePosition {
@@ -174,12 +196,6 @@ pub enum BaselinePosition {
         const ident = switch (input.expectIdent()) {
             .err => |e| return { err: e },
             .result => |v| v,
-        };
-
-        const BaselinePositionIdent = enum {
-            baseline,
-            first,
-            last,
         };
 
         const BaselinePositionMap = bun.ComptimeEnumMap(BaselinePositionIdent);
@@ -252,11 +268,6 @@ pub union(enum) JustifyContent {
         const ident = switch (input.expectIdent()) {
             .result => |v| v,
             .err => |e| return { err: e },
-        };
-
-        const JustifyContentIdent = enum {
-            left,
-            right,
         };
 
         const JustifyContentIdentMap = bun.ComptimeEnumMap(JustifyContentIdent);
@@ -376,8 +387,7 @@ pub union(enum) JustifySelf {
             .result => |v| v,
             .err => |e| return { err: e },
         };
-        const Enum = enum { left, right };
-        const Map = bun.ComptimeEnumMap(Enum);
+        const Map = bun.ComptimeEnumMap(AlignLeftRightEnum);
         if (val := Map.getASCIIICaseInsensitive(ident)) {
             switch (val) {
                 .left => return { result: { left: { overflow: overflow } } },
@@ -495,8 +505,7 @@ pub union(enum) JustifyItems {
             .err => |e| return { err: e },
         };
 
-        const Enum = enum { left, right };
-        const Map = bun.ComptimeEnumMap(Enum);
+        const Map = bun.ComptimeEnumMap(AlignLeftRightEnum);
         if (val := Map.getASCIIICaseInsensitive(ident)) {
             switch (val) {
                 .left => return { result: { left: { overflow: overflow } } },
@@ -561,13 +570,6 @@ pub enum LegacyJustify {
             .result => |v| v,
         };
 
-        const LegacyJustifyIdent = enum {
-            legacy,
-            left,
-            right,
-            center,
-        };
-
         const LegacyJustifyMap = bun.ComptimeEnumMap(LegacyJustifyIdent);
         if (value := LegacyJustifyMap.getASCIIICaseInsensitive(ident)) {
             switch (value) {
@@ -577,8 +579,7 @@ pub enum LegacyJustify {
                         .err => |e| return { err: e },
                         .result => |v| v,
                     };
-                    const InnerEnum = enum { left, right, center };
-                    const InnerLegacyJustifyMap = bun.ComptimeEnumMap(InnerEnum);
+                    const InnerLegacyJustifyMap = bun.ComptimeEnumMap(LegacyJustifyInnerEnum);
                     if (inner_value := InnerLegacyJustifyMap.getASCIIICaseInsensitive(inner_ident)) {
                         return switch (inner_value) {
                             .left => .{ .result = .left },
@@ -963,7 +964,7 @@ pub enum OverflowPosition {
     safe,
     /// Regardless of the relative sizes of the alignment subject and alignment
     /// container, the given alignment value is honored.
-    unsafe,
+    @"unsafe",
 
     const css_impl = css.DefineEnumProperty(@This());
     pub const eql = css_impl.eql;

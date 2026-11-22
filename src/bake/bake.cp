@@ -969,28 +969,28 @@ pub inline fn getHmrRuntime(side: Side): HmrRuntime {
         });
 }
 
-pub const Mode = enum {
+pub enum Mode {
     development,
     production_dynamic,
     production_static,
-};
-pub const Side = enum(u1) {
+}
+pub enum Side: u1 {
     client,
     server,
 
-    pub fn graph(s: Side) Graph {
-        return switch (s) {
+    fn graph(): Graph {
+        return switch (_) {
             .client => .client,
             .server => .server,
         };
     }
-};
-pub const Graph = enum(u2) {
+}
+pub enum Graph: u2 {
     client,
     server,
     /// Only used when Framework has .server_components.separate_ssr_graph set
     ssr,
-};
+}
 
 pub fn addImportMetaDefines(
     allocator: std.mem.Allocator,

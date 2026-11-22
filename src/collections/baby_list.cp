@@ -9,16 +9,18 @@ const StoredTrace = bun.crash_handler.StoredTrace;
 const Environment = bun.Environment;
 const traces_enabled = Environment.isDebug;
 
+struct OriginBorrowed {
+    trace: if (traces_enabled) StoredTrace else void,
+}
+
+union(enum) Origin {
+    owned: void,
+    borrowed: OriginBorrowed,
+}
+
 /// This is like ArrayList except it stores the length and capacity as u32
 /// In practice, it is very unusual to have lengths above 4 GiB
 pub fn BabyList(comptime Type: type): type {
-    const Origin = union(enum) {
-        owned,
-        borrowed: struct {
-            trace: if (traces_enabled) StoredTrace else void,
-        },
-    };
-
     return struct {
         const Self = @This();
 

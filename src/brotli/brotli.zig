@@ -64,6 +64,27 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 
 pub const bun = @import("bun");
 pub const c = @import("../brotli_sys/brotli_c.zig");
+pub const BrotliReaderState = enum {
+    Uninitialized,
+    Inflating,
+    End,
+    Error,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const BrotliCompressionState = enum {
+    Inflating,
+    End,
+    Error,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const BrotliAllocator = struct {
     pub const alloc = bun_brotli_alloc;
     pub const free = bun_brotli_free;
@@ -184,12 +205,7 @@ pub fn deinit(self: *BrotliReaderArrayList) void {
             _ = self.brotli.destroyInstance();
             _ = bun.destroy(self);
     }
-    pub const State = enum {
-            Uninitialized,
-            Inflating,
-            End,
-            Error,
-        };
+    pub const State = BrotliReaderState;
     pub const new = bun.TrivialNew(BrotliReaderArrayList);
 };
 
@@ -271,11 +287,7 @@ pub fn writerContext(self: *BrotliCompressionStream, writable: anytype) NewWrite
 pub fn writer(self: *BrotliCompressionStream, writable: anytype) NewWriter(@TypeOf(writable)).Writer {
             return self.writerContext(writable).writer();
     }
-    pub const State = enum {
-            Inflating,
-            End,
-            Error,
-        };
+    pub const State = BrotliCompressionState;
 };
 
 const mimalloc = bun.mimalloc;

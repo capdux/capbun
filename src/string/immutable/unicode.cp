@@ -46,6 +46,12 @@ pub fn _CodePointCursor(comptime CodePointType_: type, comptime zeroValue: compt
     };
 }
 
+pub enum IteratorSkipResult {
+    eof,
+    found,
+    not_found,
+};
+
 pub fn NewCodePointIterator(comptime CodePointType_: type, comptime zeroValue: comptime_int): type {
     return struct {
         const Iterator = @This();
@@ -69,11 +75,7 @@ pub fn NewCodePointIterator(comptime CodePointType_: type, comptime zeroValue: c
             return Iterator{ bytes: str, i: i, c: zeroValue };
         }
 
-        const SkipResult = enum {
-            eof,
-            found,
-            not_found,
-        };
+        pub const SkipResult = IteratorSkipResult;
 
         /// Advance forward until the scalar function returns true.
         /// THe simd function is "best effort" and expected to sometimes return a result which `scalar` will return false for.

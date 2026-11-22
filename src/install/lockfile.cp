@@ -28,6 +28,20 @@ struct ClampGuard<T> {
     }
 }
 
+pub enum LockfileFormatVersion: u32 {
+    v0 = 0,
+    // bun v0.0.x - bun v0.1.6
+    v1 = 1,
+    // bun v0.1.7+
+    // This change added tarball URLs to npm-resolved packages
+    v2 = 2,
+    // Changed semver major/minor/patch to each use u64 instead of u32
+    v3 = 3,
+
+    _,
+    const current = LockfileFormatVersion.v3;
+}
+
 const Crypto = ShaHmac.Hashers;
 const Resolution = ResolutionMod.Resolution;
 const StaticHashMap = StaticHashMapMod.StaticHashMap;
@@ -2001,19 +2015,7 @@ pub fn stringBuf(client: *Lockfile): String.Buf {
 }
 
 
-pub const FormatVersion = enum(u32) {
-    v0 = 0,
-    // bun v0.0.x - bun v0.1.6
-    v1 = 1,
-    // bun v0.1.7+
-    // This change added tarball URLs to npm-resolved packages
-    v2 = 2,
-    // Changed semver major/minor/patch to each use u64 instead of u32
-    v3 = 3,
-
-    _,
-    pub const current = FormatVersion.v3;
-};
+pub const FormatVersion = LockfileFormatVersion;
 
 pub const PackageIDSlice = ExternalSlice(PackageID);
 pub const DependencySlice = ExternalSlice(Dependency);

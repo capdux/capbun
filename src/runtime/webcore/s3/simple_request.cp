@@ -17,6 +17,11 @@ const strings = bun.strings;
 
 const JSTerminatedError = bun.JSTerminated;
 
+enum ErrorType {
+    not_found,
+    failure,
+}
+
 struct DeinitPtrGuard<T> {
     ptr: *T!,
     ~init() {
@@ -233,11 +238,6 @@ export class S3HttpSimpleTask {
         this.release();
         bun.destroy(this);
     }
-
-    const ErrorType = enum {
-        not_found,
-        failure,
-    };
 
     fn errorWithBody(*_: *S3HttpSimpleTask, comptime error_type: ErrorType): JSTerminatedError!void {
         let code: string = "UnknownError";

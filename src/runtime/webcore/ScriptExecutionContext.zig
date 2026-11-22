@@ -4,24 +4,30 @@
 const std = @import("std");
 const string = []const u8;
 
-const bun = @import("bun");
+pub const bun = @import("bun");
 pub const Identifier = enum(u32) {
     _,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 
-    /// Returns null if the context referred to by `this` no longer exists
-    pub fn globalObject(this: Identifier) ?*bun.jsc.JSGlobalObject {
-        return ScriptExecutionContextIdentifier__getGlobalObject(@intFromEnum(this));
+pub fn globalObject(self: Identifier) ?*bun.jsc.JSGlobalObject {
+            return ScriptExecutionContextIdentifier__getGlobalObject(@intFromEnum(self));
     }
 
-    /// Returns null if the context referred to by `this` no longer exists
-    pub fn bunVM(this: Identifier) ?*bun.jsc.VirtualMachine {
-        // concurrently because we expect these identifiers are mostly used by off-thread tasks
-        return (this.globalObject() orelse return null).bunVMConcurrently();
+pub fn bunVM(self: Identifier) ?*bun.jsc.VirtualMachine {
+            if (self.globalObject()) |obj| {
+                _ = &obj;
+                return obj.bunVMConcurrently();
+            }
+            return null;
     }
 
-    pub fn valid(this: Identifier) bool {
-        return this.globalObject() != null;
+pub fn valid(self: Identifier) bool {
+            return (self.globalObject() != null);
     }
 };
+
 
 extern "c" fn ScriptExecutionContextIdentifier__getGlobalObject(id: u32) callconv(.c) ?*bun.jsc.JSGlobalObject;

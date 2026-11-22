@@ -1,7 +1,7 @@
-const ReturnMode = enum {
+enum ReturnMode {
     toHaveReturned,
     toHaveReturnedTimes,
-};
+}
 
 inline fn toHaveReturnedTimesFn(client: *Expect, globalThis: *JSGlobalObject, callframe: *CallFrame, comptime mode: ReturnMode): bun.JSError!JSValue {
     jsc.markBinding(@src());

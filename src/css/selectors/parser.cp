@@ -23,10 +23,82 @@ pub const Component = GenericComponent(selector_impl.Selectors);
 pub const Selector = GenericSelector(selector_impl.Selectors);
 pub const SelectorList = GenericSelectorList(selector_impl.Selectors);
 
-pub const ToCssCtx = enum {
+pub enum ToCssCtx {
     lightning,
     servo,
-};
+}
+
+enum _PseudoElementEnum {
+    cue,
+    @"cue-region",
+    @"view-transition-group",
+    @"view-transition-image-pair",
+    @"view-transition-old",
+    @"view-transition-new",
+}
+
+enum _FunctionalPseudoClass {
+    @"nth-child",
+    @"nth-of-type",
+    @"nth-last-child",
+    @"nth-last-of-type",
+    @"nth-col",
+    @"nth-last-col",
+    is,
+    where,
+    has,
+    host,
+    not,
+}
+
+enum _AsciiCaseInsensitiveHtmlAttributes {
+    dir,
+    http_equiv,
+    rel,
+    enctype,
+    @"align",
+    accept,
+    nohref,
+    lang,
+    bgcolor,
+    direction,
+    valign,
+    checked,
+    frame,
+    link,
+    accept_charset,
+    hreflang,
+    text,
+    valuetype,
+    language,
+    nowrap,
+    vlink,
+    disabled,
+    noshade,
+    codetype,
+    @"defer",
+    noresize,
+    target,
+    scrolling,
+    rules,
+    scope,
+    rev,
+    media,
+    method,
+    charset,
+    alink,
+    selected,
+    multiple,
+    color,
+    shape,
+    @"type",
+    clear,
+    compact,
+    face,
+    declare,
+    axis,
+    readonly,
+}
 
 /// The definition of whitespace per CSS Selectors Level 3 § 4.
 pub const SELECTOR_WHITESPACE: []const u8 = " \t\n\r\x0C";
@@ -44,6 +116,53 @@ pub fn ValidSelectorImpl(comptime T: type) {
     * = T.SelectorImpl.NonTSPseudoClass;
     * = T.SelectorImpl.VendorPrefix;
     * = T.SelectorImpl.PseudoElement;
+}
+
+pub enum _AttrsAttrSelectorOperator {
+    equal,
+    includes,
+    dash_match,
+    prefix,
+    substring,
+    suffix,
+
+    const This = @This();
+    fn toCss(dest: *Printer): PrintErr!void {
+        // https://drafts.csswg.org/cssom/#serializing-selectors
+        // See "attribute selector".
+        return dest.writeStr(switch (_) {
+            .equal => "=",
+            .includes => "~=",
+            .dash_match => "|=",
+            .prefix => "^=",
+            .substring => "*=",
+            .suffix => "$=",
+        });
+    }
+
+    fn hash(hasher: *std.hash.Wyhash) {
+        return css.implementHash(@This(), &_, hasher);
+    }
+}
+
+pub enum _AttrsAttrSelectorOperation {
+    equal,
+    includes,
+    dash_match,
+    prefix,
+    substring,
+    suffix,
+}
+
+pub enum _AttrsParsedCaseSensitivity {
+    // 's' was specified.
+    explicit_case_sensitive,
+    // 'i' was specified.
+    ascii_case_insensitive,
+    // No flags were specified && HTML says this is a case-sensitive attribute.
+    case_sensitive,
+    // No flags were specified && HTML says this is a case-insensitive attribute.
+    ascii_case_insensitive_if_in_html_element_in_html_document,
 }
 
 pub struct attrs {
@@ -175,52 +294,9 @@ pub struct attrs {
         };
     }
 
-    pub const AttrSelectorOperator = enum {
-        equal,
-        includes,
-        dash_match,
-        prefix,
-        substring,
-        suffix,
-
-        const This = @This();
-        pub fn toCss(this: *const This, dest: *Printer) PrintErr!void {
-            // https://drafts.csswg.org/cssom/#serializing-selectors
-            // See "attribute selector".
-            return dest.writeStr(switch (this.*) {
-                .equal => "=",
-                .includes => "~=",
-                .dash_match => "|=",
-                .prefix => "^=",
-                .substring => "*=",
-                .suffix => "$=",
-            });
-        }
-
-        pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
-            return css.implementHash(@This(), this, hasher);
-        }
-    };
-
-    pub const AttrSelectorOperation = enum {
-        equal,
-        includes,
-        dash_match,
-        prefix,
-        substring,
-        suffix,
-    };
-
-    pub const ParsedCaseSensitivity = enum {
-        // 's' was specified.
-        explicit_case_sensitive,
-        // 'i' was specified.
-        ascii_case_insensitive,
-        // No flags were specified && HTML says this is a case-sensitive attribute.
-        case_sensitive,
-        // No flags were specified && HTML says this is a case-insensitive attribute.
-        ascii_case_insensitive_if_in_html_element_in_html_document,
-    };
+    const AttrSelectorOperator = _AttrsAttrSelectorOperator;
+    const AttrSelectorOperation = _AttrsAttrSelectorOperation;
+    pub const ParsedCaseSensitivity = _AttrsParsedCaseSensitivity;
 }
 
 pub struct Specificity {
@@ -717,28 +793,28 @@ pub fn ValidSelectorParser(comptime T: type): type {
 }
 
 /// The [:dir()](https://drafts.csswg.org/selectors-4/#the-dir-pseudo) pseudo class.
-pub const Direction = enum {
+pub enum Direction {
     /// Left to right
     ltr,
     /// Right to left
     rtl,
 
-    pub fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 
-    pub fn asStr(this: *const @This()): []const u8 {
-        return css.enum_property_util.asStr(@This(), this);
+    fn asStr(): []const u8 {
+        return css.enum_property_util.asStr(@This(), &_);
     }
 
-    pub fn parse(input: *css.Parser): Result(@This()) {
+    static fn parse(input: *css.Parser): Result(@This()) {
         return css.enum_property_util.parse(@This(), input);
     }
 
-    pub fn toCss(this: *const @This(), dest: *Printer): PrintErr!void {
-        return css.enum_property_util.toCss(@This(), this, dest);
+    fn toCss(dest: *Printer): PrintErr!void {
+        return css.enum_property_util.toCss(@This(), &_, dest);
     }
-};
+}
 
 fn pseudoClassIsEquivalent(a: *const PseudoClass, b: *const PseudoClass): bool {
     if (a.* == .fullscreen && b.* == .fullscreen) return true;
@@ -998,7 +1074,7 @@ pub union(enum) PseudoClass {
 }
 
 /// A [webkit scrollbar](https://webkit.org/blog/363/styling-scrollbars/) pseudo class.
-pub const WebKitScrollbarPseudoClass = enum {
+pub enum WebKitScrollbarPseudoClass {
     /// :horizontal
     horizontal,
     /// :vertical
@@ -1021,10 +1097,10 @@ pub const WebKitScrollbarPseudoClass = enum {
     corner_present,
     /// :window-inactive
     window_inactive,
-};
+}
 
 /// A [webkit scrollbar](https://webkit.org/blog/363/styling-scrollbars/) pseudo element.
-pub const WebKitScrollbarPseudoElement = enum {
+pub enum WebKitScrollbarPseudoElement {
     /// ::-webkit-scrollbar
     scrollbar,
     /// ::-webkit-scrollbar-button
@@ -1040,10 +1116,10 @@ pub const WebKitScrollbarPseudoElement = enum {
     /// ::-webkit-resizer
     resizer,
 
-    pub inline fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    static inline fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return lhs.* == rhs.*;
     }
-};
+}
 
 pub struct SelectorParser {
     is_nesting_allowed: bool,
@@ -1066,14 +1142,7 @@ pub struct SelectorParser {
     }
 
     pub fn parseFunctionalPseudoElement(*_, name: []const u8, input: *css.Parser): Result(Impl.SelectorImpl.PseudoElement) {
-        const Enum = enum {
-            cue,
-            @"cue-region",
-            @"view-transition-group",
-            @"view-transition-image-pair",
-            @"view-transition-old",
-            @"view-transition-new",
-        };
+        const Enum = _PseudoElementEnum;
 
         const Map = bun.ComptimeEnumMap(Enum);
         if (v := Map.get(name)) {
@@ -1412,6 +1481,44 @@ fn selectorListDebugFormat(this_val: anytype, writer: *std.Io.Writer): std.Io.Wr
     return writer.print("]\n", .{});
 }
 
+struct SelectorListDebugFmt<This> {
+    this: *const This,
+
+    pub const format = selectorListDebugFormat;
+}
+
+struct ParseSelectorWithStateClosure<Impl> {
+    outer_state: *SelectorParsingState,
+    original_state: SelectorParsingState,
+    nesting_requirement: NestingRequirement,
+    parser: *SelectorParser,
+
+    static fn parsefn(c: *ParseSelectorWithStateClosure<Impl>, input2: *css.Parser): Result(GenericSelector(Impl)) {
+        let selector_state = c.original_state;
+        const result = parse_selector(Impl, c.parser, input2, &selector_state, c.nesting_requirement);
+        if (selector_state.after_nesting) {
+            c.outer_state.after_nesting = true;
+        }
+        return result;
+    }
+}
+
+struct ParseRelativeSelectorWithStateClosure<Impl> {
+    outer_state: *SelectorParsingState,
+    original_state: SelectorParsingState,
+    nesting_requirement: NestingRequirement,
+    parser: *SelectorParser,
+
+    static fn parsefn(c: *ParseRelativeSelectorWithStateClosure<Impl>, input2: *css.Parser): Result(GenericSelector(Impl)) {
+        let selector_state = c.original_state;
+        const result = parse_relative_selector(Impl, c.parser, input2, &selector_state, c.nesting_requirement);
+        if (selector_state.after_nesting) {
+            c.outer_state.after_nesting = true;
+        }
+        return result;
+    }
+}
+
 pub fn GenericSelectorList(comptime Impl: type): type {
     ValidSelectorImpl(Impl);
 
@@ -1422,14 +1529,8 @@ pub fn GenericSelectorList(comptime Impl: type): type {
 
         const This = @This();
 
-        const DebugFmt = struct {
-            this: *const This,
-
-            pub const format = selectorListDebugFormat;
-        };
-
-        pub fn debug(this: *const @This()): DebugFmt {
-            return DebugFmt{ .this = this };
+        pub fn debug(this: *const @This()): SelectorListDebugFmt<This> {
+            return SelectorListDebugFmt<This>{ .this = this };
         }
 
         pub fn anyHasPseudoElement(this: *const This): bool {
@@ -1500,28 +1601,13 @@ pub fn GenericSelectorList(comptime Impl: type): type {
             let values: SmallList(SelectorT, 1) = .{};
 
             while (true) {
-                const Closure = struct {
-                    outer_state: *SelectorParsingState,
-                    original_state: SelectorParsingState,
-                    nesting_requirement: NestingRequirement,
-                    parser: *SelectorParser,
-
-                    pub fn parsefn(this: *@This(), input2: *css.Parser) Result(SelectorT) {
-                        let selector_state = this.original_state;
-                        const result = parse_selector(Impl, this.parser, input2, &selector_state, this.nesting_requirement);
-                        if (selector_state.after_nesting) {
-                            this.outer_state.after_nesting = true;
-                        }
-                        return result;
-                    }
-                };
-                let closure = Closure{
+                let closure = ParseSelectorWithStateClosure<Impl>{
                     .outer_state = state,
                     .original_state = original_state,
                     .nesting_requirement = nesting_requirement,
                     .parser = parser,
                 };
-                const selector = input.parseUntilBefore(css.Delimiters{ .comma = true }, SelectorT, &closure, Closure.parsefn);
+                const selector = input.parseUntilBefore(css.Delimiters{ .comma = true }, SelectorT, &closure, ParseSelectorWithStateClosure<Impl>.parsefn);
 
                 const was_ok = selector.isOk();
                 switch (selector) {
@@ -1560,28 +1646,13 @@ pub fn GenericSelectorList(comptime Impl: type): type {
             let values: SmallList(SelectorT, 1) = .{};
 
             while (true) {
-                const Closure = struct {
-                    outer_state: *SelectorParsingState,
-                    original_state: SelectorParsingState,
-                    nesting_requirement: NestingRequirement,
-                    parser: *SelectorParser,
-
-                    pub fn parsefn(this: *@This(), input2: *css.Parser) Result(SelectorT) {
-                        let selector_state = this.original_state;
-                        const result = parse_relative_selector(Impl, this.parser, input2, &selector_state, this.nesting_requirement);
-                        if (selector_state.after_nesting) {
-                            this.outer_state.after_nesting = true;
-                        }
-                        return result;
-                    }
-                };
-                let closure = Closure{
+                let closure = ParseRelativeSelectorWithStateClosure<Impl>{
                     .outer_state = state,
                     .original_state = original_state,
                     .nesting_requirement = nesting_requirement,
                     .parser = parser,
                 };
-                const selector = input.parseUntilBefore(css.Delimiters{ .comma = true }, SelectorT, &closure, Closure.parsefn);
+                const selector = input.parseUntilBefore(css.Delimiters{ .comma = true }, SelectorT, &closure, ParseRelativeSelectorWithStateClosure<Impl>.parsefn);
 
                 const was_ok = selector.isOk();
                 switch (selector) {
@@ -1654,6 +1725,95 @@ fn selectorDebugFormat(this_val: anytype, writer: *std.Io.Writer): !void {
     return writer.writeAll(_guard_arraylist.val.written());
 }
 
+struct RawMatchOrderIterator<Impl> {
+    slice: []const GenericComponent(Impl),
+    i: usize = 0,
+
+    fn next(*_): GenericComponent(Impl)? {
+        if (_.i >= _.slice.len) return null;
+        const result = _.slice[_.i];
+        _.i += 1;
+        return result;
+    }
+}
+
+struct RawParseOrderFromIter<Impl> {
+    slice: []const GenericComponent(Impl),
+    i: usize = 0,
+
+    fn next(*_): GenericComponent(Impl)? {
+        if (!(_.i < _.slice.len)) return null;
+        const result = _.slice[_.slice.len - 1 - _.i];
+        _.i += 1;
+        return result;
+    }
+}
+
+struct ParseAttrClosure {
+    parser: *SelectorParser,
+}
+
+struct ParsePartClosure<Impl> {
+    parser: *SelectorParser,
+    pub const Slice = []Impl.SelectorImpl.Identifier;
+
+    static fn parsefn(c: *const ParsePartClosure<Impl>, input2: *css.Parser): Result(Slice) {
+        let result = ArrayList(Impl.SelectorImpl.Identifier).initCapacity(
+            c.parser.allocator,
+            1,
+        ) catch unreachable;
+
+        result.append(
+            c.parser.allocator,
+            switch (input2.expectIdent()) {
+                .err => |e| return .{ .err = e },
+                .result => |v| .{ .v = v },
+            },
+        ) catch unreachable;
+
+        while (!input2.isExhausted()) {
+            result.append(
+                c.parser.allocator,
+                switch (input2.expectIdent()) {
+                    .err => |e| return .{ .err = e },
+                    .result => |v| .{ .v = v },
+                },
+            ) catch unreachable;
+        }
+
+        return .{ .result = result.items };
+    }
+}
+
+struct ParseSlottedClosure<Impl> {
+    parser: *SelectorParser,
+    state: *SelectorParsingState,
+    static fn parsefn(c: *ParseSlottedClosure<Impl>, input2: *css.Parser): Result(GenericSelector(Impl)) {
+        return parse_inner_compound_selector(Impl, c.parser, input2, c.state);
+    }
+}
+
+struct ParsePseudoClassClosure<Impl> {
+    parser: *SelectorParser,
+    name: []const u8,
+    state: *SelectorParsingState,
+    static fn parsefn(c: *ParsePseudoClassClosure<Impl>, input2: *css.Parser): Result(GenericComponent(Impl)) {
+        return parse_functional_pseudo_class(Impl, c.parser, input2, c.name, c.state);
+    }
+}
+
+struct ParseFunctionalPseudoElementClosure {
+    parser: *SelectorParser,
+    state: *SelectorParsingState,
+    name: []const u8,
+}
+
+struct SelectorDebugFmt<This> {
+    this: *const This,
+
+    pub const format = selectorDebugFormat;
+}
+
 /// This reordering doesn't change the semantics of selector matching, && we
 /// handle it in to_css to make it invisible to serialization.
 pub fn GenericSelector(comptime Impl: type): type {
@@ -1665,14 +1825,8 @@ pub fn GenericSelector(comptime Impl: type): type {
 
         const This = @This();
 
-        const DebugFmt = struct {
-            this: *const This,
-
-            pub const format = selectorDebugFormat;
-        };
-
-        pub fn debug(this: *const This): DebugFmt {
-            return DebugFmt{ .this = this };
+        pub fn debug(this: *const This): SelectorDebugFmt<This> {
+            return SelectorDebugFmt<This>{ .this = this };
         }
 
         /// Parse a selector, without any pseudo-element.
@@ -1754,44 +1908,20 @@ pub fn GenericSelector(comptime Impl: type): type {
             return parse(&selector_parser, input);
         }
 
-        pub fn iterRawMatchOrder(this: *const This): RawMatchOrderIterator {
-            return RawMatchOrderIterator{
+        pub fn iterRawMatchOrder(this: *const This): RawMatchOrderIterator<Impl> {
+            return RawMatchOrderIterator<Impl>{
                 .slice = this.components.items,
             };
         }
 
-        const RawMatchOrderIterator = struct {
-            slice: []const GenericComponent(Impl),
-            i: usize = 0,
-
-            pub fn next(this: *@This()) ?GenericComponent(Impl) {
-                if (this.i >= this.slice.len) return null;
-                const result = this.slice[this.i];
-                this.i += 1;
-                return result;
-            }
-        };
-
         /// Returns an iterator over the sequence of simple selectors &&
         /// combinators, in parse order (from left to right), starting from
         /// `offset`.
-        pub fn iterRawParseOrderFrom(this: *const This, offset: usize): RawParseOrderFromIter {
-            return RawParseOrderFromIter{
+        pub fn iterRawParseOrderFrom(this: *const This, offset: usize): RawParseOrderFromIter<Impl> {
+            return RawParseOrderFromIter<Impl>{
                 .slice = this.components.items[0 .. this.components.items.len - offset],
             };
         }
-
-        const RawParseOrderFromIter = struct {
-            slice: []const GenericComponent(Impl),
-            i: usize = 0,
-
-            pub fn next(this: *@This()) ?GenericComponent(Impl) {
-                if (!(this.i < this.slice.len)) return null;
-                const result = this.slice[this.slice.len - 1 - this.i];
-                this.i += 1;
-                return result;
-            }
-        };
 
         pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
             return css.implementHash(@This(), this, hasher);
@@ -2229,7 +2359,7 @@ pub struct SpecificityAndFlags {
 }
 
 /// How to treat invalid selectors in a selector list.
-pub const ParseErrorRecovery = enum {
+pub enum ParseErrorRecovery {
     /// Discard the entire selector list, this is the default behavior for
     /// almost all of CSS.
     discard_list,
@@ -2237,16 +2367,16 @@ pub const ParseErrorRecovery = enum {
     ///
     /// This is the error recovery mode of :is() && :where()
     ignore_invalid_selector,
-};
+}
 
-pub const NestingRequirement = enum {
+pub enum NestingRequirement {
     none,
     prefixed,
     contained,
     implicit,
-};
+}
 
-pub const Combinator = enum {
+pub enum Combinator {
     child, // >
     descendant, // space
     next_sibling, // +
@@ -2275,31 +2405,31 @@ pub const Combinator = enum {
     /// And still supported as an alias for >>> by Vue.
     deep,
 
-    pub fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return lhs.* == rhs.*;
     }
 
-    pub fn toCss(_: *const @This(), _: *Printer): PrintErr!void {
+    static fn toCss(_: *const @This(), _: *Printer): PrintErr!void {
         @compileError("Do not call this! Use `serializer.serializeCombinator()` or `tocss_servo.toCss_Combinator()` instead.");
     }
 
-    pub fn isTreeCombinator(this: *const @This()): bool {
-        return switch (this.*) {
+    fn isTreeCombinator(): bool {
+        return switch (_) {
             .child, .descendant, .next_sibling, .later_sibling => true,
             else => false,
         };
     }
 
-    pub fn format(this: *const Combinator, writer: *std.Io.Writer): !void {
-        return switch (this.*) {
+    fn format(writer: *std.Io.Writer): !void {
+        return switch (_) {
             .child => writer.print(">", .{}),
             .descendant => writer.print("`descendant` (space)", .{}),
             .next_sibling => writer.print("+", .{}),
             .later_sibling => writer.print("~", .{}),
-            else => writer.print("{s}", .{@tagName(this.*)}),
+            else => writer.print("{s}", .{@tagName(_)}),
         };
     }
-};
+}
 
 pub union(enum) SelectorParseErrorKind {
     invalid_state: void,
@@ -2562,7 +2692,7 @@ fn nthTypeAllowsOfSelector(self_val: NthType): bool {
 }
 
 /// An enum for the different types of :nth- pseudoclasses
-pub const NthType = enum {
+pub enum NthType {
     child,
     last_child,
     only_child,
@@ -2572,11 +2702,11 @@ pub const NthType = enum {
     col,
     last_col,
 
-    pub const isOnly = nthTypeIsOnly;
-    pub const isOfType = nthTypeIsOfType;
-    pub const isFromEnd = nthTypeIsFromEnd;
-    pub const allowsOfSelector = nthTypeAllowsOfSelector;
-};
+    const isOnly = nthTypeIsOnly;
+    const isOfType = nthTypeIsOfType;
+    const isFromEnd = nthTypeIsFromEnd;
+    const allowsOfSelector = nthTypeAllowsOfSelector;
+}
 
 /// * `Err(())`: Invalid selector, abort
 /// * `Ok(false)`: Not a type selector, could be something else. `input` was not consumed.
@@ -2714,14 +2844,11 @@ pub fn parse_one_simple_selector(
             if (state.afterAnyPseudo()) {
                 return .{ .err = token_location.newCustomError(SelectorParseErrorKind.intoDefaultParserError(.{ .unexpected_selector_after_pseudo_element = .open_square })) };
             }
-            const Closure = struct {
-                parser: *SelectorParser,
-            };
-            let closure = Closure{
+            let closure = ParseAttrClosure{
                 .parser = parser,
             };
             const attr = switch (input.parseNestedBlock(GenericComponent(Impl), &closure, struct {
-                pub static fn parsefn(this: *Closure, input2: *css.Parser): Result(GenericComponent(Impl)) {
+                pub static fn parsefn(this: *ParseAttrClosure, input2: *css.Parser): Result(GenericComponent(Impl)) {
                     return parse_attribute_selector(Impl, this.parser, input2);
                 }
             }
@@ -2778,44 +2905,8 @@ pub fn parse_one_simple_selector(
                             return .{ .err = input.newCustomError(SelectorParseErrorKind.intoDefaultParserError(.invalid_state)) };
                         }
 
-                        const Closure = struct {
-                            parser: *SelectorParser,
-                            pub const Slice = []Impl.SelectorImpl.Identifier;
-
-                            pub fn parsefn(self: *const @This(), input2: *css.Parser) Result(Slice) {
-                                // todo_stuff.think_about_mem_mgmt
-                                let result = ArrayList(Impl.SelectorImpl.Identifier).initCapacity(
-                                    self.parser.allocator,
-                                    // TODO: source does this, should see if initializing to 1 is actually better
-                                    // when appending empty std.ArrayList(T), it will usually initially reserve 8 elements,
-                                    // maybe that's unnecessary, || maybe smallvec is gud here
-                                    1,
-                                ) catch unreachable;
-
-                                result.append(
-                                    self.parser.allocator,
-                                    switch (input2.expectIdent()) {
-                                        .err => |e| return .{ .err = e },
-                                        .result => |v| .{ .v = v },
-                                    },
-                                ) catch unreachable;
-
-                                while (!input2.isExhausted()) {
-                                    result.append(
-                                        self.parser.allocator,
-                                        switch (input2.expectIdent()) {
-                                            .err => |e| return .{ .err = e },
-                                            .result => |v| .{ .v = v },
-                                        },
-                                    ) catch unreachable;
-                                }
-
-                                return .{ .result = result.items };
-                            }
-                        };
-
-                        let closure = Closure{ .parser = parser };
-                        const names = switch (input.parseNestedBlock(Closure.Slice, &closure, Closure.parsefn)) {
+                        let closure = ParsePartClosure<Impl>{ .parser = parser };
+                        const names = switch (input.parseNestedBlock(ParsePartClosure<Impl>.Slice, &closure, ParsePartClosure<Impl>.parsefn)) {
                             .err => |e| return .{ .err = e },
                             .result => |v| v,
                         };
@@ -2827,31 +2918,19 @@ pub fn parse_one_simple_selector(
                         if (!state.allowsSlotted()) {
                             return .{ .err = input.newCustomError(SelectorParseErrorKind.intoDefaultParserError(.invalid_state)) };
                         }
-                        const Closure = struct {
-                            parser: *SelectorParser,
-                            state: *SelectorParsingState,
-                            pub fn parsefn(this: *@This(), input2: *css.Parser) Result(GenericSelector(Impl)) {
-                                return parse_inner_compound_selector(Impl, this.parser, input2, this.state);
-                            }
-                        };
-                        let closure = Closure{
+                        let closure = ParseSlottedClosure<Impl>{
                             .parser = parser,
                             .state = state,
                         };
-                        const selector = switch (input.parseNestedBlock(GenericSelector(Impl), &closure, Closure.parsefn)) {
+                        const selector = switch (input.parseNestedBlock(GenericSelector(Impl), &closure, ParseSlottedClosure<Impl>.parsefn)) {
                             .err => |e| return .{ .err = e },
                             .result => |v| v,
                         };
                         return .{ .result = .{ .slotted_pseudo = selector } };
                     }
 
-                    const Closure = struct {
-                        parser: *SelectorParser,
-                        state: *SelectorParsingState,
-                        name: []const u8,
-                    };
-                    break :pseudo_element switch (input.parseNestedBlock(Impl.SelectorImpl.PseudoElement, &Closure{ .parser = parser, .state = state, .name = name }, struct {
-                        pub fn parseFn(closure: *const Closure, i: *css.Parser) Result(Impl.SelectorImpl.PseudoElement) {
+                    break :pseudo_element switch (input.parseNestedBlock(Impl.SelectorImpl.PseudoElement, &ParseFunctionalPseudoElementClosure{ .parser = parser, .state = state, .name = name }, struct {
+                        pub fn parseFn(closure: *const ParseFunctionalPseudoElementClosure, i: *css.Parser) Result(Impl.SelectorImpl.PseudoElement) {
                             return closure.parser.parseFunctionalPseudoElement(closure.name, i);
                         }
                     }.parseFn)) {
@@ -2872,21 +2951,13 @@ pub fn parse_one_simple_selector(
                 return .{ .result = .{ .pseudo_element = pseudo_element } };
             } else {
                 const pseudo_class: GenericComponent(Impl) = if (is_functional) pseudo_class: {
-                    const Closure = struct {
-                        parser: *SelectorParser,
-                        name: []const u8,
-                        state: *SelectorParsingState,
-                        pub fn parsefn(this: *@This(), input2: *css.Parser) Result(GenericComponent(Impl)) {
-                            return parse_functional_pseudo_class(Impl, this.parser, input2, this.name, this.state);
-                        }
-                    };
-                    let closure = Closure{
+                    let closure = ParsePseudoClassClosure<Impl>{
                         .parser = parser,
                         .name = name,
                         .state = state,
                     };
 
-                    break :pseudo_class switch (input.parseNestedBlock(GenericComponent(Impl), &closure, Closure.parsefn)) {
+                    break :pseudo_class switch (input.parseNestedBlock(GenericComponent(Impl), &closure, ParsePseudoClassClosure<Impl>.parsefn)) {
                         .err => |e| return .{ .err = e },
                         .result => |v| v,
                     };
@@ -3145,19 +3216,7 @@ pub fn parse_functional_pseudo_class(
     name: []const u8,
     state: *SelectorParsingState,
 ): Result(GenericComponent(Impl)) {
-    const FunctionalPseudoClass = enum {
-        @"nth-child",
-        @"nth-of-type",
-        @"nth-last-child",
-        @"nth-last-of-type",
-        @"nth-col",
-        @"nth-last-col",
-        is,
-        where,
-        has,
-        host,
-        not,
-    };
+    const FunctionalPseudoClass = _FunctionalPseudoClass;
     const Map = bun.ComptimeEnumMap(FunctionalPseudoClass);
 
     if (functional_pseudo_class := Map.getASCIIICaseInsensitive(name)) {
@@ -3207,7 +3266,7 @@ pub fn parse_functional_pseudo_class(
     return .{ .result = .{ .non_ts_pseudo_class = result } };
 }
 
-const TreeStructuralPseudoClass = enum { @"first-child", @"last-child", @"only-child", root, empty, scope, host, @"first-of-type", @"last-of-type", @"only-of-type" };
+enum TreeStructuralPseudoClass { @"first-child", @"last-child", @"only-child", root, empty, scope, host, @"first-of-type", @"last-of-type", @"only-of-type" }
 const TreeStructuralPseudoClassMap = bun.ComptimeEnumMap(TreeStructuralPseudoClass);
 
 pub fn parse_simple_pseudo_class(
@@ -3601,54 +3660,7 @@ fn attributeFlagsToCaseSensitivity(this_val: AttributeFlags, local_name: []const
         .ascii_case_insensitive => .ascii_case_insensitive,
         .case_sensitivity_depends_on_name => {
             // <https://html.spec.whatwg.org/multipage/#selectors>
-            const AsciiCaseInsensitiveHtmlAttributes = enum {
-                dir,
-                http_equiv,
-                rel,
-                enctype,
-                @"align",
-                accept,
-                nohref,
-                lang,
-                bgcolor,
-                direction,
-                valign,
-                checked,
-                frame,
-                link,
-                accept_charset,
-                hreflang,
-                text,
-                valuetype,
-                language,
-                nowrap,
-                vlink,
-                disabled,
-                noshade,
-                codetype,
-                @"defer",
-                noresize,
-                target,
-                scrolling,
-                rules,
-                scope,
-                rev,
-                media,
-                method,
-                charset,
-                alink,
-                selected,
-                multiple,
-                color,
-                shape,
-                @"type",
-                clear,
-                compact,
-                face,
-                declare,
-                axis,
-                readonly,
-            };
+            const AsciiCaseInsensitiveHtmlAttributes = _AsciiCaseInsensitiveHtmlAttributes;
             const Map = comptime bun.ComptimeEnumMap(AsciiCaseInsensitiveHtmlAttributes);
             if (!have_namespace && Map.has(local_name)) return .ascii_case_insensitive_if_in_html_element_in_html_document;
             return .case_sensitive;
@@ -3657,7 +3669,7 @@ fn attributeFlagsToCaseSensitivity(this_val: AttributeFlags, local_name: []const
 }
 
 /// An attribute selector can have 's' || 'i' as flags, || no flags at all.
-pub const AttributeFlags = enum {
+pub enum AttributeFlags {
     // Matching should be case-sensitive ('s' flag).
     case_sensitive,
     // Matching should be case-insensitive ('i' flag).
@@ -3665,8 +3677,8 @@ pub const AttributeFlags = enum {
     // No flags.  Matching behavior depends on the name of the attribute.
     case_sensitivity_depends_on_name,
 
-    pub const toCaseSensitivity = attributeFlagsToCaseSensitivity;
-};
+    const toCaseSensitivity = attributeFlagsToCaseSensitivity;
+}
 
 /// A [view transition part name](https://w3c.github.io/csswg-drafts/css-view-transitions-1/#typedef-pt-name-selector).
 pub union(enum) ViewTransitionPartName {

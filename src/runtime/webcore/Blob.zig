@@ -121,6 +121,58 @@ pub const BlobClosingState = enum(u8) {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
+pub fn ReadBytesAdapter(comptime Handler: type) type {
+    return struct {
+
+pub fn run(c: *Handler, r: read_file_mod.ReadFileResultType) void {
+                const res = (switch (r) {
+.result => |b| BlobReadBytesResult{ .ok = b.buf },
+.err => |e| BlobReadBytesResult{ .err = e },
+});
+                _ = Handler.onReadBytes(c, res);
+        }
+    };
+}
+
+pub fn S3ReadBytesTask(comptime Handler: type) type {
+    return struct {
+        ctx: *Handler,
+        blob: Blob,
+        poll: bun.Async.KeepAlive = .{},
+        vm: *jsc.VirtualMachine,
+
+pub fn create(ctx: *Handler, blob: Blob, vm: *jsc.VirtualMachine) *@This() {
+                return bun.new(@This(), .{ .ctx = ctx, .blob = blob, .vm = vm });
+        }
+
+pub fn done(t: *@This(), r: BlobReadBytesResult) void {
+                _ = t.poll.unref(t.vm);
+                _ = t.blob.deinit();
+                const c = t.ctx;
+                _ = bun.destroy(t);
+                _ = Handler.onReadBytes(c, r);
+        }
+
+pub fn cb(result: bun.S3.S3DownloadResult, opaque_self: *anyopaque) bun.JSTerminated!void {
+                const t: *@This() = (blk: {
+                break :blk @ptrCast(@alignCast(opaque_self));
+
+});
+                switch (result) {
+.success => |response| {
+_ = t.done(BlobReadBytesResult{ .ok = response.body.list.items });
+},
+.not_found => |e| {
+_ = t.done(BlobReadBytesResult{ .err = .{ .code = bun.String.cloneUTF8(e.code), .message = bun.String.cloneUTF8(e.message), .path = bun.String.cloneUTF8(((t.blob.store.?.getPath()) orelse (""))), .syscall = bun.String.static("fetch") } });
+},
+.failure => |e| {
+_ = t.done(BlobReadBytesResult{ .err = .{ .code = bun.String.cloneUTF8(e.code), .message = bun.String.cloneUTF8(e.message), .path = bun.String.cloneUTF8(((t.blob.store.?.getPath()) orelse (""))), .syscall = bun.String.static("fetch") } });
+},
+}
+        }
+    };
+}
+
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         ptr: *T,
@@ -1097,57 +1149,16 @@ pub fn doReadFileInternal(self: *Blob, comptime Handler: type, ctx: Handler, com
 
 pub fn readBytesToHandler(self: *Blob, comptime Handler: type, ctx: *Handler, global: *JSGlobalObject) bun.JSTerminated!void {
         if (self.needsToReadFile()) {
-            const Adapter = struct {
-
-pub fn run(c: *Handler, r: read_file_mod.ReadFileResultType) void {
-            const res = (switch (r) {
-.result => |b| BlobReadBytesResult{ .ok = b.buf },
-.err => |e| BlobReadBytesResult{ .err = e },
-});
-            _ = Handler.onReadBytes(c, res);
-    }
-};
             const HandlerPtr = @TypeOf(ctx);
-            _ = self.doReadFileInternal(HandlerPtr, ctx, Adapter.run, global);
+            _ = self.doReadFileInternal(HandlerPtr, ctx, ReadBytesAdapter(Handler).run, global);
             return;
         }
         if (self.isS3()) {
-            const Task = struct {
-    ctx: *Handler,
-    blob: Blob,
-    poll: bun.Async.KeepAlive = .{},
-    vm: *jsc.VirtualMachine,
-
-pub fn done(t: *@This(), r: BlobReadBytesResult) void {
-            _ = t.poll.unref(t.vm);
-            _ = t.blob.deinit();
-            const c = t.ctx;
-            _ = bun.destroy(t);
-            _ = Handler.onReadBytes(c, r);
-    }
-
-pub fn cb(result: bun.S3.S3DownloadResult, opaque_self: *anyopaque) bun.JSTerminated!void {
-            const t: *@This() = (blk: {
-            break :blk @ptrCast(@alignCast(opaque_self));
-
-});
-            switch (result) {
-.success => |response| {
-_ = t.done(BlobReadBytesResult{ .ok = response.body.list.items });
-},
-.not_found => |e| {
-_ = t.done(BlobReadBytesResult{ .err = .{ .code = bun.String.cloneUTF8(e.code), .message = bun.String.cloneUTF8(e.message), .path = bun.String.cloneUTF8(((t.blob.store.?.getPath()) orelse (""))), .syscall = bun.String.static("fetch") } });
-},
-.failure => |e| {
-_ = t.done(BlobReadBytesResult{ .err = .{ .code = bun.String.cloneUTF8(e.code), .message = bun.String.cloneUTF8(e.message), .path = bun.String.cloneUTF8(((t.blob.store.?.getPath()) orelse (""))), .syscall = bun.String.static("fetch") } });
-},
-}
-    }
-};
-            var t = bun.new(Task, .{ .ctx = ctx, .blob = self.dupe(), .vm = global.bunVM() });
+            var t = S3ReadBytesTask(Handler).create(ctx, self.dupe(), global.bunVM());
             _ = &t;
             _ = t.poll.ref(t.vm);
-            var _guard_task = S3ReadTaskGuard(Task){ .ptr = t };
+            const TaskT = @TypeOf(t.*);
+            var _guard_task = S3ReadTaskGuard(TaskT){ .ptr = t };
             _ = &_guard_task;
             var ___guard_task_moved = false; _ = &___guard_task_moved;
             defer if (!___guard_task_moved) { ___guard_task_moved = true; const __T = @TypeOf(_guard_task); if (@typeInfo(__T) == .optional) { if (_guard_task) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_task.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_task; _drop_val.__cp_deinit(); } };
@@ -1164,12 +1175,12 @@ _ = t.done(BlobReadBytesResult{ .err = .{ .code = bun.String.cloneUTF8(e.code), 
             if (((self.offset > 0) or (self.size != Blob.max_size))) {
                 const len: ?usize = (if ((self.size != Blob.max_size)) @intCast(self.size) else null);
                 _ = try bun.S3.downloadSlice(cred, path, @intCast(self.offset), len, (blk: {
-                break :blk @ptrCast((&Task.cb));
+                break :blk @ptrCast((&S3ReadBytesTask(Handler).cb));
 
 }), t, proxy, payer);
             } else {
                 _ = try bun.S3.download(cred, path, (blk: {
-                break :blk @ptrCast((&Task.cb));
+                break :blk @ptrCast((&S3ReadBytesTask(Handler).cb));
 
 }), t, proxy, payer);
             }

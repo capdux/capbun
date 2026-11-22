@@ -675,6 +675,13 @@ pub fn addNoteFmt(self: *DebugLogs, comptime fmt: []const u8, args: anytype) voi
     pub const FlushMode = DebugLogsFlushMode;
 };
 
+pub const _DependencyToResolve = union(enum) {
+    not_found: void,
+    pending: PendingResolution,
+    failure: anyerror,
+    resolution: Resolution,
+};
+
 pub const PendingResolution = struct {
     esm: ESModule.Package.External = .{},
     dependency: Dependency.Version = .{},
@@ -3563,12 +3570,7 @@ pub fn dirInfoUncached(r: *ThisResolver, info: *DirInfo, path: []const u8, _entr
     const ModuleTypeMap = bun.ComptimeStringMap(options.ModuleType, .{ .{ ".mjs", options.ModuleType.esm }, .{ ".mts", options.ModuleType.esm }, .{ ".cjs", options.ModuleType.cjs }, .{ ".cts", options.ModuleType.cjs } });
     const node_module_root_string = ((std.fs.path.sep_str ++ "node_modules") ++ std.fs.path.sep_str);
     const dev = Output.scoped(.Resolver, .visible);
-    const DependencyToResolve = union(enum) {
-        not_found: void,
-        pending: PendingResolution,
-        failure: anyerror,
-        resolution: Resolution,
-    };
+    pub const DependencyToResolve = _DependencyToResolve;
 };
 
 pub const Dirname = struct {

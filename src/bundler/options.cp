@@ -56,6 +56,20 @@ const MacroRemap = package_json_pkg.MacroMap;
 const PackageJSON = package_json_pkg.PackageJSON;
 const ConditionsMap = package_json_pkg.ESModule.ConditionsMap;
 
+pub enum _ForceNodeEnv {
+    unspecified,
+    development,
+    production,
+}
+
+pub enum _ImportPathFormat {
+    relative,
+    absolute_url,
+    // omit file extension
+    absolute_path,
+    package_path,
+}
+
 pub enum WriteDestination {
     stdout,
     disk,
@@ -1977,11 +1991,7 @@ pub struct BundleOptions {
     /// in its package.json is automatically a barrel candidate.
     optimize_imports: (*const bun.StringSet)? = null,
 
-    pub const ForceNodeEnv = enum {
-        unspecified,
-        development,
-        production,
-    };
+    pub const ForceNodeEnv = _ForceNodeEnv;
 
     fn isTest(): bool {
         return _.rewrite_jest_for_tests;
@@ -2063,13 +2073,7 @@ pub struct BundleOptions {
         return _.loaders.get(ext) ?? .file;
     }
 
-    pub const ImportPathFormat = enum {
-        relative,
-        absolute_url,
-        // omit file extension
-        absolute_path,
-        package_path,
-    };
+    pub const ImportPathFormat = _ImportPathFormat;
 
     pub const Defaults = _BundleOptionsDefaults;
 

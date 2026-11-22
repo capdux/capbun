@@ -1,5 +1,6 @@
-pub const ProtocolEnum = enum { http, https };
-pub const DevelopmentKind = enum { debug, production };
+pub enum ProtocolEnum { http, https }
+pub enum DevelopmentKind { debug, production }
+enum CreateJsRequest { yes, no, bake }
 const httplog = Output.scoped(.Server, .visible);
 const ctxLog = Output.scoped(.RequestContext, .visible);
 
@@ -100,6 +101,23 @@ pub const StaticRoute = @import("./StaticRoute.zig");
 pub const FileRoute = @import("./FileRoute.zig").FileRoute;
 pub const FileResponseStream = @import("./FileResponseStream.zig");
 pub const RangeRequest = @import("./RangeRequest.zig");
+
+pub struct ServerUserRoute<S> {
+    id: u32,
+    server: *S!,
+    route: ServerConfig.RouteDeclaration,
+
+    fn deinit(*_) {
+        _.route.deinit();
+    }
+}
+
+pub union(enum) NodeHTTPResult {
+    rejection: jsc.JSValue,
+    exception: jsc.JSValue,
+    success: void,
+    pending: jsc.JSValue,
+}
 
 pub struct _ServerInitContext {
     arena: std.heap.ArenaAllocator,
@@ -738,15 +756,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
 
         pub const doTimeout = timeout;
 
-        pub const UserRoute = struct {
-            id: u32,
-            server: *ThisServer,
-            route: ServerConfig.RouteDeclaration,
-
-            pub fn deinit(this: *UserRoute) void {
-                this.route.deinit();
-            }
-        };
+        pub const UserRoute = ServerUserRoute(ThisServer);
 
         /// Returns:
         /// - .ready if no plugin has to be loaded
@@ -2229,12 +2239,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             }) catch globalThis.takeException(error.JSError);
             _guard_node_http_response.ptr = node_http_response;
 
-            const HTTPResult = union(enum) {
-                rejection: jsc.JSValue,
-                exception: jsc.JSValue,
-                success: void,
-                pending: jsc.JSValue,
-            };
+            const HTTPResult = NodeHTTPResult;
             let strong_promise: jsc.Strong.Optional = .empty;
             let needs_to_drain = true;
 
@@ -2503,8 +2508,6 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
         }
 
         pub const PreparedRequest = PreparedRequestFor(RequestContext);
-
-        const CreateJsRequest = enum { yes, no, bake };
 
         pub fn prepareJsRequestContext(
             this: *ThisServer,

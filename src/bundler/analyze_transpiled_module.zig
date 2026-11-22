@@ -76,6 +76,82 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 
 pub const bun = @import("bun");
 pub const analyze_jsc = @import("../bundler_jsc/analyze_jsc.zig");
+pub const RecordKind = enum(u8) {
+    declared_variable,
+    lexical_variable,
+    import_info_single,
+    import_info_single_type_script,
+    import_info_namespace,
+    export_info_indirect,
+    export_info_local,
+    export_info_namespace,
+    export_info_star,
+    _,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub fn len(self: RecordKind) !usize {
+            return (switch (self) {
+.declared_variable, .lexical_variable => 1,
+.import_info_single => 3,
+.import_info_single_type_script => 3,
+.import_info_namespace => 3,
+.export_info_indirect => 3,
+.export_info_local => 3,
+.export_info_namespace => 2,
+.export_info_star => 1,
+else => {
+return error.InvalidRecordKind;
+},
+});
+    }
+};
+
+pub const StringMapKey = enum(u32) {
+    _,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const ModuleInfoFetchParameters = enum(u32) {
+    none = std.math.maxInt(u32),
+    javascript = (std.math.maxInt(u32) - 1),
+    webassembly = (std.math.maxInt(u32) - 2),
+    json = (std.math.maxInt(u32) - 3),
+    _,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub fn hostDefined(value: StringID) ModuleInfoFetchParameters {
+            return @enumFromInt(@intFromEnum(value));
+    }
+};
+
+pub const ModuleInfoVarKind = enum {
+    declared,
+    lexical,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const StringID = enum(u32) {
+    star_default = std.math.maxInt(u32),
+    star_namespace = (std.math.maxInt(u32) - 1),
+    _,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         ptr: *T,
@@ -474,62 +550,10 @@ pub fn finalize(self: *ModuleInfo) !void {
             self._deserialized = .{ .strings_buf = self.strings_buf.items, .strings_lens = self.strings_lens.items, .requested_modules_keys = self.requested_modules.keys(), .requested_modules_values = self.requested_modules.values(), .buffer = self.buffer.items, .record_kinds = self.record_kinds.items, .flags = self.flags, .owner = .module_info };
             self.finalized = true;
     }
-    pub const FetchParameters = enum(u32) {
-            none = std.math.maxInt(u32),
-            javascript = std.math.maxInt(u32) - 1,
-            webassembly = std.math.maxInt(u32) - 2,
-            json = std.math.maxInt(u32) - 3,
-            _, // host_defined: cast to StringID
-            pub fn hostDefined(value: StringID) FetchParameters {
-                return @enumFromInt(@intFromEnum(value));
-            }
-        };
-    pub const VarKind = enum { declared, lexical };
+    pub const FetchParameters = ModuleInfoFetchParameters;
+    pub const VarKind = ModuleInfoVarKind;
 };
 
-pub const RecordKind = enum(u8) {
-    /// var_name
-    declared_variable,
-    /// let_name
-    lexical_variable,
-    /// module_name, import_name, local_name
-    import_info_single,
-    /// module_name, import_name, local_name
-    import_info_single_type_script,
-    /// module_name, import_name = '*', local_name
-    import_info_namespace,
-    /// export_name, import_name, module_name
-    export_info_indirect,
-    /// export_name, local_name, padding (for local => indirect conversion)
-    export_info_local,
-    /// export_name, module_name
-    export_info_namespace,
-    /// module_name
-    export_info_star,
-    _,
-
-    pub fn len(record: RecordKind) !usize {
-        return switch (record) {
-            .declared_variable, .lexical_variable => 1,
-            .import_info_single => 3,
-            .import_info_single_type_script => 3,
-            .import_info_namespace => 3,
-            .export_info_indirect => 3,
-            .export_info_local => 3,
-            .export_info_namespace => 2,
-            .export_info_star => 1,
-            else => return error.InvalidRecordKind,
-        };
-    }
-};
-pub const StringMapKey = enum(u32) {
-    _,
-};
-pub const StringID = enum(u32) {
-    star_default = std.math.maxInt(u32),
-    star_namespace = std.math.maxInt(u32) - 1,
-    _,
-};
 
 pub export fn zig__ModuleInfo__destroy(info: *ModuleInfo) callconv(.c) void {
         _ = info.destroy();

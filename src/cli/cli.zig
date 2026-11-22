@@ -73,6 +73,15 @@ pub const fs = @import("../resolver/fs.zig");
 pub const options = @import("../bundler/options.zig");
 pub const Install = @import("../install/install.zig");
 pub const bun = @import("bun");
+pub const HelpCommandReason = enum {
+    explicit,
+    invalid_command,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const ArgsIterator = struct {
     buf: [][:0]const u8,
     i: u32 = 0,
@@ -180,10 +189,7 @@ pub fn execWithReason(_: std.mem.Allocator, comptime reason: Reason) void {
             }
             _ = Global.exit(0);
     }
-    pub const Reason = enum {
-            explicit,
-            invalid_command,
-        };
+    pub const Reason = HelpCommandReason;
     pub const packages_to_remove_filler = [_]string{
             "moment",
             "underscore",

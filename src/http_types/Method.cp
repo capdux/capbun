@@ -168,37 +168,39 @@ export enum Method: u8 {
 
     pub const toJS = @import("../http_jsc/method_jsc.zig").toJS;
 
-    pub const Optional = union(enum) {
-        any: void,
-        method: Set,
+    pub const Optional = MethodOptional;
+}
 
-        pub fn contains(this: Optional, other: Optional) bool {
-            if (this == .any) {
-                return true;
-            }
-            if (other == .any) {
-                return true;
-            }
+pub union(enum) MethodOptional {
+    any: void,
+    method: Method.Set,
 
-            return this.method.intersectWith(other.method).count() > 0;
+    fn contains(other: MethodOptional): bool {
+        if (_ == .any) {
+            return true;
+        }
+        if (other == .any) {
+            return true;
         }
 
-        pub fn insert(this: *Optional, method: Method) void {
-            switch (this.*) {
-                .any => {},
-                .method => |*set| {
-                    set.insert(method);
-                    if (set.eql(Set.initFull())) {
-                        this.* = .any;
-                    }
-                },
-            }
+        return _.method.intersectWith(other.method).count() > 0;
+    }
+
+    fn insert(*_, method: Method) {
+        switch (_.*) {
+            .any => {},
+            .method => {
+                _.method.insert(method);
+                if (_.method.eql(Method.Set.initFull())) {
+                    _.* = .any;
+                }
+            },
         }
-    };
+    }
 }
 
 @export @c fn Bun__HTTPMethod__from(str: [*]const u8, len: usize): i16 {
-    let method: Method? = Method.find(str[0..len]);
+    let method: Method? = unsafe { Method.find(str[0..len]) };
     if (method == null) {
         return -1;
     }

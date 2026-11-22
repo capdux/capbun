@@ -55,7 +55,7 @@ pub fn ArrayListAlignedIn(
 ): type {
     return struct {
         const Self = @This();
-        const UnmanagedAndAllocator = struct { Unmanaged, Allocator };
+        type UnmanagedAndAllocator = [Unmanaged, Allocator];
 
         #unmanaged: Unmanaged = .empty;
         #allocator: Allocator;

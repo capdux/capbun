@@ -21,11 +21,17 @@ const Blob = WebCore.Blob;
 const SizeType = Blob.SizeType;
 const Store = Blob.Store;
 
-pub const IOWhich = enum {
+pub enum IOWhich {
     source,
     destination,
     both,
-};
+}
+
+pub enum CopyFileTryWith {
+    sendfile,
+    copy_file_range,
+    splice,
+}
 
 struct CopyFileReadLenGuard {
     copy_file: *CopyFile!,
@@ -268,11 +274,7 @@ export class CopyFile {
         }
     }
 
-    pub const TryWith = enum {
-        sendfile,
-        copy_file_range,
-        splice,
-    };
+    pub const TryWith = CopyFileTryWith;
 
     pub fn doCopyFileRange(*_, use: TryWith, clear_append_if_invalid: bool): anyerror!void {
         this.read_off += this.offset;

@@ -102,6 +102,25 @@ pub fn big(self: Kind) Big {
     pub const Big = Kind_Big;
 };
 
+pub const TimeoutWarning = enum {
+    TimeoutOverflowWarning,
+    TimeoutNegativeWarning,
+    TimeoutNaNWarning,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const CountdownOverflowBehavior = enum(u8) {
+    one_ms,
+    clamp,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub fn LockGuard(comptime T: type) type {
     return struct {
         ptr: *T,
@@ -298,7 +317,7 @@ pub fn ensureUVTimer(self: *All, vm: *VirtualMachine) void {
             }
     }
 
-pub fn onUVTimer(self: *All, uv_timer_t: *uv.Timer) void {
+pub fn onUVTimer(self: *const All, uv_timer_t: *uv.Timer) void {
         _ = self;
             const all: *All = @fieldParentPtr("uv_timer", uv_timer_t);
             const vm: *VirtualMachine = (blk: {
@@ -773,15 +792,6 @@ pub const DateHeaderTimer = @import("./DateHeaderTimer.zig");
 pub const EventLoopDelayMonitor = @import("./EventLoopDelayMonitor.zig");
 pub const TimeoutMap = std.AutoArrayHashMapUnmanaged(i32, *EventLoopTimer);
 pub const TimerHeap = heap.Intrusive(EventLoopTimer, void, EventLoopTimer.less);
-const TimeoutWarning = enum {
-    TimeoutOverflowWarning,
-    TimeoutNegativeWarning,
-    TimeoutNaNWarning,
-};
-const CountdownOverflowBehavior = enum(u8) {
-    one_ms,
-    clamp,
-};
 
 pub export fn Bun__internal_drainTimers(vm: *VirtualMachine) callconv(.c) void {
         _ = All.drainTimers((&vm.timer), vm);

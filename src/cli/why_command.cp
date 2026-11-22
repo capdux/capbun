@@ -73,13 +73,13 @@ pub struct DependentInfo {
     workspace: bool,
 }
 
-pub const DependencyType = enum {
+pub enum DependencyType {
     dev,
     prod,
     peer,
     optional,
     optional_peer,
-};
+}
 
 fn getSpecifierSpecificity(spec: []const u8): u8 {
     if (spec.len == 0) return 9;
@@ -123,14 +123,14 @@ fn compareDependents(context: void, a: DependentInfo, b: DependentInfo): bool {
     return std.mem.lessThan(u8, a.name, b.name);
 }
 
-pub const GlobPatternType = enum {
+pub enum GlobPatternType {
     exact,
     prefix,
     suffix,
     middle,
     contains,
     invalid,
-};
+}
 
 pub struct GlobPattern {
     pattern_type: GlobPatternType,

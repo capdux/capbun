@@ -66,6 +66,31 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 pub const install = @import("../install/install.zig");
 pub const pm_cmd = @import("./package_manager_command.zig");
 pub const bun = @import("bun");
+pub const DependencyType = enum {
+    dev,
+    prod,
+    peer,
+    optional,
+    optional_peer,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const GlobPatternType = enum {
+    exact,
+    prefix,
+    suffix,
+    middle,
+    contains,
+    invalid,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const VersionInfo = struct {
     version: []const u8,
     pkg_id: PackageID,
@@ -272,21 +297,6 @@ const PREFIX_MIDDLE = "  ├─ ";
 const PREFIX_CONTINUE = "  │  ";
 const PREFIX_SPACE = "     ";
 var max_depth: usize = 100;
-pub const DependencyType = enum {
-    dev,
-    prod,
-    peer,
-    optional,
-    optional_peer,
-};
-pub const GlobPatternType = enum {
-    exact,
-    prefix,
-    suffix,
-    middle,
-    contains,
-    invalid,
-};
 
 pub fn getSpecifierSpecificity(spec: []const u8) u8 {
         if ((spec.len == 0)) {

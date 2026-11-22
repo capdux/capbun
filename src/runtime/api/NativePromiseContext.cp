@@ -23,7 +23,7 @@ pub const NativePromiseContext = @This();
 /// One entry per concrete native type — the tag is packed into the pointer's
 /// upper bits via CompactPointerTuple so the cell stays at one pointer of
 /// storage beyond the JSCell header.
-pub const Tag = enum(u8) {
+pub enum Tag: u8 {
     HTTPServerRequestContext,
     HTTPSServerRequestContext,
     DebugHTTPServerRequestContext,
@@ -32,7 +32,7 @@ pub const Tag = enum(u8) {
     HTTPSServerH3RequestContext,
     DebugHTTPSServerH3RequestContext,
 
-    pub fn fromType(comptime T: type): Tag {
+    static fn fromType(comptime T: type): Tag {
         return switch (T) {
             server.HTTPServer.RequestContext => .HTTPServerRequestContext,
             server.HTTPSServer.RequestContext => .HTTPSServerRequestContext,
@@ -44,7 +44,7 @@ pub const Tag = enum(u8) {
             else => @compileError("NativePromiseContext.Tag: unsupported type " ++ @typeName(T)),
         };
     }
-};
+}
 
 extern fn Bun__NativePromiseContext__create(global: *jsc.JSGlobalObject, ctx: *!, tag: u8): jsc.JSValue ;
 extern fn Bun__NativePromiseContext__take(value: jsc.JSValue): *!? ;
@@ -130,7 +130,7 @@ pub struct DeferredDerefTask {
         // queue won't drain.
         if (vm.isShuttingDown()) return;
 
-        const addr = @intFromPtr(ctx);
+        const addr = unsafe { @intFromPtr(ctx) };
         bun.debugAssert((addr & tag_mask) == 0);
 
         let marker: DeferredDerefTask = undefined;
@@ -141,7 +141,7 @@ pub struct DeferredDerefTask {
 
     static fn runFromJSThread(packed_ptr: usize) {
         const tag: Tag = @enumFromInt(packed_ptr & tag_mask);
-        const ctx: *! = @ptrFromInt(packed_ptr & ~tag_mask);
+        const ctx: *! = unsafe { @ptrFromInt(packed_ptr & ~tag_mask) };
         unsafe {
             switch (tag) {
                 .HTTPServerRequestContext => @as(*server.HTTPServer.RequestContext, ctx).deref(),

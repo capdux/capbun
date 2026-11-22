@@ -1477,6 +1477,13 @@ pub fn eql(self: Circle, other: *const Circle) bool {
     }
 };
 
+pub fn ParseItemsClosure(comptime D: type) type {
+    return struct {
+        items: *ArrayList(GradientItem(D)),
+        seen_stop: *bool,
+    };
+}
+
 const Result = css.Result;
 const VendorPrefix = css.VendorPrefix;
 const Printer = css.Printer;
@@ -1674,13 +1681,9 @@ pub fn parseItems(comptime D: type, input: *css.Parser) Result(ArrayList(Gradien
         var seen_stop = false;
         _ = &seen_stop;
         while (true) {
-            const Closure = struct {
-    items: *ArrayList(GradientItem(D)),
-    seen_stop: *bool,
-};
-            if (input.parseUntilBefore(css.Delimiters{ .comma = true }, void, Closure{ .items = (&items), .seen_stop = (&seen_stop) }, (struct {
+            if (input.parseUntilBefore(css.Delimiters{ .comma = true }, void, ParseItemsClosure(D){ .items = (&items), .seen_stop = (&seen_stop) }, (struct {
 
-pub fn parse(closure: Closure, i: *css.Parser) Result(void) {
+pub fn parse(closure: ParseItemsClosure(D), i: *css.Parser) Result(void) {
             if (closure.seen_stop.*) {
                 if (i.tryParse((comptime css.generic.parseFor(D)), .{}).asValue()) |hint| {
                     _ = &hint;

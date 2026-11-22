@@ -66,6 +66,59 @@ pub const bun = @import("bun");
 pub const DotEnv = @import("../dotenv/env_loader.zig");
 pub const HTTPServerAgent = @import("./HTTPServerAgent.zig");
 pub const InspectorBunFrontendDevServerAgent = @import("../runtime/server/InspectorBunFrontendDevServerAgent.zig");
+pub const Mode = enum {
+    listen,
+    connect,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const Wait = enum {
+    off,
+    shortly,
+    forever,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const AsyncCallType = enum(u8) {
+    DOMTimer = 1,
+    EventListener = 2,
+    PostMessage = 3,
+    RequestAnimationFrame = 4,
+    Microtask = 5,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const TestReporterTestStatus = enum(u8) {
+    pass,
+    fail,
+    timeout,
+    skip,
+    todo,
+    skipped_because_label,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const TestReporterTestType = enum(u8) {
+    @"test" = 0,
+    describe = 1,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const TestReporterHandle = opaque {
 
 pub fn reportTestFound(self: *TestReporterHandle, callFrame: *jsc.CallFrame, testId: i32, name: *bun.String, item_type: TestReporterAgent.TestType, parentId: i32) void {
@@ -178,18 +231,8 @@ pub fn isEnabled(self: TestReporterAgent) bool {
             return (self.handle != null);
     }
     const debug = Output.scoped(.TestReporterAgent, .visible);
-    pub const TestStatus = enum(u8) {
-            pass,
-            fail,
-            timeout,
-            skip,
-            todo,
-            skipped_because_label,
-        };
-    pub const TestType = enum(u8) {
-            @"test" = 0,
-            describe = 1,
-        };
+    pub const TestStatus = TestReporterTestStatus;
+    pub const TestType = TestReporterTestType;
     pub const Handle = TestReporterHandle;
     const bun_test = jsc.Jest.bun_test;
 };
@@ -430,22 +473,8 @@ const VirtualMachine = jsc.VirtualMachine;
 const ZigException = jsc.ZigException;
 pub const DebuggerId = bun.GenericIndex(i32, Debugger);
 pub const BunFrontendDevServerAgent = InspectorBunFrontendDevServerAgent.BunFrontendDevServerAgent;
-pub const Mode = enum {
-    /// Bun acts as the server. https://debug.bun.sh/ uses this
-    listen,
-    /// Bun connects to this path. The VSCode extension uses this.
-    connect,
-};
-pub const Wait = enum { off, shortly, forever };
 pub const log = Output.scoped(.debugger, .visible);
 const lifecycle_debug = Output.scoped(.LifecycleAgent, .visible);
-pub const AsyncCallType = enum(u8) {
-    DOMTimer = 1,
-    EventListener = 2,
-    PostMessage = 3,
-    RequestAnimationFrame = 4,
-    Microtask = 5,
-};
 var futex_atomic = std.atomic.Value(u32).init(0);
 pub var has_created_debugger: bool = false;
 

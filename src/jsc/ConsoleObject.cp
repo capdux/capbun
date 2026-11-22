@@ -3,9 +3,9 @@ import { ObjectPool } from "../collections/pool.zig";
 import CliMod from "../cli/cli.zig";
 const CLI = CliMod.Command;
 import { JestPrettyFormat } from "../test_runner/pretty_format.zig";
-@root struct ConsoleObject {
+@opaque struct ScriptArguments {}
 
-const ScriptArguments = opaque {};
+@root struct ConsoleObject {
 
 /// Default depth for console.log object inspection
 /// Only --console-depth CLI flag and console.depth bunfig option should modify this
@@ -47,16 +47,16 @@ pub static fn init(out: *ConsoleObject, error_writer: Output.Source.StreamType, 
 }
 }
 
-pub const MessageLevel = enum(u32) {
+pub enum MessageLevel: u32 {
     Log = 0,
     Warning = 1,
     Error = 2,
     Debug = 3,
     Info = 4,
     _,
-};
+}
 
-pub const MessageType = enum(u32) {
+pub enum MessageType: u32 {
     Log = 0,
     Dir = 1,
     DirXML = 2,
@@ -72,7 +72,7 @@ pub const MessageType = enum(u32) {
     ProfileEnd = 12,
     Image = 13,
     _,
-};
+}
 
 pub struct DeinitGuard<T> {
     val: T,
@@ -492,7 +492,7 @@ pub struct TablePrinter {
         str: String,
         num: u32,
 
-        const Type = enum { str, num };
+        enum Type { str, num }
     };
 
     const PADDING = 1;
@@ -922,15 +922,17 @@ pub fn writeTrace(comptime Writer: type, writer: Writer, global: *JSGlobalObject
         ) catch {};
 }
 
-pub const FormatOptionsErrorDisplayLevel = enum {
+pub enum ErrorDisplayLevelColon { include_colon, exclude_colon }
+
+pub enum FormatOptionsErrorDisplayLevel {
     normal,
     warn,
     full,
 
-    pub const Colon = enum { include_colon, exclude_colon };
-    pub const Formatter = ErrorDisplayLevelFormatter;
-    pub const formatter = ErrorDisplayLevelFormatter.init;
-};
+    const Colon = ErrorDisplayLevelColon;
+    const Formatter = ErrorDisplayLevelFormatter;
+    const formatter = ErrorDisplayLevelFormatter.init;
+}
 
 pub struct ErrorDisplayLevelFormatter {
     name: bun.String,
@@ -1610,6 +1612,135 @@ pub fn getAdvancedFormatterTag(value: JSValue, globalThis: *JSGlobalObject, opts
             };
 }
 
+/// https://console.spec.whatwg.org/#formatter
+enum FormatterPercentTag {
+    s, // s
+    i, // i or d
+    f, // f
+    o, // o
+    O, // O
+    c, // c
+    j, // j
+}
+
+pub const FormatterTag = enum {
+    StringPossiblyFormatted,
+    String,
+    Undefined,
+    Double,
+    Integer,
+    Null,
+    Boolean,
+    Array,
+    Object,
+    Function,
+    Class,
+    Error,
+    TypedArray,
+    Map,
+    MapIterator,
+    SetIterator,
+    Set,
+    BigInt,
+    Symbol,
+
+    CustomFormattedObject,
+
+    GlobalObject,
+    Private,
+    Promise,
+
+    JSON,
+    toJSON,
+    NativeCode,
+
+    JSX,
+    Event,
+
+    GetterSetter,
+    CustomGetterSetter,
+
+    Proxy,
+    RevokedProxy,
+
+    pub fn isPrimitive(this: FormatterTag): bool {
+        return switch (this) {
+            .String,
+            .StringPossiblyFormatted,
+            .Undefined,
+            .Double,
+            .Integer,
+            .Null,
+            .Boolean,
+            .Symbol,
+            .BigInt,
+            => true,
+            else => false,
+        };
+    }
+
+    pub fn canHaveCircularReferences(tag: FormatterTag): bool {
+        return switch (tag) {
+            .Function, .Array, .Object, .Map, .Set, .Error, .Class, .Event => true,
+            else => false,
+        };
+    }
+
+    const Result = struct {
+        tag: union(FormatterTag) {
+            StringPossiblyFormatted: void,
+            String: void,
+            Undefined: void,
+            Double: void,
+            Integer: void,
+            Null: void,
+            Boolean: void,
+            Array: void,
+            Object: void,
+            Function: void,
+            Class: void,
+            Error: void,
+            TypedArray: void,
+            Map: void,
+            MapIterator: void,
+            SetIterator: void,
+            Set: void,
+            BigInt: void,
+            Symbol: void,
+            CustomFormattedObject: CustomFormattedObject,
+            GlobalObject: void,
+            Private: void,
+            Promise: void,
+            JSON: void,
+            toJSON: void,
+            NativeCode: void,
+            JSX: void,
+            Event: void,
+            GetterSetter: void,
+            CustomGetterSetter: void,
+            Proxy: void,
+            RevokedProxy: void,
+
+            pub fn isPrimitive(this: @This()): bool {
+                return @as(FormatterTag, this).isPrimitive();
+            }
+
+            pub fn tag(this: @This()): FormatterTag {
+                return @as(FormatterTag, this);
+            }
+        },
+        cell: JSValue.JSType = JSValue.JSType.Cell,
+    };
+
+    pub const Options = packed struct {
+        hide_global: bool = false,
+        disable_inspect_custom: bool = false,
+    };
+
+    pub const get = getFormatterTag;
+    pub const getAdvanced = getAdvancedFormatterTag;
+};
+
 pub struct Formatter {
     globalThis: *JSGlobalObject,
 
@@ -1681,137 +1812,12 @@ pub struct Formatter {
         );
     };
 
-    pub const Tag = enum {
-        StringPossiblyFormatted,
-        String,
-        Undefined,
-        Double,
-        Integer,
-        Null,
-        Boolean,
-        Array,
-        Object,
-        Function,
-        Class,
-        Error,
-        TypedArray,
-        Map,
-        MapIterator,
-        SetIterator,
-        Set,
-        BigInt,
-        Symbol,
-
-        CustomFormattedObject,
-
-        GlobalObject,
-        Private,
-        Promise,
-
-        JSON,
-        toJSON,
-        NativeCode,
-
-        JSX,
-        Event,
-
-        GetterSetter,
-        CustomGetterSetter,
-
-        Proxy,
-        RevokedProxy,
-
-        pub fn isPrimitive(this: Tag): bool {
-            return switch (this) {
-                .String,
-                .StringPossiblyFormatted,
-                .Undefined,
-                .Double,
-                .Integer,
-                .Null,
-                .Boolean,
-                .Symbol,
-                .BigInt,
-                => true,
-                else => false,
-            };
-        }
-
-        pub fn canHaveCircularReferences(tag: Tag): bool {
-            return switch (tag) {
-                .Function, .Array, .Object, .Map, .Set, .Error, .Class, .Event => true,
-                else => false,
-            };
-        }
-
-        const Result = struct {
-            tag: union(Tag) {
-                StringPossiblyFormatted: void,
-                String: void,
-                Undefined: void,
-                Double: void,
-                Integer: void,
-                Null: void,
-                Boolean: void,
-                Array: void,
-                Object: void,
-                Function: void,
-                Class: void,
-                Error: void,
-                TypedArray: void,
-                Map: void,
-                MapIterator: void,
-                SetIterator: void,
-                Set: void,
-                BigInt: void,
-                Symbol: void,
-                CustomFormattedObject: CustomFormattedObject,
-                GlobalObject: void,
-                Private: void,
-                Promise: void,
-                JSON: void,
-                toJSON: void,
-                NativeCode: void,
-                JSX: void,
-                Event: void,
-                GetterSetter: void,
-                CustomGetterSetter: void,
-                Proxy: void,
-                RevokedProxy: void,
-
-                pub fn isPrimitive(this: @This()): bool {
-                    return @as(Tag, this).isPrimitive();
-                }
-
-                pub fn tag(this: @This()): Tag {
-                    return @as(Tag, this);
-                }
-            },
-            cell: JSValue.JSType = JSValue.JSType.Cell,
-        };
-
-        pub const Options = packed struct {
-            hide_global: bool = false,
-            disable_inspect_custom: bool = false,
-        };
-
-        pub const get = getFormatterTag;
-        pub const getAdvanced = getAdvancedFormatterTag;
-    };
+    pub const Tag = FormatterTag;
 
     const CellType = jsc.C.CellType;
 @tls let name_buf: [512]u8 = undefined;
 
-    /// https://console.spec.whatwg.org/#formatter
-    const PercentTag = enum {
-        s, // s
-        i, // i or d
-        f, // f
-        o, // o
-        O, // O
-        c, // c
-        j, // j
-    };
+    const PercentTag = FormatterPercentTag;
 
     pub fn writeWithFormatting(
         *_,

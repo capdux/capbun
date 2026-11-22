@@ -94,6 +94,46 @@ pub const _SinkStatus = enum {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
+pub const FromJSResult = enum(usize) {
+    detached = 0,
+    cast_failed = 1,
+    _,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub fn JSSinkSignal(comptime ParentSink: type) type {
+    return extern struct {
+        cpp: JSValue,
+
+pub fn init(cpp: JSValue) streams.Signal {
+                _ = @setRuntimeSafety(false);
+                {
+                    const sig: *@This() = @ptrFromInt(@as(usize, @bitCast(@intFromEnum(cpp))));
+                    return streams.Signal.initWithType(@This(), sig);
+                }
+        }
+
+pub fn close(self: *@This(), _: ?Syscall.Error) void {
+                {
+                    _ = ParentSink.onClose(@as(@This(), @bitCast(@intFromPtr(self))).cpp, .js_undefined);
+                }
+        }
+
+pub fn ready(self: *@This(), _: ?Blob.SizeType, _: ?Blob.SizeType) void {
+                {
+                    _ = ParentSink.onReady(@as(@This(), @bitCast(@intFromPtr(self))).cpp, .js_undefined, .js_undefined);
+                }
+        }
+
+pub fn start(self: *@This()) void {
+            _ = self;
+        }
+    };
+}
+
 pub const UTF8Fallback = struct {
     
 pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; return self_ptr; }
@@ -262,6 +302,9 @@ pub const pending = Sink{ .ptr = @ptrFromInt(2863311530), .vtable = undefined };
 pub const Status = _SinkStatus;
 pub const Data = _SinkData;
 pub const VTable = _SinkVTable;
+pub const Detached = opaque {
+};
+
 const MaybeSyscallErr = ?Syscall.Error;
 pub const ArrayBufferSink = ArrayBufferSinkMod;
 const Syscall = sys;
@@ -271,7 +314,6 @@ const JSValue = jsc.JSValue;
 const Blob = webcore.Blob;
 const streams = webcore.streams;
 const stack_size = 1024;
-const Detached = opaque {};
 pub const DestructorPtr = bun.TaggedPointerUnion(.{ Detached, Subprocess });
 
 pub fn _WrapFunctions(comptime Wrapped: type) type {
@@ -592,24 +634,7 @@ pub fn jsGetInternalFd(ptr: *anyopaque) callconv(.c) JSValue {
             return JSValue.null;
     }
     const ThisSink = @This();
-    pub const SinkSignal = extern struct {
-                cpp: JSValue,
-    
-                pub fn init(cpp: JSValue) streams.Signal {
-                    @setRuntimeSafety(false);
-                    return streams.Signal.initWithType(SinkSignal, @as(*SinkSignal, @ptrFromInt(@as(usize, @bitCast(@intFromEnum(cpp))))));
-                }
-    
-                pub fn close(this: *@This(), _: ?Syscall.Error) void {
-                    onClose(@as(SinkSignal, @bitCast(@intFromPtr(this))).cpp, .js_undefined);
-                }
-    
-                pub fn ready(this: *@This(), _: ?Blob.SizeType, _: ?Blob.SizeType) void {
-                    onReady(@as(SinkSignal, @bitCast(@intFromPtr(this))).cpp, .js_undefined, .js_undefined);
-                }
-    
-                pub fn start(_: *@This()) void {}
-            };
+    pub const SinkSignal = JSSinkSignal(ThisSink);
     const OpaquePtr = *anyopaque;
     const AssignToStreamFn = *const fn(*JSGlobalObject, JSValue, *anyopaque, *OpaquePtr) callconv(.c) JSValue;
     const OnCloseFn = *const fn(JSValue, JSValue) callconv(.c) void;
@@ -625,11 +650,6 @@ pub fn jsGetInternalFd(ptr: *anyopaque) callconv(.c) JSValue {
     const createObjectExtern = @extern(CreateObjectFn, .{ .name = (abi_name ++ "__createObject") });
     const setDestroyCallbackExtern = @extern(SetDestroyCallbackFn, .{ .name = (abi_name ++ "__setDestroyCallback") });
     const detachPtrExtern = @extern(DetachPtrFn, .{ .name = (abi_name ++ "__detachPtr") });
-    const FromJSResult = enum(usize) {
-                detached = 0,
-                cast_failed = 1,
-                _,
-            };
     const FromJSFn = *const fn(value: JSValue) callconv(.c) FromJSResult;
     const fromJSExtern = @extern(FromJSFn, .{ .name = (abi_name ++ "__fromJS") });
     const jsWrite = jsc.toJSHostFn(@This().write);

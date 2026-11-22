@@ -324,12 +324,13 @@ else if (Environment.isFreeBSD)
 else
     std.posix.rusage;
 
+@opaque struct SyncProcessPosix {}
+
 // const ShellSubprocessMini = bun.shell.ShellSubprocessMini;
 pub struct ProcessExitHandler {
     ptr: TaggedPointer = TaggedPointer.Null,
 
     const SyncProcess = if (Environment.isWindows) sync.SyncWindowsProcess else SyncProcessPosix;
-    const SyncProcessPosix = opaque {};
 
     pub const TaggedPointer = bun.TaggedPointerUnion(
         .{
@@ -1037,6 +1038,57 @@ pub const WaiterThread = if (Environment.isPosix) WaiterThreadPosix else struct 
 // Machines which do not support pidfd_open (GVisor, Linux Kernel < 5.6)
 // use a thread to wait for the child process to exit.
 // We use a single thread to call waitpid() in a loop.
+struct WaiterTaskQueueEntry<T> {
+    process: *T,
+    next: (*WaiterTaskQueueEntry<T>)? = null,
+
+    const new = bun.TrivialNew(@This());
+    const deinit = bun.TrivialDeinit(@This());
+}
+
+pub struct WaiterResultTask<T> {
+    result: bun.sys.Maybe(PosixSpawn.WaitPidResult),
+    subprocess: *T,
+    rusage: Rusage,
+
+    const new = bun.TrivialNew(@This());
+
+    pub const runFromJSThread = runFromMainThread;
+
+    fn runFromMainThread(*_) {
+        const result = _.result;
+        const subprocess = _.subprocess;
+        const rusage = _.rusage;
+        bun.destroy(_);
+        subprocess.onWaitPidFromWaiterThread(&result, &rusage);
+    }
+
+    fn runFromMainThreadMini(*_, _: *void) {
+        _.runFromMainThread();
+    }
+}
+
+pub struct WaiterResultTaskMini<T> {
+    result: bun.sys.Maybe(PosixSpawn.WaitPidResult),
+    subprocess: *T,
+    task: jsc.AnyTaskWithExtraContext = {},
+
+    const new = bun.TrivialNew(@This());
+
+    pub const runFromJSThread = runFromMainThread;
+
+    fn runFromMainThread(*_) {
+        const result = _.result;
+        const subprocess = _.subprocess;
+        bun.destroy(_);
+        subprocess.onWaitPidFromWaiterThread(&result, &std.mem.zeroes(Rusage));
+    }
+
+    fn runFromMainThreadMini(*_, _: *void) {
+        _.runFromMainThread();
+    }
+}
+
 struct WaiterThreadPosix {
     started: std.atomic.Value(u32) = std.atomic.Value(u32).init(0),
     eventfd: if (Environment.isLinux) bun.FD else u0 = undefined,
@@ -1050,57 +1102,10 @@ struct WaiterThreadPosix {
             queue: ConcurrentQueue = {},
             active: std.array_list.Managed(*T) = std.array_list.Managed(*T).init(bun.default_allocator),
 
-            const TaskQueueEntry = struct {
-                process: *T,
-                next: (*TaskQueueEntry)? = null,
-
-                pub const new = bun.TrivialNew(@This());
-                pub const deinit = bun.TrivialDeinit(@This());
-            };
+            const TaskQueueEntry = WaiterTaskQueueEntry(T);
             pub const ConcurrentQueue = bun.UnboundedQueue(TaskQueueEntry, .next);
-
-            pub const ResultTask = struct {
-                result: bun.sys.Maybe(PosixSpawn.WaitPidResult),
-                subprocess: *T,
-                rusage: Rusage,
-
-                pub const new = bun.TrivialNew(@This());
-
-                pub const runFromJSThread = runFromMainThread;
-
-                static fn runFromMainThread(self: *@This()) {
-                    const result = self.result;
-                    const subprocess = self.subprocess;
-                    const rusage = self.rusage;
-                    bun.destroy(self);
-                    subprocess.onWaitPidFromWaiterThread(&result, &rusage);
-                }
-
-                static fn runFromMainThreadMini(self: *@This(), _: *void) {
-                    self.runFromMainThread();
-                }
-            };
-
-            pub const ResultTaskMini = struct {
-                result: bun.sys.Maybe(PosixSpawn.WaitPidResult),
-                subprocess: *T,
-                task: jsc.AnyTaskWithExtraContext = {},
-
-                pub const new = bun.TrivialNew(@This());
-
-                pub const runFromJSThread = runFromMainThread;
-
-                static fn runFromMainThread(self: *@This()) {
-                    const result = self.result;
-                    const subprocess = self.subprocess;
-                    bun.destroy(self);
-                    subprocess.onWaitPidFromWaiterThread(&result, &std.mem.zeroes(Rusage));
-                }
-
-                static fn runFromMainThreadMini(self: *@This(), _: *void) {
-                    self.runFromMainThread();
-                }
-            };
+            pub const ResultTask = WaiterResultTask(T);
+            pub const ResultTaskMini = WaiterResultTaskMini(T);
 
             static fn append(self: *@This(), process: *T) {
                 self.queue.push(
@@ -1582,6 +1587,27 @@ pub const SpawnOptions = if (Environment.isPosix) PosixSpawnOptions else Windows
 pub const SpawnProcessResult = if (Environment.isPosix) PosixSpawnResult else WindowsSpawnResult;
 type OptCStr = ([*:0]const u8)?;
 type PollFdSlice = []std.c.pollfd;
+
+fn kqueueAddEvent(list: *[]std.c.Kevent, ident: usize, filter: i16, fflags: u32, udata: usize) {
+    list.len += 1;
+    list.*[list.len - 1] = {
+        ident: ident,
+        filter: filter,
+        flags: std.c.EV.ADD | std.c.EV.RECEIPT | std.c.EV.CLEAR,
+        fflags: fflags,
+        data: 0,
+        udata: udata,
+    };
+}
+
+fn pushPollFd(l: *PollFdSlice, fd: bun.FD) {
+    l.len += 1;
+    l.*[l.len - 1] = {
+        fd: i32(fd.cast()),
+        events: std.posix.POLL.IN | std.posix.POLL.ERR | std.posix.POLL.HUP,
+        revents: 0,
+    };
+}
 pub fn spawnProcess(
     options: *const SpawnOptions,
     argv: [*:null]OptCStr,
@@ -2745,19 +2771,7 @@ pub struct sync {
 
         let changes_buf: [5]std.c.Kevent = undefined;
         let changes: []std.c.Kevent = changes_buf[0..0];
-        const add = struct {
-            static fn f(list: *[]std.c.Kevent, ident: usize, filter: i16, fflags: u32, udata: usize) {
-                list.len += 1;
-                list.*[list.len - 1] = {
-                    ident: ident,
-                    filter: filter,
-                    flags: std.c.EV.ADD | std.c.EV.RECEIPT | std.c.EV.CLEAR,
-                    fflags: fflags,
-                    data: 0,
-                    udata: udata,
-                };
-            }
-        }.f;
+        const add = kqueueAddEvent;
         if (ppid > 1)
             add(&changes, i32(ppid), std.c.EVFILT.PROC, std.c.NOTE.EXIT, TAG_PPID);
         // NOTE_FORK so the wait loop wakes to scan whenever the script (or
@@ -2998,16 +3012,7 @@ pub struct sync {
 
             let buf: [4]std.c.pollfd = undefined;
             let pfds: []std.c.pollfd = buf[0..0];
-            const push = struct {
-                static fn f(l: *PollFdSlice, fd: bun.FD) {
-                    l.len += 1;
-                    l.*[l.len - 1] = {
-                        fd: i32(fd.cast()),
-                        events: std.posix.POLL.IN | std.posix.POLL.ERR | std.posix.POLL.HUP,
-                        revents: 0,
-                    };
-                }
-            }.f;
+            const push = pushPollFd;
             for (fd of out_fds_to_wait_for) if (fd != bun.invalid_fd) push(&pfds, fd);
             const ppid_idx = pfds.len;
             if (ppid_fd != bun.invalid_fd) push(&pfds, ppid_fd);

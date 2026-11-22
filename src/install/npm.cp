@@ -1076,6 +1076,399 @@ struct DependencyGroup {
 
 type ByteFixedStream = std.io.FixedBufferStream(string);
 
+pub struct SerializerFieldData {
+    size: usize,
+    name: []const u8,
+    alignment: usize,
+}
+
+pub struct SerializerSort {
+    static fn lessThan(_: void, lhs: SerializerFieldData, rhs: SerializerFieldData): bool {
+        return lhs.alignment > rhs.alignment;
+    }
+}
+
+pub struct SerializerSaveTask {
+    manifest: PackageManifest,
+    scope: *const Registry.Scope,
+    tmpdir: std.fs.Dir,
+    cache_dir: std.fs.Dir,
+
+    task: bun.ThreadPool.Task = { callback: &run },
+    pub const new = bun.TrivialNew(@This());
+
+    static fn run(task: *bun.ThreadPool.Task) {
+        let tracer = bun.perf.trace("PackageManifest.Serializer.save");
+        const _guard_tracer = EndGuard<*@TypeOf(tracer)!>{ ptr: &tracer };
+
+        const save_task: *@This() = @fieldParentPtr("task", task);
+        const _guard_save_task = DestroyGuard<@TypeOf(save_task)>{ ptr: save_task };
+
+        PackageManifestSerializer.save(&save_task.manifest, save_task.scope, save_task.tmpdir, save_task.cache_dir) catch |e| {
+            if (PackageManager.verbose_install) {
+                Output.warn("Error caching manifest for {s}: {s}", .{ save_task.manifest.name(), @errorName(e) });
+                Output.flush();
+            }
+        };
+    }
+}
+
+pub struct PackageManifestSerializer {
+    // - v0.0.3: added serialization of registry url. it's used to invalidate when it changes
+    // - v0.0.4: fixed bug with cpu & os tag not being added correctly
+    // - v0.0.5: added bundled dependencies
+    // - v0.0.6: changed semver major/minor/patch to each use u64 instead of u32
+    // - v0.0.7: added version publish times and extended manifest flag for minimum release age
+    pub const version = "bun-npm-manifest-cache-v0.0.7\n";
+    const header_bytes: string = "#!/usr/bin/env bun\n" ++ version;
+
+    pub const sizes = blk: {
+        if (header_bytes.len != 49)
+            @compileError("header bytes must be exactly 49 bytes long, length is not serialized");
+
+        // skip name
+        const fields = std.@"meta".fields(PackageManifest);
+        const field_count = fields.len;
+
+        let data: [field_count]SerializerFieldData = undefined;
+        for (fields, &data) |field_info, *dat| {
+            dat.* = SerializerFieldData{
+                size: @sizeOf(field_info.@"type"),
+                name: field_info.name,
+                alignment: if (@sizeOf(field_info.@"type") == 0) 1 else field_info.alignment,
+            };
+        }
+        std.sort.pdq(SerializerFieldData, &data, @as(void, undefined), SerializerSort.lessThan);
+        let sizes_bytes: [field_count]usize = undefined;
+        let names: [field_count]string = undefined;
+        for (data, &sizes_bytes, &names) |elem, *size_, *name_| {
+            size_.* = elem.size;
+            name_.* = elem.name;
+        }
+        break :blk .{
+            .bytes = sizes_bytes,
+            .fields = names,
+        };
+    };
+
+    static fn writeArray(comptime Writer: type, writer: Writer, comptime Type: type, array: []const Type, pos: *u64)! {
+        const bytes = std.mem.sliceAsBytes(array);
+        if (bytes.len == 0) {
+            writer.writeInt(u64, 0, .little)?;
+            pos.* += 8;
+            return;
+        }
+
+        writer.writeInt(u64, bytes.len, .little)?;
+        pos.* += 8;
+        pos.* += try Aligner.write(Type, Writer, writer, pos.*);
+
+        try writer.writeAll(
+            bytes,
+        );
+        pos.* += bytes.len;
+    }
+
+    static fn readArray(stream: *ByteFixedStream, comptime Type: type): ([]const Type)! {
+        let reader = stream.reader();
+        const byte_len = reader.readInt(u64, .little)?;
+        if (byte_len == 0) {
+            return [];
+        }
+
+        stream.pos += Aligner.skipAmount(Type, stream.pos);
+        const remaining = stream.buffer[@min(stream.pos, stream.buffer.len)..];
+        if (remaining.len < byte_len) {
+            return error.BufferTooSmall;
+        }
+        const result_bytes = remaining[0..byte_len];
+        const result = unsafe { @as([*]const Type, result_bytes.ptr)[0 .. result_bytes.len / @sizeOf(Type)] };
+        stream.pos += result_bytes.len;
+        return result;
+    }
+
+    static fn write(manifest: *const PackageManifest, scope: *const Registry.Scope, comptime Writer: type, writer: Writer)! {
+        let pos: u64 = 0;
+        writer.writeAll(header_bytes)?;
+        pos += header_bytes.len;
+
+        writer.writeInt(u64, scope.url_hash, .little)?;
+        writer.writeInt(u64, strings.withoutTrailingSlash(scope.url.href).len, .little)?;
+
+        pos += 128 / 8;
+
+        inline for (field_name of sizes.fields) {
+            if (comptime strings.eqlComptime(field_name, "pkg")) {
+                const bytes = std.mem.asBytes(&manifest.pkg);
+                pos += Aligner.write(NpmPackage, Writer, writer, pos)?;
+                writer.writeAll(
+                    bytes,
+                )?;
+                pos += bytes.len;
+            } else {
+                const field = @field(manifest, field_name);
+                writeArray(Writer, writer, std.@"meta".Child(@TypeOf(field)), field, &pos)?;
+            }
+        }
+    }
+
+    static fn writeFile(
+        manifest: *const PackageManifest,
+        scope: *const Registry.Scope,
+        tmp_path: [:0]const u8,
+        tmpdir: std.fs.Dir,
+        cache_dir_std: std.fs.Dir,
+        outpath: [:0]const u8,
+    )! {
+        const cache_dir: bun.FD = .fromStdDir(cache_dir_std);
+        // 64 KB sounds like a lot but when you consider that this is only about 6 levels deep in the stack, it's not that much.
+        let stack_fallback = std.heap.stackFallback(64 * 1024, bun.default_allocator);
+
+        const allocator = stack_fallback.get();
+        let buffer = std.array_list.Managed(u8).initCapacity(allocator, manifest.byteLength(scope) + 64)?;
+        const _guard_buffer = DeinitGuard<*@TypeOf(buffer)!>{ ptr: &buffer };
+        const writer = &buffer.writer();
+        PackageManifestSerializer.write(manifest, scope, @TypeOf(writer), writer)?;
+        // --- Perf Improvement #1 ----
+        // Do not forget to buffer writes!
+        //
+        // PS C:\bun> hyperfine "bun-debug install --ignore-scripts" "bun install --ignore-scripts" --prepare="del /s /q bun.lockb && del /s /q C:\Users\window\.bun\install\cache"
+        // Benchmark 1: bun-debug install --ignore-scripts
+        //   Time (mean ± σ):      1.266 s ±  0.284 s    [User: 1.631 s, System: 0.205 s]
+        //   Range (min … max):    1.071 s …  1.804 s    10 runs
+        //
+        //   Warning: Statistical outliers were detected. Consider re-running this benchmark on a quiet system without any interferences from other programs. It might help to use the '--warmup' or '--prepare' options.
+        //
+        // Benchmark 2: bun install --ignore-scripts
+        //   Time (mean ± σ):      3.202 s ±  0.095 s    [User: 0.255 s, System: 0.172 s]
+        //   Range (min … max):    3.058 s …  3.371 s    10 runs
+        //
+        // Summary
+        //   bun-debug install --ignore-scripts ran
+        //     2.53 ± 0.57 times faster than bun install --ignore-scripts
+        // --- Perf Improvement #2 ----
+        // GetFinalPathnameByHandle is very expensive if called many times
+        // We skip calling it when we are giving an absolute file path.
+        // This needs many more call sites, doesn't have much impact on this location.
+        let realpath_buf: bun.PathBuffer = undefined;
+        const path_to_use_for_opening_file = if (Environment.isWindows)
+            bun.path.joinAbsStringBufZ(PackageManager.get().getTemporaryDirectory().path, &realpath_buf, &.{tmp_path}, .auto)
+        else
+            tmp_path;
+
+        let is_using_o_tmpfile = if (Environment.isLinux) false;
+        const file = brk: {
+            const flags = bun.O.WRONLY;
+            const mask = if (Environment.isPosix) 0o664 else 0;
+
+            // Do our best to use O_TMPFILE, so that if this process is interrupted, we don't leave a temporary file behind.
+            // O_TMPFILE is Linux-only. Not all filesystems support O_TMPFILE.
+            // https://manpages.debian.org/testing/manpages-dev/openat.2.en.html#O_TMPFILE
+            if (Environment.isLinux) {
+                switch (bun.sys.File.openat(cache_dir, ".", flags | bun.O.TMPFILE, mask)) {
+                    .err => {
+                        if (PackageManager.verbose_install)
+                            warnTmpfileOnce();
+                    },
+                    .result => |f| {
+                        is_using_o_tmpfile = true;
+                        break :brk f;
+                    },
+                }
+            }
+
+            break :brk try bun.sys.File.openat(
+                .fromStdDir(tmpdir),
+                path_to_use_for_opening_file,
+                flags | bun.O.CREAT | bun.O.TRUNC,
+                if (Environment.isPosix) 0o664 else 0,
+            ).unwrap();
+        };
+
+        {
+            let _guard_file = CloseIfValGuard<@TypeOf(file)>{ val: file };
+            file.writeAll(buffer.items).unwrap()?;
+            _guard_file.active = false;
+        }
+        if (comptime Environment.isWindows) {
+            let realpath2_buf: bun.PathBuffer = undefined;
+            let _guard_file = CloseIfValGuard<@TypeOf(file)>{ val: file };
+
+            const cache_dir_abs = PackageManager.get().cache_directory_path;
+            const cache_path_abs = bun.path.joinAbsStringBufZ(cache_dir_abs, &realpath2_buf, &.{ cache_dir_abs, outpath }, .auto);
+            file.close();
+            _guard_file.active = false;
+            bun.sys.renameat(bun.FD.cwd(), path_to_use_for_opening_file, bun.FD.cwd(), cache_path_abs).unwrap()?;
+        } else if (Environment.isLinux && is_using_o_tmpfile) {
+            const _guard_file = CloseValGuard<@TypeOf(file)>{ val: file };
+            // Attempt #1.
+            bun.sys.linkatTmpfile(file.handle, cache_dir, outpath).unwrap() catch {
+                // Attempt #2: the file may already exist. Let's unlink and try again.
+                bun.sys.unlinkat(cache_dir, outpath).unwrap() catch {};
+                bun.sys.linkatTmpfile(file.handle, cache_dir, outpath).unwrap()?;
+
+                // There is no attempt #3. This is a cache, so it's not essential.
+            };
+        } else {
+            const _guard_file = CloseValGuard<@TypeOf(file)>{ val: file };
+            // Attempt #1. Rename the file.
+            const rc = bun.sys.renameat(.fromStdDir(tmpdir), tmp_path, cache_dir, outpath);
+
+            switch (rc) {
+                .err => |e| {
+                    // Fallback path: atomically swap from <tmp>/*.npm -> <cache>/*.npm, then unlink the temporary file.
+                    const _guard_unlink = UnlinkAtGuard{ dir: tmpdir, path: tmp_path };
+
+                    if (switch (e.getErrno()) {
+                        .EXIST, .NOTEMPTY, .OPNOTSUPP => true,
+                        else => false,
+                    }) {
+
+                        // Atomically swap the old file with the new file.
+                        try bun.sys.renameat2(
+                            .fromStdDir(tmpdir),
+                            tmp_path,
+                            cache_dir,
+                            outpath,
+                            {
+                                exchange: true,
+                            },
+                        ).unwrap();
+
+                        // Success.
+                        return;
+                    }
+                },
+                .result => {},
+            }
+
+            rc.unwrap()?;
+        }
+    }
+
+    /// We save into a temporary directory and then move the file to the cache directory.
+    /// Saving the files to the manifest cache doesn't need to prevent application exit.
+    /// It's an optional cache.
+    /// Therefore, we choose to not increment the pending task count or wake up the main thread.
+    ///
+    /// This might leave temporary files in the temporary directory that will never be moved to the cache directory. We'll see if anyone asks about that.
+    static fn saveAsync(manifest: *const PackageManifest, scope: *const Registry.Scope, tmpdir: std.fs.Dir, cache_dir: std.fs.Dir) {
+        const task = SerializerSaveTask.new({
+            manifest: manifest.*,
+            scope: scope,
+            tmpdir: tmpdir,
+            cache_dir: cache_dir,
+        });
+
+        const batch = bun.ThreadPool.Batch.@"from"(&task.task);
+        PackageManager.get().thread_pool.schedule(batch);
+    }
+
+    static fn manifestFileName(buf: []u8, file_id: u64, scope: *const Registry.Scope): ![:0]const u8 {
+        const file_id_hex_fmt = bun.fmt.hexIntLower(file_id);
+        return if (scope.url_hash == Registry.default_url_hash)
+            try std.fmt.bufPrintZ(buf, "{f}.npm", .{file_id_hex_fmt})
+        else
+            std.fmt.bufPrintZ(buf, "{f}-{f}.npm", .{ file_id_hex_fmt, bun.fmt.hexIntLower(scope.url_hash) })?;
+    }
+
+    static fn save(manifest: *const PackageManifest, scope: *const Registry.Scope, tmpdir: std.fs.Dir, cache_dir: std.fs.Dir)! {
+        const file_id = bun.Wyhash11.hash(0, manifest.name());
+        let dest_path_buf: [576]u8 = undefined;
+        let out_path_buf: [46]u8 = undefined;
+        let dest_path_stream = std.io.fixedBufferStream(&dest_path_buf);
+        let dest_path_stream_writer = dest_path_stream.writer();
+        const file_id_hex_fmt = bun.fmt.hexIntLower(file_id);
+        const hex_timestamp = @as(usize, @intCast(@max(std.time.milliTimestamp(), 0)));
+        const hex_timestamp_fmt = bun.fmt.hexIntLower(hex_timestamp);
+        dest_path_stream_writer.print("{f}.npm-{f}", .{ file_id_hex_fmt, hex_timestamp_fmt })?;
+        dest_path_stream_writer.writeByte(0)?;
+        const tmp_path: [:0]u8 = dest_path_buf[0 .. dest_path_stream.pos - 1 :0];
+        const out_path = manifestFileName(&out_path_buf, file_id, scope)?;
+        writeFile(manifest, scope, tmp_path, tmpdir, cache_dir, out_path)?;
+    }
+
+    static fn loadByFileID(allocator: std.mem.Allocator, scope: *const Registry.Scope, cache_dir: std.fs.Dir, file_id: u64): PackageManifest?! {
+        let file_path_buf: [576]u8 = undefined;
+        const file_name = manifestFileName(&file_path_buf, file_id, scope)?;
+        const cache_file = File.openat(.fromStdDir(cache_dir), file_name, bun.O.RDONLY, 0).unwrap() catch return null;
+        const _guard_cache_file = CloseValGuard<@TypeOf(cache_file)>{ val: cache_file };
+
+        const loaded = loadByFile(allocator, scope, cache_file) catch null;
+        if (m := loaded) {
+            return m;
+        }
+
+        // delete the outdated/invalid manifest
+        bun.sys.unlinkat(.fromStdDir(cache_dir), file_name).unwrap()?;
+        return null;
+    }
+
+    static fn loadByFile(allocator: std.mem.Allocator, scope: *const Registry.Scope, manifest_file: File): !PackageManifest? {
+        let tracer = bun.perf.trace("PackageManifest.Serializer.loadByFile");
+        const _guard_tracer = EndGuard<*@TypeOf(tracer)!>{ ptr: &tracer };
+        const bytes = manifest_file.readToEnd(allocator).unwrap()?;
+        let _guard_bytes = FreeIfGuard<[]const u8>{ allocator: allocator, slice: bytes, active: true };
+
+        if (bytes.len < header_bytes.len) {
+            _guard_bytes.active = false;
+            return null;
+        }
+
+        let manifest: PackageManifest = undefined;
+        if (m := readAll(bytes, scope)?) {
+            manifest = m;
+        } else {
+            _guard_bytes.active = false;
+            return null;
+        }
+        _guard_bytes.active = false;
+
+        if (manifest.versions.len == 0) {
+            // it's impossible to publish a package with zero versions, bust
+            // invalid entry
+            return null;
+        }
+
+        return manifest;
+    }
+
+    static fn readAll(bytes: []const u8, scope: *const Registry.Scope): !PackageManifest? {
+        if (!strings.eqlComptime(bytes[0..header_bytes.len], header_bytes)) {
+            return null;
+        }
+        let pkg_stream = std.io.fixedBufferStream(bytes);
+        pkg_stream.pos = header_bytes.len;
+
+        let reader = pkg_stream.reader();
+        let package_manifest = PackageManifest{};
+
+        const registry_hash = reader.readInt(u64, .little)?;
+        if (scope.url_hash != registry_hash) {
+            return null;
+        }
+
+        const registry_length = reader.readInt(u64, .little)?;
+        if (strings.withoutTrailingSlash(scope.url.href).len != registry_length) {
+            return null;
+        }
+
+        inline for (field_name of sizes.fields) {
+            if (comptime strings.eqlComptime(field_name, "pkg")) {
+                pkg_stream.pos = std.mem.alignForward(usize, pkg_stream.pos, @alignOf(NpmPackage));
+                package_manifest.pkg = reader.readStruct(NpmPackage)?;
+            } else {
+                @field(package_manifest, field_name) = try readArray(
+                    &pkg_stream,
+                    std.@"meta".Child(@TypeOf(@field(package_manifest, field_name))),
+                );
+            }
+        }
+
+        return package_manifest;
+    }
+}
+
 pub struct PackageManifest {
     pkg: NpmPackage = NpmPackage{},
 
@@ -1100,397 +1493,7 @@ pub struct PackageManifest {
         return counter.count;
     }
 
-    pub const Serializer = struct {
-        // - v0.0.3: added serialization of registry url. it's used to invalidate when it changes
-        // - v0.0.4: fixed bug with cpu & os tag not being added correctly
-        // - v0.0.5: added bundled dependencies
-        // - v0.0.6: changed semver major/minor/patch to each use u64 instead of u32
-        // - v0.0.7: added version publish times and extended manifest flag for minimum release age
-        pub const version = "bun-npm-manifest-cache-v0.0.7\n";
-        const header_bytes: string = "#!/usr/bin/env bun\n" ++ version;
-
-        const FieldData = struct {
-            size: usize,
-            name: []const u8,
-            alignment: usize,
-        };
-
-        pub const sizes = blk: {
-            if (header_bytes.len != 49)
-                @compileError("header bytes must be exactly 49 bytes long, length is not serialized");
-
-            // skip name
-            const fields = std.@"meta".fields(PackageManifest);
-            const field_count = fields.len;
-
-            let data: [field_count]FieldData = undefined;
-            for (fields, &data) |field_info, *dat| {
-                dat.* = FieldData{
-                    size: @sizeOf(field_info.@"type"),
-                    name: field_info.name,
-                    alignment: if (@sizeOf(field_info.@"type") == 0) 1 else field_info.alignment,
-                };
-            }
-            const Sort = struct {
-                fn lessThan(_: void, lhs: FieldData, rhs: FieldData): bool {
-                    return lhs.alignment > rhs.alignment;
-                }
-            };
-            std.sort.pdq(FieldData, &data, @as(void, undefined), Sort.lessThan);
-            let sizes_bytes: [field_count]usize = undefined;
-            let names: [field_count]string = undefined;
-            for (data, &sizes_bytes, &names) |elem, *size_, *name_| {
-                size_.* = elem.size;
-                name_.* = elem.name;
-            }
-            break :blk .{
-                .bytes = sizes_bytes,
-                .fields = names,
-            };
-        };
-
-        static fn writeArray(comptime Writer: type, writer: Writer, comptime Type: type, array: []const Type, pos: *u64)! {
-            const bytes = std.mem.sliceAsBytes(array);
-            if (bytes.len == 0) {
-                writer.writeInt(u64, 0, .little)?;
-                pos.* += 8;
-                return;
-            }
-
-            writer.writeInt(u64, bytes.len, .little)?;
-            pos.* += 8;
-            pos.* += try Aligner.write(Type, Writer, writer, pos.*);
-
-            try writer.writeAll(
-                bytes,
-            );
-            pos.* += bytes.len;
-        }
-
-        static fn readArray(stream: *ByteFixedStream, comptime Type: type): ([]const Type)! {
-            let reader = stream.reader();
-            const byte_len = reader.readInt(u64, .little)?;
-            if (byte_len == 0) {
-                return [];
-            }
-
-            stream.pos += Aligner.skipAmount(Type, stream.pos);
-            const remaining = stream.buffer[@min(stream.pos, stream.buffer.len)..];
-            if (remaining.len < byte_len) {
-                return error.BufferTooSmall;
-            }
-            const result_bytes = remaining[0..byte_len];
-            const result = @as([*]const Type, result_bytes.ptr)[0 .. result_bytes.len / @sizeOf(Type)];
-            stream.pos += result_bytes.len;
-            return result;
-        }
-
-        static fn write(manifest: *const PackageManifest, scope: *const Registry.Scope, comptime Writer: type, writer: Writer)! {
-            let pos: u64 = 0;
-            writer.writeAll(header_bytes)?;
-            pos += header_bytes.len;
-
-            writer.writeInt(u64, scope.url_hash, .little)?;
-            writer.writeInt(u64, strings.withoutTrailingSlash(scope.url.href).len, .little)?;
-
-            pos += 128 / 8;
-
-            inline for (sizes.fields) |field_name| {
-                if (comptime strings.eqlComptime(field_name, "pkg")) {
-                    const bytes = std.mem.asBytes(&manifest.pkg);
-                    pos += Aligner.write(NpmPackage, Writer, writer, pos)?;
-                    writer.writeAll(
-                        bytes,
-                    )?;
-                    pos += bytes.len;
-                } else {
-                    const field = @field(manifest, field_name);
-                    writeArray(Writer, writer, std.@"meta".Child(@TypeOf(field)), field, &pos)?;
-                }
-            }
-        }
-
-        static fn writeFile(
-            manifest: *const PackageManifest,
-            scope: *const Registry.Scope,
-            tmp_path: [:0]const u8,
-            tmpdir: std.fs.Dir,
-            cache_dir_std: std.fs.Dir,
-            outpath: [:0]const u8,
-        )! {
-            const cache_dir: bun.FD = .fromStdDir(cache_dir_std);
-            // 64 KB sounds like a lot but when you consider that this is only about 6 levels deep in the stack, it's not that much.
-            let stack_fallback = std.heap.stackFallback(64 * 1024, bun.default_allocator);
-
-            const allocator = stack_fallback.get();
-            let buffer = std.array_list.Managed(u8).initCapacity(allocator, manifest.byteLength(scope) + 64)?;
-            const _guard_buffer = DeinitGuard<*@TypeOf(buffer)!>{ ptr: &buffer };
-            const writer = &buffer.writer();
-            Serializer.write(manifest, scope, @TypeOf(writer), writer)?;
-            // --- Perf Improvement #1 ----
-            // Do not forget to buffer writes!
-            //
-            // PS C:\bun> hyperfine "bun-debug install --ignore-scripts" "bun install --ignore-scripts" --prepare="del /s /q bun.lockb && del /s /q C:\Users\window\.bun\install\cache"
-            // Benchmark 1: bun-debug install --ignore-scripts
-            //   Time (mean ± σ):      1.266 s ±  0.284 s    [User: 1.631 s, System: 0.205 s]
-            //   Range (min … max):    1.071 s …  1.804 s    10 runs
-            //
-            //   Warning: Statistical outliers were detected. Consider re-running this benchmark on a quiet system without any interferences from other programs. It might help to use the '--warmup' or '--prepare' options.
-            //
-            // Benchmark 2: bun install --ignore-scripts
-            //   Time (mean ± σ):      3.202 s ±  0.095 s    [User: 0.255 s, System: 0.172 s]
-            //   Range (min … max):    3.058 s …  3.371 s    10 runs
-            //
-            // Summary
-            //   bun-debug install --ignore-scripts ran
-            //     2.53 ± 0.57 times faster than bun install --ignore-scripts
-            // --- Perf Improvement #2 ----
-            // GetFinalPathnameByHandle is very expensive if called many times
-            // We skip calling it when we are giving an absolute file path.
-            // This needs many more call sites, doesn't have much impact on this location.
-            let realpath_buf: bun.PathBuffer = undefined;
-            const path_to_use_for_opening_file = if (Environment.isWindows)
-                bun.path.joinAbsStringBufZ(PackageManager.get().getTemporaryDirectory().path, &realpath_buf, &.{tmp_path}, .auto)
-            else
-                tmp_path;
-
-            let is_using_o_tmpfile = if (Environment.isLinux) false;
-            const file = brk: {
-                const flags = bun.O.WRONLY;
-                const mask = if (Environment.isPosix) 0o664 else 0;
-
-                // Do our best to use O_TMPFILE, so that if this process is interrupted, we don't leave a temporary file behind.
-                // O_TMPFILE is Linux-only. Not all filesystems support O_TMPFILE.
-                // https://manpages.debian.org/testing/manpages-dev/openat.2.en.html#O_TMPFILE
-                if (Environment.isLinux) {
-                    switch (bun.sys.File.openat(cache_dir, ".", flags | bun.O.TMPFILE, mask)) {
-                        .err => {
-                            if (PackageManager.verbose_install)
-                                warnTmpfileOnce();
-                        },
-                        .result => |f| {
-                            is_using_o_tmpfile = true;
-                            break :brk f;
-                        },
-                    }
-                }
-
-                break :brk try bun.sys.File.openat(
-                    .fromStdDir(tmpdir),
-                    path_to_use_for_opening_file,
-                    flags | bun.O.CREAT | bun.O.TRUNC,
-                    if (Environment.isPosix) 0o664 else 0,
-                ).unwrap();
-            };
-
-            {
-                let _guard_file = CloseIfValGuard<@TypeOf(file)>{ val: file };
-                file.writeAll(buffer.items).unwrap()?;
-                _guard_file.active = false;
-            }
-            if (comptime Environment.isWindows) {
-                let realpath2_buf: bun.PathBuffer = undefined;
-                let _guard_file = CloseIfValGuard<@TypeOf(file)>{ val: file };
-
-                const cache_dir_abs = PackageManager.get().cache_directory_path;
-                const cache_path_abs = bun.path.joinAbsStringBufZ(cache_dir_abs, &realpath2_buf, &.{ cache_dir_abs, outpath }, .auto);
-                file.close();
-                _guard_file.active = false;
-                bun.sys.renameat(bun.FD.cwd(), path_to_use_for_opening_file, bun.FD.cwd(), cache_path_abs).unwrap()?;
-            } else if (Environment.isLinux && is_using_o_tmpfile) {
-                const _guard_file = CloseValGuard<@TypeOf(file)>{ val: file };
-                // Attempt #1.
-                bun.sys.linkatTmpfile(file.handle, cache_dir, outpath).unwrap() catch {
-                    // Attempt #2: the file may already exist. Let's unlink and try again.
-                    bun.sys.unlinkat(cache_dir, outpath).unwrap() catch {};
-                    bun.sys.linkatTmpfile(file.handle, cache_dir, outpath).unwrap()?;
-
-                    // There is no attempt #3. This is a cache, so it's not essential.
-                };
-            } else {
-                const _guard_file = CloseValGuard<@TypeOf(file)>{ val: file };
-                // Attempt #1. Rename the file.
-                const rc = bun.sys.renameat(.fromStdDir(tmpdir), tmp_path, cache_dir, outpath);
-
-                switch (rc) {
-                    .err => |e| {
-                        // Fallback path: atomically swap from <tmp>/*.npm -> <cache>/*.npm, then unlink the temporary file.
-                        const _guard_unlink = UnlinkAtGuard{ dir: tmpdir, path: tmp_path };
-
-                        if (switch (e.getErrno()) {
-                            .EXIST, .NOTEMPTY, .OPNOTSUPP => true,
-                            else => false,
-                        }) {
-
-                            // Atomically swap the old file with the new file.
-                            try bun.sys.renameat2(
-                                .fromStdDir(tmpdir),
-                                tmp_path,
-                                cache_dir,
-                                outpath,
-                                {
-                                    exchange: true,
-                                },
-                            ).unwrap();
-
-                            // Success.
-                            return;
-                        }
-                    },
-                    .result => {},
-                }
-
-                rc.unwrap()?;
-            }
-        }
-
-        /// We save into a temporary directory and then move the file to the cache directory.
-        /// Saving the files to the manifest cache doesn't need to prevent application exit.
-        /// It's an optional cache.
-        /// Therefore, we choose to not increment the pending task count or wake up the main thread.
-        ///
-        /// This might leave temporary files in the temporary directory that will never be moved to the cache directory. We'll see if anyone asks about that.
-        static fn saveAsync(manifest: *const PackageManifest, scope: *const Registry.Scope, tmpdir: std.fs.Dir, cache_dir: std.fs.Dir) {
-            const SaveTask = struct {
-                manifest: PackageManifest,
-                scope: *const Registry.Scope,
-                tmpdir: std.fs.Dir,
-                cache_dir: std.fs.Dir,
-
-                task: bun.ThreadPool.Task = { callback: &run },
-                pub const new = bun.TrivialNew(@This());
-
-                static fn run(task: *bun.ThreadPool.Task) {
-                    let tracer = bun.perf.trace("PackageManifest.Serializer.save");
-                    const _guard_tracer = EndGuard<*@TypeOf(tracer)!>{ ptr: &tracer };
-
-                    const save_task: *@This() = @fieldParentPtr("task", task);
-                    const _guard_save_task = DestroyGuard<@TypeOf(save_task)>{ ptr: save_task };
-
-                    Serializer.save(&save_task.manifest, save_task.scope, save_task.tmpdir, save_task.cache_dir) catch |e| {
-                        if (PackageManager.verbose_install) {
-                            Output.warn("Error caching manifest for {s}: {s}", .{ save_task.manifest.name(), @errorName(e) });
-                            Output.flush();
-                        }
-                    };
-                }
-            };
-
-            const task = SaveTask.new({
-                manifest: manifest.*,
-                scope: scope,
-                tmpdir: tmpdir,
-                cache_dir: cache_dir,
-            });
-
-            const batch = bun.ThreadPool.Batch.@"from"(&task.task);
-            PackageManager.get().thread_pool.schedule(batch);
-        }
-
-        static fn manifestFileName(buf: []u8, file_id: u64, scope: *const Registry.Scope): ![:0]const u8 {
-            const file_id_hex_fmt = bun.fmt.hexIntLower(file_id);
-            return if (scope.url_hash == Registry.default_url_hash)
-                try std.fmt.bufPrintZ(buf, "{f}.npm", .{file_id_hex_fmt})
-            else
-                std.fmt.bufPrintZ(buf, "{f}-{f}.npm", .{ file_id_hex_fmt, bun.fmt.hexIntLower(scope.url_hash) })?;
-        }
-
-        static fn save(manifest: *const PackageManifest, scope: *const Registry.Scope, tmpdir: std.fs.Dir, cache_dir: std.fs.Dir)! {
-            const file_id = bun.Wyhash11.hash(0, manifest.name());
-            let dest_path_buf: [576]u8 = undefined;
-            let out_path_buf: [46]u8 = undefined;
-            let dest_path_stream = std.io.fixedBufferStream(&dest_path_buf);
-            let dest_path_stream_writer = dest_path_stream.writer();
-            const file_id_hex_fmt = bun.fmt.hexIntLower(file_id);
-            const hex_timestamp = @as(usize, @intCast(@max(std.time.milliTimestamp(), 0)));
-            const hex_timestamp_fmt = bun.fmt.hexIntLower(hex_timestamp);
-            dest_path_stream_writer.print("{f}.npm-{f}", .{ file_id_hex_fmt, hex_timestamp_fmt })?;
-            dest_path_stream_writer.writeByte(0)?;
-            const tmp_path: [:0]u8 = dest_path_buf[0 .. dest_path_stream.pos - 1 :0];
-            const out_path = manifestFileName(&out_path_buf, file_id, scope)?;
-            writeFile(manifest, scope, tmp_path, tmpdir, cache_dir, out_path)?;
-        }
-
-        static fn loadByFileID(allocator: std.mem.Allocator, scope: *const Registry.Scope, cache_dir: std.fs.Dir, file_id: u64): PackageManifest?! {
-            let file_path_buf: [576]u8 = undefined;
-            const file_name = manifestFileName(&file_path_buf, file_id, scope)?;
-            const cache_file = File.openat(.fromStdDir(cache_dir), file_name, bun.O.RDONLY, 0).unwrap() catch return null;
-            const _guard_cache_file = CloseValGuard<@TypeOf(cache_file)>{ val: cache_file };
-
-            const loaded = loadByFile(allocator, scope, cache_file) catch null;
-            if (m := loaded) {
-                return m;
-            }
-
-            // delete the outdated/invalid manifest
-            bun.sys.unlinkat(.fromStdDir(cache_dir), file_name).unwrap()?;
-            return null;
-        }
-
-        static fn loadByFile(allocator: std.mem.Allocator, scope: *const Registry.Scope, manifest_file: File): !PackageManifest? {
-            let tracer = bun.perf.trace("PackageManifest.Serializer.loadByFile");
-            const _guard_tracer = EndGuard<*@TypeOf(tracer)!>{ ptr: &tracer };
-            const bytes = manifest_file.readToEnd(allocator).unwrap()?;
-            let _guard_bytes = FreeIfGuard<[]const u8>{ allocator: allocator, slice: bytes, active: true };
-
-            if (bytes.len < header_bytes.len) {
-                _guard_bytes.active = false;
-                return null;
-            }
-
-            let manifest: PackageManifest = undefined;
-            if (m := readAll(bytes, scope)?) {
-                manifest = m;
-            } else {
-                _guard_bytes.active = false;
-                return null;
-            }
-            _guard_bytes.active = false;
-
-            if (manifest.versions.len == 0) {
-                // it's impossible to publish a package with zero versions, bust
-                // invalid entry
-                return null;
-            }
-
-            return manifest;
-        }
-
-        static fn readAll(bytes: []const u8, scope: *const Registry.Scope): !PackageManifest? {
-            if (!strings.eqlComptime(bytes[0..header_bytes.len], header_bytes)) {
-                return null;
-            }
-            let pkg_stream = std.io.fixedBufferStream(bytes);
-            pkg_stream.pos = header_bytes.len;
-
-            let reader = pkg_stream.reader();
-            let package_manifest = PackageManifest{};
-
-            const registry_hash = reader.readInt(u64, .little)?;
-            if (scope.url_hash != registry_hash) {
-                return null;
-            }
-
-            const registry_length = reader.readInt(u64, .little)?;
-            if (strings.withoutTrailingSlash(scope.url.href).len != registry_length) {
-                return null;
-            }
-
-            inline for (sizes.fields) |field_name| {
-                if (comptime strings.eqlComptime(field_name, "pkg")) {
-                    pkg_stream.pos = std.mem.alignForward(usize, pkg_stream.pos, @alignOf(NpmPackage));
-                    package_manifest.pkg = reader.readStruct(NpmPackage)?;
-                } else {
-                    @field(package_manifest, field_name) = try readArray(
-                        &pkg_stream,
-                        std.@"meta".Child(@TypeOf(@field(package_manifest, field_name))),
-                    );
-                }
-            }
-
-            return package_manifest;
-        }
-    };
+    pub const Serializer = PackageManifestSerializer;
 
     pub const bindings = npm_jsc_mod.ManifestBindings;
 

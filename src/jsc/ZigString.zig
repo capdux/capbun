@@ -618,11 +618,7 @@ pub fn fromUTF8(slice_: []const u8) ZigString {
     }
 
 pub fn static(comptime slice_: [:0]const u8) *const ZigString {
-            const Holder = struct {
-    const null_terminated_ascii_literal = slice_;
-    pub const value = (&ZigString{ ._unsafe_ptr_do_not_use = null_terminated_ascii_literal.ptr, .len = null_terminated_ascii_literal.len });
-};
-            return (if (@typeInfo(@TypeOf(Holder)) == .@"enum") @intFromEnum(Holder) else Holder.value);
+            return (&ZigString{ ._unsafe_ptr_do_not_use = slice_.ptr, .len = slice_.len });
     }
 
 pub fn githubAction(self: ZigString) GithubActionFormatter {

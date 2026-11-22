@@ -6,11 +6,11 @@ const FD = bun.FD;
 const strings = bun.strings;
 const sys = bun.sys;
 
-pub const LinkStrategy = enum {
+pub enum LinkStrategy {
     expect_existing,
     expect_missing,
     ignore_failure,
-};
+}
 
 pub struct Symlinker {
     dest: bun.Path(.{ .sep = .auto }),

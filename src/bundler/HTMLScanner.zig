@@ -124,6 +124,15 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub fn HTMLDoneCallback(comptime T: type) type {
+    return struct {
+
+pub fn done(_unused: *T) void {
+            _ = _unused;
+        }
+    };
+}
+
 pub const TagHandler = struct {
     selector: []const u8,
     has_content: bool = false,
@@ -269,13 +278,7 @@ pub fn run(target: *T, input: []const u8) !void {
             var __err_guard_moved = false; _ = &__err_guard_moved;
             errdefer if (!__err_guard_moved) { __err_guard_moved = true; const __T = @TypeOf(err_guard); if (@typeInfo(__T) == .optional) { if (err_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { __cp_opt_v.__cp_errdeinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_errdeinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_errdeinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { err_guard.__cp_errdeinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_errdeinit")) { var _drop_val = err_guard; _drop_val.__cp_errdeinit(); } };
             _ = &err_guard;
-            const DoneCallback = struct {
-
-pub fn done(_unused: *T) void {
-        _ = _unused;
-    }
-};
-            var rewriter = try builder.build(.UTF8, memory_settings, false, T, target, T.onWriteHTML, DoneCallback.done);
+            var rewriter = try builder.build(.UTF8, memory_settings, false, T, target, T.onWriteHTML, HTMLDoneCallback(T).done);
             _ = &rewriter;
             var rewriter_guard = PtrDeinitGuard(@TypeOf(rewriter)){ .ptr = rewriter };
             _ = &rewriter_guard;

@@ -430,20 +430,7 @@ _ = r.@"resume"();
     }
 
 pub fn onData(self: AnyResponse, comptime UserDataType: type, comptime handler: anytype, optional_data: UserDataType) void {
-            const wrapper = struct {
-
-pub fn ssl_cb(user_data: UserDataType, _: *ResponseTLS, data: []const u8, last: bool) void {
-            _ = @call(bun.callmod_inline, handler, .{ user_data, data, last });
-    }
-
-pub fn tcp_cb(user_data: UserDataType, _: *ResponseTCP, data: []const u8, last: bool) void {
-            _ = @call(bun.callmod_inline, handler, .{ user_data, data, last });
-    }
-
-pub fn h3_cb(user_data: UserDataType, _: *H3Response, data: []const u8, last: bool) void {
-            _ = @call(bun.callmod_inline, handler, .{ user_data, data, last });
-    }
-};
+            const wrapper = AnyResOnDataWrap(UserDataType, handler);
             switch (self) {
 .SSL => |r| {
 _ = r.onData(optional_data, wrapper.ssl_cb);
@@ -458,20 +445,7 @@ _ = r.onData(optional_data, wrapper.h3_cb);
     }
 
 pub fn onWritable(self: AnyResponse, comptime UserDataType: type, comptime handler: anytype, optional_data: UserDataType) void {
-            const wrapper = struct {
-
-pub fn ssl_cb(user_data: UserDataType, offset: u64, resp: *ResponseTLS) bool {
-            return handler(user_data, offset, AnyResponse{ .SSL = resp });
-    }
-
-pub fn tcp_cb(user_data: UserDataType, offset: u64, resp: *ResponseTCP) bool {
-            return handler(user_data, offset, AnyResponse{ .TCP = resp });
-    }
-
-pub fn h3_cb(user_data: UserDataType, offset: u64, resp: *H3Response) bool {
-            return handler(user_data, offset, AnyResponse{ .H3 = resp });
-    }
-};
+            const wrapper = AnyResOnWritableWrap(UserDataType, handler);
             switch (self) {
 .SSL => |r| {
 _ = r.onWritable(optional_data, wrapper.ssl_cb);
@@ -486,20 +460,7 @@ _ = r.onWritable(optional_data, wrapper.h3_cb);
     }
 
 pub fn onTimeout(self: AnyResponse, comptime UserDataType: type, comptime handler: anytype, optional_data: UserDataType) void {
-            const wrapper = struct {
-
-pub fn ssl_cb(user_data: UserDataType, resp: *ResponseTLS) void {
-            _ = handler(user_data, AnyResponse{ .SSL = resp });
-    }
-
-pub fn tcp_cb(user_data: UserDataType, resp: *ResponseTCP) void {
-            _ = handler(user_data, AnyResponse{ .TCP = resp });
-    }
-
-pub fn h3_cb(user_data: UserDataType, resp: *H3Response) void {
-            _ = handler(user_data, AnyResponse{ .H3 = resp });
-    }
-};
+            const wrapper = AnyResCbWrap(UserDataType, handler);
             switch (self) {
 .SSL => |r| {
 _ = r.onTimeout(optional_data, wrapper.ssl_cb);
@@ -514,20 +475,7 @@ _ = r.onTimeout(optional_data, wrapper.h3_cb);
     }
 
 pub fn onAborted(self: AnyResponse, comptime UserDataType: type, comptime handler: anytype, optional_data: UserDataType) void {
-            const wrapper = struct {
-
-pub fn ssl_cb(user_data: UserDataType, resp: *ResponseTLS) void {
-            _ = handler(user_data, AnyResponse{ .SSL = resp });
-    }
-
-pub fn tcp_cb(user_data: UserDataType, resp: *ResponseTCP) void {
-            _ = handler(user_data, AnyResponse{ .TCP = resp });
-    }
-
-pub fn h3_cb(user_data: UserDataType, resp: *H3Response) void {
-            _ = handler(user_data, AnyResponse{ .H3 = resp });
-    }
-};
+            const wrapper = AnyResCbWrap(UserDataType, handler);
             switch (self) {
 .SSL => |r| {
 _ = r.onAborted(optional_data, wrapper.ssl_cb);
@@ -923,16 +871,8 @@ pub fn hasResponded(self: *@This()) bool {
     }
 
 pub fn onWritable(self: *@This(), ud: anytype, comptime handler: anytype) void {
-            const wrapper = struct {
-
-pub fn callback(res_: *uws_res, offset: u64, user_data: ?*anyopaque) callconv(.c) bool {
             {
-                return handler(@ptrCast(@alignCast(user_data)), offset, bun.cast(SelfPtr, res_));
-            }
-    }
-};
-            {
-                _ = uws_res_on_writable(ssl_flag, self.downcast(), wrapper.callback, @ptrCast(ud));
+                _ = uws_res_on_writable(ssl_flag, self.downcast(), ResOnWritableWrap(SelfPtr, handler).callback, @ptrCast(ud));
             }
     }
 
@@ -941,16 +881,8 @@ pub fn clearOnWritable(self: *@This()) void {
     }
 
 pub fn onAborted(self: *@This(), ud: anytype, comptime handler: anytype) void {
-            const wrapper = struct {
-
-pub fn callback(res_: *uws_res, user_data: ?*anyopaque) callconv(.c) void {
             {
-                _ = handler(@ptrCast(@alignCast(user_data)), bun.cast(SelfPtr, res_));
-            }
-    }
-};
-            {
-                _ = uws_res_on_aborted(ssl_flag, self.downcast(), wrapper.callback, @ptrCast(ud));
+                _ = uws_res_on_aborted(ssl_flag, self.downcast(), ResCbWrap(SelfPtr, handler).callback, @ptrCast(ud));
             }
     }
 
@@ -959,16 +891,8 @@ pub fn clearAborted(self: *@This()) void {
     }
 
 pub fn onTimeout(self: *@This(), ud: anytype, comptime handler: anytype) void {
-            const wrapper = struct {
-
-pub fn callback(res_: *uws_res, user_data: ?*anyopaque) callconv(.c) void {
             {
-                _ = handler(@ptrCast(@alignCast(user_data)), bun.cast(SelfPtr, res_));
-            }
-    }
-};
-            {
-                _ = uws_res_on_timeout(ssl_flag, self.downcast(), wrapper.callback, @ptrCast(ud));
+                _ = uws_res_on_timeout(ssl_flag, self.downcast(), ResCbWrap(SelfPtr, handler).callback, @ptrCast(ud));
             }
     }
 
@@ -977,17 +901,8 @@ pub fn clearTimeout(self: *@This()) void {
     }
 
 pub fn onData(self: *@This(), ud: anytype, comptime handler: anytype) void {
-            const wrapper = struct {
-
-pub fn callback(res_: *uws_res, data: [*c]const u8, length: usize, last: bool, user_data: ?*anyopaque) callconv(.c) void {
             {
-                const slice: []const u8 = (if ((length > 0)) data[0..length] else "");
-                _ = handler(@ptrCast(@alignCast(user_data)), bun.cast(SelfPtr, res_), slice, last);
-            }
-    }
-};
-            {
-                _ = uws_res_on_data(ssl_flag, self.downcast(), wrapper.callback, @ptrCast(ud));
+                _ = uws_res_on_data(ssl_flag, self.downcast(), ResOnDataWrap(SelfPtr, handler).callback, @ptrCast(ud));
             }
     }
 
@@ -1043,32 +958,14 @@ pub fn getNativeHandle(self: *@This()) bun.FD {
     }
 
 pub fn corked(self: *@This(), comptime handler: anytype, args_tuple: std.meta.ArgsTuple(@TypeOf(handler))) void {
-            const Wrapper = struct {
-
-pub fn handle(user_data: ?*anyopaque) callconv(.c) void {
             {
-                const args: *@TypeOf(args_tuple) = @ptrCast(@alignCast(user_data.?));
-                _ = @call(bun.callmod_inline, handler_fn, args.*);
-            }
-    }
-    const handler_fn = handler;
-};
-            {
-                _ = uws_res_cork(ssl_flag, self.downcast(), @ptrCast(@constCast((&args_tuple))), Wrapper.handle);
+                _ = uws_res_cork(ssl_flag, self.downcast(), @ptrCast(@constCast((&args_tuple))), ResCorkedWrap(handler, @TypeOf(args_tuple)).handle);
             }
     }
 
 pub fn runCorkedWithType(self: *@This(), ud: anytype, comptime handler: anytype) void {
-            const wrapper = struct {
-
-pub fn onCork(user_data: ?*anyopaque) callconv(.c) void {
             {
-                _ = handler(@ptrCast(@alignCast(user_data)));
-            }
-    }
-};
-            {
-                _ = uws_res_cork(ssl_flag, self.downcast(), @ptrCast(ud), wrapper.onCork);
+                _ = uws_res_cork(ssl_flag, self.downcast(), @ptrCast(ud), ResRunCorkedWrap(handler).onCork);
             }
     }
 
@@ -1094,5 +991,114 @@ pub fn markNeedsMore(self: *@This()) void {
             }
     }
     const SelfPtr = *@This();
+};
+}
+
+pub fn ResOnWritableWrap(comptime SelfPtr: type, comptime handler: anytype) type {
+        return struct {
+
+pub fn callback(res_: *uws_res, offset: u64, user_data: ?*anyopaque) callconv(.c) bool {
+            {
+                return handler(@ptrCast(@alignCast(user_data)), offset, bun.cast(SelfPtr, res_));
+            }
+    }
+};
+}
+
+pub fn ResCbWrap(comptime SelfPtr: type, comptime handler: anytype) type {
+        return struct {
+
+pub fn callback(res_: *uws_res, user_data: ?*anyopaque) callconv(.c) void {
+            {
+                _ = handler(@ptrCast(@alignCast(user_data)), bun.cast(SelfPtr, res_));
+            }
+    }
+};
+}
+
+pub fn ResOnDataWrap(comptime SelfPtr: type, comptime handler: anytype) type {
+        return struct {
+
+pub fn callback(res_: *uws_res, data: [*c]const u8, length: usize, last: bool, user_data: ?*anyopaque) callconv(.c) void {
+            {
+                const slice: []const u8 = (if ((length > 0)) data[0..length] else "");
+                _ = handler(@ptrCast(@alignCast(user_data)), bun.cast(SelfPtr, res_), slice, last);
+            }
+    }
+};
+}
+
+pub fn ResCorkedWrap(comptime handler: anytype, comptime ArgsType: type) type {
+        return struct {
+
+pub fn handle(user_data: ?*anyopaque) callconv(.c) void {
+            {
+                const args: *ArgsType = @ptrCast(@alignCast(user_data.?));
+                _ = @call(bun.callmod_inline, handler_fn, args.*);
+            }
+    }
+    const handler_fn = handler;
+};
+}
+
+pub fn ResRunCorkedWrap(comptime handler: anytype) type {
+        return struct {
+
+pub fn onCork(user_data: ?*anyopaque) callconv(.c) void {
+            {
+                _ = handler(@ptrCast(@alignCast(user_data)));
+            }
+    }
+};
+}
+
+pub fn AnyResOnDataWrap(comptime UserDataType: type, comptime handler: anytype) type {
+        return struct {
+
+pub fn ssl_cb(user_data: UserDataType, _: *ResponseTLS, data: []const u8, last: bool) void {
+            _ = @call(bun.callmod_inline, handler, .{ user_data, data, last });
+    }
+
+pub fn tcp_cb(user_data: UserDataType, _: *ResponseTCP, data: []const u8, last: bool) void {
+            _ = @call(bun.callmod_inline, handler, .{ user_data, data, last });
+    }
+
+pub fn h3_cb(user_data: UserDataType, _: *H3Response, data: []const u8, last: bool) void {
+            _ = @call(bun.callmod_inline, handler, .{ user_data, data, last });
+    }
+};
+}
+
+pub fn AnyResOnWritableWrap(comptime UserDataType: type, comptime handler: anytype) type {
+        return struct {
+
+pub fn ssl_cb(user_data: UserDataType, offset: u64, resp: *ResponseTLS) bool {
+            return handler(user_data, offset, AnyResponse{ .SSL = resp });
+    }
+
+pub fn tcp_cb(user_data: UserDataType, offset: u64, resp: *ResponseTCP) bool {
+            return handler(user_data, offset, AnyResponse{ .TCP = resp });
+    }
+
+pub fn h3_cb(user_data: UserDataType, offset: u64, resp: *H3Response) bool {
+            return handler(user_data, offset, AnyResponse{ .H3 = resp });
+    }
+};
+}
+
+pub fn AnyResCbWrap(comptime UserDataType: type, comptime handler: anytype) type {
+        return struct {
+
+pub fn ssl_cb(user_data: UserDataType, resp: *ResponseTLS) void {
+            _ = handler(user_data, AnyResponse{ .SSL = resp });
+    }
+
+pub fn tcp_cb(user_data: UserDataType, resp: *ResponseTCP) void {
+            _ = handler(user_data, AnyResponse{ .TCP = resp });
+    }
+
+pub fn h3_cb(user_data: UserDataType, resp: *H3Response) void {
+            _ = handler(user_data, AnyResponse{ .H3 = resp });
+    }
 };
 }

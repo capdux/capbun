@@ -1,3 +1,9 @@
+pub enum DeferredErrorKind {
+    plainerror,
+    typeerror,
+    rangeerror,
+}
+
 // Error's cannot be created off of the main thread. So we use this to store the
 // information until its ready to be materialized later.
 pub struct DeferredError {
@@ -5,7 +11,7 @@ pub struct DeferredError {
     code: jsc.Node.ErrorCode,
     msg: bun.String,
 
-    pub const Kind = enum { plainerror, typeerror, rangeerror };
+    pub const Kind = DeferredErrorKind;
 
     static fn @"from"(kind: Kind, code: jsc.Node.ErrorCode, comptime fmt: [:0]const u8, args: auto): DeferredError {
         return {

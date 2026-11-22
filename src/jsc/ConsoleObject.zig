@@ -84,6 +84,83 @@ pub const bun = @import("bun");
 const ObjectPool = @import("../collections/pool.zig").ObjectPool;
 pub const CliMod = @import("../cli/cli.zig");
 const JestPrettyFormat = @import("../test_runner/pretty_format.zig").JestPrettyFormat;
+pub const MessageLevel = enum(u32) {
+    Log = 0,
+    Warning = 1,
+    Error = 2,
+    Debug = 3,
+    Info = 4,
+    _,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const MessageType = enum(u32) {
+    Log = 0,
+    Dir = 1,
+    DirXML = 2,
+    Table = 3,
+    Trace = 4,
+    StartGroup = 5,
+    StartGroupCollapsed = 6,
+    EndGroup = 7,
+    Clear = 8,
+    Assert = 9,
+    Timing = 10,
+    Profile = 11,
+    ProfileEnd = 12,
+    Image = 13,
+    _,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const ErrorDisplayLevelColon = enum {
+    include_colon,
+    exclude_colon,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const FormatOptionsErrorDisplayLevel = enum {
+    normal,
+    warn,
+    full,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+    
+    pub const Colon = ErrorDisplayLevelColon;
+    
+    pub const Formatter = ErrorDisplayLevelFormatter;
+    
+    pub const formatter = ErrorDisplayLevelFormatter.init;
+};
+
+pub const FormatterPercentTag = enum {
+    s,
+    i,
+    f,
+    o,
+    O,
+    c,
+    j,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const ScriptArguments = opaque {
+};
+
 pub const ConsoleObject = @This();
 
 stderr_buffer: [4096]u8,
@@ -106,7 +183,6 @@ pub fn init(out: *ConsoleObject, error_writer: Output.Source.StreamType, writer:
         out.error_writer = (&out.error_writer_backing.new_interface);
         out.writer = (&out.writer_backing.new_interface);
 }
-const ScriptArguments = opaque {};
 const DEFAULT_CONSOLE_LOG_DEPTH: u16 = 2;
 const Counter = std.AutoHashMapUnmanaged(u64, u32);
 pub fn DeinitGuard(comptime T: type) type {
@@ -774,7 +850,14 @@ pub fn printTable(self: *TablePrinter, comptime Writer: type, writer: *std.Io.Wr
     const RowKey = union(@This().Type) {
         str: String,
         num: u32,
-        const Type = enum { str, num };
+        pub const Type = enum {
+            str,
+            num,
+            pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+            pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+            pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+            pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+        };
     };
     const PADDING = 1;
     const VisibleCharacterCounter = struct {
@@ -992,7 +1075,6 @@ pub fn addForNewLine(self: *Formatter, len: usize) void {
 
 pub fn writeWithFormatting(self: *Formatter, comptime Writer: type, writer_: Writer, comptime Slice: type, slice_: Slice, global: *JSGlobalObject, comptime enable_ansi_colors: bool) bun.JSError!void {
             const Wrapped = Formatter.WrappedWriter(Writer);
-            _ = &Wrapped;
             var writer = Wrapped{ .ctx = writer_, .estimated_line_length = (&self.estimated_line_length) };
             _ = &writer;
             var slice: []const u8 = @as([]const u8, @ptrCast(@alignCast(slice_)));
@@ -1401,7 +1483,6 @@ pub fn printAs(self: *Formatter, comptime Format: ConsoleObject.Formatter.Tag, c
             var remove_before_recurse = false;
             _ = &remove_before_recurse;
             const Wrapped = Formatter.WrappedWriter(Writer);
-            _ = &Wrapped;
             var writer = Wrapped{ .ctx = writer_, .estimated_line_length = (&self.estimated_line_length) };
             _ = &writer;
             var _wf_g = WriterFailedGuard(@TypeOf(&writer)){ .formatter = self, .writer = (blk: {
@@ -2065,7 +2146,6 @@ _ = writer.print(("{s}({d}) {{" ++ (if (single_line) " " else "\n")), .{ map_nam
                 switch (self.single_line) {
 inline else => |single_line| {
 const Iter = Formatter.MapIterator(Writer, enable_ansi_colors, false, single_line);
-                _ = &Iter;
                 var iter = Iter{ .formatter = self, .writer = writer_ };
                 _ = &iter;
                 _ = try value.forEach(self.globalThis, (&iter), @TypeOf(iter).forEach);
@@ -2100,7 +2180,6 @@ var _qs_g = RestoreQuoteStringsGuard{ .fmt = self, .prev = self.quote_strings };
                 switch (self.single_line) {
 inline else => |single_line| {
 const Iter = Formatter.MapIterator(Writer, enable_ansi_colors, true, single_line);
-                _ = &Iter;
                 var iter = Iter{ .formatter = self, .writer = writer_ };
                 _ = &iter;
                 _ = try value.forEach(self.globalThis, (&iter), @TypeOf(iter).forEach);
@@ -2139,7 +2218,6 @@ var _qs_g = RestoreQuoteStringsGuard{ .fmt = self, .prev = self.quote_strings };
                 switch (self.single_line) {
 inline else => |single_line| {
 const Iter = Formatter.MapIterator(Writer, enable_ansi_colors, true, single_line);
-                _ = &Iter;
                 var iter = Iter{ .formatter = self, .writer = writer_ };
                 _ = &iter;
                 _ = try value.forEach(self.globalThis, (&iter), @TypeOf(iter).forEach);
@@ -2185,7 +2263,6 @@ _ = writer.print(("{s}({d}) {{" ++ (if (single_line) " " else "\n")), .{ set_nam
                 switch (self.single_line) {
 inline else => |single_line| {
 const Iter = Formatter.SetIterator(Writer, enable_ansi_colors, single_line);
-                _ = &Iter;
                 var iter = Iter{ .formatter = self, .writer = writer_ };
                 _ = &iter;
                 _ = try value.forEach(self.globalThis, (&iter), @TypeOf(iter).forEach);
@@ -2790,176 +2867,135 @@ self.custom_formatted_object = result.tag.CustomFormattedObject;
             }
         }).init, true, 16);
     };
-    pub const Tag = enum {
-            StringPossiblyFormatted,
-            String,
-            Undefined,
-            Double,
-            Integer,
-            Null,
-            Boolean,
-            Array,
-            Object,
-            Function,
-            Class,
-            Error,
-            TypedArray,
-            Map,
-            MapIterator,
-            SetIterator,
-            Set,
-            BigInt,
-            Symbol,
-    
-            CustomFormattedObject,
-    
-            GlobalObject,
-            Private,
-            Promise,
-    
-            JSON,
-            toJSON,
-            NativeCode,
-    
-            JSX,
-            Event,
-    
-            GetterSetter,
-            CustomGetterSetter,
-    
-            Proxy,
-            RevokedProxy,
-    
-            pub fn isPrimitive(this: Tag) bool {
-                return switch (this) {
-                    .String,
-                    .StringPossiblyFormatted,
-                    .Undefined,
-                    .Double,
-                    .Integer,
-                    .Null,
-                    .Boolean,
-                    .Symbol,
-                    .BigInt,
-                    => true,
-                    else => false,
-                };
-            }
-    
-            pub fn canHaveCircularReferences(tag: Tag) bool {
-                return switch (tag) {
-                    .Function, .Array, .Object, .Map, .Set, .Error, .Class, .Event => true,
-                    else => false,
-                };
-            }
-    
-            const Result = struct {
-                tag: union(Tag) {
-                    StringPossiblyFormatted: void,
-                    String: void,
-                    Undefined: void,
-                    Double: void,
-                    Integer: void,
-                    Null: void,
-                    Boolean: void,
-                    Array: void,
-                    Object: void,
-                    Function: void,
-                    Class: void,
-                    Error: void,
-                    TypedArray: void,
-                    Map: void,
-                    MapIterator: void,
-                    SetIterator: void,
-                    Set: void,
-                    BigInt: void,
-                    Symbol: void,
-                    CustomFormattedObject: CustomFormattedObject,
-                    GlobalObject: void,
-                    Private: void,
-                    Promise: void,
-                    JSON: void,
-                    toJSON: void,
-                    NativeCode: void,
-                    JSX: void,
-                    Event: void,
-                    GetterSetter: void,
-                    CustomGetterSetter: void,
-                    Proxy: void,
-                    RevokedProxy: void,
-    
-                    pub fn isPrimitive(this: @This()) bool {
-                        return @as(Tag, this).isPrimitive();
-                    }
-    
-                    pub fn tag(this: @This()) Tag {
-                        return @as(Tag, this);
-                    }
-                },
-                cell: JSValue.JSType = JSValue.JSType.Cell,
-            };
-    
-            pub const Options = packed struct {
-                hide_global: bool = false,
-                disable_inspect_custom: bool = false,
-            };
-    
-            pub const get = getFormatterTag;
-            pub const getAdvanced = getAdvancedFormatterTag;
-        };
+    pub const Tag = FormatterTag;
     const CellType = jsc.C.CellType;
-    const PercentTag = enum {
-            s, // s
-            i, // i or d
-            f, // f
-            o, // o
-            O, // O
-            c, // c
-            j, // j
-        };
+    const PercentTag = FormatterPercentTag;
     const indentation_buf = [_]u8{' '} ** 64;
     pub const PropertyIterator = FormatterPropertyIterator;
 };
 
 const OptionalTimer = ?std.time.Timer;
 const CLI = CliMod.Command;
-pub const MessageLevel = enum(u32) {
-    Log = 0,
-    Warning = 1,
-    Error = 2,
-    Debug = 3,
-    Info = 4,
-    _,
-};
-pub const MessageType = enum(u32) {
-    Log = 0,
-    Dir = 1,
-    DirXML = 2,
-    Table = 3,
-    Trace = 4,
-    StartGroup = 5,
-    StartGroupCollapsed = 6,
-    EndGroup = 7,
-    Clear = 8,
-    Assert = 9,
-    Timing = 10,
-    Profile = 11,
-    ProfileEnd = 12,
-    Image = 13,
-    _,
-};
 var stderr_mutex: bun.Mutex = .{};
 var stdout_mutex: bun.Mutex = .{};
 threadlocal var stderr_lock_count: u16 = 0;
 threadlocal var stdout_lock_count: u16 = 0;
-pub const FormatOptionsErrorDisplayLevel = enum {
-    normal,
-    warn,
-    full,
+pub const FormatterTag = enum {
+    StringPossiblyFormatted,
+    String,
+    Undefined,
+    Double,
+    Integer,
+    Null,
+    Boolean,
+    Array,
+    Object,
+    Function,
+    Class,
+    Error,
+    TypedArray,
+    Map,
+    MapIterator,
+    SetIterator,
+    Set,
+    BigInt,
+    Symbol,
 
-    pub const Colon = enum { include_colon, exclude_colon };
-    pub const Formatter = ErrorDisplayLevelFormatter;
-    pub const formatter = ErrorDisplayLevelFormatter.init;
+    CustomFormattedObject,
+
+    GlobalObject,
+    Private,
+    Promise,
+
+    JSON,
+    toJSON,
+    NativeCode,
+
+    JSX,
+    Event,
+
+    GetterSetter,
+    CustomGetterSetter,
+
+    Proxy,
+    RevokedProxy,
+
+    pub fn isPrimitive(this: FormatterTag) bool {
+        return switch (this) {
+            .String,
+            .StringPossiblyFormatted,
+            .Undefined,
+            .Double,
+            .Integer,
+            .Null,
+            .Boolean,
+            .Symbol,
+            .BigInt,
+            => true,
+            else => false,
+        };
+    }
+
+    pub fn canHaveCircularReferences(tag: FormatterTag) bool {
+        return switch (tag) {
+            .Function, .Array, .Object, .Map, .Set, .Error, .Class, .Event => true,
+            else => false,
+        };
+    }
+
+    const Result = struct {
+        tag: union(FormatterTag) {
+            StringPossiblyFormatted: void,
+            String: void,
+            Undefined: void,
+            Double: void,
+            Integer: void,
+            Null: void,
+            Boolean: void,
+            Array: void,
+            Object: void,
+            Function: void,
+            Class: void,
+            Error: void,
+            TypedArray: void,
+            Map: void,
+            MapIterator: void,
+            SetIterator: void,
+            Set: void,
+            BigInt: void,
+            Symbol: void,
+            CustomFormattedObject: CustomFormattedObject,
+            GlobalObject: void,
+            Private: void,
+            Promise: void,
+            JSON: void,
+            toJSON: void,
+            NativeCode: void,
+            JSX: void,
+            Event: void,
+            GetterSetter: void,
+            CustomGetterSetter: void,
+            Proxy: void,
+            RevokedProxy: void,
+
+            pub fn isPrimitive(this: @This()) bool {
+                return @as(FormatterTag, this).isPrimitive();
+            }
+
+            pub fn tag(this: @This()) FormatterTag {
+                return @as(FormatterTag, this);
+            }
+        },
+        cell: JSValue.JSType = JSValue.JSType.Cell,
+    };
+
+    pub const Options = packed struct {
+        hide_global: bool = false,
+        disable_inspect_custom: bool = false,
+    };
+
+    pub const get = getFormatterTag;
+    pub const getAdvanced = getAdvancedFormatterTag;
 };
 const PendingTimers = std.AutoHashMap(u64, OptionalTimer);
 threadlocal var pending_time_logs: PendingTimers = undefined;
@@ -3273,7 +3309,6 @@ pub fn FormatterPropertyIterator(comptime Writer: type, comptime enable_ansi_col
 pub fn handleFirstProperty(self: *@This(), globalThis: *jsc.JSGlobalObject, value: JSValue) bun.JSError!void {
             if ((value.isCell() and (!value.jsType().isFunction()))) {
                 const Wrapped = Formatter.WrappedWriter(Writer);
-                _ = &Wrapped;
                 var writer = Wrapped{ .ctx = self.writer, .failed = false, .estimated_line_length = (&self.formatter.estimated_line_length) };
                 _ = &writer;
                 if (try Formatter.getObjectName(globalThis, value)) |name_str| {
@@ -3314,7 +3349,6 @@ pub fn forEach(globalThis: *JSGlobalObject, ctx_ptr: ?*anyopaque, key: *ZigStrin
             }
             const writer_ = ctx.writer;
             const Wrapped = Formatter.WrappedWriter(Writer);
-            _ = &Wrapped;
             var writer = Wrapped{ .ctx = writer_, .failed = false, .estimated_line_length = (&fmt.estimated_line_length) };
             _ = &writer;
             const tag = (blk_catch_3: { break :blk_catch_3 ((Formatter.Tag.getAdvanced(value, globalThis, .{ .hide_global = true, .disable_inspect_custom = fmt.disable_inspect_custom })) catch |__ce_3| { _ = &__ce_3; return; }); });

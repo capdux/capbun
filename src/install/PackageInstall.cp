@@ -50,6 +50,318 @@ pub struct EndGuard<T> {
     }
 }
 
+let once_log_win_hardlink: bool = false;
+let once_log_symlink_hardlink: bool = false;
+
+fn copyFilesClonefile(
+    destination_dir_: std.fs.Dir,
+    walker: *Walker,
+): !u32 {
+    let real_file_count: u32 = 0;
+    let stackpath: [bun.MAX_PATH_BYTES]u8 = undefined;
+    while (entry := walker.next().unwrap()?) {
+        switch (entry.kind) {
+            .directory => {
+                * = bun.sys.mkdirat(.fromStdDir(destination_dir_), entry.path, 0o755);
+            },
+            .file => {
+                bun.copy(u8, &stackpath, entry.path);
+                stackpath[entry.path.len] = 0;
+                const path: [:0]u8 = stackpath[0..entry.path.len :0];
+                const basename: [:0]u8 = stackpath[entry.path.len - entry.basename.len .. entry.path.len :0];
+                const rc = bun.c.clonefileat(
+                    entry.dir.cast(),
+                    basename,
+                    destination_dir_.fd,
+                    path,
+                    0,
+                );
+                if (rc != 0) {
+                    switch (std.posix.errno(rc)) {
+                        .XDEV => return error.NotSupported, // not same file system
+                        .OPNOTSUPP => return error.NotSupported,
+                        .NOENT => return error.FileNotFound,
+                        // sometimes the downloaded npm package has already node_modules with it, so just ignore exist error here
+                        .EXIST => {},
+                        .ACCES => return error.AccessDenied,
+                        else => return error.Unexpected,
+                    }
+                }
+
+                real_file_count += 1;
+            },
+            else => {},
+        }
+    }
+
+    return real_file_count;
+}
+
+fn copyFilesCopyfile(
+    destination_dir_: std.fs.Dir,
+    walker: *Walker,
+    progress_: (*Progress)?,
+    to_copy_into1: if (Environment.isWindows) []u16 else void,
+    head1: if (Environment.isWindows) []u16 else void,
+    to_copy_into2: if (Environment.isWindows) []u16 else void,
+    head2: if (Environment.isWindows) []u16 else void,
+): !u32 {
+    let real_file_count: u32 = 0;
+    let copy_file_state = bun.CopyFileState{};
+
+    while (entry := walker.next().unwrap()?) {
+        if (comptime Environment.isWindows) {
+            switch (entry.kind) {
+                .directory, .file => {},
+                else => continue,
+            }
+
+            if (entry.path.len > to_copy_into1.len || entry.path.len > to_copy_into2.len) {
+                return error.NameTooLong;
+            }
+
+            @memcpy(to_copy_into1[0..entry.path.len], entry.path);
+            head1[entry.path.len + (head1.len - to_copy_into1.len)] = 0;
+            const dest: [:0]u16 = head1[0 .. entry.path.len + head1.len - to_copy_into1.len :0];
+
+            @memcpy(to_copy_into2[0..entry.path.len], entry.path);
+            head2[entry.path.len + (head1.len - to_copy_into2.len)] = 0;
+            const src: [:0]u16 = head2[0 .. entry.path.len + head2.len - to_copy_into2.len :0];
+
+            switch (entry.kind) {
+                .directory => {
+                    if (bun.windows.CreateDirectoryExW(src.ptr, dest.ptr, null) == 0) {
+                        bun.MakePath.makePath(u16, destination_dir_, entry.path) catch {};
+                    }
+                },
+                .file => {
+                    if (bun.windows.CopyFileW(src.ptr, dest.ptr, 0) == 0) {
+                        if (entry_dirname := bun.Dirname.dirname(u16, entry.path)) {
+                            bun.MakePath.makePath(u16, destination_dir_, entry_dirname) catch {};
+                            if (bun.windows.CopyFileW(src.ptr, dest.ptr, 0) != 0) {
+                                continue;
+                            }
+                        }
+
+                        if (progress := progress_) {
+                            progress.root.end();
+                            progress.refresh();
+                        }
+
+                        if (e := bun.windows.Win32Error.get().toSystemErrno()) {
+                            Output.prettyError("<r><red>{s}<r>: copying file {f}", .{ @tagName(e), bun.fmt.fmtOSPath(entry.path, .{}) });
+                        } else {
+                            Output.prettyError("<r><red>error<r> copying file {f}", .{bun.fmt.fmtOSPath(entry.path, .{})});
+                        }
+
+                        Global.crash();
+                    }
+                },
+                else => unreachable, // handled above
+            }
+        } else {
+            if (entry.kind != .file) continue;
+            real_file_count += 1;
+            const createFile = std.fs.Dir.createFile;
+
+            let in_file = entry.dir.openat(entry.basename, bun.O.RDONLY, 0).unwrap()?;
+            const _guard_in_file = CloseGuard<@TypeOf(&in_file)>{ ptr: &in_file };
+
+            PackageInstall.debug("createFile {} {s}\n", .{ destination_dir_.fd, entry.path });
+            let outfile = createFile(destination_dir_, entry.path, .{}) catch brk: {
+                if (entry_dirname := bun.Dirname.dirname(bun.OSPathChar, entry.path)) {
+                    bun.MakePath.makePath(bun.OSPathChar, destination_dir_, entry_dirname) catch {};
+                }
+                break :brk createFile(destination_dir_, entry.path, .{}) catch |e| {
+                    if (progress := progress_) {
+                        progress.root.end();
+                        progress.refresh();
+                    }
+
+                    Output.prettyErrorln("<r><red>{s}<r>: copying file {f}", .{ @errorName(e), bun.fmt.fmtOSPath(entry.path, .{}) });
+                    Global.crash();
+                };
+            };
+            const _guard_outfile = CloseGuard<@TypeOf(&outfile)>{ ptr: &outfile };
+
+            if (comptime Environment.isPosix) {
+                const stat = in_file.stat().unwrap() catch continue;
+                * = bun.c.fchmod(outfile.handle, @intCast(stat.mode));
+            }
+
+            bun.copyFileWithState(in_file, .fromStdFile(outfile), &copy_file_state).unwrap() catch |e| {
+                if (progress := progress_) {
+                    progress.root.end();
+                    progress.refresh();
+                }
+
+                Output.prettyError("<r><red>{s}<r>: copying file {f}", .{ @errorName(e), bun.fmt.fmtOSPath(entry.path, .{}) });
+                Global.crash();
+            };
+        }
+    }
+
+    return real_file_count;
+}
+
+fn copyFilesHardlink(
+    destination_dir: std.fs.Dir,
+    walker: *Walker,
+    to_copy_into1: if (Environment.isWindows) []u16 else void,
+    head1: if (Environment.isWindows) []u16 else void,
+    to_copy_into2: if (Environment.isWindows) []u16 else void,
+    head2: if (Environment.isWindows) []u16 else void,
+): !u32 {
+    let real_file_count: u32 = 0;
+    const queue = if (Environment.isWindows) HardLinkWindowsInstallTask.initQueue() else @as(void, undefined);
+
+    while (entry := walker.next().unwrap()?) {
+        if (comptime Environment.isPosix) {
+            switch (entry.kind) {
+                .directory => {
+                    bun.MakePath.makePath(std.meta.Elem(@TypeOf(entry.path)), destination_dir, entry.path) catch {};
+                },
+                .file => {
+                    std.posix.linkatZ(entry.dir.cast(), entry.basename, destination_dir.fd, entry.path, 0) catch |e| {
+                        if (e != error.PathAlreadyExists) {
+                            return e;
+                        }
+
+                        std.posix.unlinkatZ(destination_dir.fd, entry.path, 0) catch {};
+                        std.posix.linkatZ(entry.dir.cast(), entry.basename, destination_dir.fd, entry.path, 0)?;
+                    };
+
+                    real_file_count += 1;
+                },
+                else => {},
+            }
+        } else {
+            switch (entry.kind) {
+                .file => {},
+                else => continue,
+            }
+
+            if (entry.path.len > to_copy_into1.len || entry.path.len > to_copy_into2.len) {
+                return error.NameTooLong;
+            }
+
+            @memcpy(to_copy_into1[0..entry.path.len], entry.path);
+            head1[entry.path.len + (head1.len - to_copy_into1.len)] = 0;
+            const dest: [:0]u16 = head1[0 .. entry.path.len + head1.len - to_copy_into1.len :0];
+
+            @memcpy(to_copy_into2[0..entry.path.len], entry.path);
+            head2[entry.path.len + (head1.len - to_copy_into2.len)] = 0;
+            const src: [:0]u16 = head2[0 .. entry.path.len + head2.len - to_copy_into2.len :0];
+
+            queue.push(HardLinkWindowsInstallTask.init(src, dest, entry.basename));
+            real_file_count += 1;
+        }
+    }
+
+    if (comptime Environment.isWindows) {
+        queue.wait();
+
+        // .monotonic is okay because no tasks are running (could be made non-atomic)
+        if (task := queue.errored_task.load(.monotonic)) {
+            if (e := task.err) {
+                return e;
+            }
+        }
+    }
+
+    return real_file_count;
+}
+
+fn copyFilesSymlink(
+    destination_dir: std.fs.Dir,
+    walker: *Walker,
+    to_copy_into1: if (Environment.isWindows) []u16 else void,
+    head1: if (Environment.isWindows) []u16 else void,
+    to_copy_into2: if (Environment.isWindows) []u16 else []u8,
+    head2: if (Environment.isWindows) []u16 else []u8,
+): !u32 {
+    let real_file_count: u32 = 0;
+    while (entry := walker.next().unwrap()?) {
+        if (comptime Environment.isPosix) {
+            switch (entry.kind) {
+                .directory => {
+                    bun.MakePath.makePath(std.meta.Elem(@TypeOf(entry.path)), destination_dir, entry.path) catch {};
+                },
+                .file => {
+                    @memcpy(to_copy_into2[0..entry.path.len], entry.path);
+                    head2[entry.path.len + (head2.len - to_copy_into2.len)] = 0;
+                    const target: [:0]u8 = head2[0 .. entry.path.len + head2.len - to_copy_into2.len :0];
+
+                    std.posix.symlinkat(target, destination_dir.fd, entry.path) catch |e| {
+                        if (e != error.PathAlreadyExists) {
+                            return e;
+                        }
+
+                        std.posix.unlinkat(destination_dir.fd, entry.path, 0) catch {};
+                        std.posix.symlinkat(entry.basename, destination_dir.fd, entry.path)?;
+                    };
+
+                    real_file_count += 1;
+                },
+                else => {},
+            }
+        } else {
+            switch (entry.kind) {
+                .directory, .file => {},
+                else => continue,
+            }
+
+            if (entry.path.len > to_copy_into1.len || entry.path.len > to_copy_into2.len) {
+                return error.NameTooLong;
+            }
+
+            @memcpy(to_copy_into1[0..entry.path.len], entry.path);
+            head1[entry.path.len + (head1.len - to_copy_into1.len)] = 0;
+            const dest: [:0]u16 = head1[0 .. entry.path.len + head1.len - to_copy_into1.len :0];
+
+            @memcpy(to_copy_into2[0..entry.path.len], entry.path);
+            head2[entry.path.len + (head1.len - to_copy_into2.len)] = 0;
+            const src: [:0]u16 = head2[0 .. entry.path.len + head2.len - to_copy_into2.len :0];
+
+            switch (entry.kind) {
+                .directory => {
+                    if (bun.windows.CreateDirectoryExW(src.ptr, dest.ptr, null) == 0) {
+                        bun.MakePath.makePath(u16, destination_dir, entry.path) catch {};
+                    }
+                },
+                .file => {
+                    switch (bun.sys.symlinkW(dest, src, .{})) {
+                        .err e => {
+                            if (entry_dirname := bun.Dirname.dirname(u16, entry.path)) {
+                                bun.MakePath.makePath(u16, destination_dir, entry_dirname) catch {};
+                                if (bun.sys.symlinkW(dest, src, .{}) == .result) {
+                                    continue;
+                                }
+                            }
+
+                            if (PackageManager.verbose_install) {
+                                if (!once_log_symlink_hardlink) {
+                                    once_log_symlink_hardlink = true;
+                                    Output.warn("CreateHardLinkW failed, falling back to CopyFileW: {f} -> {f}\n", .{
+                                        bun.fmt.fmtOSPath(src, .{}),
+                                        bun.fmt.fmtOSPath(dest, .{}),
+                                    });
+                                }
+                            }
+
+                            return bun.errnoToZigErr(e.errno);
+                        },
+                        .result => {},
+                    }
+                },
+                else => unreachable, // handled above
+            }
+        }
+    }
+
+    return real_file_count;
+}
+
 pub struct PackageInstallPatch {
     path: string,
     contents_hash: u64,
@@ -309,17 +621,8 @@ struct HardLinkWindowsInstallTask {
         }
 
         if (PackageManager.verbose_install) {
-            const once_log = struct {
-                let once = false;
-
-                fn get(): bool {
-                    const prev = once;
-                    once = true;
-                    return !prev;
-                }
-            }.get();
-
-            if (once_log) {
+            if (!once_log_win_hardlink) {
+                once_log_win_hardlink = true;
                 Output.warn("CreateHardLinkW failed, falling back to CopyFileW: {f} -> {f}\n", .{
                     bun.fmt.fmtOSPath(src, .{}),
                     bun.fmt.fmtOSPath(dest, .{}),
@@ -631,56 +934,10 @@ pub struct PackageInstall {
         walker_.resolve_unknown_entry_types = true;
         const _guard_walker = DeinitGuard<@TypeOf(&walker_)>{ ptr: &walker_ };
 
-        const FileCopier = struct {
-            fn copy(
-                destination_dir_: std.fs.Dir,
-                walker: *Walker,
-            ) !u32 {
-                let real_file_count: u32 = 0;
-                let stackpath: [bun.MAX_PATH_BYTES]u8 = undefined;
-                while (try walker.next().unwrap()) |entry| {
-                    switch (entry.kind) {
-                        .directory => {
-                            _ = bun.sys.mkdirat(.fromStdDir(destination_dir_), entry.path, 0o755);
-                        },
-                        .file => {
-                            bun.copy(u8, &stackpath, entry.path);
-                            stackpath[entry.path.len] = 0;
-                            const path: [:0]u8 = stackpath[0..entry.path.len :0];
-                            const basename: [:0]u8 = stackpath[entry.path.len - entry.basename.len .. entry.path.len :0];
-                            switch (bun.c.clonefileat(
-                                entry.dir.cast(),
-                                basename,
-                                destination_dir_.fd,
-                                path,
-                                0,
-                            )) {
-                                0 => {},
-                                else => |errno| switch (std.posix.errno(errno)) {
-                                    .XDEV => return error.NotSupported, // not same file system
-                                    .OPNOTSUPP => return error.NotSupported,
-                                    .NOENT => return error.FileNotFound,
-                                    // sometimes the downloaded npm package has already node_modules with it, so just ignore exist error here
-                                    .EXIST => {},
-                                    .ACCES => return error.AccessDenied,
-                                    else => return error.Unexpected,
-                                },
-                            }
-
-                            real_file_count += 1;
-                        },
-                        else => {},
-                    }
-                }
-
-                return real_file_count;
-            }
-        };
-
         let subdir = destination_dir.makeOpenPath(bun.span(_.destination_dir_subpath), .{}) catch |e| return Result.fail(e, .opening_dest_dir, @errorReturnTrace());
         const _guard_subdir = CloseGuard<@TypeOf(&subdir)>{ ptr: &subdir };
 
-        _.file_count = FileCopier.copy(
+        _.file_count = copyFilesClonefile(
             subdir,
             &walker_,
         ) catch |e| return Result.fail(e, .copying_files, @errorReturnTrace());
@@ -824,117 +1081,7 @@ pub struct PackageInstall {
         if (res.isFail()) return res;
         const _guard_state = DeinitGuard<@TypeOf(&state)>{ ptr: &state };
 
-        const FileCopier = struct {
-            fn copy(
-                destination_dir_: std.fs.Dir,
-                walker: *Walker,
-                progress_: ?*Progress,
-                to_copy_into1: if (Environment.isWindows) []u16 else void,
-                head1: if (Environment.isWindows) []u16 else void,
-                to_copy_into2: if (Environment.isWindows) []u16 else void,
-                head2: if (Environment.isWindows) []u16 else void,
-            ) !u32 {
-                let real_file_count: u32 = 0;
-
-                let copy_file_state: bun.CopyFileState = .{};
-
-                while (try walker.next().unwrap()) |entry| {
-                    if (comptime Environment.isWindows) {
-                        switch (entry.kind) {
-                            .directory, .file => {},
-                            else => continue,
-                        }
-
-                        if (entry.path.len > to_copy_into1.len or entry.path.len > to_copy_into2.len) {
-                            return error.NameTooLong;
-                        }
-
-                        @memcpy(to_copy_into1[0..entry.path.len], entry.path);
-                        head1[entry.path.len + (head1.len - to_copy_into1.len)] = 0;
-                        const dest: [:0]u16 = head1[0 .. entry.path.len + head1.len - to_copy_into1.len :0];
-
-                        @memcpy(to_copy_into2[0..entry.path.len], entry.path);
-                        head2[entry.path.len + (head1.len - to_copy_into2.len)] = 0;
-                        const src: [:0]u16 = head2[0 .. entry.path.len + head2.len - to_copy_into2.len :0];
-
-                        switch (entry.kind) {
-                            .directory => {
-                                if (bun.windows.CreateDirectoryExW(src.ptr, dest.ptr, null) == 0) {
-                                    bun.MakePath.makePath(u16, destination_dir_, entry.path) catch {};
-                                }
-                            },
-                            .file => {
-                                if (bun.windows.CopyFileW(src.ptr, dest.ptr, 0) == 0) {
-                                    if (bun.Dirname.dirname(u16, entry.path)) |entry_dirname| {
-                                        bun.MakePath.makePath(u16, destination_dir_, entry_dirname) catch {};
-                                        if (bun.windows.CopyFileW(src.ptr, dest.ptr, 0) != 0) {
-                                            continue;
-                                        }
-                                    }
-
-                                    if (progress_) |progress| {
-                                        progress.root.end();
-                                        progress.refresh();
-                                    }
-
-                                    if (bun.windows.Win32Error.get().toSystemErrno()) |err| {
-                                        Output.prettyError("<r><red>{s}<r>: copying file {f}", .{ @tagName(err), bun.fmt.fmtOSPath(entry.path, .{}) });
-                                    } else {
-                                        Output.prettyError("<r><red>error<r> copying file {f}", .{bun.fmt.fmtOSPath(entry.path, .{})});
-                                    }
-
-                                    Global.crash();
-                                }
-                            },
-                            else => unreachable, // handled above
-                        }
-                    } else {
-                        if (entry.kind != .file) continue;
-                        real_file_count += 1;
-                        const createFile = std.fs.Dir.createFile;
-
-                        let in_file = try entry.dir.openat(entry.basename, bun.O.RDONLY, 0).unwrap();
-                        const _guard_in_file = CloseGuard<@TypeOf(&in_file)>{ ptr: &in_file };
-
-                        debug("createFile {} {s}\n", .{ destination_dir_.fd, entry.path });
-                        let outfile = createFile(destination_dir_, entry.path, .{}) catch brk: {
-                            if (bun.Dirname.dirname(bun.OSPathChar, entry.path)) |entry_dirname| {
-                                bun.MakePath.makePath(bun.OSPathChar, destination_dir_, entry_dirname) catch {};
-                            }
-                            break :brk createFile(destination_dir_, entry.path, .{}) catch |err| {
-                                if (progress_) |progress| {
-                                    progress.root.end();
-                                    progress.refresh();
-                                }
-
-                                Output.prettyErrorln("<r><red>{s}<r>: copying file {f}", .{ @errorName(err), bun.fmt.fmtOSPath(entry.path, .{}) });
-                                Global.crash();
-                            };
-                        };
-                        const _guard_outfile = CloseGuard<@TypeOf(&outfile)>{ ptr: &outfile };
-
-                        if (comptime Environment.isPosix) {
-                            const stat = in_file.stat().unwrap() catch continue;
-                            _ = bun.c.fchmod(outfile.handle, @intCast(stat.mode));
-                        }
-
-                        bun.copyFileWithState(in_file, .fromStdFile(outfile), &copy_file_state).unwrap() catch |err| {
-                            if (progress_) |progress| {
-                                progress.root.end();
-                                progress.refresh();
-                            }
-
-                            Output.prettyError("<r><red>{s}<r>: copying file {f}", .{ @errorName(err), bun.fmt.fmtOSPath(entry.path, .{}) });
-                            Global.crash();
-                        };
-                    }
-                }
-
-                return real_file_count;
-            }
-        };
-
-        _.file_count = FileCopier.copy(
+        _.file_count = copyFilesCopyfile(
             state.subdir,
             &state.walker,
             _.progress,
@@ -974,77 +1121,7 @@ pub struct PackageInstall {
         if (res.isFail()) return res;
         const _guard_state = DeinitGuard<@TypeOf(&state)>{ ptr: &state };
 
-        const FileCopier = struct {
-            fn copy(
-                destination_dir: std.fs.Dir,
-                walker: *Walker,
-                to_copy_into1: if (Environment.isWindows) []u16 else void,
-                head1: if (Environment.isWindows) []u16 else void,
-                to_copy_into2: if (Environment.isWindows) []u16 else void,
-                head2: if (Environment.isWindows) []u16 else void,
-            ) !u32 {
-                let real_file_count: u32 = 0;
-                const queue = if (Environment.isWindows) HardLinkWindowsInstallTask.initQueue() else @as(void, undefined);
-
-                while (try walker.next().unwrap()) |entry| {
-                    if (comptime Environment.isPosix) {
-                        switch (entry.kind) {
-                            .directory => {
-                                bun.MakePath.makePath(std.meta.Elem(@TypeOf(entry.path)), destination_dir, entry.path) catch {};
-                            },
-                            .file => {
-                                std.posix.linkatZ(entry.dir.cast(), entry.basename, destination_dir.fd, entry.path, 0) catch |err| {
-                                    if (err != error.PathAlreadyExists) {
-                                        return err;
-                                    }
-
-                                    std.posix.unlinkatZ(destination_dir.fd, entry.path, 0) catch {};
-                                    try std.posix.linkatZ(entry.dir.cast(), entry.basename, destination_dir.fd, entry.path, 0);
-                                };
-
-                                real_file_count += 1;
-                            },
-                            else => {},
-                        }
-                    } else {
-                        switch (entry.kind) {
-                            .file => {},
-                            else => continue,
-                        }
-
-                        if (entry.path.len > to_copy_into1.len or entry.path.len > to_copy_into2.len) {
-                            return error.NameTooLong;
-                        }
-
-                        @memcpy(to_copy_into1[0..entry.path.len], entry.path);
-                        head1[entry.path.len + (head1.len - to_copy_into1.len)] = 0;
-                        const dest: [:0]u16 = head1[0 .. entry.path.len + head1.len - to_copy_into1.len :0];
-
-                        @memcpy(to_copy_into2[0..entry.path.len], entry.path);
-                        head2[entry.path.len + (head1.len - to_copy_into2.len)] = 0;
-                        const src: [:0]u16 = head2[0 .. entry.path.len + head2.len - to_copy_into2.len :0];
-
-                        queue.push(HardLinkWindowsInstallTask.init(src, dest, entry.basename));
-                        real_file_count += 1;
-                    }
-                }
-
-                if (comptime Environment.isWindows) {
-                    queue.wait();
-
-                    // .monotonic is okay because no tasks are running (could be made non-atomic)
-                    if (queue.errored_task.load(.monotonic)) |task| {
-                        if (task.err) |err| {
-                            return err;
-                        }
-                    }
-                }
-
-                return real_file_count;
-            }
-        };
-
-        _.file_count = FileCopier.copy(
+        _.file_count = copyFilesHardlink(
             state.subdir,
             &state.walker,
             state.to_copy_buf,
@@ -1086,108 +1163,7 @@ pub struct PackageInstall {
             }
         }
 
-        const FileCopier = struct {
-            fn copy(
-                destination_dir: std.fs.Dir,
-                walker: *Walker,
-                to_copy_into1: if (Environment.isWindows) []u16 else void,
-                head1: if (Environment.isWindows) []u16 else void,
-                to_copy_into2: []if (Environment.isWindows) u16 else u8,
-                head2: []if (Environment.isWindows) u16 else u8,
-            ) !u32 {
-                let real_file_count: u32 = 0;
-                while (try walker.next().unwrap()) |entry| {
-                    if (comptime Environment.isPosix) {
-                        switch (entry.kind) {
-                            .directory => {
-                                bun.MakePath.makePath(std.meta.Elem(@TypeOf(entry.path)), destination_dir, entry.path) catch {};
-                            },
-                            .file => {
-                                @memcpy(to_copy_into2[0..entry.path.len], entry.path);
-                                head2[entry.path.len + (head2.len - to_copy_into2.len)] = 0;
-                                const target: [:0]u8 = head2[0 .. entry.path.len + head2.len - to_copy_into2.len :0];
-
-                                std.posix.symlinkat(target, destination_dir.fd, entry.path) catch |err| {
-                                    if (err != error.PathAlreadyExists) {
-                                        return err;
-                                    }
-
-                                    std.posix.unlinkat(destination_dir.fd, entry.path, 0) catch {};
-                                    try std.posix.symlinkat(entry.basename, destination_dir.fd, entry.path);
-                                };
-
-                                real_file_count += 1;
-                            },
-                            else => {},
-                        }
-                    } else {
-                        switch (entry.kind) {
-                            .directory, .file => {},
-                            else => continue,
-                        }
-
-                        if (entry.path.len > to_copy_into1.len or entry.path.len > to_copy_into2.len) {
-                            return error.NameTooLong;
-                        }
-
-                        @memcpy(to_copy_into1[0..entry.path.len], entry.path);
-                        head1[entry.path.len + (head1.len - to_copy_into1.len)] = 0;
-                        const dest: [:0]u16 = head1[0 .. entry.path.len + head1.len - to_copy_into1.len :0];
-
-                        @memcpy(to_copy_into2[0..entry.path.len], entry.path);
-                        head2[entry.path.len + (head1.len - to_copy_into2.len)] = 0;
-                        const src: [:0]u16 = head2[0 .. entry.path.len + head2.len - to_copy_into2.len :0];
-
-                        switch (entry.kind) {
-                            .directory => {
-                                if (bun.windows.CreateDirectoryExW(src.ptr, dest.ptr, null) == 0) {
-                                    bun.MakePath.makePath(u16, destination_dir, entry.path) catch {};
-                                }
-                            },
-                            .file => {
-                                switch (bun.sys.symlinkW(dest, src, .{})) {
-                                    .err => |err| {
-                                        if (bun.Dirname.dirname(u16, entry.path)) |entry_dirname| {
-                                            bun.MakePath.makePath(u16, destination_dir, entry_dirname) catch {};
-                                            if (bun.sys.symlinkW(dest, src, .{}) == .result) {
-                                                continue;
-                                            }
-                                        }
-
-                                        if (PackageManager.verbose_install) {
-                                            const once_log = struct {
-                                                let once = false;
-
-                                                fn get() bool {
-                                                    const prev = once;
-                                                    once = true;
-                                                    return !prev;
-                                                }
-                                            }.get();
-
-                                            if (once_log) {
-                                                Output.warn("CreateHardLinkW failed, falling back to CopyFileW: {f} -> {f}\n", .{
-                                                    bun.fmt.fmtOSPath(src, .{}),
-                                                    bun.fmt.fmtOSPath(dest, .{}),
-                                                });
-                                            }
-                                        }
-
-                                        return bun.errnoToZigErr(err.errno);
-                                    },
-                                    .result => {},
-                                }
-                            },
-                            else => unreachable, // handled above
-                        }
-                    }
-                }
-
-                return real_file_count;
-            }
-        };
-
-        _.file_count = FileCopier.copy(
+        _.file_count = copyFilesSymlink(
             state.subdir,
             &state.walker,
             if (Environment.isWindows) state.to_copy_buf else @as(void, undefined),

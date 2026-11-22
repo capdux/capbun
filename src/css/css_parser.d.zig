@@ -62,6 +62,16 @@ pub const context = @import("./context.zig");
 pub const errors_ = @import("./error.zig");
 pub const generic = @import("./generics.zig");
 pub const compat = @import("./compat.zig");
+pub const SeenStatus = enum {
+    dont_care,
+    looking_for_them,
+    seen,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const ParseUntilErrorBehavior = enum {
     consume,
     stop,
@@ -386,7 +396,7 @@ pub const StyleAttribute = struct {
     declarations: DeclarationBlock,
     sources: ArrayList(string),
 
-pub fn parse(allocator: Allocator, code: []const u8, options: ParserOptions, import_records: *bun.BabyList(ImportRecord), source_index: SrcIndex) Maybe(StyleAttribute,Err(ParserError)) {
+pub fn parse(allocator: Allocator, code: []const u8, options: ParserOptions, import_records: *bun.BabyList(ImportRecord), source_index: SrcIndex) Maybe(StyleAttribute, Err(ParserError)) {
         _ = allocator;
         _ = code;
         _ = options;
@@ -744,12 +754,12 @@ pub fn sourceLocation() SourceLocation {
 
 pub const nth = struct {
 
-pub fn parse_number_saturate(allocator: Allocator, str: []const u8) Maybe(i32,void) {
+pub fn parse_number_saturate(allocator: Allocator, str: []const u8) Maybe(i32, void) {
         _ = allocator;
         _ = str;
     }
 
-pub fn parse_n_dash_digits(allocator: Allocator, str: []const u8) Maybe(i32,void) {
+pub fn parse_n_dash_digits(allocator: Allocator, str: []const u8) Maybe(i32, void) {
         _ = allocator;
         _ = str;
     }
@@ -831,11 +841,11 @@ pub fn seeFunction(self: Tokenizer, name: []const u8) void {
         _ = name;
     }
 
-pub fn next(self: Tokenizer) Maybe(Token,void) {
+pub fn next(self: Tokenizer) Maybe(Token, void) {
         _ = self;
     }
 
-pub fn nextImpl(self: Tokenizer) Maybe(Token,void) {
+pub fn nextImpl(self: Tokenizer) Maybe(Token, void) {
         _ = self;
     }
 
@@ -1351,7 +1361,6 @@ pub const Allocator = std.mem.Allocator;
 pub const ArrayList = std.ArrayList;
 pub const Log = bun.logger.Log;
 pub const Opts = ParserOptions;
-pub const SeenStatus = enum { dont_care, looking_for_them, seen };
 pub const ColorError = error{ parse };
 pub const LocalScope = bun.StringArrayHashMapUnmanaged(LocalEntry);
 pub const LocalsResultsMap = bun.bundle_v2.MangledProps;
@@ -1435,7 +1444,7 @@ pub export fn parse_custom_at_rule_prelude(name: []const u8, input: *Parser, opt
     _ = at_rule_parser;
 }
 
-pub export fn parse_custom_at_rule_without_block(comptime T: type, prelude: T.CustomAtRuleParser.Prelude, start: *const ParserState, options: *const ParserOptions, at_rule_parser: *T, is_nested: bool) Maybe(CssRule(T.CustomAtRuleParser.AtRule),void) {
+pub export fn parse_custom_at_rule_without_block(comptime T: type, prelude: T.CustomAtRuleParser.Prelude, start: *const ParserState, options: *const ParserOptions, at_rule_parser: *T, is_nested: bool) Maybe(CssRule(T.CustomAtRuleParser.AtRule), void) {
     _ = prelude;
     _ = start;
     _ = options;

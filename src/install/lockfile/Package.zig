@@ -64,6 +64,18 @@ fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .ar
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub const PackageDiffOp = enum {
+    add,
+    remove,
+    update,
+    unlink,
+    link,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         ptr: ?*T = null,
@@ -149,6 +161,193 @@ pub inline fn hasDiffs(self: DiffSummary) bool {
             return ((((((((self.add > 0) or (self.remove > 0)) or (self.update > 0)) or self.overrides_changed) or self.catalogs_changed) or (self.added_trusted_dependencies.count() > 0)) or (self.removed_trusted_dependencies.count() > 0)) or self.patched_dependencies_changed);
     }
 };
+
+pub const PackageSerializerData = struct {
+    size: usize,
+    size_index: usize,
+    alignment: usize,
+    Type: type,
+};
+
+pub const PackageSerializerSortContext = struct {
+    data: []PackageSerializerData,
+
+pub fn swap(comptime ctx: @This(), comptime lhs: usize, comptime rhs: usize) void {
+            const tmp = ctx.data[@as(usize, @intCast(lhs))];
+            ctx.data[cp_cast_int(usize, lhs)] = ctx.data[@as(usize, @intCast(rhs))];
+            ctx.data[cp_cast_int(usize, rhs)] = tmp;
+    }
+
+pub fn lessThan(comptime ctx: @This(), comptime lhs: usize, comptime rhs: usize) bool {
+            return (ctx.data[@as(usize, @intCast(lhs))].alignment > ctx.data[@as(usize, @intCast(rhs))].alignment);
+    }
+};
+
+pub fn PackagesLoadResult(comptime List: type) type {
+    return struct {
+        list: List,
+        needs_update: bool = false,
+    };
+}
+
+pub fn PackageSerializer(comptime PackageType: type, comptime List: type) type {
+    return struct {
+
+pub fn byteSize(list: List) usize {
+                const sizes_vector: std.@"meta".Vector(sizes.bytes.len, usize) = sizes.bytes;
+                const capacity_vector: @Vector(sizes.bytes.len, usize) = @splat(list.len);
+                return @reduce(.Add, (capacity_vector * sizes_vector));
+        }
+
+pub fn save(list: List, comptime StreamType: type, stream: StreamType, comptime Writer: type, writer: Writer) !void {
+                _ = try writer.writeInt(u64, list.len, .little);
+                _ = try writer.writeInt(u64, @alignOf(@TypeOf(list.bytes)), .little);
+                _ = try writer.writeInt(u64, sizes.Types.len, .little);
+                const begin_at = try stream.getPos();
+                _ = try writer.writeInt(u64, 0, .little);
+                const end_at = try stream.getPos();
+                _ = try writer.writeInt(u64, 0, .little);
+                _ = try Aligner.write(@TypeOf(list.bytes), Writer, writer, try stream.getPos());
+                const really_begin_at = try stream.getPos();
+                var sliced = list.slice();
+                _ = &sliced;
+                inline for (FieldsEnum.fields) |field| {
+                    const value = sliced.items(@field(List.Field, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)));
+                    if (comptime Environment.allow_assert) {
+                        _ = debug("save(\"{s}\") = {d} bytes", .{ (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), std.mem.sliceAsBytes(value).len });
+                        if (comptime strings.eqlComptime((if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), "meta")) {
+                            for (cp_iter_slice(value)) |meta| {
+                                _ = &meta;
+                                _ = assert((meta.has_install_script != .old));
+                            }
+                        }
+                    }
+                    _ = (comptime assertNoUninitializedPadding(@TypeOf(value)));
+                    if (comptime strings.eqlComptime((if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), "resolution")) {
+                        for (cp_iter_slice(value)) |val| {
+                            _ = &val;
+                            const copy = val.copy();
+                            _ = try writer.writeAll(std.mem.asBytes((&copy)));
+                        }
+                    } else {
+                        _ = try writer.writeAll(std.mem.sliceAsBytes(value));
+                    }
+                }
+                const really_end_at = try stream.getPos();
+                _ = stream.pwrite(std.mem.asBytes((&really_begin_at)), begin_at);
+                _ = stream.pwrite(std.mem.asBytes((&really_end_at)), end_at);
+        }
+
+pub fn load(stream: *Stream, end: usize, allocator: Allocator, migrate_from_v2: bool) !PackagesLoadResult(List) {
+                var reader = stream.reader();
+                _ = &reader;
+                const list_len = try reader.readInt(u64, .little);
+                if ((list_len > (std.math.maxInt(u32) - 1))) {
+                    return error.@"Lockfile validation failed: list is impossibly long";
+                }
+                const input_alignment = try reader.readInt(u64, .little);
+                var list = List{  };
+                _ = &list;
+                const Alingee = @TypeOf(list.bytes);
+                const expected_alignment = @alignOf(Alingee);
+                if ((expected_alignment != input_alignment)) {
+                    return error.@"Lockfile validation failed: alignment mismatch";
+                }
+                const prev_field_count = (sizes.Types.len - 1);
+                _ = &prev_field_count;
+                const field_count = try reader.readInt(u64, .little);
+                switch (field_count) {
+sizes.Types.len => {
+
+},
+prev_field_count => {
+
+},
+else => {
+return error.@"Lockfile validation failed: unexpected number of package fields";
+},
+}
+                const begin_at = try reader.readInt(u64, .little);
+                const end_at = try reader.readInt(u64, .little);
+                if ((((begin_at > end) or (end_at > end)) or (begin_at > end_at))) {
+                    return error.@"Lockfile validation failed: invalid package list range";
+                }
+                stream.pos = begin_at;
+                _ = try list.ensureTotalCapacity(allocator, list_len);
+                var needs_update = false;
+                _ = &needs_update;
+                if (migrate_from_v2) {
+                    _ = try PackageType.migrateListFromV2(stream, end_at, allocator, (&list), list_len, (&needs_update));
+                } else {
+                    list.len = list_len;
+                    _ = try loadFields(stream, end_at, List, (&list), (&needs_update));
+                }
+                return PackagesLoadResult(List){ .list = list, .needs_update = needs_update };
+        }
+
+pub fn loadFields(stream: *Stream, end_at: u64, comptime ListType: type, list: *ListType, needs_update: *bool) !void {
+                var sliced = list.slice();
+                _ = &sliced;
+                inline for (FieldsEnum.fields) |field| {
+                    const value = sliced.items(@field(List.Field, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)));
+                    _ = (comptime assertNoUninitializedPadding(@TypeOf(value)));
+                    const bytes = std.mem.sliceAsBytes(value);
+                    const end_pos = (stream.pos + bytes.len);
+                    if ((end_pos <= end_at)) {
+                        _ = @memcpy(bytes, stream.buffer[stream.pos..][0..bytes.len]);
+                        stream.pos = end_pos;
+                        if (comptime strings.eqlComptime((if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), "meta")) {
+                            for (cp_mut_slice(&value)) |*meta| {
+                                _ = &meta;
+                                if ((meta.*).needsUpdate()) {
+                                    needs_update.* = true;
+                                    break;
+                                }
+                            }
+                        }
+                    } else {
+                        if (comptime strings.eqlComptime((if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), "scripts")) {
+                            _ = @memset(bytes, 0);
+                        } else {
+                            return error.@"Lockfile validation failed: invalid package list range";
+                        }
+                    }
+                }
+        }
+        const debug = Output.scoped(.Lockfile, .hidden);
+        pub const sizes = blk: {
+                    const fields = std.@"meta".fields(PackageType);
+                    _ = &fields;
+                    var data: [fields.len]PackageSerializerData = undefined;
+                    _ = &data;
+                    for (fields, &data, 0..) |field_info, *elem, i| {
+                        _ = &field_info;
+                        _ = &elem;
+                        _ = &i;
+                        elem.* = .{ .size = @sizeOf(field_info.type), .size_index = i, .Type = field_info.type, .alignment = (if ((@sizeOf(field_info.type) == 0)) 1 else field_info.alignment) };
+                    }
+                    _ = std.sort.insertionContext(0, fields.len, PackageSerializerSortContext{ .data = (&data) });
+                    var sizes_bytes: [fields.len]usize = undefined;
+                    _ = &sizes_bytes;
+                    var field_indexes: [fields.len]usize = undefined;
+                    _ = &field_indexes;
+                    var Types: [fields.len]type = undefined;
+                    _ = &Types;
+                    for (data, &sizes_bytes, &field_indexes, &Types) |elem, *size, *index, *Type| {
+                        _ = &elem;
+                        _ = &size;
+                        _ = &index;
+                        _ = &Type;
+                        size.* = elem.size;
+                        index.* = elem.size_index;
+                        Type.* = elem.Type;
+                    }
+                    break :blk .{ .bytes = sizes_bytes, .fields = field_indexes, .Types = Types };
+        };
+        const FieldsEnum = @typeInfo(List.Field).@"enum";
+        const AlignmentType = sizes.Types[@as(usize, @intCast(sizes.fields[0]))];
+    };
+}
 
 const string = []const u8;
 const ResolutionType = @import("../resolution.zig").ResolutionType;
@@ -1667,205 +1866,10 @@ else => .init(.uninitialized),
                 }
                 return summary;
         }
-        pub const Op = enum {
-                        add,
-                        remove,
-                        update,
-                        unlink,
-                        link,
-                    };
+        pub const Op = PackageDiffOp;
         pub const Summary = DiffSummary;
     };
     pub const List = bun.MultiArrayList(PackageType);
-    pub const Serializer = struct {
-                pub const sizes = blk: {
-                    const fields = std.@"meta".fields(PackageType);
-                    const Data = struct {
-                        size: usize,
-                        size_index: usize,
-                        alignment: usize,
-                        Type: type,
-                    };
-                    var data: [fields.len]Data = undefined;
-                    for (fields, &data, 0..) |field_info, *elem, i| {
-                        elem.* = .{
-                            .size = @sizeOf(field_info.type),
-                            .size_index = i,
-                            .Type = field_info.type,
-                            .alignment = if (@sizeOf(field_info.type) == 0) 1 else field_info.alignment,
-                        };
-                    }
-                    const SortContext = struct {
-                        data: []Data,
-                        pub fn swap(comptime ctx: @This(), comptime lhs: usize, comptime rhs: usize) void {
-                            const tmp = ctx.data[lhs];
-                            ctx.data[lhs] = ctx.data[rhs];
-                            ctx.data[rhs] = tmp;
-                        }
-                        pub fn lessThan(comptime ctx: @This(), comptime lhs: usize, comptime rhs: usize) bool {
-                            return ctx.data[lhs].alignment > ctx.data[rhs].alignment;
-                        }
-                    };
-                    std.sort.insertionContext(0, fields.len, SortContext{
-                        .data = &data,
-                    });
-                    var sizes_bytes: [fields.len]usize = undefined;
-                    var field_indexes: [fields.len]usize = undefined;
-                    var Types: [fields.len]type = undefined;
-                    for (data, &sizes_bytes, &field_indexes, &Types) |elem, *size, *index, *Type| {
-                        size.* = elem.size;
-                        index.* = elem.size_index;
-                        Type.* = elem.Type;
-                    }
-                    break :blk .{
-                        .bytes = sizes_bytes,
-                        .fields = field_indexes,
-                        .Types = Types,
-                    };
-                };
-    
-                const FieldsEnum = @typeInfo(List.Field).@"enum";
-    
-                pub fn byteSize(list: List) usize {
-                    const sizes_vector: std.@"meta".Vector(sizes.bytes.len, usize) = sizes.bytes;
-                    const capacity_vector: @Vector(sizes.bytes.len, usize) = @splat(list.len);
-                    return @reduce(.Add, capacity_vector * sizes_vector);
-                }
-    
-                const AlignmentType = sizes.Types[sizes.fields[0]];
-    
-                pub fn save(list: List, comptime StreamType: type, stream: StreamType, comptime Writer: type, writer: Writer) !void {
-                    try writer.writeInt(u64, list.len, .little);
-                    try writer.writeInt(u64, @alignOf(@TypeOf(list.bytes)), .little);
-                    try writer.writeInt(u64, sizes.Types.len, .little);
-                    const begin_at = try stream.getPos();
-                    try writer.writeInt(u64, 0, .little);
-                    const end_at = try stream.getPos();
-                    try writer.writeInt(u64, 0, .little);
-    
-                    _ = try Aligner.write(@TypeOf(list.bytes), Writer, writer, try stream.getPos());
-    
-                    const really_begin_at = try stream.getPos();
-                    var sliced = list.slice();
-    
-                    inline for (FieldsEnum.fields) |field| {
-                        const value = sliced.items(@field(List.Field, field.name));
-                        if (comptime Environment.allow_assert) {
-                            debug("save(\"{s}\") = {d} bytes", .{ field.name, std.mem.sliceAsBytes(value).len });
-                            if (comptime strings.eqlComptime(field.name, "meta")) {
-                                for (value) |meta| {
-                                    assert(meta.has_install_script != .old);
-                                }
-                            }
-                        }
-                        comptime assertNoUninitializedPadding(@TypeOf(value));
-                        if (comptime strings.eqlComptime(field.name, "resolution")) {
-                            // copy each resolution to make sure the union is zero initialized
-                            for (value) |val| {
-                                const copy = val.copy();
-                                try writer.writeAll(std.mem.asBytes(&copy));
-                            }
-                        } else {
-                            try writer.writeAll(std.mem.sliceAsBytes(value));
-                        }
-                    }
-    
-                    const really_end_at = try stream.getPos();
-    
-                    _ = stream.pwrite(std.mem.asBytes(&really_begin_at), begin_at);
-                    _ = stream.pwrite(std.mem.asBytes(&really_end_at), end_at);
-                }
-    
-                const PackagesLoadResult = struct {
-                    list: List,
-                    needs_update: bool = false,
-                };
-    
-                pub fn load(
-                    stream: *Stream,
-                    end: usize,
-                    allocator: Allocator,
-                    migrate_from_v2: bool,
-                ) !PackagesLoadResult {
-                    var reader = stream.reader();
-    
-                    const list_len = try reader.readInt(u64, .little);
-                    if (list_len > std.math.maxInt(u32) - 1)
-                        return error.@"Lockfile validation failed: list is impossibly long";
-    
-                    const input_alignment = try reader.readInt(u64, .little);
-    
-                    var list = List{};
-    
-                    const Alingee = @TypeOf(list.bytes);
-                    const expected_alignment = @alignOf(Alingee);
-                    if (expected_alignment != input_alignment) {
-                        return error.@"Lockfile validation failed: alignment mismatch";
-                    }
-    
-                    const field_count = try reader.readInt(u64, .little);
-                    switch (field_count) {
-                        sizes.Types.len => {},
-                        // "scripts" field is absent before v0.6.8
-                        // we will back-fill from each package.json
-                        sizes.Types.len - 1 => {},
-                        else => {
-                            return error.@"Lockfile validation failed: unexpected number of package fields";
-                        },
-                    }
-    
-                    const begin_at = try reader.readInt(u64, .little);
-                    const end_at = try reader.readInt(u64, .little);
-                    if (begin_at > end or end_at > end or begin_at > end_at) {
-                        return error.@"Lockfile validation failed: invalid package list range";
-                    }
-                    stream.pos = begin_at;
-                    try list.ensureTotalCapacity(allocator, list_len);
-    
-                    var needs_update = false;
-                    if (migrate_from_v2) {
-                        try migrateListFromV2(stream, end_at, allocator, &list, list_len, &needs_update);
-                    } else {
-                        list.len = list_len;
-                        try loadFields(stream, end_at, List, &list, &needs_update);
-                    }
-    
-                    return .{
-                        .list = list,
-                        .needs_update = needs_update,
-                    };
-                }
-    
-                pub fn loadFields(stream: *Stream, end_at: u64, comptime ListType: type, list: *ListType, needs_update: *bool) !void {
-                    var sliced = list.slice();
-    
-                    inline for (FieldsEnum.fields) |field| {
-                        const value = sliced.items(@field(List.Field, field.name));
-    
-                        comptime assertNoUninitializedPadding(@TypeOf(value));
-                        const bytes = std.mem.sliceAsBytes(value);
-                        const end_pos = stream.pos + bytes.len;
-                        if (end_pos <= end_at) {
-                            @memcpy(bytes, stream.buffer[stream.pos..][0..bytes.len]);
-                            stream.pos = end_pos;
-                            if (comptime strings.eqlComptime(field.name, "meta")) {
-                                // need to check if any values were created from an older version of bun
-                                // (currently just `has_install_script`). If any are found, the values need
-                                // to be updated before saving the lockfile.
-                                for (value) |*meta| {
-                                    if (meta.needsUpdate()) {
-                                        needs_update.* = true;
-                                        break;
-                                    }
-                                }
-                            }
-                        } else if (comptime strings.eqlComptime(field.name, "scripts")) {
-                            @memset(bytes, 0);
-                        } else {
-                            return error.@"Lockfile validation failed: invalid package list range";
-                        }
-                    }
-                }
-            };
+    pub const Serializer = PackageSerializer(PackageType, List);
 };
 }

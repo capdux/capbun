@@ -64,6 +64,10 @@ fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .ar
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub const NodeModulesOkSingleton = struct {
+    pub var node_modules_is_ok: bool = false;
+};
+
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         ptr: *T,
@@ -1030,10 +1034,7 @@ if (comptime Environment.allow_assert) {
                     self.summary.fail = (self.summary.fail + 1);
                 } else {
                     if ((cause.err == error.AccessDenied)) {
-                        const Singleton = struct {
-                            var node_modules_is_ok = false;
-                        };
-                        if ((!Singleton.node_modules_is_ok)) {
+                        if ((!NodeModulesOkSingleton.node_modules_is_ok)) {
                             if ((!Environment.isWindows)) {
                                 const stat = (blk_catch_17: { break :blk_catch_17 ((bun.sys.fstat(.fromStdDir((blk_catch_15: { break :blk_catch_15 ((lazy_package_dir.getDir()) catch |e| { _ = &e; _ = Output.err("EACCES", "Permission denied while installing <b>{s}<r>", .{ @TypeOf(self.names[@as(usize, @intCast(package_id))]).slice((&self.names[@as(usize, @intCast(package_id))]), self.lockfile.buffers.string_bytes.items) });
                                 if (Environment.isDebug) {
@@ -1050,7 +1051,7 @@ if (comptime Environment.allow_assert) {
                                     _ = Global.exit(1);
                                 }
                             }
-                            Singleton.node_modules_is_ok = true;
+                            NodeModulesOkSingleton.node_modules_is_ok = true;
                         }
                         _ = Output.err("EACCES", "Permission denied while installing <b>{s}<r>", .{ @TypeOf(self.names[@as(usize, @intCast(package_id))]).slice((&self.names[@as(usize, @intCast(package_id))]), self.lockfile.buffers.string_bytes.items) });
                         self.summary.fail = (self.summary.fail + 1);

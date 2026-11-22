@@ -196,6 +196,222 @@ pub fn visit(symbols: []const js_ast.Symbol, char_freq: *js_ast.CharFreq, scope:
     }
 };
 
+pub fn TopLevelBinding2ExprWrapper(comptime P: type) type {
+    return struct {
+        pub const Namespace = Binding.ToExpr(P, P.wrapIdentifierNamespace);
+        pub const Hoisted = Binding.ToExpr(P, P.wrapIdentifierHoisting);
+    };
+}
+
+pub fn TopLevelLowerUsingDeclarationsContext(comptime P: type) type {
+    return struct {
+        first_using_loc: logger.Loc,
+        stack_ref: Ref,
+        has_await_using: bool,
+
+pub fn init(p: *P) !TopLevelLowerUsingDeclarationsContext(P) {
+                return @This(){ .first_using_loc = logger.Loc.Empty, .stack_ref = p.generateTempRef("__stack"), .has_await_using = false };
+        }
+
+pub fn scanStmts(self: *@This(), p: *P, stmts: []Stmt) void {
+                for (cp_iter_slice(stmts)) |stmt| {
+                    _ = &stmt;
+                    switch (stmt.data) {
+.s_local => |local| {
+if ((!local.kind.isUsing())) {
+                        continue;
+                    }
+                    if (self.first_using_loc.isEmpty()) {
+                        self.first_using_loc = stmt.loc;
+                    }
+                    if ((local.kind == .k_await_using)) {
+                        self.has_await_using = true;
+                    }
+                    for (cp_mut_slice(&local.decls.slice())) |*decl| {
+                        _ = &decl;
+                        if (((if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value) != null)) {
+                            const decl_value = (&(if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value).?);
+                            const value_loc = decl_value.loc;
+                            _ = p.recordUsage(self.stack_ref);
+                            var args = bun.handleOom(p.allocator.alloc(Expr, 3));
+                            _ = &args;
+                            args[cp_cast_int(usize, 0)] = Expr{ .data = .{ .e_identifier = .{ .ref = self.stack_ref } }, .loc = stmt.loc };
+                            args[cp_cast_int(usize, 1)] = decl_value.*;
+                            args[cp_cast_int(usize, 2)] = Expr{ .data = .{ .e_number = .{ .value = (if ((local.kind == .k_await_using)) 1 else 0) } }, .loc = stmt.loc };
+                            (if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value) = p.callRuntime(value_loc, "__using", args);
+                        }
+                    }
+                    if ((p.will_wrap_module_in_try_catch_for_using and (p.current_scope.kind == .entry))) {
+                        local.kind = .k_var;
+                    } else {
+                        local.kind = .k_const;
+                    }
+},
+else => {
+
+},
+}
+                }
+        }
+
+pub fn finalize(self: *@This(), p: *P, stmts: []Stmt, should_hoist_fns: bool) ListManaged(Stmt) {
+                var result = ListManaged(Stmt).init(p.allocator);
+                _ = &result;
+                var exports = ListManaged(js_ast.ClauseItem).init(p.allocator);
+                _ = &exports;
+                var end: u32 = 0;
+                _ = &end;
+                for (cp_iter_slice(stmts)) |stmt| {
+                    _ = &stmt;
+                    switch (stmt.data) {
+.s_directive, .s_import, .s_export_from, .s_export_star => {
+_ = bun.handleOom(result.append(stmt));
+                    continue;
+},
+.s_class => {
+if (stmt.data.s_class.is_export) {
+                        _ = bun.handleOom(result.append(stmt));
+                        continue;
+                    }
+},
+.s_export_default => {
+continue;
+},
+.s_export_clause => |data| {
+_ = bun.handleOom(exports.appendSlice(data.items));
+                    continue;
+},
+.s_function => {
+if (should_hoist_fns) {
+                        _ = bun.handleOom(result.append(stmt));
+                        continue;
+                    }
+},
+.s_local => |local| {
+if (local.is_export) {
+                        local.is_export = false;
+                        for (cp_iter_slice(local.decls.slice())) |decl| {
+                            _ = &decl;
+                            if ((decl.binding.data == .b_identifier)) {
+                                const identifier = decl.binding.data.b_identifier;
+                                _ = (blk_catch_0: { break :blk_catch_0 ((exports.append(js_ast.ClauseItem{ .name = .{ .loc = decl.binding.loc, .ref = identifier.ref }, .alias = p.symbols.items[@as(usize, @intCast(identifier.ref.inner_index))].original_name, .alias_loc = decl.binding.loc })) catch |e| { _ = &e; break :blk_catch_0 bun.handleOom(e); }); });
+                                local.kind = .k_var;
+                            }
+                        }
+                    }
+},
+else => {
+
+},
+}
+                    stmts[cp_cast_int(usize, end)] = stmt;
+                    end = (end + 1);
+                }
+                const non_exported_statements = stmts[0..end];
+                const caught_ref = p.generateTempRef("_catch");
+                const err_ref = p.generateTempRef("_err");
+                const has_err_ref = p.generateTempRef("_hasErr");
+                var scope = p.current_scope;
+                _ = &scope;
+                while ((!scope.kindStopsHoisting())) {
+                    scope = scope.parent.?;
+                }
+                const is_top_level = (scope == p.module_scope);
+                const generated_refs: [4]Ref = .{ self.stack_ref, caught_ref, err_ref, has_err_ref };
+                _ = (blk_catch_1: { break :blk_catch_1 ((scope.generated.appendSlice(p.allocator, (&generated_refs))) catch |e| { _ = &e; break :blk_catch_1 bun.handleOom(e); }); });
+                _ = (blk_catch_2: { break :blk_catch_2 ((p.declared_symbols.ensureUnusedCapacity(p.allocator, (if (self.has_await_using) 5 else 4))) catch |e| { _ = &e; break :blk_catch_2 bun.handleOom(e); }); });
+                _ = p.declared_symbols.appendAssumeCapacity(.{ .is_top_level = is_top_level, .ref = self.stack_ref });
+                _ = p.declared_symbols.appendAssumeCapacity(.{ .is_top_level = is_top_level, .ref = caught_ref });
+                _ = p.declared_symbols.appendAssumeCapacity(.{ .is_top_level = is_top_level, .ref = err_ref });
+                _ = p.declared_symbols.appendAssumeCapacity(.{ .is_top_level = is_top_level, .ref = has_err_ref });
+                const loc = self.first_using_loc;
+                const call_dispose = call_dispose: {
+                _ = p.recordUsage(self.stack_ref);
+                _ = p.recordUsage(err_ref);
+                _ = p.recordUsage(has_err_ref);
+                var args = bun.handleOom(p.allocator.alloc(Expr, 3));
+                _ = &args;
+                args[cp_cast_int(usize, 0)] = Expr{ .data = .{ .e_identifier = .{ .ref = self.stack_ref } }, .loc = loc };
+                args[cp_cast_int(usize, 1)] = Expr{ .data = .{ .e_identifier = .{ .ref = err_ref } }, .loc = loc };
+                args[cp_cast_int(usize, 2)] = Expr{ .data = .{ .e_identifier = .{ .ref = has_err_ref } }, .loc = loc };
+                break :call_dispose p.callRuntime(loc, "__callDispose", args);
+};
+                const finally_stmts = finally: {
+                if (self.has_await_using) {
+                    const promise_ref = p.generateTempRef("_promise");
+                    _ = bun.handleOom(scope.generated.append(p.allocator, promise_ref));
+                    _ = p.declared_symbols.appendAssumeCapacity(.{ .is_top_level = is_top_level, .ref = promise_ref });
+                    const promise_ref_expr = p.newExpr(E.Identifier{ .ref = promise_ref }, loc);
+                    const await_expr = p.newExpr(E.Await{ .value = promise_ref_expr }, loc);
+                    _ = p.recordUsage(promise_ref);
+                    var statements = bun.handleOom(p.allocator.alloc(Stmt, 2));
+                    _ = &statements;
+                    statements[cp_cast_int(usize, 0)] = p.s(S.Local{ .decls = decls: {
+                    var decls = bun.handleOom(p.allocator.alloc(Decl, 1));
+                    _ = &decls;
+                    decls[cp_cast_int(usize, 0)] = .{ .binding = p.b(B.Identifier{ .ref = promise_ref }, loc), .value = call_dispose };
+                    break :decls G.Decl.List.fromOwnedSlice(decls);
+} }, loc);
+                    statements[cp_cast_int(usize, 1)] = p.s(S.SExpr{ .value = p.newExpr(E.Binary{ .op = .bin_logical_and, .left = promise_ref_expr, .right = await_expr }, loc) }, loc);
+                    break :finally statements;
+                } else {
+                    var single = bun.handleOom(p.allocator.alloc(Stmt, 1));
+                    _ = &single;
+                    single[cp_cast_int(usize, 0)] = p.s(S.SExpr{ .value = call_dispose }, call_dispose.loc);
+                    break :finally single;
+                }
+};
+                _ = p.recordUsage(caught_ref);
+                _ = bun.handleOom(result.ensureUnusedCapacity((2 + (if (comptime @typeInfo(@TypeOf(@intFromBool((exports.items.len > 0)))) == .@"enum") cp_cast_int(usize, @intFromEnum(@intFromBool((exports.items.len > 0)))) else cp_cast_int(usize, @intFromBool((exports.items.len > 0)))))));
+                _ = result.appendAssumeCapacity(p.s(S.Local{ .decls = decls: {
+                var decls = bun.handleOom(p.allocator.alloc(Decl, 1));
+                _ = &decls;
+                decls[cp_cast_int(usize, 0)] = .{ .binding = p.b(B.Identifier{ .ref = self.stack_ref }, loc), .value = p.newExpr(E.Array{ .is_single_line = false }, loc) };
+                break :decls G.Decl.List.fromOwnedSlice(decls);
+}, .kind = .k_let }, loc));
+                _ = result.appendAssumeCapacity(p.s(S.Try{ .body = non_exported_statements, .body_loc = loc, .catch_ = .{ .binding = p.b(B.Identifier{ .ref = caught_ref }, loc), .body = catch_body: {
+                var statements = bun.handleOom(p.allocator.alloc(Stmt, 1));
+                _ = &statements;
+                statements[cp_cast_int(usize, 0)] = p.s(S.Local{ .decls = decls: {
+                var decls = bun.handleOom(p.allocator.alloc(Decl, 2));
+                _ = &decls;
+                decls[cp_cast_int(usize, 0)] = .{ .binding = p.b(B.Identifier{ .ref = err_ref }, loc), .value = p.newExpr(E.Identifier{ .ref = caught_ref }, loc) };
+                decls[cp_cast_int(usize, 1)] = .{ .binding = p.b(B.Identifier{ .ref = has_err_ref }, loc), .value = p.newExpr(E.Number{ .value = 1 }, loc) };
+                break :decls G.Decl.List.fromOwnedSlice(decls);
+} }, loc);
+                break :catch_body statements;
+}, .body_loc = loc, .loc = loc }, .finally = .{ .loc = loc, .stmts = finally_stmts } }, loc));
+                if ((exports.items.len > 0)) {
+                    _ = result.appendAssumeCapacity(p.s(S.ExportClause{ .items = exports.items, .is_single_line = false }, loc));
+                }
+                return result;
+        }
+    };
+}
+
+pub const PartSymbolCtx = struct {
+    allocator: std.mem.Allocator,
+    top_level_symbols_to_parts: *js_ast.Ast.TopLevelSymbolToParts,
+    symbols: []const js_ast.Symbol,
+    part_index: u32,
+
+pub fn next(ctx: PartSymbolCtx, input: Ref) void {
+            var sym_ref = input;
+            _ = &sym_ref;
+            var symbol_ref = (&ctx.symbols[@as(usize, @intCast(sym_ref.innerIndex()))]);
+            _ = &symbol_ref;
+            while (symbol_ref.hasLink()) : (symbol_ref = (&ctx.symbols[@as(usize, @intCast(sym_ref.innerIndex()))])) {
+                sym_ref = symbol_ref.link;
+            }
+            var entry = ((ctx.top_level_symbols_to_parts.getOrPut(ctx.allocator, sym_ref)) catch unreachable);
+            _ = &entry;
+            if ((!entry.found_existing)) {
+                entry.value_ptr.* = .{};
+            }
+            _ = bun.handleOom(entry.value_ptr.append(ctx.allocator, @as(u32, @truncate(ctx.part_index))));
+    }
+};
+
 const string = []const u8;
 const import_meta_hot_accept_err = "Dependencies to `import.meta.hot.accept` must be statically analyzable module specifiers matching direct imports.";
 var e_missing_data: E.Missing = .{};
@@ -4603,28 +4819,7 @@ else => {
             var top_level = (&top_level_symbols_to_parts);
             _ = &top_level;
             if (p.options.bundle) {
-                const Ctx = struct {
-    allocator: std.mem.Allocator,
-    top_level_symbols_to_parts: *js_ast.Ast.TopLevelSymbolToParts,
-    symbols: []const js_ast.Symbol,
-    part_index: u32,
-
-pub fn next(ctx: @This(), input: Ref) void {
-            var sym_ref = input;
-            _ = &sym_ref;
-            var symbol_ref = (&ctx.symbols[@as(usize, @intCast(sym_ref.innerIndex()))]);
-            _ = &symbol_ref;
-            while (symbol_ref.hasLink()) : (symbol_ref = (&ctx.symbols[@as(usize, @intCast(sym_ref.innerIndex()))])) {
-                sym_ref = symbol_ref.link;
-            }
-            var entry = ((ctx.top_level_symbols_to_parts.getOrPut(ctx.allocator, sym_ref)) catch unreachable);
-            _ = &entry;
-            if ((!entry.found_existing)) {
-                entry.value_ptr.* = .{};
-            }
-            _ = bun.handleOom(entry.value_ptr.append(ctx.allocator, @as(u32, @truncate(ctx.part_index))));
-    }
-};
+                const Ctx = PartSymbolCtx;
                 var part_index: usize = 0;
                 _ = &part_index;
                 while ((part_index < parts.items.len)) : (part_index = (part_index + 1)) {
@@ -4856,183 +5051,7 @@ pub fn init(allocator: Allocator, log: *logger.Log, source: *const logger.Source
     const ImportTransposer = ExpressionTransposer(P, *const TransposeState, P.transposeImport);
     const RequireTransposer = ExpressionTransposer(P, *const TransposeState, P.transposeRequire);
     const RequireResolveTransposer = ExpressionTransposer(P, Expr, P.transposeRequireResolve);
-    const Binding2ExprWrapper = struct {
-        pub const Namespace = Binding.ToExpr(P, P.wrapIdentifierNamespace);
-        pub const Hoisted = Binding.ToExpr(P, P.wrapIdentifierHoisting);
-    };
-    pub const LowerUsingDeclarationsContext = struct {
-        first_using_loc: logger.Loc,
-        stack_ref: Ref,
-        has_await_using: bool,
-    
-    pub fn init(p: *P) !LowerUsingDeclarationsContext {
-                return LowerUsingDeclarationsContext{ .first_using_loc = logger.Loc.Empty, .stack_ref = p.generateTempRef("__stack"), .has_await_using = false };
-        }
-    
-    pub fn scanStmts(ctx: *LowerUsingDeclarationsContext, p: *P, stmts: []Stmt) void {
-                for (cp_iter_slice(stmts)) |stmt| {
-                    _ = &stmt;
-                    switch (stmt.data) {
-    .s_local => |local| {
-    if ((!local.kind.isUsing())) {
-                        continue;
-                    }
-                    if (ctx.first_using_loc.isEmpty()) {
-                        ctx.first_using_loc = stmt.loc;
-                    }
-                    if ((local.kind == .k_await_using)) {
-                        ctx.has_await_using = true;
-                    }
-                    for (cp_mut_slice(&local.decls.slice())) |*decl| {
-                        _ = &decl;
-                        if (((if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value) != null)) {
-                            const decl_value = (&(if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value).?);
-                            const value_loc = decl_value.loc;
-                            _ = p.recordUsage(ctx.stack_ref);
-                            const args = bun.handleOom(p.allocator.alloc(Expr, 3));
-                            args[cp_cast_int(usize, 0)] = Expr{ .data = .{ .e_identifier = .{ .ref = ctx.stack_ref } }, .loc = stmt.loc };
-                            args[cp_cast_int(usize, 1)] = decl_value.*;
-                            args[cp_cast_int(usize, 2)] = Expr{ .data = .{ .e_number = .{ .value = (if ((local.kind == .k_await_using)) 1 else 0) } }, .loc = stmt.loc };
-                            (if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value) = p.callRuntime(value_loc, "__using", args);
-                        }
-                    }
-                    if ((p.will_wrap_module_in_try_catch_for_using and (p.current_scope.kind == .entry))) {
-                        local.kind = .k_var;
-                    } else {
-                        local.kind = .k_const;
-                    }
-    },
-    else => {
-    
-    },
-    }
-                }
-        }
-    
-    pub fn finalize(ctx: *LowerUsingDeclarationsContext, p: *P, stmts: []Stmt, should_hoist_fns: bool) ListManaged(Stmt) {
-                var result = ListManaged(Stmt).init(p.allocator);
-                _ = &result;
-                var exports = ListManaged(js_ast.ClauseItem).init(p.allocator);
-                _ = &exports;
-                var end: u32 = 0;
-                _ = &end;
-                for (cp_iter_slice(stmts)) |stmt| {
-                    _ = &stmt;
-                    switch (stmt.data) {
-    .s_directive, .s_import, .s_export_from, .s_export_star => {
-    _ = bun.handleOom(result.append(stmt));
-                    continue;
-    },
-    .s_class => {
-    if (stmt.data.s_class.is_export) {
-                        _ = bun.handleOom(result.append(stmt));
-                        continue;
-                    }
-    },
-    .s_export_default => {
-    continue;
-    },
-    .s_export_clause => |data| {
-    _ = bun.handleOom(exports.appendSlice(data.items));
-                    continue;
-    },
-    .s_function => {
-    if (should_hoist_fns) {
-                        _ = bun.handleOom(result.append(stmt));
-                        continue;
-                    }
-    },
-    .s_local => |local| {
-    if (local.is_export) {
-                        local.is_export = false;
-                        for (cp_iter_slice(local.decls.slice())) |decl| {
-                            _ = &decl;
-                            if ((decl.binding.data == .b_identifier)) {
-                                const identifier = decl.binding.data.b_identifier;
-                                _ = (blk_catch_0: { break :blk_catch_0 ((exports.append(js_ast.ClauseItem{ .name = .{ .loc = decl.binding.loc, .ref = identifier.ref }, .alias = p.symbols.items[@as(usize, @intCast(identifier.ref.inner_index))].original_name, .alias_loc = decl.binding.loc })) catch |e| { _ = &e; break :blk_catch_0 bun.handleOom(e); }); });
-                                local.kind = .k_var;
-                            }
-                        }
-                    }
-    },
-    else => {
-    
-    },
-    }
-                    stmts[cp_cast_int(usize, end)] = stmt;
-                    end = (end + 1);
-                }
-                const non_exported_statements = stmts[0..end];
-                const caught_ref = p.generateTempRef("_catch");
-                const err_ref = p.generateTempRef("_err");
-                const has_err_ref = p.generateTempRef("_hasErr");
-                var scope = p.current_scope;
-                _ = &scope;
-                while ((!scope.kindStopsHoisting())) {
-                    scope = scope.parent.?;
-                }
-                const is_top_level = (scope == p.module_scope);
-                _ = (blk_catch_1: { break :blk_catch_1 ((scope.generated.appendSlice(p.allocator, (&.{ ctx.stack_ref, caught_ref, err_ref, has_err_ref }))) catch |e| { _ = &e; break :blk_catch_1 bun.handleOom(e); }); });
-                _ = (blk_catch_2: { break :blk_catch_2 ((p.declared_symbols.ensureUnusedCapacity(p.allocator, (if (ctx.has_await_using) 5 else 4))) catch |e| { _ = &e; break :blk_catch_2 bun.handleOom(e); }); });
-                _ = p.declared_symbols.appendAssumeCapacity(.{ .is_top_level = is_top_level, .ref = ctx.stack_ref });
-                _ = p.declared_symbols.appendAssumeCapacity(.{ .is_top_level = is_top_level, .ref = caught_ref });
-                _ = p.declared_symbols.appendAssumeCapacity(.{ .is_top_level = is_top_level, .ref = err_ref });
-                _ = p.declared_symbols.appendAssumeCapacity(.{ .is_top_level = is_top_level, .ref = has_err_ref });
-                const loc = ctx.first_using_loc;
-                const call_dispose = call_dispose: {
-                _ = p.recordUsage(ctx.stack_ref);
-                _ = p.recordUsage(err_ref);
-                _ = p.recordUsage(has_err_ref);
-                const args = bun.handleOom(p.allocator.alloc(Expr, 3));
-                args[cp_cast_int(usize, 0)] = Expr{ .data = .{ .e_identifier = .{ .ref = ctx.stack_ref } }, .loc = loc };
-                args[cp_cast_int(usize, 1)] = Expr{ .data = .{ .e_identifier = .{ .ref = err_ref } }, .loc = loc };
-                args[cp_cast_int(usize, 2)] = Expr{ .data = .{ .e_identifier = .{ .ref = has_err_ref } }, .loc = loc };
-                break :call_dispose p.callRuntime(loc, "__callDispose", args);
-    };
-                const finally_stmts = finally: {
-                if (ctx.has_await_using) {
-                    const promise_ref = p.generateTempRef("_promise");
-                    _ = bun.handleOom(scope.generated.append(p.allocator, promise_ref));
-                    _ = p.declared_symbols.appendAssumeCapacity(.{ .is_top_level = is_top_level, .ref = promise_ref });
-                    const promise_ref_expr = p.newExpr(E.Identifier{ .ref = promise_ref }, loc);
-                    const await_expr = p.newExpr(E.Await{ .value = promise_ref_expr }, loc);
-                    _ = p.recordUsage(promise_ref);
-                    const statements = bun.handleOom(p.allocator.alloc(Stmt, 2));
-                    statements[cp_cast_int(usize, 0)] = p.s(S.Local{ .decls = decls: {
-                    const decls = bun.handleOom(p.allocator.alloc(Decl, 1));
-                    decls[cp_cast_int(usize, 0)] = .{ .binding = p.b(B.Identifier{ .ref = promise_ref }, loc), .value = call_dispose };
-                    break :decls G.Decl.List.fromOwnedSlice(decls);
-    } }, loc);
-                    statements[cp_cast_int(usize, 1)] = p.s(S.SExpr{ .value = p.newExpr(E.Binary{ .op = .bin_logical_and, .left = promise_ref_expr, .right = await_expr }, loc) }, loc);
-                    break :finally statements;
-                } else {
-                    const single = bun.handleOom(p.allocator.alloc(Stmt, 1));
-                    single[cp_cast_int(usize, 0)] = p.s(S.SExpr{ .value = call_dispose }, call_dispose.loc);
-                    break :finally single;
-                }
-    };
-                _ = p.recordUsage(caught_ref);
-                _ = bun.handleOom(result.ensureUnusedCapacity((2 + (if (comptime @typeInfo(@TypeOf(@intFromBool((exports.items.len > 0)))) == .@"enum") cp_cast_int(usize, @intFromEnum(@intFromBool((exports.items.len > 0)))) else cp_cast_int(usize, @intFromBool((exports.items.len > 0)))))));
-                _ = result.appendAssumeCapacity(p.s(S.Local{ .decls = decls: {
-                const decls = bun.handleOom(p.allocator.alloc(Decl, 1));
-                decls[cp_cast_int(usize, 0)] = .{ .binding = p.b(B.Identifier{ .ref = ctx.stack_ref }, loc), .value = p.newExpr(E.Array{ .is_single_line = false }, loc) };
-                break :decls G.Decl.List.fromOwnedSlice(decls);
-    }, .kind = .k_let }, loc));
-                _ = result.appendAssumeCapacity(p.s(S.Try{ .body = non_exported_statements, .body_loc = loc, .catch_ = .{ .binding = p.b(B.Identifier{ .ref = caught_ref }, loc), .body = catch_body: {
-                const statements = bun.handleOom(p.allocator.alloc(Stmt, 1));
-                statements[cp_cast_int(usize, 0)] = p.s(S.Local{ .decls = decls: {
-                const decls = bun.handleOom(p.allocator.alloc(Decl, 2));
-                decls[cp_cast_int(usize, 0)] = .{ .binding = p.b(B.Identifier{ .ref = err_ref }, loc), .value = p.newExpr(E.Identifier{ .ref = caught_ref }, loc) };
-                decls[cp_cast_int(usize, 1)] = .{ .binding = p.b(B.Identifier{ .ref = has_err_ref }, loc), .value = p.newExpr(E.Number{ .value = 1 }, loc) };
-                break :decls G.Decl.List.fromOwnedSlice(decls);
-    } }, loc);
-                break :catch_body statements;
-    }, .body_loc = loc, .loc = loc }, .finally = .{ .loc = loc, .stmts = finally_stmts } }, loc));
-                if ((exports.items.len > 0)) {
-                    _ = result.appendAssumeCapacity(p.s(S.ExportClause{ .items = exports.items, .is_single_line = false }, loc));
-                }
-                return result;
-        }
-    };
+    const Binding2ExprWrapper = TopLevelBinding2ExprWrapper(P);
+    pub const LowerUsingDeclarationsContext = TopLevelLowerUsingDeclarationsContext(P);
 };
 }

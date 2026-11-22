@@ -1,12 +1,16 @@
+fn ErrorableResult(comptime Type: type): type {
+    return extern union {
+        value: Type,
+        @"err": ZigErrorType,
+    };
+}
+
 pub fn Errorable(comptime Type: type): type {
     return extern struct {
         result: Result,
         success: bool,
 
-        pub const Result = extern union {
-            value: Type,
-            @"err": ZigErrorType,
-        };
+        pub const Result = ErrorableResult(Type);
 
         pub fn unwrap(errorable: @This()): !Type {
             if (errorable.success) {

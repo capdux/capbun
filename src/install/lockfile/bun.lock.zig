@@ -65,6 +65,17 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 
 pub const ExtractTarball = @import("../extract_tarball.zig");
 pub const bun = @import("bun");
+pub const Version = enum(u32) {
+    v0 = 0,
+    v1,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+    
+    pub const current: Version = .v1;
+};
+
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         ptr: *T,
@@ -132,7 +143,7 @@ pub fn isLessThan(_ctx: TreeSortCtx, l: Item, r: Item) bool {
 .eq => (strings.order(l_rel_path, r_rel_path) == .lt),
 });
     }
-    pub const Item = struct { []const DependencyID, string, usize };
+    pub const Item = TreeSortCtxItem;
 };
 
 pub const Stringifier = struct {
@@ -828,15 +839,8 @@ pub const WorkspaceDepGroup = struct {
     behavior: Dependency.Behavior,
 };
 
+const TreeSortCtxItem = struct { []const DependencyID, []const u8, usize };
 const string = []const u8;
-pub const Version = enum(u32) {
-    v0 = 0,
-
-    // fixed unnecessary listing of workspace dependencies
-    v1,
-
-    pub const current: Version = .v1;
-};
 const workspace_dependency_groups = .{ WorkspaceDepGroup{ .name = "dependencies", .behavior = .{ .prod = true } }, WorkspaceDepGroup{ .name = "devDependencies", .behavior = .{ .dev = true } }, WorkspaceDepGroup{ .name = "optionalDependencies", .behavior = .{ .optional = true } }, WorkspaceDepGroup{ .name = "peerDependencies", .behavior = .{ .peer = true } } };
 const ParseError = (OOM || error{
     InvalidLockfileVersion,

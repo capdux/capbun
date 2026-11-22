@@ -13,6 +13,17 @@ type TCPSocket = jsc.API.TCPSocket;
 type TLSSocket = jsc.API.TLSSocket;
 const log = Output.scoped(.WindowsNamedPipeContext, .visible);
 
+pub enum WindowsNamedPipeEventState: u8 {
+    deinit,
+    none,
+}
+
+pub union(enum) WindowsNamedPipeSocketType {
+    tls: *TLSSocket,
+    tcp: *TCPSocket,
+    none: void,
+}
+
 struct NamedPipeConnectErrGuard {
     obj: (*WindowsNamedPipeContext)?,
     socket: WindowsNamedPipeContext.SocketType,
@@ -56,16 +67,8 @@ pub struct WindowsNamedPipeContext {
         _.deinitInNextTick();
     }
 
-    pub const EventState = enum(u8) {
-        deinit,
-        none,
-    };
-
-    pub const SocketType = union(enum) {
-        tls: *TLSSocket,
-        tcp: *TCPSocket,
-        none: void,
-    };
+    pub const EventState = WindowsNamedPipeEventState;
+    pub const SocketType = WindowsNamedPipeSocketType;
 
     pub const new = bun.TrivialNew(WindowsNamedPipeContext);
 

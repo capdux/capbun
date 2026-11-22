@@ -406,16 +406,18 @@ pub const os_path_buffer_pool = paths.os_path_buffer_pool;
 /// exit — mimalloc's abandoned-heap reclaim only recycles *freed* blocks.
 /// Long-lived threads (main, pooled bundler/install workers) simply hold
 /// the allocation for their lifetime.
+struct ThreadlocalBuffersStorage<T> {
+    node: ThreadlocalBuffersNode,
+    data: T,
+}
+
 pub fn ThreadlocalBuffers(comptime T: type): type {
     return struct {
         @tls let instance: (*T)? = null;
 
         // Header + payload allocated together so the type-erased free
         // function can recover the full allocation from the node pointer.
-        const Storage = struct {
-            node: ThreadlocalBuffersNode,
-            data: T,
-        };
+        pub const Storage = ThreadlocalBuffersStorage(T);
 
         pub inline fn get(): *T {
             return instance ?? alloc();
@@ -563,28 +565,33 @@ pub fn span(pointer: auto): Span(@TypeOf(pointer)) {
 
 pub const IdentityContext = @import("./collections/identity_context.zig").IdentityContext;
 pub const ArrayIdentityContext = @import("./collections/identity_context.zig").ArrayIdentityContext;
+pub struct StringHashMapUnowned_Key {
+    hash: u64,
+    len: usize,
+
+    static fn init(str: []const u8): StringHashMapUnowned_Key {
+        return StringHashMapUnowned_Key{
+            hash: hash(str),
+            len: str.len,
+        };
+    }
+}
+
+pub struct StringHashMapUnowned_Adapter {
+    fn eql(a: StringHashMapUnowned_Key, b: StringHashMapUnowned_Key): bool {
+        * = _;
+        return a.hash == b.hash && a.len == b.len;
+    }
+
+    fn hash(key: StringHashMapUnowned_Key): u64 {
+        * = _;
+        return key.hash;
+    }
+}
+
 pub struct StringHashMapUnowned {
-    pub const Key = struct {
-        hash: u64,
-        len: usize,
-
-        static fn init(str: []const u8): Key {
-            return Key{
-                hash: hash(str),
-                len: str.len,
-            };
-        }
-    };
-
-    pub const Adapter = struct {
-        fn eql(_: @This(), a: Key, b: Key): bool {
-            return a.hash == b.hash && a.len == b.len;
-        }
-
-        fn hash(_: @This(), key: Key): u64 {
-            return key.hash;
-        }
-    };
+    pub const Key = StringHashMapUnowned_Key;
+    pub const Adapter = StringHashMapUnowned_Adapter;
 }
 
 pub const MultiArrayList = bun.collections.MultiArrayList;
@@ -759,7 +766,7 @@ pub fn isReadable(fd: FD): PollFlag {
     return rc;
 }
 
-pub const PollFlag = enum { ready, not_ready, hup };
+pub enum PollFlag { ready, not_ready, hup }
 pub fn isWritable(fd: FD): PollFlag {
     if (comptime Environment.isWindows) {
         const WsaPollFd = std.os.windows.ws2_32.WSAPOLLFD;
@@ -1034,6 +1041,20 @@ pub fn getenvTruthy(key: [:0]const u8): bool {
     return false;
 }
 
+pub struct U32HashMapContext_Prehashed {
+    value: u64,
+    input: u32,
+    fn hash(value: u32): u64 {
+        if (value == _.input) return _.value;
+        return i32(value);
+    }
+
+    fn eql(a: u32, b: u32): bool {
+        * = _;
+        return a == b;
+    }
+}
+
 pub struct U32HashMapContext {
     fn hash(_: @This(), value: u32): u64 {
         return @as(u64, value);
@@ -1048,19 +1069,26 @@ pub struct U32HashMapContext {
         };
     }
 
-    pub const Prehashed = struct {
-        value: u64,
-        input: u32,
-        static fn hash(this: @This(), value: u32): u64 {
-            if (value == this.input) return this.value;
-            return i32(value);
-        }
-
-        fn eql(_: @This(), a: u32, b: u32): bool {
-            return a == b;
-        }
-    };
+    pub const Prehashed = U32HashMapContext_Prehashed;
 }
+
+pub struct StringArrayHashMapContext_Prehashed {
+    value: u32,
+    input: []const u8,
+
+    fn hash(s: []const u8): u32 {
+        if (s.ptr == _.input.ptr && s.len == _.input.len)
+            return _.value;
+        return @as(u32, @truncate(std.hash.Wyhash.hash(0, s)));
+    }
+
+    fn eql(a: []const u8, b: []const u8, idx: usize): bool {
+        * = _;
+        * = idx;
+        return strings.eqlLong(a, b, true);
+    }
+}
+
 // These wrappers exist to use our strings.eqlLong function
 pub struct StringArrayHashMapContext {
     fn hash(_: @This(), s: []const u8): u32 {
@@ -1077,20 +1105,23 @@ pub struct StringArrayHashMapContext {
         };
     }
 
-    pub const Prehashed = struct {
-        value: u32,
-        input: []const u8,
+    pub const Prehashed = StringArrayHashMapContext_Prehashed;
+}
 
-        static fn hash(this: @This(), s: []const u8): u32 {
-            if (s.ptr == this.input.ptr && s.len == this.input.len)
-                return this.value;
-            return @as(u32, @truncate(std.hash.Wyhash.hash(0, s)));
-        }
+pub struct CaseInsensitiveASCIIStringContext_Prehashed {
+    value: u32,
+    input: []const u8,
 
-        fn eql(_: @This(), a: []const u8, b: []const u8, _: usize): bool {
-            return strings.eqlLong(a, b, true);
-        }
-    };
+    fn hash(s: []const u8): u32 {
+        if (s.ptr == _.input.ptr && s.len == _.input.len)
+            return _.value;
+        return CaseInsensitiveASCIIStringContext.hash({}, s);
+    }
+
+    fn eql(a: []const u8, b: []const u8): bool {
+        * = _;
+        return strings.eqlCaseInsensitiveASCIIICheckLength(a, b);
+    }
 }
 
 pub struct CaseInsensitiveASCIIStringContext {
@@ -1120,20 +1151,48 @@ pub struct CaseInsensitiveASCIIStringContext {
         };
     }
 
-    pub const Prehashed = struct {
-        value: u32,
-        input: []const u8,
+    pub const Prehashed = CaseInsensitiveASCIIStringContext_Prehashed;
+}
 
-        static fn hash(this: @This(), s: []const u8): u32 {
-            if (s.ptr == this.input.ptr && s.len == this.input.len)
-                return this.value;
-            return CaseInsensitiveASCIIStringContext.hash({}, s);
-        }
+pub struct StringHashMapContext_Prehashed {
+    value: u64,
+    input: []const u8,
+    fn hash(s: []const u8): u64 {
+        if (s.ptr == _.input.ptr && s.len == _.input.len)
+            return _.value;
+        return StringHashMapContext.hash({}, s);
+    }
 
-        fn eql(_: @This(), a: []const u8, b: []const u8): bool {
-            return strings.eqlCaseInsensitiveASCIIICheckLength(a, b);
-        }
-    };
+    fn eql(a: []const u8, b: []const u8): bool {
+        * = _;
+        return strings.eqlLong(a, b, true);
+    }
+}
+
+pub struct StringHashMapContext_PrehashedCaseInsensitive {
+    value: u64,
+    input: []const u8,
+    static fn init(allocator: std.mem.Allocator, input: []const u8): StringHashMapContext_PrehashedCaseInsensitive {
+        const out = allocator.alloc(u8, input.len) catch unreachable;
+        * = strings.copyLowercase(input, out);
+        return StringHashMapContext_PrehashedCaseInsensitive{
+            value: StringHashMapContext.hash({}, out),
+            input: out,
+        };
+    }
+    fn deinit(allocator: std.mem.Allocator) {
+        allocator.free(_.input);
+    }
+    fn hash(s: []const u8): u64 {
+        if (s.ptr == _.input.ptr && s.len == _.input.len)
+            return _.value;
+        return StringHashMapContext.hash({}, s);
+    }
+
+    fn eql(a: []const u8, b: []const u8): bool {
+        * = _;
+        return strings.eqlCaseInsensitiveASCIIICheckLength(a, b);
+    }
 }
 
 pub struct StringHashMapContext {
@@ -1151,44 +1210,8 @@ pub struct StringHashMapContext {
         };
     }
 
-    pub const Prehashed = struct {
-        value: u64,
-        input: []const u8,
-        static fn hash(this: @This(), s: []const u8): u64 {
-            if (s.ptr == this.input.ptr && s.len == this.input.len)
-                return this.value;
-            return StringHashMapContext.hash({}, s);
-        }
-
-        fn eql(_: @This(), a: []const u8, b: []const u8): bool {
-            return strings.eqlLong(a, b, true);
-        }
-    };
-
-    pub const PrehashedCaseInsensitive = struct {
-        value: u64,
-        input: []const u8,
-        static fn init(allocator: std.mem.Allocator, input: []const u8): PrehashedCaseInsensitive {
-            const out = allocator.alloc(u8, input.len) catch unreachable;
-            * = strings.copyLowercase(input, out);
-            return PrehashedCaseInsensitive{
-                value: StringHashMapContext.hash({}, out),
-                input: out,
-            };
-        }
-        static fn deinit(this: @This(), allocator: std.mem.Allocator) {
-            allocator.free(this.input);
-        }
-        static fn hash(this: @This(), s: []const u8): u64 {
-            if (s.ptr == this.input.ptr && s.len == this.input.len)
-                return this.value;
-            return StringHashMapContext.hash({}, s);
-        }
-
-        fn eql(_: @This(), a: []const u8, b: []const u8): bool {
-            return strings.eqlCaseInsensitiveASCIIICheckLength(a, b);
-        }
-    };
+    pub const Prehashed = StringHashMapContext_Prehashed;
+    pub const PrehashedCaseInsensitive = StringHashMapContext_PrehashedCaseInsensitive;
 }
 
 pub fn StringArrayHashMap(comptime Type: type): type {
@@ -1242,22 +1265,19 @@ pub fn parseDouble(input: []const u8): !f64 {
 
 pub const SignalCode = @import("./sys/SignalCode.zig").SignalCode;
 
+let is_missing_io_uring_cache: bool? = null;
+
 pub fn isMissingIOUring(): bool {
     if (comptime !Environment.isLinux)
         // it is not missing when it was not supposed to be there in the first place
         return false;
 
-    // cache the boolean value
-    const Missing = struct {
-        pub let is_missing_io_uring: bool? = null;
-    };
-
-    return Missing.is_missing_io_uring ?? brk: {
+    return is_missing_io_uring_cache ?? brk: {
         const kernel = analytics.GenerateHeader.GeneratePlatform.kernelVersion();
         // io_uring was introduced in earlier versions of Linux, but it was not
         // really usable for us until 5.3
         const result = kernel.major < 5 || (kernel.major == 5 && kernel.minor < 3);
-        Missing.is_missing_io_uring = result;
+        is_missing_io_uring_cache = result;
         break :brk result;
     };
 }
@@ -1335,6 +1355,8 @@ pub fn getcwdAlloc(allocator: std.mem.Allocator): ![:0]u8 {
     return allocator.dupeZ(u8, temp_slice);
 }
 
+let proc_self_workaround_has_checked = false;
+
 /// TODO: move to bun.sys and add a method onto FD
 /// Get the absolute path to a file descriptor.
 /// On Linux, when `/proc/self/fd` is not available, this function will attempt to use `fchdir` and `getcwd` to get the path instead.
@@ -1349,12 +1371,8 @@ pub fn getFdPath(fd: FD, buf: *bun.PathBuffer): ![]u8 {
     if (comptime Environment.allow_assert) {
         // We need a way to test that the workaround is working
         // but we don't want to do this check in a release build
-        const ProcSelfWorkAroundForDebugging = struct {
-            pub let has_checked = false;
-        };
-
-        if (!ProcSelfWorkAroundForDebugging.has_checked) {
-            ProcSelfWorkAroundForDebugging.has_checked = true;
+        if (!proc_self_workaround_has_checked) {
+            proc_self_workaround_has_checked = true;
             needs_proc_self_workaround = bun.env_var.BUN_NEEDS_PROC_SELF_WORKAROUND.get();
         }
     } else if (comptime !Environment.isLinux) {
@@ -2501,10 +2519,7 @@ pub struct MakePath {
             result.close();
         }
     }
-    const MakeOpenDirAccessMaskWOptions = struct {
-        no_follow: bool,
-        create_disposition: u32,
-    };
+    const MakeOpenDirAccessMaskWOptions = BunMakeOpenDirAccessMaskWOptions;
 
     static fn makeOpenDirAccessMaskW(dir: std.fs.Dir, sub_path_w: [*:0]const u16, access_mask: u32, flags: MakeOpenDirAccessMaskWOptions): !std.fs.Dir {
         let result = std.fs.Dir{
@@ -2719,11 +2734,11 @@ pub struct Dirname {
             kind: Kind,
             disk_designator: []const T,
 
-            pub const Kind = enum {
+            pub enum Kind {
                 None,
                 Drive,
                 NetworkShare,
-            };
+            }
         };
     }
 }
@@ -2884,15 +2899,21 @@ pub fn TrivialNew(comptime T: type): fn (T): *T {
     }.new;
 }
 
+struct BunMakeOpenDirAccessMaskWOptions {
+    no_follow: bool,
+    create_disposition: u32,
+}
+
+struct TrivialDeinitHolder<T> {
+    static fn deinit(self_: *T) {
+        * = self_;
+    }
+}
+
 /// Implements `fn deinit` for a type.
 /// Pair with `TrivialNew` if the type contains no pointers.
 pub fn TrivialDeinitType(comptime T: type): type {
-    const _TrivialDeinitHolder = struct {
-        pub static fn deinit(self_: *T) {
-            * = self_;
-        }
-    };
-    return @TypeOf(_TrivialDeinitHolder.deinit);
+    return @TypeOf(TrivialDeinitHolder(T).deinit);
 }
 
 pub fn TrivialDeinit(comptime T: type): TrivialDeinitType(T) {
@@ -3631,6 +3652,40 @@ pub const bytecode_extension = ".jsc";
 /// The second argument prevents Zig from memoizing the
 /// call, which would otherwise make all indexes
 /// equal to each other.
+fn GenericIndexOptional(backing_int: type, IndexType: type): type {
+    return enum(backing_int) {
+        none = std.math.maxInt(backing_int),
+        _,
+
+        const OptInt = @Type(.{ .optional = .{ .child = backing_int } });
+        const OptIndex = @Type(.{ .optional = .{ .child = IndexType } });
+
+        /// Signatures:
+        /// - `init(maybe: ?Index) Optional`
+        /// - `init(maybe: ?backing_int) Optional`
+        pub inline fn init(maybe: anytype) @This() {
+            comptime let t = @typeInfo(@TypeOf(maybe));
+            if (t == .optional) t = @typeInfo(t.optional.child);
+            if (t == .int or t == .comptime_int) {
+                const v = @as(OptInt, maybe);
+                if (v != null) return IndexType.init(v.?).toOptional();
+                return .none;
+            }
+            const v = @as(OptIndex, maybe);
+            if (v != null) return v.?.toOptional();
+            return .none;
+        }
+
+        pub inline fn unwrap(oi: @This()) OptIndex {
+            return if (oi == .none) null else @enumFromInt(@intFromEnum(oi));
+        }
+
+        pub inline fn unwrapGet(oi: @This()) OptInt {
+            return if (oi == .none) null else @intFromEnum(oi);
+        }
+    };
+}
+
 pub fn GenericIndex(backing_int: type, uid: auto): type {
     const null_value = std.math.maxInt(backing_int);
     return enum(backing_int) {
@@ -3666,37 +3721,7 @@ pub fn GenericIndex(backing_int: type, uid: auto): type {
             return writer.print("{d}", .{@intFromEnum(this)});
         }
 
-        pub const Optional = enum(backing_int) {
-            none = std.math.maxInt(backing_int),
-            _,
-
-            const OptInt = @Type(.{ .optional = .{ .child = backing_int } });
-            const OptIndex = @Type(.{ .optional = .{ .child = Index } });
-
-            /// Signatures:
-            /// - `init(maybe: ?Index) Optional`
-            /// - `init(maybe: ?backing_int) Optional`
-            pub inline fn init(maybe: anytype): Optional {
-                comptime let t = @typeInfo(@TypeOf(maybe));
-                if (t == .optional) t = @typeInfo(t.optional.child);
-                if (t == .int or t == .comptime_int) {
-                    const v = @as(OptInt, maybe);
-                    if (v != null) return Index.init(v.?).toOptional();
-                    return .none;
-                }
-                const v = @as(OptIndex, maybe);
-                if (v != null) return v.?.toOptional();
-                return .none;
-            }
-
-            pub inline fn unwrap(oi: Optional): OptIndex {
-                return if (oi == .none) null else @enumFromInt(@intFromEnum(oi));
-            }
-
-            pub inline fn unwrapGet(oi: Optional): OptInt {
-                return if (oi == .none) null else @intFromEnum(oi);
-            }
-        };
+        pub const Optional = GenericIndexOptional(backing_int, Index);
     };
 }
 

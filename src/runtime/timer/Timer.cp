@@ -87,16 +87,16 @@ pub struct Maps {
     }
 }
 
-const TimeoutWarning = enum {
+enum TimeoutWarning {
     TimeoutOverflowWarning,
     TimeoutNegativeWarning,
     TimeoutNaNWarning,
-};
+}
 
-const CountdownOverflowBehavior = enum(u8) {
+enum CountdownOverflowBehavior: u8 {
     one_ms,
     clamp,
-};
+}
 
 export class All {
     last_id: i32 = 1;

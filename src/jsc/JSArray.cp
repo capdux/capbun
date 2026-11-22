@@ -1,25 +1,27 @@
-pub const JSArray = opaque {
-    // TODO(@paperclover): this can throw
-    extern fn JSArray__constructArray(*JSGlobalObject, [*]const JSValue, usize): JSValue ;
-
-    pub fn create(global: *JSGlobalObject, items: []const JSValue): bun.JSError!JSValue {
-        return bun.jsc.fromJSHostCall(global, @src(), JSArray__constructArray, .{ global, items.ptr, items.len });
-    }
-
-    extern fn JSArray__constructEmptyArray(*JSGlobalObject, usize): JSValue ;
-
-    pub fn createEmpty(global: *JSGlobalObject, len: usize): bun.JSError!JSValue {
-        return bun.jsc.fromJSHostCall(global, @src(), JSArray__constructEmptyArray, .{ global, len });
-    }
-
-    pub fn iterator(array: *JSArray, global: *JSGlobalObject): bun.JSError!JSArrayIterator {
-        return JSValue.fromCell(array).arrayIterator(global);
-    }
-};
-
 import bun from "bun";
-const JSArrayIterator = @import("./JSArrayIterator.zig").JSArrayIterator;
+import JSArrayIteratorMod from "./JSArrayIterator.zig";
 
+const JSArrayIterator = JSArrayIteratorMod.JSArrayIterator;
 const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
+
+@c {
+    fn JSArray__constructArray(global: *JSGlobalObject, ptr: [*]const JSValue, len: usize): JSValue;
+    fn JSArray__constructEmptyArray(global: *JSGlobalObject, len: usize): JSValue;
+}
+
+@opaque pub struct JSArray {
+    // TODO(@paperclover): this can throw
+    static fn create(global: *JSGlobalObject, items: []const JSValue): JSValue ! bun.JSError {
+        return bun.jsc.fromJSHostCall(global, @src(), JSArray__constructArray, .{ global, items.ptr, items.len });
+    }
+
+    static fn createEmpty(global: *JSGlobalObject, len: usize): JSValue ! bun.JSError {
+        return bun.jsc.fromJSHostCall(global, @src(), JSArray__constructEmptyArray, .{ global, len });
+    }
+
+    fn iterator(*_, global: *JSGlobalObject): JSArrayIterator ! bun.JSError {
+        return JSValue.fromCell(_).arrayIterator(global);
+    }
+}

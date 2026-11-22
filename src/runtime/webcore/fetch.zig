@@ -93,6 +93,16 @@ const DataURL = @import("../../resolver/data_url.zig").DataURL;
 pub const FetchTaskletMod = @import("./fetch/FetchTasklet.zig");
 const ServerConfig = @import("../server/ServerConfig.zig").ServerConfig;
 pub const UrlMod = @import("../../url/url.zig");
+pub const URLType = enum {
+    remote,
+    file,
+    blob,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         val: T,
@@ -379,11 +389,6 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
         _ = &unix_socket_path;
         var url_proxy_buffer: []const u8 = "";
         _ = &url_proxy_buffer;
-        const URLType = enum {
-        remote,
-        file,
-        blob,
-    };
         var url_type = URLType.remote;
         _ = &url_type;
         var ssl_config: ?ServerConfig.SSLConfig.SharedPtr = null;

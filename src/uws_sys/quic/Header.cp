@@ -22,6 +22,21 @@ export @extern @value class Header {
     }
 }
 
+pub struct QpackClassIndexed {
+    name: []const u8,
+    index: Qpack,
+}
+
+pub union(enum) QpackClass {
+    forbidden: void,
+    host: void,
+    indexed: QpackClassIndexed,
+
+    static fn idx(comptime hdr_name: []const u8, i: Qpack): QpackClass {
+        return .{ .indexed = .{ .name = hdr_name, .index = i } };
+    }
+}
+
 export enum Qpack: u8 {
     authority = 0,
     path = 1,
@@ -57,15 +72,7 @@ export enum Qpack: u8 {
     x_forwarded_for = 96,
     _,
 
-    pub const Class = union(enum) {
-        forbidden,
-        host,
-        indexed: struct { name: []const u8, index: Qpack },
-
-        fn idx(comptime hdr_name: []const u8, i: Qpack) Class {
-            return .{ .indexed = .{ .name = hdr_name, .index = i } };
-        }
-    };
+    pub const Class = QpackClass;
 
     static fn classify(hdr_name: []const u8): Class? {
         return map.getAnyCase(hdr_name);

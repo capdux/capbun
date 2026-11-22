@@ -38,6 +38,22 @@ struct StringSliceFreeGuard {
     }
 }
 
+fn enumOneOfLabel(comptime property_name: []const u8, comptime Enum: type): [:0]const u8 {
+    let str: []const u8 = "'";
+    const field_names = bun.meta.enumFieldNames(Enum);
+    let i: usize = 0;
+    for (entry of field_names) {
+        str = str ++ entry ++ "'";
+        if (i < field_names.len - 2) {
+            str = str ++ ", '";
+        } else if (i == field_names.len - 2) {
+            str = str ++ " or '";
+        }
+        i += 1;
+    }
+    return property_name ++ " must be one of " ++ str ++ "";
+}
+
 /// ABI-compatible with EncodedJSValue
 /// In the future, this type will exclude `zero`, encoding it as `error.JSError` instead.
 
@@ -1762,24 +1778,7 @@ pub enum JSValue: i64 {
         if (res := StringMap.fromJS(globalThis, this)?) {
             return res;
         } else {
-            const one_of = struct {
-                pub const list = brk: {
-                    let str: []const u8 = "'";
-                    const field_names = bun.meta.enumFieldNames(Enum);
-                    for (field_names, 0..) |entry, i| {
-                        str = str ++ entry ++ "'";
-                        if (i < field_names.len - 2) {
-                            str = str ++ ", '";
-                        } else if (i == field_names.len - 2) {
-                            str = str ++ " or '";
-                        }
-                    }
-                    break :brk str;
-                };
-
-                pub const label = property_name ++ " must be one of " ++ list;
-            }.label;
-
+            const one_of = comptime enumOneOfLabel(property_name, Enum);
             return globalThis.throwInvalidArguments(one_of, .{});
         }
     }

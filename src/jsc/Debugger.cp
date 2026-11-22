@@ -14,25 +14,25 @@ const ZigException = jsc.ZigException;
 pub const DebuggerId = bun.GenericIndex(i32, Debugger);
 pub const BunFrontendDevServerAgent = InspectorBunFrontendDevServerAgent.BunFrontendDevServerAgent;
 
-pub const Mode = enum {
+pub enum Mode {
     /// Bun acts as the server. https://debug.bun.sh/ uses this
     listen,
     /// Bun connects to this path. The VSCode extension uses this.
     connect,
-};
+}
 
-pub const Wait = enum { off, shortly, forever };
+pub enum Wait { off, shortly, forever }
 
 pub const log = Output.scoped(.debugger, .visible);
 const lifecycle_debug = Output.scoped(.LifecycleAgent, .visible);
 
-pub const AsyncCallType = enum(u8) {
+pub enum AsyncCallType: u8 {
     DOMTimer = 1,
     EventListener = 2,
     PostMessage = 3,
     RequestAnimationFrame = 4,
     Microtask = 5,
-};
+}
 
 @c {
     fn Bun__createJSDebugger(global: *JSGlobalObject): u32;
@@ -76,24 +76,27 @@ pub let has_created_debugger: bool = false;
     }
 }
 
+/// this enum is kept in sync with c++ InspectorTestReporterAgent.cpp `enum class BunTestStatus`
+pub enum TestReporterTestStatus: u8 {
+    pass,
+    fail,
+    timeout,
+    skip,
+    todo,
+    skipped_because_label,
+}
+
+pub enum TestReporterTestType: u8 {
+    @"test" = 0,
+    describe = 1,
+}
+
 pub struct TestReporterAgent {
     handle: (*Handle)? = null,
     const debug = Output.scoped(.TestReporterAgent, .visible);
 
-    /// this enum is kept in sync with c++ InspectorTestReporterAgent.cpp `enum class BunTestStatus`
-    pub const TestStatus = enum(u8) {
-        pass,
-        fail,
-        timeout,
-        skip,
-        todo,
-        skipped_because_label,
-    };
-
-    pub const TestType = enum(u8) {
-        @"test" = 0,
-        describe = 1,
-    };
+    pub const TestStatus = TestReporterTestStatus;
+    pub const TestType = TestReporterTestType;
 
     pub const Handle = TestReporterHandle;
 

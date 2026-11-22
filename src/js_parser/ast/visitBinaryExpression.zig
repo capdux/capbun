@@ -44,9 +44,436 @@ fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @Type
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
 fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == __CpErr) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return __CpErr{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return __CpErr{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return __CpErr{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return __CpErr.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return __CpErr.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return __CpErr{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
 fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub fn BinaryExpressionVisitorImpl(comptime P: type) type {
+    return struct {
+        e: *E.Binary,
+        loc: logger.Loc,
+        @"in": ExprIn,
+        left_in: ExprIn,
+        is_stmt_expr: bool = false,
+
+pub fn visitRightAndFinish(v: *BinaryExpressionVisitorImpl(P), p: *P) Expr {
+                var e_ = v.e;
+                _ = &e_;
+                const is_call_target = ((std.meta.activeTag(p.call_target) == .e_binary) and (e_ == p.call_target.e_binary));
+                const was_anonymous_named_expr = e_.right.isAnonymousNamed();
+                const prev_decorator_class_name = p.decorator_class_name;
+                if ((((((e_.op == .bin_assign) and was_anonymous_named_expr) and (e_.right.data == .e_class)) and e_.right.data.e_class.should_lower_standard_decorators) and (e_.left.data == .e_identifier))) {
+                    p.decorator_class_name = p.loadNameFromRef(e_.left.data.e_identifier.ref);
+                }
+                switch (e_.op) {
+.bin_logical_or => {
+const side_effects = SideEffects.toBoolean(p, e_.left.data);
+                if ((side_effects.ok and (if (@typeInfo(@TypeOf(side_effects)) == .@"enum") @intFromEnum(side_effects) else side_effects.value))) {
+                    const old = p.is_control_flow_dead;
+                    p.is_control_flow_dead = true;
+                    e_.right = p.visitExpr(e_.right);
+                    p.is_control_flow_dead = old;
+                } else {
+                    e_.right = p.visitExpr(e_.right);
+                }
+},
+.bin_logical_and => {
+const side_effects = SideEffects.toBoolean(p, e_.left.data);
+                if ((side_effects.ok and (!(if (@typeInfo(@TypeOf(side_effects)) == .@"enum") @intFromEnum(side_effects) else side_effects.value)))) {
+                    const old = p.is_control_flow_dead;
+                    p.is_control_flow_dead = true;
+                    e_.right = p.visitExpr(e_.right);
+                    p.is_control_flow_dead = old;
+                } else {
+                    e_.right = p.visitExpr(e_.right);
+                }
+},
+.bin_nullish_coalescing => {
+const side_effects = SideEffects.toNullOrUndefined(p, e_.left.data);
+                if ((side_effects.ok and (!(if (@typeInfo(@TypeOf(side_effects)) == .@"enum") @intFromEnum(side_effects) else side_effects.value)))) {
+                    const old = p.is_control_flow_dead;
+                    p.is_control_flow_dead = true;
+                    e_.right = p.visitExpr(e_.right);
+                    p.is_control_flow_dead = old;
+                } else {
+                    e_.right = p.visitExpr(e_.right);
+                }
+},
+else => {
+e_.right = p.visitExpr(e_.right);
+},
+}
+                p.decorator_class_name = prev_decorator_class_name;
+                switch (e_.op) {
+.bin_loose_eq, .bin_loose_ne, .bin_strict_eq, .bin_strict_ne => {
+if ((SideEffects.isPrimitiveToReorder(e_.left.data) and (!SideEffects.isPrimitiveToReorder(e_.right.data)))) {
+                    const _left = e_.left;
+                    const _right = e_.right;
+                    e_.left = _right;
+                    e_.right = _left;
+                }
+},
+else => {
+
+},
+}
+                switch (e_.op) {
+.bin_comma => {
+if (p.options.features.minify_syntax) {
+                    if (SideEffects.simplifyUnusedExpr(p, e_.left)) |simplified_left| {
+                        _ = &simplified_left;
+                        if (simplified_left.isEmpty()) {
+                            return e_.right;
+                        }
+                        e_.left = simplified_left;
+                    } else {
+                        if ((is_call_target and e_.right.hasValueForThisInCall())) {
+                            e_.left = Expr{ .data = Prefill.Data.Zero, .loc = e_.left.loc };
+                        } else {
+                            return e_.right;
+                        }
+                    }
+                }
+},
+.bin_loose_eq => {
+const equality = e_.left.data.eql(e_.right.data, p, .loose);
+                if (equality.ok) {
+                    if (equality.is_require_main_and_module) {
+                        _ = p.ignoreUsageOfRuntimeRequire();
+                        _ = p.ignoreUsage(p.module_ref);
+                        return p.valueForImportMetaMain(false, v.loc);
+                    }
+                    return p.newExpr(E.Boolean{ .value = equality.equal }, v.loc);
+                }
+                if (p.options.features.minify_syntax) {
+                    if (tryOptimizeTypeofUndefined(P, e_, p, .bin_gt)) |optimized| {
+                        _ = &optimized;
+                        return optimized;
+                    }
+                    if ((e_.left.data == .e_undefined)) {
+                        e_.left.data = .{ .e_null = std.mem.zeroes(E.Null) };
+                    } else {
+                        if ((e_.right.data == .e_undefined)) {
+                            e_.right.data = .{ .e_null = std.mem.zeroes(E.Null) };
+                        }
+                    }
+                }
+},
+.bin_strict_eq => {
+const equality = e_.left.data.eql(e_.right.data, p, .strict);
+                if (equality.ok) {
+                    if (equality.is_require_main_and_module) {
+                        _ = p.ignoreUsage(p.module_ref);
+                        _ = p.ignoreUsageOfRuntimeRequire();
+                        return p.valueForImportMetaMain(false, v.loc);
+                    }
+                    return p.newExpr(E.Boolean{ .value = equality.equal }, v.loc);
+                }
+                if (p.options.features.minify_syntax) {
+                    if (tryOptimizeTypeofUndefined(P, e_, p, .bin_gt)) |optimized| {
+                        _ = &optimized;
+                        return optimized;
+                    }
+                }
+},
+.bin_loose_ne => {
+const equality = e_.left.data.eql(e_.right.data, p, .loose);
+                if (equality.ok) {
+                    if (equality.is_require_main_and_module) {
+                        _ = p.ignoreUsage(p.module_ref);
+                        _ = p.ignoreUsageOfRuntimeRequire();
+                        return p.valueForImportMetaMain(true, v.loc);
+                    }
+                    return p.newExpr(E.Boolean{ .value = (!equality.equal) }, v.loc);
+                }
+                if (p.options.features.minify_syntax) {
+                    if (tryOptimizeTypeofUndefined(P, e_, p, .bin_lt)) |optimized| {
+                        _ = &optimized;
+                        return optimized;
+                    }
+                }
+                if ((std.meta.activeTag(e_.right.data) == .e_undefined)) {
+                    e_.right = p.newExpr(E.Null, e_.right.loc);
+                }
+},
+.bin_strict_ne => {
+const equality = e_.left.data.eql(e_.right.data, p, .strict);
+                if (equality.ok) {
+                    if (equality.is_require_main_and_module) {
+                        _ = p.ignoreUsage(p.module_ref);
+                        _ = p.ignoreUsageOfRuntimeRequire();
+                        return p.valueForImportMetaMain(true, v.loc);
+                    }
+                    return p.newExpr(E.Boolean{ .value = (!equality.equal) }, v.loc);
+                }
+                if (p.options.features.minify_syntax) {
+                    if (tryOptimizeTypeofUndefined(P, e_, p, .bin_lt)) |optimized| {
+                        _ = &optimized;
+                        return optimized;
+                    }
+                }
+},
+.bin_nullish_coalescing => {
+const nullorUndefined = SideEffects.toNullOrUndefined(p, e_.left.data);
+                if (nullorUndefined.ok) {
+                    if ((!(if (@typeInfo(@TypeOf(nullorUndefined)) == .@"enum") @intFromEnum(nullorUndefined) else nullorUndefined.value))) {
+                        return e_.left;
+                    } else {
+                        if ((nullorUndefined.side_effects == .no_side_effects)) {
+                            if ((is_call_target and e_.right.hasValueForThisInCall())) {
+                                return Expr.joinWithComma(Expr{ .data = .{ .e_number = .{ .value = 0.0 } }, .loc = e_.left.loc }, e_.right, p.allocator);
+                            }
+                            return e_.right;
+                        }
+                    }
+                }
+},
+.bin_logical_or => {
+const side_effects = SideEffects.toBoolean(p, e_.left.data);
+                if ((side_effects.ok and (if (@typeInfo(@TypeOf(side_effects)) == .@"enum") @intFromEnum(side_effects) else side_effects.value))) {
+                    return e_.left;
+                } else {
+                    if ((side_effects.ok and (side_effects.side_effects == .no_side_effects))) {
+                        if ((is_call_target and e_.right.hasValueForThisInCall())) {
+                            return Expr.joinWithComma(Expr{ .data = Prefill.Data.Zero, .loc = e_.left.loc }, e_.right, p.allocator);
+                        }
+                        return e_.right;
+                    }
+                }
+},
+.bin_logical_and => {
+const side_effects = SideEffects.toBoolean(p, e_.left.data);
+                if (side_effects.ok) {
+                    if ((!(if (@typeInfo(@TypeOf(side_effects)) == .@"enum") @intFromEnum(side_effects) else side_effects.value))) {
+                        return e_.left;
+                    } else {
+                        if ((side_effects.side_effects == .no_side_effects)) {
+                            if ((is_call_target and e_.right.hasValueForThisInCall())) {
+                                return Expr.joinWithComma(Expr{ .data = Prefill.Data.Zero, .loc = e_.left.loc }, e_.right, p.allocator);
+                            }
+                            return e_.right;
+                        }
+                    }
+                }
+},
+.bin_add => {
+if (p.should_fold_typescript_constant_expressions) {
+                    if (Expr.extractNumericValues(e_.left.data, e_.right.data)) |vals| {
+                        _ = &vals;
+                        return p.newExpr(E.Number{ .value = (vals[0] + vals[1]) }, v.loc);
+                    }
+                    if (foldStringAddition(e_.left, e_.right, p.allocator, .normal)) |res| {
+                        _ = &res;
+                        return res;
+                    }
+                    if (e_.left.data.@"as"(.e_binary)) |left| {
+                        _ = &left;
+                        if ((left.op == .bin_add)) {
+                            if (foldStringAddition(left.right, e_.right, p.allocator, .nested_left)) |result| {
+                                _ = &result;
+                                return p.newExpr(E.Binary{ .left = left.left, .right = result, .op = .bin_add }, e_.left.loc);
+                            }
+                        }
+                    }
+                }
+},
+.bin_sub => {
+if (p.should_fold_typescript_constant_expressions) {
+                    if (Expr.extractNumericValues(e_.left.data, e_.right.data)) |vals| {
+                        _ = &vals;
+                        return p.newExpr(E.Number{ .value = (vals[0] - vals[1]) }, v.loc);
+                    }
+                }
+},
+.bin_mul => {
+if (p.should_fold_typescript_constant_expressions) {
+                    if (Expr.extractNumericValues(e_.left.data, e_.right.data)) |vals| {
+                        _ = &vals;
+                        return p.newExpr(E.Number{ .value = (vals[0] * vals[1]) }, v.loc);
+                    }
+                }
+},
+.bin_div => {
+if (p.should_fold_typescript_constant_expressions) {
+                    if (Expr.extractNumericValues(e_.left.data, e_.right.data)) |vals| {
+                        _ = &vals;
+                        return p.newExpr(E.Number{ .value = (vals[0] / vals[1]) }, v.loc);
+                    }
+                }
+},
+.bin_rem => {
+if (p.should_fold_typescript_constant_expressions) {
+                    if (Expr.extractNumericValues(e_.left.data, e_.right.data)) |vals| {
+                        _ = &vals;
+                        const fmod = @extern(*const fn (f64, f64) callconv(.c) f64, .{ .name = "fmod" });
+                        return p.newExpr(E.Number{ .value = (if (comptime Environment.isNative) fmod(vals[0], vals[1]) else (blk_catch_0: { break :blk_catch_0 ((std.math.mod(f64, vals[0], vals[1])) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 0; }); })) }, v.loc);
+                    }
+                }
+},
+.bin_pow => {
+if (p.should_fold_typescript_constant_expressions) {
+                    if (Expr.extractNumericValues(e_.left.data, e_.right.data)) |vals| {
+                        _ = &vals;
+                        return p.newExpr(E.Number{ .value = jsc.math.pow(vals[0], vals[1]) }, v.loc);
+                    }
+                }
+},
+.bin_shl => {
+if (p.should_fold_typescript_constant_expressions) {
+                    if (Expr.extractNumericValues(e_.left.data, e_.right.data)) |vals| {
+                        _ = &vals;
+                        const left = floatToInt32(vals[0]);
+                        const right: u8 = @intCast((@as(u32, @bitCast(floatToInt32(vals[1]))) % 32));
+                        const result: i32 = @bitCast(std.math.shl(i32, left, right));
+                        return p.newExpr(E.Number{ .value = @floatFromInt(result) }, v.loc);
+                    }
+                }
+},
+.bin_shr => {
+if (p.should_fold_typescript_constant_expressions) {
+                    if (Expr.extractNumericValues(e_.left.data, e_.right.data)) |vals| {
+                        _ = &vals;
+                        const left = floatToInt32(vals[0]);
+                        const right: u8 = @intCast((@as(u32, @bitCast(floatToInt32(vals[1]))) % 32));
+                        const result: i32 = @bitCast(std.math.shr(i32, left, right));
+                        return p.newExpr(E.Number{ .value = @floatFromInt(result) }, v.loc);
+                    }
+                }
+},
+.bin_u_shr => {
+if (p.should_fold_typescript_constant_expressions) {
+                    if (Expr.extractNumericValues(e_.left.data, e_.right.data)) |vals| {
+                        _ = &vals;
+                        const left: u32 = @bitCast(floatToInt32(vals[0]));
+                        const right: u8 = @intCast((@as(u32, @bitCast(floatToInt32(vals[1]))) % 32));
+                        const result: u32 = std.math.shr(u32, left, right);
+                        return p.newExpr(E.Number{ .value = @floatFromInt(result) }, v.loc);
+                    }
+                }
+},
+.bin_bitwise_and => {
+if (p.should_fold_typescript_constant_expressions) {
+                    if (Expr.extractNumericValues(e_.left.data, e_.right.data)) |vals| {
+                        _ = &vals;
+                        return p.newExpr(E.Number{ .value = @floatFromInt((floatToInt32(vals[0]) & floatToInt32(vals[1]))) }, v.loc);
+                    }
+                }
+},
+.bin_bitwise_or => {
+if (p.should_fold_typescript_constant_expressions) {
+                    if (Expr.extractNumericValues(e_.left.data, e_.right.data)) |vals| {
+                        _ = &vals;
+                        return p.newExpr(E.Number{ .value = @floatFromInt((floatToInt32(vals[0]) | floatToInt32(vals[1]))) }, v.loc);
+                    }
+                }
+},
+.bin_bitwise_xor => {
+if (p.should_fold_typescript_constant_expressions) {
+                    if (Expr.extractNumericValues(e_.left.data, e_.right.data)) |vals| {
+                        _ = &vals;
+                        return p.newExpr(E.Number{ .value = @floatFromInt((floatToInt32(vals[0]) ^ floatToInt32(vals[1]))) }, v.loc);
+                    }
+                }
+},
+.bin_lt => {
+if (p.should_fold_typescript_constant_expressions) {
+                    if (Expr.extractNumericValuesInSafeRange(e_.left.data, e_.right.data)) |vals| {
+                        _ = &vals;
+                        return p.newExpr(E.Boolean{ .value = (vals[0] < vals[1]) }, v.loc);
+                    }
+                    if (Expr.extractStringValues(e_.left.data, e_.right.data, p.allocator)) |vals| {
+                        _ = &vals;
+                        return p.newExpr(E.Boolean{ .value = (vals[0].order(vals[1]) == .lt) }, v.loc);
+                    }
+                }
+},
+.bin_gt => {
+if (p.should_fold_typescript_constant_expressions) {
+                    if (Expr.extractNumericValuesInSafeRange(e_.left.data, e_.right.data)) |vals| {
+                        _ = &vals;
+                        return p.newExpr(E.Boolean{ .value = (vals[0] > vals[1]) }, v.loc);
+                    }
+                    if (Expr.extractStringValues(e_.left.data, e_.right.data, p.allocator)) |vals| {
+                        _ = &vals;
+                        return p.newExpr(E.Boolean{ .value = (vals[0].order(vals[1]) == .gt) }, v.loc);
+                    }
+                }
+},
+.bin_le => {
+if (p.should_fold_typescript_constant_expressions) {
+                    if (Expr.extractNumericValuesInSafeRange(e_.left.data, e_.right.data)) |vals| {
+                        _ = &vals;
+                        return p.newExpr(E.Boolean{ .value = (vals[0] <= vals[1]) }, v.loc);
+                    }
+                    if (Expr.extractStringValues(e_.left.data, e_.right.data, p.allocator)) |vals| {
+                        _ = &vals;
+                        return p.newExpr(E.Boolean{ .value = (switch (vals[0].order(vals[1])) {
+.eq, .lt => true,
+.gt => false,
+}) }, v.loc);
+                    }
+                }
+},
+.bin_ge => {
+if (p.should_fold_typescript_constant_expressions) {
+                    if (Expr.extractNumericValuesInSafeRange(e_.left.data, e_.right.data)) |vals| {
+                        _ = &vals;
+                        return p.newExpr(E.Boolean{ .value = (vals[0] >= vals[1]) }, v.loc);
+                    }
+                    if (Expr.extractStringValues(e_.left.data, e_.right.data, p.allocator)) |vals| {
+                        _ = &vals;
+                        return p.newExpr(E.Boolean{ .value = (switch (vals[0].order(vals[1])) {
+.eq, .gt => true,
+.lt => false,
+}) }, v.loc);
+                    }
+                }
+},
+.bin_assign => {
+if ((e_.left.data == .e_identifier)) {
+                    e_.right = p.maybeKeepExprSymbolName(e_.right, p.symbols.items[@as(usize, @intCast(e_.left.data.e_identifier.ref.innerIndex()))].original_name, was_anonymous_named_expr);
+                }
+},
+.bin_nullish_coalescing_assign, .bin_logical_or_assign => {
+if (e_.left.data.@"as"(.e_dot)) |dot| {
+                    _ = &dot;
+                    if (dot.target.data.@"as"(.e_object)) |obj| {
+                        _ = &obj;
+                        if ((obj.properties.len == 0)) {
+                            if ((!bun.strings.eqlComptime((if (@typeInfo(@TypeOf(dot)) == .@"enum" or @typeInfo(@TypeOf(dot)) == .@"union") @tagName(dot) else dot.name), "__proto__"))) {
+                                return e_.right;
+                            }
+                        }
+                    }
+                }
+},
+else => {
+
+},
+}
+                return Expr{ .loc = v.loc, .data = .{ .e_binary = e_ } };
+        }
+
+pub fn checkAndPrepare(v: *BinaryExpressionVisitorImpl(P), p: *P) ?Expr {
+                return checkAndPrepareImpl(P, v, p);
+        }
+    };
+}
+
 const string = []const u8;
 const Environment = bun.Environment;
 const jsc = bun.jsc;
@@ -88,442 +515,34 @@ pub fn checkAndPrepareImpl(comptime P: type, v: anytype, p: *P) ?Expr {
         return null;
 }
 
-pub fn CreateBinaryExpressionVisitor(comptime parser_feature__typescript: bool, comptime parser_feature__jsx: JSXTransformType, comptime parser_feature__scan_only: bool) type {
-        return struct {
-
-pub fn tryOptimizeTypeofUndefined(e_: *E.Binary, p: *P, replacement_op: js_ast.Op.Code) ?Expr {
-            const expr_res = exprs: {
-            if (((e_.left.data == .e_unary) and (e_.left.data.e_unary.op == .un_typeof))) {
-                if (((e_.right.data == .e_string) and e_.right.data.e_string.eqlComptime("undefined"))) {
-                    break :exprs .{ e_.left, e_.right, false };
-                }
-                return null;
-            }
-            if (((e_.right.data == .e_unary) and (e_.right.data.e_unary.op == .un_typeof))) {
-                if (((e_.left.data == .e_string) and e_.left.data.e_string.eqlComptime("undefined"))) {
-                    break :exprs .{ e_.right, e_.left, true };
-                }
-                return null;
+pub fn tryOptimizeTypeofUndefined(comptime P: type, e_: *E.Binary, p: *P, replacement_op: js_ast.Op.Code) ?Expr {
+        const expr_res = exprs: {
+        if (((e_.left.data == .e_unary) and (e_.left.data.e_unary.op == .un_typeof))) {
+            if (((e_.right.data == .e_string) and e_.right.data.e_string.eqlComptime("undefined"))) {
+                break :exprs .{ e_.left, e_.right, false };
             }
             return null;
+        }
+        if (((e_.right.data == .e_unary) and (e_.right.data.e_unary.op == .un_typeof))) {
+            if (((e_.left.data == .e_string) and e_.left.data.e_string.eqlComptime("undefined"))) {
+                break :exprs .{ e_.right, e_.left, true };
+            }
+            return null;
+        }
+        return null;
 };
-            const typeof_expr = expr_res[0];
-            const string_expr = expr_res[1];
-            const flip_comparison = expr_res[2];
-            const u_string = p.newExpr(E.String{ .data = "u" }, string_expr.loc);
-            const left = (if (flip_comparison) u_string else typeof_expr);
-            const right = (if (flip_comparison) typeof_expr else u_string);
-            return p.newExpr(E.Binary{ .left = left, .right = right, .op = replacement_op }, e_.left.loc);
-    }
+        const typeof_expr = expr_res[0];
+        const string_expr = expr_res[1];
+        const flip_comparison = expr_res[2];
+        const u_string = p.newExpr(E.String{ .data = "u" }, string_expr.loc);
+        const left = (if (flip_comparison) u_string else typeof_expr);
+        const right = (if (flip_comparison) typeof_expr else u_string);
+        return p.newExpr(E.Binary{ .left = left, .right = right, .op = replacement_op }, e_.left.loc);
+}
+
+pub fn CreateBinaryExpressionVisitor(comptime parser_feature__typescript: bool, comptime parser_feature__jsx: JSXTransformType, comptime parser_feature__scan_only: bool) type {
+        return struct {
     const P = js_parser.NewParser_(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only);
-    pub const BinaryExpressionVisitor = struct {
-        e: *E.Binary,
-        loc: logger.Loc,
-        @"in": ExprIn,
-        left_in: ExprIn,
-        is_stmt_expr: bool = false,
-    
-    pub fn visitRightAndFinish(v: *BinaryExpressionVisitor, p: *P) Expr {
-                var e_ = v.e;
-                _ = &e_;
-                const is_call_target = ((std.meta.activeTag(p.call_target) == .e_binary) and (e_ == p.call_target.e_binary));
-                const was_anonymous_named_expr = e_.right.isAnonymousNamed();
-                const prev_decorator_class_name = p.decorator_class_name;
-                if ((((((e_.op == .bin_assign) and was_anonymous_named_expr) and (e_.right.data == .e_class)) and e_.right.data.e_class.should_lower_standard_decorators) and (e_.left.data == .e_identifier))) {
-                    p.decorator_class_name = p.loadNameFromRef(e_.left.data.e_identifier.ref);
-                }
-                switch (e_.op) {
-    .bin_logical_or => {
-    const side_effects = SideEffects.toBoolean(p, e_.left.data);
-                if ((side_effects.ok and (if (@typeInfo(@TypeOf(side_effects)) == .@"enum") @intFromEnum(side_effects) else side_effects.value))) {
-                    const old = p.is_control_flow_dead;
-                    p.is_control_flow_dead = true;
-                    e_.right = p.visitExpr(e_.right);
-                    p.is_control_flow_dead = old;
-                } else {
-                    e_.right = p.visitExpr(e_.right);
-                }
-    },
-    .bin_logical_and => {
-    const side_effects = SideEffects.toBoolean(p, e_.left.data);
-                if ((side_effects.ok and (!(if (@typeInfo(@TypeOf(side_effects)) == .@"enum") @intFromEnum(side_effects) else side_effects.value)))) {
-                    const old = p.is_control_flow_dead;
-                    p.is_control_flow_dead = true;
-                    e_.right = p.visitExpr(e_.right);
-                    p.is_control_flow_dead = old;
-                } else {
-                    e_.right = p.visitExpr(e_.right);
-                }
-    },
-    .bin_nullish_coalescing => {
-    const side_effects = SideEffects.toNullOrUndefined(p, e_.left.data);
-                if ((side_effects.ok and (!(if (@typeInfo(@TypeOf(side_effects)) == .@"enum") @intFromEnum(side_effects) else side_effects.value)))) {
-                    const old = p.is_control_flow_dead;
-                    p.is_control_flow_dead = true;
-                    e_.right = p.visitExpr(e_.right);
-                    p.is_control_flow_dead = old;
-                } else {
-                    e_.right = p.visitExpr(e_.right);
-                }
-    },
-    else => {
-    e_.right = p.visitExpr(e_.right);
-    },
-    }
-                p.decorator_class_name = prev_decorator_class_name;
-                switch (e_.op) {
-    .bin_loose_eq, .bin_loose_ne, .bin_strict_eq, .bin_strict_ne => {
-    if ((SideEffects.isPrimitiveToReorder(e_.left.data) and (!SideEffects.isPrimitiveToReorder(e_.right.data)))) {
-                    const _left = e_.left;
-                    const _right = e_.right;
-                    e_.left = _right;
-                    e_.right = _left;
-                }
-    },
-    else => {
-    
-    },
-    }
-                switch (e_.op) {
-    .bin_comma => {
-    if (p.options.features.minify_syntax) {
-                    if (SideEffects.simplifyUnusedExpr(p, e_.left)) |simplified_left| {
-                        _ = &simplified_left;
-                        if (simplified_left.isEmpty()) {
-                            return e_.right;
-                        }
-                        e_.left = simplified_left;
-                    } else {
-                        if ((is_call_target and e_.right.hasValueForThisInCall())) {
-                            e_.left = Expr{ .data = Prefill.Data.Zero, .loc = e_.left.loc };
-                        } else {
-                            return e_.right;
-                        }
-                    }
-                }
-    },
-    .bin_loose_eq => {
-    const equality = e_.left.data.eql(e_.right.data, p, .loose);
-                if (equality.ok) {
-                    if (equality.is_require_main_and_module) {
-                        _ = p.ignoreUsageOfRuntimeRequire();
-                        _ = p.ignoreUsage(p.module_ref);
-                        return p.valueForImportMetaMain(false, v.loc);
-                    }
-                    return p.newExpr(E.Boolean{ .value = equality.equal }, v.loc);
-                }
-                if (p.options.features.minify_syntax) {
-                    if (tryOptimizeTypeofUndefined(e_, p, .bin_gt)) |optimized| {
-                        _ = &optimized;
-                        return optimized;
-                    }
-                    if ((e_.left.data == .e_undefined)) {
-                        e_.left.data = .{ .e_null = std.mem.zeroes(E.Null) };
-                    } else {
-                        if ((e_.right.data == .e_undefined)) {
-                            e_.right.data = .{ .e_null = std.mem.zeroes(E.Null) };
-                        }
-                    }
-                }
-    },
-    .bin_strict_eq => {
-    const equality = e_.left.data.eql(e_.right.data, p, .strict);
-                if (equality.ok) {
-                    if (equality.is_require_main_and_module) {
-                        _ = p.ignoreUsage(p.module_ref);
-                        _ = p.ignoreUsageOfRuntimeRequire();
-                        return p.valueForImportMetaMain(false, v.loc);
-                    }
-                    return p.newExpr(E.Boolean{ .value = equality.equal }, v.loc);
-                }
-                if (p.options.features.minify_syntax) {
-                    if (tryOptimizeTypeofUndefined(e_, p, .bin_gt)) |optimized| {
-                        _ = &optimized;
-                        return optimized;
-                    }
-                }
-    },
-    .bin_loose_ne => {
-    const equality = e_.left.data.eql(e_.right.data, p, .loose);
-                if (equality.ok) {
-                    if (equality.is_require_main_and_module) {
-                        _ = p.ignoreUsage(p.module_ref);
-                        _ = p.ignoreUsageOfRuntimeRequire();
-                        return p.valueForImportMetaMain(true, v.loc);
-                    }
-                    return p.newExpr(E.Boolean{ .value = (!equality.equal) }, v.loc);
-                }
-                if (p.options.features.minify_syntax) {
-                    if (tryOptimizeTypeofUndefined(e_, p, .bin_lt)) |optimized| {
-                        _ = &optimized;
-                        return optimized;
-                    }
-                }
-                if ((std.meta.activeTag(e_.right.data) == .e_undefined)) {
-                    e_.right = p.newExpr(E.Null, e_.right.loc);
-                }
-    },
-    .bin_strict_ne => {
-    const equality = e_.left.data.eql(e_.right.data, p, .strict);
-                if (equality.ok) {
-                    if (equality.is_require_main_and_module) {
-                        _ = p.ignoreUsage(p.module_ref);
-                        _ = p.ignoreUsageOfRuntimeRequire();
-                        return p.valueForImportMetaMain(true, v.loc);
-                    }
-                    return p.newExpr(E.Boolean{ .value = (!equality.equal) }, v.loc);
-                }
-                if (p.options.features.minify_syntax) {
-                    if (tryOptimizeTypeofUndefined(e_, p, .bin_lt)) |optimized| {
-                        _ = &optimized;
-                        return optimized;
-                    }
-                }
-    },
-    .bin_nullish_coalescing => {
-    const nullorUndefined = SideEffects.toNullOrUndefined(p, e_.left.data);
-                if (nullorUndefined.ok) {
-                    if ((!(if (@typeInfo(@TypeOf(nullorUndefined)) == .@"enum") @intFromEnum(nullorUndefined) else nullorUndefined.value))) {
-                        return e_.left;
-                    } else {
-                        if ((nullorUndefined.side_effects == .no_side_effects)) {
-                            if ((is_call_target and e_.right.hasValueForThisInCall())) {
-                                return Expr.joinWithComma(Expr{ .data = .{ .e_number = .{ .value = 0.0 } }, .loc = e_.left.loc }, e_.right, p.allocator);
-                            }
-                            return e_.right;
-                        }
-                    }
-                }
-    },
-    .bin_logical_or => {
-    const side_effects = SideEffects.toBoolean(p, e_.left.data);
-                if ((side_effects.ok and (if (@typeInfo(@TypeOf(side_effects)) == .@"enum") @intFromEnum(side_effects) else side_effects.value))) {
-                    return e_.left;
-                } else {
-                    if ((side_effects.ok and (side_effects.side_effects == .no_side_effects))) {
-                        if ((is_call_target and e_.right.hasValueForThisInCall())) {
-                            return Expr.joinWithComma(Expr{ .data = Prefill.Data.Zero, .loc = e_.left.loc }, e_.right, p.allocator);
-                        }
-                        return e_.right;
-                    }
-                }
-    },
-    .bin_logical_and => {
-    const side_effects = SideEffects.toBoolean(p, e_.left.data);
-                if (side_effects.ok) {
-                    if ((!(if (@typeInfo(@TypeOf(side_effects)) == .@"enum") @intFromEnum(side_effects) else side_effects.value))) {
-                        return e_.left;
-                    } else {
-                        if ((side_effects.side_effects == .no_side_effects)) {
-                            if ((is_call_target and e_.right.hasValueForThisInCall())) {
-                                return Expr.joinWithComma(Expr{ .data = Prefill.Data.Zero, .loc = e_.left.loc }, e_.right, p.allocator);
-                            }
-                            return e_.right;
-                        }
-                    }
-                }
-    },
-    .bin_add => {
-    if (p.should_fold_typescript_constant_expressions) {
-                    if (Expr.extractNumericValues(e_.left.data, e_.right.data)) |vals| {
-                        _ = &vals;
-                        return p.newExpr(E.Number{ .value = (vals[0] + vals[1]) }, v.loc);
-                    }
-                    if (foldStringAddition(e_.left, e_.right, p.allocator, .normal)) |res| {
-                        _ = &res;
-                        return res;
-                    }
-                    if (e_.left.data.@"as"(.e_binary)) |left| {
-                        _ = &left;
-                        if ((left.op == .bin_add)) {
-                            if (foldStringAddition(left.right, e_.right, p.allocator, .nested_left)) |result| {
-                                _ = &result;
-                                return p.newExpr(E.Binary{ .left = left.left, .right = result, .op = .bin_add }, e_.left.loc);
-                            }
-                        }
-                    }
-                }
-    },
-    .bin_sub => {
-    if (p.should_fold_typescript_constant_expressions) {
-                    if (Expr.extractNumericValues(e_.left.data, e_.right.data)) |vals| {
-                        _ = &vals;
-                        return p.newExpr(E.Number{ .value = (vals[0] - vals[1]) }, v.loc);
-                    }
-                }
-    },
-    .bin_mul => {
-    if (p.should_fold_typescript_constant_expressions) {
-                    if (Expr.extractNumericValues(e_.left.data, e_.right.data)) |vals| {
-                        _ = &vals;
-                        return p.newExpr(E.Number{ .value = (vals[0] * vals[1]) }, v.loc);
-                    }
-                }
-    },
-    .bin_div => {
-    if (p.should_fold_typescript_constant_expressions) {
-                    if (Expr.extractNumericValues(e_.left.data, e_.right.data)) |vals| {
-                        _ = &vals;
-                        return p.newExpr(E.Number{ .value = (vals[0] / vals[1]) }, v.loc);
-                    }
-                }
-    },
-    .bin_rem => {
-    if (p.should_fold_typescript_constant_expressions) {
-                    if (Expr.extractNumericValues(e_.left.data, e_.right.data)) |vals| {
-                        _ = &vals;
-                        const fmod = @extern(*const fn(f64, f64) callconv(.c) f64, .{ .name = "fmod" });
-                        return p.newExpr(E.Number{ .value = (if (comptime Environment.isNative) fmod(vals[0], vals[1]) else (blk_catch_0: { break :blk_catch_0 ((std.math.mod(f64, vals[0], vals[1])) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 0; }); })) }, v.loc);
-                    }
-                }
-    },
-    .bin_pow => {
-    if (p.should_fold_typescript_constant_expressions) {
-                    if (Expr.extractNumericValues(e_.left.data, e_.right.data)) |vals| {
-                        _ = &vals;
-                        return p.newExpr(E.Number{ .value = jsc.math.pow(vals[0], vals[1]) }, v.loc);
-                    }
-                }
-    },
-    .bin_shl => {
-    if (p.should_fold_typescript_constant_expressions) {
-                    if (Expr.extractNumericValues(e_.left.data, e_.right.data)) |vals| {
-                        _ = &vals;
-                        const left = floatToInt32(vals[0]);
-                        const right: u8 = @intCast((@as(u32, @bitCast(floatToInt32(vals[1]))) % 32));
-                        const result: i32 = @bitCast(std.math.shl(i32, left, right));
-                        return p.newExpr(E.Number{ .value = @floatFromInt(result) }, v.loc);
-                    }
-                }
-    },
-    .bin_shr => {
-    if (p.should_fold_typescript_constant_expressions) {
-                    if (Expr.extractNumericValues(e_.left.data, e_.right.data)) |vals| {
-                        _ = &vals;
-                        const left = floatToInt32(vals[0]);
-                        const right: u8 = @intCast((@as(u32, @bitCast(floatToInt32(vals[1]))) % 32));
-                        const result: i32 = @bitCast(std.math.shr(i32, left, right));
-                        return p.newExpr(E.Number{ .value = @floatFromInt(result) }, v.loc);
-                    }
-                }
-    },
-    .bin_u_shr => {
-    if (p.should_fold_typescript_constant_expressions) {
-                    if (Expr.extractNumericValues(e_.left.data, e_.right.data)) |vals| {
-                        _ = &vals;
-                        const left: u32 = @bitCast(floatToInt32(vals[0]));
-                        const right: u8 = @intCast((@as(u32, @bitCast(floatToInt32(vals[1]))) % 32));
-                        const result: u32 = std.math.shr(u32, left, right);
-                        return p.newExpr(E.Number{ .value = @floatFromInt(result) }, v.loc);
-                    }
-                }
-    },
-    .bin_bitwise_and => {
-    if (p.should_fold_typescript_constant_expressions) {
-                    if (Expr.extractNumericValues(e_.left.data, e_.right.data)) |vals| {
-                        _ = &vals;
-                        return p.newExpr(E.Number{ .value = @floatFromInt((floatToInt32(vals[0]) & floatToInt32(vals[1]))) }, v.loc);
-                    }
-                }
-    },
-    .bin_bitwise_or => {
-    if (p.should_fold_typescript_constant_expressions) {
-                    if (Expr.extractNumericValues(e_.left.data, e_.right.data)) |vals| {
-                        _ = &vals;
-                        return p.newExpr(E.Number{ .value = @floatFromInt((floatToInt32(vals[0]) | floatToInt32(vals[1]))) }, v.loc);
-                    }
-                }
-    },
-    .bin_bitwise_xor => {
-    if (p.should_fold_typescript_constant_expressions) {
-                    if (Expr.extractNumericValues(e_.left.data, e_.right.data)) |vals| {
-                        _ = &vals;
-                        return p.newExpr(E.Number{ .value = @floatFromInt((floatToInt32(vals[0]) ^ floatToInt32(vals[1]))) }, v.loc);
-                    }
-                }
-    },
-    .bin_lt => {
-    if (p.should_fold_typescript_constant_expressions) {
-                    if (Expr.extractNumericValuesInSafeRange(e_.left.data, e_.right.data)) |vals| {
-                        _ = &vals;
-                        return p.newExpr(E.Boolean{ .value = (vals[0] < vals[1]) }, v.loc);
-                    }
-                    if (Expr.extractStringValues(e_.left.data, e_.right.data, p.allocator)) |vals| {
-                        _ = &vals;
-                        return p.newExpr(E.Boolean{ .value = (vals[0].order(vals[1]) == .lt) }, v.loc);
-                    }
-                }
-    },
-    .bin_gt => {
-    if (p.should_fold_typescript_constant_expressions) {
-                    if (Expr.extractNumericValuesInSafeRange(e_.left.data, e_.right.data)) |vals| {
-                        _ = &vals;
-                        return p.newExpr(E.Boolean{ .value = (vals[0] > vals[1]) }, v.loc);
-                    }
-                    if (Expr.extractStringValues(e_.left.data, e_.right.data, p.allocator)) |vals| {
-                        _ = &vals;
-                        return p.newExpr(E.Boolean{ .value = (vals[0].order(vals[1]) == .gt) }, v.loc);
-                    }
-                }
-    },
-    .bin_le => {
-    if (p.should_fold_typescript_constant_expressions) {
-                    if (Expr.extractNumericValuesInSafeRange(e_.left.data, e_.right.data)) |vals| {
-                        _ = &vals;
-                        return p.newExpr(E.Boolean{ .value = (vals[0] <= vals[1]) }, v.loc);
-                    }
-                    if (Expr.extractStringValues(e_.left.data, e_.right.data, p.allocator)) |vals| {
-                        _ = &vals;
-                        return p.newExpr(E.Boolean{ .value = (switch (vals[0].order(vals[1])) {
-    .eq, .lt => true,
-    .gt => false,
-    }) }, v.loc);
-                    }
-                }
-    },
-    .bin_ge => {
-    if (p.should_fold_typescript_constant_expressions) {
-                    if (Expr.extractNumericValuesInSafeRange(e_.left.data, e_.right.data)) |vals| {
-                        _ = &vals;
-                        return p.newExpr(E.Boolean{ .value = (vals[0] >= vals[1]) }, v.loc);
-                    }
-                    if (Expr.extractStringValues(e_.left.data, e_.right.data, p.allocator)) |vals| {
-                        _ = &vals;
-                        return p.newExpr(E.Boolean{ .value = (switch (vals[0].order(vals[1])) {
-    .eq, .gt => true,
-    .lt => false,
-    }) }, v.loc);
-                    }
-                }
-    },
-    .bin_assign => {
-    if ((e_.left.data == .e_identifier)) {
-                    e_.right = p.maybeKeepExprSymbolName(e_.right, p.symbols.items[@as(usize, @intCast(e_.left.data.e_identifier.ref.innerIndex()))].original_name, was_anonymous_named_expr);
-                }
-    },
-    .bin_nullish_coalescing_assign, .bin_logical_or_assign => {
-    if (e_.left.data.@"as"(.e_dot)) |dot| {
-                    _ = &dot;
-                    if (dot.target.data.@"as"(.e_object)) |obj| {
-                        _ = &obj;
-                        if ((obj.properties.len == 0)) {
-                            if ((!bun.strings.eqlComptime((if (@typeInfo(@TypeOf(dot)) == .@"enum" or @typeInfo(@TypeOf(dot)) == .@"union") @tagName(dot) else dot.name), "__proto__"))) {
-                                return e_.right;
-                            }
-                        }
-                    }
-                }
-    },
-    else => {
-    
-    },
-    }
-                return Expr{ .loc = v.loc, .data = .{ .e_binary = e_ } };
-        }
-    
-    pub fn checkAndPrepare(v: *BinaryExpressionVisitor, p: *P) ?Expr {
-                return checkAndPrepareImpl(P, v, p);
-        }
-    };
+    pub const BinaryExpressionVisitor = BinaryExpressionVisitorImpl(P);
 };
 }

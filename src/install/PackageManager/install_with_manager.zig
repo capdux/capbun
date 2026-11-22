@@ -672,57 +672,6 @@ else => {
                     _ = Output.flush();
                 }
             }
-            const runAndWaitFn = (struct {
-
-pub fn runAndWaitFn(comptime check_peers: bool, comptime only_pre_patch: bool) *const fn (*PackageManager) anyerror!void {
-            _ = &check_peers;
-            _ = &only_pre_patch;
-            return (struct {
-    manager: *PackageManager,
-    err: ?anyerror = null,
-
-pub fn isDone(closure: *@This()) bool {
-            var mgr = closure.manager;
-            _ = &mgr;
-            if (comptime check_peers) {
-                _ = (blk_catch_0: { break :blk_catch_0 ((mgr.processPeerDependencyList()) catch |e| { _ = &e; closure.err = e;
-                return true; }); });
-            }
-            _ = mgr.drainDependencyList();
-            _ = (blk_catch_1: { break :blk_catch_1 ((mgr.runTasks(*PackageManager, mgr, .{ .onExtract = .{}, .onResolve = .{}, .onPackageManifestError = .{}, .onPackageDownloadError = .{}, .progress_bar = true }, check_peers, mgr.options.log_level)) catch |e| { _ = &e; closure.err = e;
-            return true; }); });
-            if (comptime check_peers) {
-                if ((mgr.peer_dependencies.readableLength() > 0)) {
-                    return false;
-                }
-            }
-            if (comptime only_pre_patch) {
-                const pending_patch = mgr.pending_pre_calc_hashes.load(.monotonic);
-                return (pending_patch == 0);
-            }
-            const pending_tasks = mgr.pendingTaskCount();
-            if ((PackageManager.verbose_install and (pending_tasks > 0))) {
-                if (PackageManager.hasEnoughTimePassedBetweenWaitingMessages()) {
-                    _ = Output.prettyErrorln("<d>[PackageManager]<r> waiting for {d} tasks\n", .{ pending_tasks });
-                }
-            }
-            return (pending_tasks == 0);
-    }
-
-pub fn runAndWait(mgr: *PackageManager) !void {
-            var closure: @This() = undefined;
-            _ = &closure;
-            closure.manager = mgr;
-            closure.err = null;
-            _ = mgr.sleepUntil((&closure), (&@This().isDone));
-            if (closure.err) |e| {
-                _ = &e;
-                return e;
-            }
-    }
-}).runAndWait;
-    }
-}).runAndWaitFn;
             const waitForCalcingPatchHashes = runAndWaitFn(false, true);
             const waitForEverythingExceptPeers = runAndWaitFn(false, false);
             const waitForPeers = runAndWaitFn(true, false);
@@ -1084,4 +1033,53 @@ pub fn addDependencyError(manager: *PackageManager, dependency: *const Dependenc
         } else {
             _ = ((manager.log.addZigErrorWithNote(manager.allocator, e, fmt_str, .{ path_arg })) catch unreachable);
         }
+}
+
+pub fn runAndWaitFn(comptime check_peers: bool, comptime only_pre_patch: bool) *const fn (*PackageManager) anyerror!void {
+        _ = &check_peers;
+        _ = &only_pre_patch;
+        return (struct {
+    manager: *PackageManager,
+    err: ?anyerror = null,
+
+pub fn isDone(closure: *@This()) bool {
+            var mgr = closure.manager;
+            _ = &mgr;
+            if (comptime check_peers) {
+                _ = (blk_catch_0: { break :blk_catch_0 ((mgr.processPeerDependencyList()) catch |e| { _ = &e; closure.err = e;
+                return true; }); });
+            }
+            _ = mgr.drainDependencyList();
+            _ = (blk_catch_1: { break :blk_catch_1 ((mgr.runTasks(*PackageManager, mgr, .{ .onExtract = .{}, .onResolve = .{}, .onPackageManifestError = .{}, .onPackageDownloadError = .{}, .progress_bar = true }, check_peers, mgr.options.log_level)) catch |e| { _ = &e; closure.err = e;
+            return true; }); });
+            if (comptime check_peers) {
+                if ((mgr.peer_dependencies.readableLength() > 0)) {
+                    return false;
+                }
+            }
+            if (comptime only_pre_patch) {
+                const pending_patch = mgr.pending_pre_calc_hashes.load(.monotonic);
+                return (pending_patch == 0);
+            }
+            const pending_tasks = mgr.pendingTaskCount();
+            if ((PackageManager.verbose_install and (pending_tasks > 0))) {
+                if (PackageManager.hasEnoughTimePassedBetweenWaitingMessages()) {
+                    _ = Output.prettyErrorln("<d>[PackageManager]<r> waiting for {d} tasks\n", .{ pending_tasks });
+                }
+            }
+            return (pending_tasks == 0);
+    }
+
+pub fn runAndWait(mgr: *PackageManager) !void {
+            var closure: @This() = undefined;
+            _ = &closure;
+            closure.manager = mgr;
+            closure.err = null;
+            _ = mgr.sleepUntil((&closure), (&@This().isDone));
+            if (closure.err) |e| {
+                _ = &e;
+                return e;
+            }
+    }
+}).runAndWait;
 }

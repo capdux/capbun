@@ -10,6 +10,21 @@ type CallbackFn = *const fn (*!, *!);
 
 pub struct DestroyDefaultGuard<T> { ptr: *T!, ~init() { bun.default_allocator.destroy(_.ptr); } }
 
+fn AutoDeinitWrapper(comptime Ptr: type, comptime fieldName: [:0]const u8): type {
+    return struct {
+        any_task: AnyTaskWithExtraContext,
+        wrapped: *Ptr,
+        static fn function(raw: *!, extra: *!) {
+            unsafe {
+                const that: *@This() = @ptrCast(@alignCast(raw));
+                * = DestroyDefaultGuard<@This()>{ ptr: that };
+                const ctx = that.wrapped;
+                @field(Ptr, fieldName)(ctx, extra);
+            }
+        }
+    };
+}
+
 @root struct AnyTaskWithExtraContext {
     ctx: *!? = undefined,
     callback: CallbackFn = undefined,
@@ -17,18 +32,7 @@ pub struct DestroyDefaultGuard<T> { ptr: *T!, ~init() { bun.default_allocator.de
 
     static fn fromCallbackAutoDeinit(ptr: auto, comptime fieldName: [:0]const u8): *AnyTaskWithExtraContext {
         const Ptr = std.meta.Child(@TypeOf(ptr));
-        const Wrapper = struct {
-            any_task: AnyTaskWithExtraContext,
-            wrapped: *Ptr,
-            static fn function(raw: *!, extra: *!) {
-                unsafe {
-                    const that: *@This() = @ptrCast(@alignCast(raw));
-                    * = DestroyDefaultGuard<@This()>{ ptr: that };
-                    const ctx = that.wrapped;
-                    @field(Ptr, fieldName)(ctx, extra);
-                }
-            }
-        };
+        const Wrapper = AutoDeinitWrapper(Ptr, fieldName);
         const task = bun.handleOom(bun.default_allocator.create(Wrapper));
         task.* = Wrapper{
             any_task: AnyTaskWithExtraContext{

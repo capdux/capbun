@@ -89,10 +89,13 @@ pub fn on_handshake(s: *us_socket_t, ok: c_int, verify_err: bun.uws.us_bun_verif
 };
 }
 
-pub fn make(comptime H: type) *const VTable {
+pub fn VTableHolder(comptime H: type) type {
         const T = Trampolines(H);
-        const Holder = struct {
+        return struct {
     pub const vt: VTable = .{ .on_open = (if (@hasDecl(H, "onOpen")) T.on_open else null), .on_data = (if (@hasDecl(H, "onData")) T.on_data else null), .on_fd = (if (@hasDecl(H, "onFd")) T.on_fd else null), .on_writable = (if (@hasDecl(H, "onWritable")) T.on_writable else null), .on_close = (if (@hasDecl(H, "onClose")) T.on_close else null), .on_timeout = (if (@hasDecl(H, "onTimeout")) T.on_timeout else null), .on_long_timeout = (if (@hasDecl(H, "onLongTimeout")) T.on_long_timeout else null), .on_end = (if (@hasDecl(H, "onEnd")) T.on_end else null), .on_connect_error = (if (@hasDecl(H, "onConnectError")) T.on_connect_error else null), .on_connecting_error = (if (@hasDecl(H, "onConnectingError")) T.on_connecting_error else null), .on_handshake = (if (@hasDecl(H, "onHandshake")) T.on_handshake else null) };
 };
-        return (&Holder.vt);
+}
+
+pub fn make(comptime H: type) *const VTable {
+        return (&VTableHolder(H).vt);
 }

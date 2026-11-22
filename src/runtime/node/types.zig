@@ -209,6 +209,15 @@ pub fn toJS(encoding: Encoding, globalObject: *jsc.JSGlobalObject) jsc.JSValue {
     pub const map = bun.ComptimeStringMap(Encoding, .{ .{ "utf-8", Encoding.utf8 }, .{ "utf8", Encoding.utf8 }, .{ "ucs-2", Encoding.utf16le }, .{ "ucs2", Encoding.utf16le }, .{ "utf16-le", Encoding.utf16le }, .{ "utf16le", Encoding.utf16le }, .{ "binary", Encoding.latin1 }, .{ "latin1", Encoding.latin1 }, .{ "ascii", Encoding.ascii }, .{ "base64", Encoding.base64 }, .{ "hex", Encoding.hex }, .{ "buffer", Encoding.buffer }, .{ "base64url", Encoding.base64url } });
 };
 
+pub const PathOrBufferTag = enum {
+    path,
+    buffer,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const _PathOrFileDescriptorTag = enum {
     fd,
     path,
@@ -814,14 +823,14 @@ pub fn fromJSWithEncodingValueAllowStringObject(global: *jsc.JSGlobalObject, all
     pub const empty = StringOrBuffer{ .encoded_slice = jsc.ZigString.Slice.empty };
 };
 
-pub const PathOrBuffer = union(Tag) {
+pub const PathOrBuffer = union(PathOrBufferTag) {
     path: bun.PathString,
     buffer: Buffer,
 
 pub inline fn slice(self: *const PathOrBuffer) []const u8 {
             return self.path.slice();
     }
-    pub const Tag = enum { path, buffer };
+    pub const Tag = PathOrBufferTag;
 };
 
 pub const PathLike = union(enum) {
@@ -1323,15 +1332,19 @@ pub fn jsAssertEncodingValid(global: *jsc.JSGlobalObject, call_frame: *jsc.CallF
         return jsc.JSValue.js_undefined;
 }
 
+pub fn CallbackTaskOption(comptime Result: type) type {
+        return union {
+    e: jsc.SystemError,
+    result: Result,
+};
+}
+
 pub fn CallbackTask(comptime Result: type) type {
         return struct {
     callback: jsc.C.JSObjectRef,
     option: Option,
     success: bool = false,
-    pub const Option = union {
-        e: jsc.SystemError,
-        result: Result,
-    };
+    pub const Option = CallbackTaskOption(Result);
 };
 }
 

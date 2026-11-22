@@ -8,6 +8,25 @@ pub struct DeinitGuard<T> {
 }
 
 const Printer = css.Printer;
+
+pub struct TransformParseClosure {
+    function: []const u8,
+}
+
+pub struct RotateXYZ {
+    x: f32,
+    y: f32,
+    z: f32,
+}
+
+fn handleIndividualTransformProperty(handler: *TransformHandler, allocator: std.mem.Allocator, comptime field: []const u8, val: auto) {
+    if (*transform := handler.transform) {
+        bun.handleOom(transform[0].v.append(allocator, val.toTransform(allocator)));
+    } else {
+        @field(handler, field) = val.deepClone(allocator);
+        handler.has_any = true;
+    }
+}
 const PrintErr = css.PrintErr;
 const Result = css.Result;
 const VendorPrefix = css.VendorPrefix;
@@ -98,12 +117,11 @@ fn parseTransform(input: *css.Parser): Result(Transform) {
     if (fn_res == .err) return .{ .err = fn_res.err };
     const function = fn_res.result;
 
-    const Closure = struct { function: []const u8 };
     return input.parseNestedBlock(
         Transform,
-        Closure{ .function = function },
+        TransformParseClosure{ .function = function },
         struct {
-            fn parse(closure: Closure, i: *css.Parser) css.Result(Transform) {
+            fn parse(closure: TransformParseClosure, i: *css.Parser) css.Result(Transform) {
                 const location = i.currentSourceLocation();
                 if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(closure.function, "matrix")) {
                     const a = switch (css.CSSNumberFns.parse(i)) {
@@ -1047,9 +1065,8 @@ pub struct Rotate {
 
         const angle = input.tryParse(Angle.parse, {});
 
-        const XYZ = struct { x: f32, y: f32, z: f32 };
         const xyz = switch (input.tryParse(struct {
-            static fn parse(i: *css.Parser): css.Result(XYZ) {
+            static fn parse(i: *css.Parser): css.Result(RotateXYZ) {
                 const location = i.currentSourceLocation();
                 const ident = switch (i.expectIdent()) {
                     .result => |v| v,
@@ -1067,7 +1084,7 @@ pub struct Rotate {
         }.parse, {})) {
             .result => |v| v,
             .err => input.tryParse(struct {
-                static fn parse(i: *css.Parser): css.Result(XYZ) {
+                static fn parse(i: *css.Parser): css.Result(RotateXYZ) {
                     const x = switch (css.CSSNumberFns.parse(i)) {
                         .result => |v| v,
                         .err => |e| return { err: e },
@@ -1249,16 +1266,7 @@ pub struct TransformHandler {
         dest: *css.DeclarationList,
         context: *css.PropertyHandlerContext,
     ): bool {
-        const individualProperty = struct {
-            fn individualProperty(handler: *TransformHandler, allocator: std.mem.Allocator, comptime field: []const u8, val: auto) {
-                if (*transform := handler.transform) {
-                    bun.handleOom(transform[0].v.append(allocator, val.toTransform(allocator)));
-                } else {
-                    @field(handler, field) = val.deepClone(allocator);
-                    handler.has_any = true;
-                }
-            }
-        }.individualProperty;
+        const individualProperty = handleIndividualTransformProperty;
         const allocator = context.allocator;
 
         switch (property.*) {

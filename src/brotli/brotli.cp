@@ -39,13 +39,15 @@ export struct DecoderOptions {
     },
 }
 
+pub enum BrotliReaderState {
+    Uninitialized,
+    Inflating,
+    End,
+    Error,
+}
+
 export struct BrotliReaderArrayList {
-    pub const State = enum {
-        Uninitialized,
-        Inflating,
-        End,
-        Error,
-    };
+    pub const State = BrotliReaderState;
 
     input: []const u8,
     list: std.ArrayListUnmanaged(u8),
@@ -190,12 +192,14 @@ export struct BrotliReaderArrayList {
     }
 }
 
+pub enum BrotliCompressionState {
+    Inflating,
+    End,
+    Error,
+}
+
 export struct BrotliCompressionStream {
-    pub const State = enum {
-        Inflating,
-        End,
-        Error,
-    };
+    pub const State = BrotliCompressionState;
 
     brotli: *BrotliEncoder,
     state: State = State.Inflating,

@@ -10,6 +10,26 @@ const JSValue = jsc.JSValue;
     fn Bun__CallFrame__describeFrame(call_frame: *const CallFrame): [*:0]const u8;
 }
 
+@c struct CallFrameRegisterAsBits {
+    payload: i32,
+    tag: i32,
+}
+
+@c union CallFrameEncodedValueDescriptor {
+    ptr: JSValue, // JSCell*
+    as_bits: CallFrameRegisterAsBits,
+}
+
+@c union CallFrameRegister {
+    value: JSValue, // EncodedJSValue
+    call_frame: *CallFrame,
+    code_block: *!, // CodeBlock*
+    /// EncodedValueDescriptor defined in JavaScriptCore/runtime/JSCJSValue.h
+    encoded_value: CallFrameEncodedValueDescriptor,
+    number: f64, // double
+    integer: i64, // integer
+}
+
 pub struct CallFrameCallerSrcLoc {
     str: bun.String,
     line: c_uint,
@@ -201,23 +221,7 @@ pub struct CallFrameArgumentsSlice {
     /// This function is manually ported from JSC's equivalent function in C++
     /// See JavaScriptCore/interpreter/CallFrame.h
     static fn argumentCountIncludingThis(frame: *const CallFrame): u32 {
-        // Register defined in JavaScriptCore/interpreter/Register.h
-        const Register = extern union {
-            value: JSValue, // EncodedJSValue
-            call_frame: *CallFrame,
-            code_block: *!, // CodeBlock*
-            /// EncodedValueDescriptor defined in JavaScriptCore/runtime/JSCJSValue.h
-            encoded_value: extern union {
-                ptr: JSValue, // JSCell*
-                as_bits: extern struct {
-                    payload: i32,
-                    tag: i32,
-                },
-            },
-            number: f64, // double
-            integer: i64, // integer
-        };
-        const registers: [*]const Register = unsafe { @ptrCast(@alignCast(frame)) };
+        const registers: [*]const CallFrameRegister = unsafe { @ptrCast(@alignCast(frame)) };
         // argumentCountIncludingThis takes the register at the defined offset, then
         // calls 'ALWAYS_INLINE int32_t Register::unboxedInt32() const',
         // which in turn calls 'ALWAYS_INLINE int32_t Register::payload() const'

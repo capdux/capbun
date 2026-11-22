@@ -14,6 +14,8 @@ comptime {
 
 let title_mutex = bun.Mutex{};
 
+type ComptimeKV = struct { []const u8, void };
+
 struct DerefGuard<T> {
     ptr: (*T!)? = null,
     ~init() {
@@ -157,7 +159,7 @@ fn createExecArgv(globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
         const map = bun.ComptimeStringMap(void, comptime brk: {
             const auto_params = bun.cli.Arguments.auto_params;
             const auto_params_len = auto_params.len;
-            const KV = struct { []const u8, void };
+            const KV = ComptimeKV;
             let entries: [auto_params_len]KV = undefined;
             let i = 0;
             for (param of auto_params) {

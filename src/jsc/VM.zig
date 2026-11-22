@@ -9,6 +9,15 @@ pub const ThrowError = error{
     JSError,
 };
 
+pub const VMHeapType = enum(u8) {
+    SmallHeap = 0,
+    LargeHeap = 1,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         ptr: *T,
@@ -176,10 +185,7 @@ pub fn blockBytesAllocated(self: *VM) usize {
 pub fn performOpportunisticallyScheduledTasks(self: *VM, until: f64) void {
             _ = JSC__VM__performOpportunisticallyScheduledTasks(self, until);
     }
-    pub const HeapType = enum(u8) {
-            SmallHeap = 0,
-            LargeHeap = 1,
-        };
+    pub const HeapType = VMHeapType;
     pub const Lock = VMLock;
 };
 

@@ -71,6 +71,15 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 
 pub const analyze_transpiled_module = @import("../analyze_transpiled_module.zig");
 pub const bun = @import("bun");
+pub const CommentType = enum {
+    multiline,
+    single,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub fn EndGuard(comptime T: type) type {
     return struct {
         ptr: *T,
@@ -517,10 +526,6 @@ else => {
                     _ = j.pushStatic("\n");
                     _ = line_offset.advance("\n");
                 }
-                const CommentType = enum {
-                multiline,
-                single,
-            };
                 const pretty = sources[@as(usize, @intCast(source_index))].path.pretty;
                 const comment_type = (if ((strings.indexOfNewlineOrNonASCII(pretty, 0) != null)) CommentType.multiline else CommentType.single);
                 if (((!c.options.minify_whitespace) and ((output_format == .iife) or (output_format == .internal_bake_dev)))) {

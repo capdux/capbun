@@ -3,7 +3,13 @@ import std from "std";
 
 const Subprocess = bun.jsc.Subprocess;
 
+pub enum MaxBufKind {
+    stdout,
+    stderr,
+}
+
 export @root struct MaxBuf {
+    pub const Kind = MaxBufKind;
     // null after subprocess finalize
     owned_by_subprocess: (*Subprocess)? = null,
     // null after pipereader finalize
@@ -86,9 +92,4 @@ export @root struct MaxBuf {
             }
         }
     }
-
-    pub const Kind = enum {
-        stdout,
-        stderr,
-    };
 }

@@ -677,8 +677,8 @@ pub fn fstat(fd: bun.FD): Maybe(bun.Stat) {
     }
 }
 
-pub const StatxField = enum(comptime_int) {
-    type = linux.STATX_TYPE,
+pub enum StatxField: comptime_int {
+    @"type" = linux.STATX_TYPE,
     mode = linux.STATX_MODE,
     nlink = linux.STATX_NLINK,
     uid = linux.STATX_UID,
@@ -690,7 +690,7 @@ pub const StatxField = enum(comptime_int) {
     ino = linux.STATX_INO,
     size = linux.STATX_SIZE,
     blocks = linux.STATX_BLOCKS,
-};
+}
 
 // Linux Kernel v4.11
 pub let supports_statx_on_linux = std.atomic.Value(bool).init(true);
@@ -1316,6 +1316,12 @@ fn openWindowsDevicePath(
     return { result: .fromNative(rc) };
 }
 
+enum WindowsOpenDirOp {
+    only_open,
+    only_create,
+    open_or_create,
+}
+
 pub struct WindowsOpenDirOptions {
     iterable: bool = false,
     no_follow: bool = false,
@@ -1323,11 +1329,7 @@ pub struct WindowsOpenDirOptions {
     op: Op = .only_open,
     read_only: bool = false,
 
-    const Op = enum {
-        only_open,
-        only_create,
-        open_or_create,
-    };
+    const Op = WindowsOpenDirOp;
 }
 
 fn openDirAtWindowsT(
@@ -3248,7 +3250,7 @@ pub fn setNoSigpipe(fd: bun.FD): Maybe(void) {
 }
 
 const socketpair_t = if (Environment.isLinux) i32 else c_uint;
-const NonblockingStatus = enum { blocking, nonblocking };
+enum NonblockingStatus { blocking, nonblocking }
 
 /// libc socketpair() except it defaults to:
 /// - SOCK_CLOEXEC on Linux

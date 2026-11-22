@@ -656,6 +656,41 @@ pub fn toJS(self: MatchedParams, global: *jsc.JSGlobalObject) JSValue {
     const Entry = MatchedParamsEntry;
 };
 
+pub fn InsertionContextWrapper(comptime T: type) type {
+    return struct {
+
+pub fn getFileIdForRouter(opaque_ctx: *void, abs_path: []const u8, associated_route: Route.Index, kind: Route.FileKind) bun.OOM!OpaqueFileId {
+                const cast_ctx: *T = (blk: {
+                break :blk @ptrCast(@alignCast(opaque_ctx));
+
+});
+                return try cast_ctx.getFileIdForRouter(abs_path, associated_route, kind);
+        }
+
+pub fn onRouterSyntaxError(opaque_ctx: *void, rel_path: []const u8, log: TinyLog) bun.OOM!void {
+                const cast_ctx: *T = (blk: {
+                break :blk @ptrCast(@alignCast(opaque_ctx));
+
+});
+                if ((!@hasDecl(T, "onRouterSyntaxError"))) {
+                    _ = @panic(("TODO: onRouterSyntaxError for " ++ @typeName(T)));
+                }
+                return try cast_ctx.onRouterSyntaxError(rel_path, log);
+        }
+
+pub fn onRouterCollisionError(opaque_ctx: *void, rel_path: []const u8, other_id: OpaqueFileId, file_kind: Route.FileKind) bun.OOM!void {
+                const cast_ctx: *T = (blk: {
+                break :blk @ptrCast(@alignCast(opaque_ctx));
+
+});
+                if ((!@hasDecl(T, "onRouterCollisionError"))) {
+                    _ = @panic(("TODO: onRouterCollisionError for " ++ @typeName(T)));
+                }
+                return try cast_ctx.onRouterCollisionError(rel_path, other_id, file_kind);
+        }
+    };
+}
+
 pub const InsertionContextVTable = struct {
     getFileIdForRouter: *const fn (*void, []const u8, Route.Index, Route.FileKind) bun.OOM!OpaqueFileId,
     onRouterSyntaxError: *const fn (*void, []const u8, TinyLog) bun.OOM!void,
@@ -667,42 +702,10 @@ pub const InsertionContext = struct {
     vtable: *const VTable,
 
 pub fn wrap(comptime T: type, ctx: *T) InsertionContext {
-            const wrapper = struct {
-
-pub fn getFileIdForRouter(opaque_ctx: *void, abs_path: []const u8, associated_route: Route.Index, kind: Route.FileKind) bun.OOM!OpaqueFileId {
-            const cast_ctx: *T = (blk: {
-            break :blk @ptrCast(@alignCast(opaque_ctx));
-
-});
-            return try cast_ctx.getFileIdForRouter(abs_path, associated_route, kind);
-    }
-
-pub fn onRouterSyntaxError(opaque_ctx: *void, rel_path: []const u8, log: TinyLog) bun.OOM!void {
-            const cast_ctx: *T = (blk: {
-            break :blk @ptrCast(@alignCast(opaque_ctx));
-
-});
-            if ((!@hasDecl(T, "onRouterSyntaxError"))) {
-                _ = @panic(("TODO: onRouterSyntaxError for " ++ @typeName(T)));
-            }
-            return try cast_ctx.onRouterSyntaxError(rel_path, log);
-    }
-
-pub fn onRouterCollisionError(opaque_ctx: *void, rel_path: []const u8, other_id: OpaqueFileId, file_kind: Route.FileKind) bun.OOM!void {
-            const cast_ctx: *T = (blk: {
-            break :blk @ptrCast(@alignCast(opaque_ctx));
-
-});
-            if ((!@hasDecl(T, "onRouterCollisionError"))) {
-                _ = @panic(("TODO: onRouterCollisionError for " ++ @typeName(T)));
-            }
-            return try cast_ctx.onRouterCollisionError(rel_path, other_id, file_kind);
-    }
-};
             return .{ .opaque_ctx = (blk: {
             break :blk @ptrCast(ctx);
 
-}), .vtable = (comptime (&.{ .getFileIdForRouter = (&wrapper.getFileIdForRouter), .onRouterSyntaxError = (&wrapper.onRouterSyntaxError), .onRouterCollisionError = (&wrapper.onRouterCollisionError) })) };
+}), .vtable = (comptime (&.{ .getFileIdForRouter = (&InsertionContextWrapper(T).getFileIdForRouter), .onRouterSyntaxError = (&InsertionContextWrapper(T).onRouterSyntaxError), .onRouterCollisionError = (&InsertionContextWrapper(T).onRouterCollisionError) })) };
     }
     const VTable = InsertionContextVTable;
 };

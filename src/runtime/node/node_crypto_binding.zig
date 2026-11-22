@@ -528,11 +528,12 @@ pub fn deinitSync(self: *Scrypt) void {
             _ = self.password.deinit();
             _ = self.buf.deinit();
     }
-    pub const AsyncResult = struct { Scrypt, JSValue };
+    pub const AsyncResult = ScryptAsyncResult;
     pub const Job = CryptoJob(Scrypt);
 };
 
 const string = []const u8;
+pub const ScryptAsyncResult = struct { Scrypt, JSValue };
 const Async = bun.Async;
 const JSError = bun.JSError;
 const String = bun.String;

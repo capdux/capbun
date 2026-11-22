@@ -583,14 +583,14 @@ pub fn isConditionalImportRedundant(earlier: *const BabyList(bun.css.ImportCondi
     return true;
 }
 
-pub const CssOrderDebugStep = enum {
+pub enum CssOrderDebugStep {
     BEFORE_HOISTING,
     AFTER_HOISTING,
     AFTER_REMOVING_DUPLICATES,
     WHILE_OPTIMIZING_REDUNDANT_LAYER_RULES,
     AFTER_OPTIMIZING_REDUNDANT_LAYER_RULES,
     AFTER_MERGING_ADJACENT_LAYER_RULES,
-};
+}
 
 fn debugCssOrder(client: *LinkerContext, order: *const BabyList(Chunk.CssImportOrder), comptime step: CssOrderDebugStep) {
     if (comptime bun.Environment.isDebug) {

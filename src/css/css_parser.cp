@@ -1,4 +1,49 @@
 import bun from "bun";
+
+enum _BundlerPreludeNames {
+    tailwind,
+}
+
+enum _StylesheetParserState: u8 {
+    start = 1,
+    layers = 2,
+    imports = 3,
+    namespaces = 4,
+    body = 5,
+}
+
+enum _TopLevelPreludeEnum {
+    import,
+    charset,
+    namespace,
+    @"custom-media",
+    property,
+}
+
+enum _NestedPreludeEnum {
+    media,
+    supports,
+    @"font-face",
+    @"font-palette-values",
+    @"counter-style",
+    viewport,
+    @"-ms-viewport",
+    keyframes,
+    @"-webkit-keyframes",
+    @"-moz-keyframes",
+    @"-o-keyframes",
+    @"-ms-keyframes",
+    page,
+    @"-moz-document",
+    layer,
+    container,
+    @"starting-style",
+    scope,
+    nest,
+}
+
+enum _PluckImportsState { count, exec }
+
 pub const SrcIndex = bun.bundle_v2.Index;
 
 pub const SymbolList = bun.ast.Symbol.List;
@@ -1028,6 +1073,25 @@ fn consume_until_end_of_block(block_type: BlockType, tokenizer: *Tokenizer) {
     }
 }
 
+struct AtRulePreludeClosure<P> {
+    name: []const u8,
+    parser: *P,
+
+    fn parsefn(*_, input2: *Parser): Result(P.AtRuleParser.Prelude) {
+        return P.AtRuleParser.parsePrelude(_.parser, _.name, input2);
+    }
+}
+
+struct AtRuleBlockClosure<P> {
+    prelude: P.AtRuleParser.Prelude,
+    start: *const ParserState,
+    parser: *P,
+
+    fn parsefn(*_, input2: *Parser): Result(P.AtRuleParser.AtRule) {
+        return P.AtRuleParser.parseBlock(_.parser, _.prelude, _.start, input2);
+    }
+}
+
 fn parse_at_rule(
     allocator: Allocator,
     start: *const ParserState,
@@ -1039,16 +1103,8 @@ fn parse_at_rule(
     * = allocator; // autofix
     ValidAtRuleParser(P);
     const delimiters = Delimiters{ .semicolon = true, .curly_bracket = true };
-    const Closure = struct {
-        name: []const u8,
-        parser: *P,
-
-        pub fn parsefn(this: *@This(), input2: *Parser): Result(P.AtRuleParser.Prelude) {
-            return P.AtRuleParser.parsePrelude(this.parser, this.name, input2);
-        }
-    };
-    let closure = Closure{ .name = name, .parser = parser };
-    const prelude_res = input.parseUntilBefore(delimiters, P.AtRuleParser.Prelude, &closure, Closure.parsefn);
+    let closure: AtRulePreludeClosure<P> = { name: name, parser: parser };
+    const prelude_res = input.parseUntilBefore(delimiters, P.AtRuleParser.Prelude, &closure, @TypeOf(closure).parsefn);
     if (e := prelude_res.asErr()) {
         const next_t = input.next();
         if (tok := next_t.asValue()) {
@@ -1082,20 +1138,12 @@ fn parse_at_rule(
             }
         },
         .open_curly => {
-            const AnotherClosure = struct {
-                prelude: P.AtRuleParser.Prelude,
-                start: *const ParserState,
-                parser: *P,
-                pub fn parsefn(this: *@This(), input2: *Parser): Result(P.AtRuleParser.AtRule) {
-                    return P.AtRuleParser.parseBlock(this.parser, this.prelude, this.start, input2);
-                }
-            };
-            let another_closure = AnotherClosure{
+            let another_closure: AtRuleBlockClosure<P> = {
                 prelude: prelude,
                 start: start,
                 parser: parser,
             };
-            return parse_nested_block(input, P.AtRuleParser.AtRule, &another_closure, AnotherClosure.parsefn);
+            return parse_nested_block(input, P.AtRuleParser.AtRule, &another_closure, @TypeOf(another_closure).parsefn);
         },
         else => {
             bun.unreachablePanic("", {});
@@ -1173,6 +1221,16 @@ fn parse_custom_at_rule_body(
     return { result: result };
 }
 
+struct QualifiedRuleBlockClosure<P> {
+    start: *const ParserState,
+    prelude: P.QualifiedRuleParser.Prelude,
+    parser: *P,
+
+    fn parsefn(*_, input2: *Parser): Result(P.QualifiedRuleParser.QualifiedRule) {
+        return P.QualifiedRuleParser.parseBlock(_.parser, _.prelude, _.start, input2);
+    }
+}
+
 fn parse_qualified_rule(
     start: *const ParserState,
     input: *Parser,
@@ -1190,21 +1248,12 @@ fn parse_qualified_rule(
         .err => |e| return { err: e },
         .result => |v| v,
     };
-    const Closure = struct {
-        start: *const ParserState,
-        prelude: P.QualifiedRuleParser.Prelude,
-        parser: *P,
-
-        pub fn parsefn(this: *@This(), input2: *Parser): Result(P.QualifiedRuleParser.QualifiedRule) {
-            return P.QualifiedRuleParser.parseBlock(this.parser, this.prelude, this.start, input2);
-        }
-    };
-    let closure = Closure{
+    let closure: QualifiedRuleBlockClosure<P> = {
         start: start,
         prelude: prelude,
         parser: parser,
     };
-    return parse_nested_block(input, P.QualifiedRuleParser.QualifiedRule, &closure, Closure.parsefn);
+    return parse_nested_block(input, P.QualifiedRuleParser.QualifiedRule, &closure, @TypeOf(closure).parsefn);
 }
 
 fn parse_until_before(
@@ -1400,9 +1449,7 @@ pub struct _BundlerAtRuleParser_CustomAtRuleParser {
 
     static fn parsePrelude(b: *BundlerAtRuleParser, name: []const u8, input: *Parser, _: *const ParserOptions): Result(Prelude) {
         if (comptime ENABLE_TAILWIND_PARSING) {
-            const PreludeNames = enum {
-                tailwind,
-            };
+            const PreludeNames = _BundlerPreludeNames;
             const Map = comptime bun.ComptimeEnumMap(PreludeNames);
             if (prelude := Map.getASCIIICaseInsensitive(name)) return switch (prelude) {
                 .tailwind => {
@@ -1729,6 +1776,62 @@ pub fn ParseNestedResult(comptime RuleT: type): type {
     };
 }
 
+struct SupportsConditionFunc {
+    static fn do(_: void, p: *Parser): Result(SupportsCondition) {
+        const result = p.tryParse(SupportsCondition.parse, .{});
+        if (result == .err) return SupportsCondition.parseDeclaration(p);
+        return result;
+    }
+}
+
+pub enum ComposesState {
+    allow: SourceLocation,
+    disallow_nested: SourceLocation,
+    disallow_not_single_class: SourceLocation,
+    disallow_entirely,
+}
+
+struct PageSelectorsFn {
+    static fn parsefn(input2: *Parser): Result(ArrayList(css_rules.page.PageSelector)) {
+        return input2.parseCommaSeparated(css_rules.page.PageSelector, css_rules.page.PageSelector.parse);
+    }
+}
+
+struct MozDocumentFn {
+    static fn parsefn(_: void, input2: *Parser): Result(void) {
+        * = input2.tryParse(parseInner, {});
+        if (input2.expectExhausted().asErr()) |e| return { err: e };
+        return .success;
+    }
+
+    static fn parseInner(input2: *Parser): Result(void) {
+        const s = switch (input2.expectString()) {
+            .err => |e| return { err: e },
+            .result => |v| v,
+        };
+        if (s.len > 0) {
+            return { err: input2.newCustomError(ParserError.invalid_value) };
+        }
+        return .success;
+    }
+}
+
+struct ScopeClosure {
+    selector_parser: *selector.parser.SelectorParser,
+    fn parsefn(*_, input2: *Parser): Result(selector.parser.SelectorList) {
+        return selector.parser.SelectorList.parseRelative(_.selector_parser, input2, .ignore_invalid_selector, .none);
+    }
+}
+
+struct RuleBodyDeclClosure<P, I> {
+    parser: *P,
+    name: []const u8,
+    fn parsefn(*_, input: *Parser): Result(I) {
+        if (e := input.expectColon().asErr()) return { err: e };
+        return P.DeclarationParser.parseValue(_.parser, _.name, input);
+    }
+}
+
 pub fn TopLevelRuleParser(comptime AtRuleParserT: type): type {
     ValidCustomAtRuleParser(AtRuleParserT);
     const AtRuleT = AtRuleParserT.CustomAtRuleParser.AtRule;
@@ -1745,13 +1848,7 @@ pub fn TopLevelRuleParser(comptime AtRuleParserT: type): type {
         composes_refs: SmallList(bun.bundle_v2.Ref, 2) = {},
         local_properties: *LocalPropertyUsage,
 
-        const State = enum(u8) {
-            start = 1,
-            layers = 2,
-            imports = 3,
-            namespaces = 4,
-            body = 5,
-        };
+        const State = _StylesheetParserState;
 
         const This = @This();
 
@@ -1760,13 +1857,7 @@ pub fn TopLevelRuleParser(comptime AtRuleParserT: type): type {
             pub const AtRule = void;
 
             static fn parsePrelude(parser: *This, name: []const u8, input: *Parser) Result(Prelude) {
-                const PreludeEnum = enum {
-                    import,
-                    charset,
-                    namespace,
-                    @"custom-media",
-                    property,
-                };
+                const PreludeEnum = _TopLevelPreludeEnum;
                 const Map = comptime bun.ComptimeEnumMap(PreludeEnum);
 
                 if (Map.getASCIIICaseInsensitive(name)) |prelude| {
@@ -1794,14 +1885,7 @@ pub fn TopLevelRuleParser(comptime AtRuleParserT: type): type {
                                 } else null;
 
                             const supports = if (input.tryParse(Parser.expectFunctionMatching, .{"supports"}) == .result) brk: {
-                                const Func = struct {
-                                    pub fn do(_: void, p: *Parser): Result(SupportsCondition) {
-                                        const result = p.tryParse(SupportsCondition.parse, .{});
-                                        if (result == .err) return SupportsCondition.parseDeclaration(p);
-                                        return result;
-                                    }
-                                };
-                                break :brk switch (input.parseNestedBlock(SupportsCondition, @as(void, undefined), Func.do)) {
+                                break :brk switch (input.parseNestedBlock(SupportsCondition, @as(void, undefined), SupportsConditionFunc.do)) {
                                     .result => |v| v,
                                     .err => |e| return .{ .err = e },
                                 };
@@ -2048,13 +2132,6 @@ pub fn NestedRuleParser(comptime T: type): type {
 
         allocator: Allocator,
 
-        const ComposesState = union(enum) {
-            allow: SourceLocation,
-            disallow_nested: SourceLocation,
-            disallow_not_single_class: SourceLocation,
-            disallow_entirely,
-        };
-
         const This = @This();
 
         pub fn getLoc(this: *This, start: *const ParserState) Location {
@@ -2072,27 +2149,7 @@ pub fn NestedRuleParser(comptime T: type): type {
 
             static fn parsePrelude(parser: *This, name: []const u8, input: *Parser): Result(Prelude) {
                 const result: Prelude = brk: {
-                    const PreludeEnum = enum {
-                        media,
-                        supports,
-                        @"font-face",
-                        @"font-palette-values",
-                        @"counter-style",
-                        viewport,
-                        @"-ms-viewport",
-                        keyframes,
-                        @"-webkit-keyframes",
-                        @"-moz-keyframes",
-                        @"-o-keyframes",
-                        @"-ms-keyframes",
-                        page,
-                        @"-moz-document",
-                        layer,
-                        container,
-                        @"starting-style",
-                        scope,
-                        nest,
-                    };
+                    const PreludeEnum = _NestedPreludeEnum;
                     const Map = comptime bun.ComptimeEnumMap(PreludeEnum);
                     if (Map.getASCIIICaseInsensitive(name)) |kind| switch (kind) {
                         .media => {
@@ -2145,12 +2202,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                         },
                         .page => {
                             const PageSelectors = ArrayList(css_rules.page.PageSelector);
-                            const Fn = struct {
-                                pub fn parsefn(input2: *Parser): Result(PageSelectors) {
-                                    return input2.parseCommaSeparated(css_rules.page.PageSelector, css_rules.page.PageSelector.parse);
-                                }
-                            };
-                            const selectors = switch (input.tryParse(Fn.parsefn, {})) {
+                            const selectors = switch (input.tryParse(PageSelectorsFn.parsefn, {})) {
                                 .result => |v| v,
                                 .err => PageSelectors{},
                             };
@@ -2160,26 +2212,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                             // Firefox only supports the url-prefix() function with no arguments as a legacy CSS hack.
                             // See https://css-tricks.com/snippets/css/css-hacks-targeting-firefox/
                             if (input.expectFunctionMatching("url-prefix").asErr()) |e| return .{ .err = e };
-                            const Fn = struct {
-                                pub fn parsefn(_: void, input2: *Parser): Result(void) {
-                                    // Firefox also allows an empty string as an argument...
-                                    // https://github.com/mozilla/gecko-dev/blob/0077f2248712a1b45bf02f0f866449f663538164/servo/components/style/stylesheets/document_rule.rs#L303
-                                    * = input2.tryParse(parseInner, {});
-                                    if (input2.expectExhausted().asErr()) |e| return .{ .err = e };
-                                    return .success;
-                                }
-                                fn parseInner(input2: *Parser): Result(void) {
-                                    const s = switch (input2.expectString()) {
-                                        .err => |e| return .{ .err = e },
-                                        .result => |v| v,
-                                    };
-                                    if (s.len > 0) {
-                                        return .{ .err = input2.newCustomError(ParserError.invalid_value) };
-                                    }
-                                    return .success;
-                                }
-                            };
-                            if (input.parseNestedBlock(void, @as(void, undefined), Fn.parsefn).asErr()) |e| return .{ .err = e };
+                            if (input.parseNestedBlock(void, @as(void, undefined), MozDocumentFn.parsefn).asErr()) |e| return .{ .err = e };
                             break :brk .moz_document;
                         },
                         .layer => {
@@ -2214,18 +2247,12 @@ pub fn NestedRuleParser(comptime T: type): type {
                                 .options = parser.options,
                                 .allocator = input.allocator(),
                             };
-                            const Closure = struct {
-                                selector_parser: *selector.parser.SelectorParser,
-                                pub fn parsefn(self: *@This(), input2: *Parser) Result(selector.parser.SelectorList) {
-                                    return selector.parser.SelectorList.parseRelative(self.selector_parser, input2, .ignore_invalid_selector, .none);
-                                }
-                            };
-                            let closure = Closure{
+                            let closure = ScopeClosure{
                                 .selector_parser = &selector_parser,
                             };
 
                             const scope_start = if (input.tryParse(Parser.expectParenthesisBlock, {}).isOk()) scope_start: {
-                                break :scope_start switch (input.parseNestedBlock(selector.parser.SelectorList, &closure, Closure.parsefn)) {
+                                break :scope_start switch (input.parseNestedBlock(selector.parser.SelectorList, &closure, ScopeClosure.parsefn)) {
                                     .result => |v| v,
                                     .err => |e| return .{ .err = e },
                                 };
@@ -2233,7 +2260,7 @@ pub fn NestedRuleParser(comptime T: type): type {
 
                             const scope_end = if (input.tryParse(Parser.expectIdentMatching, .{"to"}).isOk()) scope_end: {
                                 if (input.expectParenthesisBlock().asErr()) |e| return .{ .err = e };
-                                break :scope_end switch (input.parseNestedBlock(selector.parser.SelectorList, &closure, Closure.parsefn)) {
+                                break :scope_end switch (input.parseNestedBlock(selector.parser.SelectorList, &closure, ScopeClosure.parsefn)) {
                                     .result => |v| v,
                                     .err => |e| return .{ .err = e },
                                 };
@@ -3504,7 +3531,7 @@ pub fn StyleSheet(comptime AtRule: type): type {
         /// ourselves in the bundler.
         pub fn pluckImports(self: *const @This(), allocator: Allocator, out: *CssRuleList(AtRule), new_import_records: *bun.BabyList(ImportRecord)) void {
             if (comptime AtRule != BundlerAtRule) @compileError("Expected BundlerAtRule for this function.");
-            const State = enum { count, exec };
+            const State = _PluckImportsState;
             const STATES: [2]State = [ .count, .exec ];
 
             let count: u32 = 0;
@@ -3733,19 +3760,11 @@ pub fn RuleBodyParser(comptime P: type): type {
                             const parse_qualified = P.RuleBodyItemParser.parseQualified(_.parser);
                             const result: Result(I) = result: {
                                 const error_behavior: ParseUntilErrorBehavior = if (parse_qualified) .stop else .consume;
-                                const Closure = struct {
-                                    parser: *P,
-                                    name: []const u8,
-                                    pub fn parsefn(c: *@This(), input: *Parser): Result(I) {
-                                        if (e := input.expectColon().asErr()) return { err: e };
-                                        return P.DeclarationParser.parseValue(c.parser, c.name, input);
-                                    }
-                                };
-                                let closure = Closure{
+                                let closure: RuleBodyDeclClosure<P, I> = {
                                     parser: _.parser,
                                     name: name,
                                 };
-                                break :result parse_until_after(_.input, Delimiters{ .semicolon = true }, error_behavior, I, &closure, Closure.parsefn);
+                                break :result parse_until_after(_.input, Delimiters{ .semicolon = true }, error_behavior, I, &closure, @TypeOf(closure).parsefn);
                             };
                             if (result.isErr() && parse_qualified) {
                                 _.input.reset(&start);
@@ -3776,9 +3795,8 @@ pub fn RuleBodyParser(comptime P: type): type {
                 } else result: {
                     const token = tok.*;
 
-                    const Closure = struct { token: Token, start: ParserState };
-                    break :result _.input.parseUntilAfter(Delimiters{ .semicolon = true }, I, &Closure{ .token = token, .start = start }, struct {
-                        pub fn parseFn(closure: *const Closure, i: *Parser): Result(I) {
+                    break :result _.input.parseUntilAfter(Delimiters{ .semicolon = true }, I, &UnexpectedTokenClosure{ .token = token, .start = start }, struct {
+                        pub fn parseFn(closure: *const UnexpectedTokenClosure, i: *Parser): Result(I) {
                             * = i; // autofix
                             return { err: closure.start.sourceLocation().newUnexpectedTokenError(closure.token) };
                         }
@@ -3790,6 +3808,8 @@ pub fn RuleBodyParser(comptime P: type): type {
         }
     };
 }
+
+struct UnexpectedTokenClosure { token: Token, start: ParserState }
 
 pub struct ParserOptions {
     /// Filename to use in error messages.
@@ -4876,11 +4896,11 @@ pub struct HexDigitsResult {
     num_digits: u32,
 }
 
-const SeenStatus = enum {
+enum SeenStatus {
     dont_care,
     looking_for_them,
     seen_at_least_one,
-};
+}
 
 const FORM_FEED_BYTE = 0x0C;
 const REPLACEMENT_CHAR = 0xFFFD;
@@ -6658,6 +6678,8 @@ fn _colorHueToRgb(m1: f32, m2: f32, _h3: f32): f32 {
     }
 }
 
+pub const ColorRGB = struct { u8, u8, u8 };
+
 pub struct color {
     /// The opaque alpha value of 1.0.
     pub const OPAQUE: f32 = 1.0;
@@ -6669,7 +6691,7 @@ pub struct color {
     /// Either an angle or a number.
     pub const AngleOrNumber = _ColorAngleOrNumber;
 
-    pub const RGB = struct { u8, u8, u8 };
+    pub const RGB = ColorRGB;
     pub const named_colors = bun.ComptimeStringMap(RGB, .{
         .{ "aliceblue", .{ 240, 248, 255 } },
         .{ "antiquewhite", .{ 250, 235, 215 } },

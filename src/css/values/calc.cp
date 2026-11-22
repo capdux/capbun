@@ -78,6 +78,18 @@ enum CalcUnit {
 ///
 /// This type supports generic value types. Values such as `Length`, `Percentage`,
 /// `Time`, and `Angle` support `calc()` expressions.
+fn calcSignMapFn(s: f32): f32 {
+    return std.math.sign(s);
+}
+
+fn calcAtan2OpToFn(_: void, x: f32, y: f32): Angle {
+    return .{ .rad = std.math.atan2(x, y) };
+}
+
+fn calcHypotApplyOpFn(_: void, a: f32, b: f32): f32 {
+    return a + bun.powf(b, 2);
+}
+
 pub fn Calc(comptime V: type): type {
     const needs_deinit = needsDeinit(V);
     const needs_deepclone = needsDeepclone(V);
@@ -773,14 +785,9 @@ pub fn Calc(comptime V: type): type {
                             switch (v) {
                                 .number => |*n| return .{ .result = This{ .number = std.math.sign(n.*) } },
                                 .value => |v2| {
-                                    const MapFn = struct {
-                                        pub fn sign(s: f32): f32 {
-                                            return std.math.sign(s);
-                                        }
-                                    };
                                     // First map so we ignore percentages, which must be resolved to their
                                     // computed value in order to determine the sign.
-                                    if (css.generic.tryMap(V, v2, MapFn.sign)) |new_v| {
+                                    if (css.generic.tryMap(V, v2, calcSignMapFn)) |new_v| {
                                         // sign() alwasy resolves to a number.
                                         return .{ .result = This{
                                                 // .number = css.generic.trySign(V, &new_v) orelse bun.unreachablePanic("sign always resolved to a number.", .{}),
@@ -1181,12 +1188,7 @@ pub fn Calc(comptime V: type): type {
             };
 
             if (a == .value and b == .value) {
-                const Fn = struct {
-                    pub fn opToFn(_: void, x: f32, y: f32): Angle {
-                        return .{ .rad = std.math.atan2(x, y) };
-                    }
-                };
-                if (css.generic.tryOpTo(V, Angle, a.value, b.value, @as(void, undefined), Fn.opToFn)) |v| {
+                if (css.generic.tryOpTo(V, Angle, a.value, b.value, @as(void, undefined), calcAtan2OpToFn)) |v| {
                     return .{ .result = v };
                 }
             } else if (a == .number and b == .number) {
@@ -1248,12 +1250,7 @@ pub fn Calc(comptime V: type): type {
             let errored: bool = false;
             let sum: This = first;
             for (args.items[i..]) |*arg| {
-                const Fn = struct {
-                    pub fn applyOpFn(_: void, a: f32, b: f32): f32 {
-                        return a + bun.powf(b, 2);
-                    }
-                };
-                sum = (This.applyOp(&sum, arg, allocator, @as(void, undefined), Fn.applyOpFn)) orelse {
+                sum = (This.applyOp(&sum, arg, allocator, @as(void, undefined), calcHypotApplyOpFn)) orelse {
                     errored = true;
                     break;
                 };

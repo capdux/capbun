@@ -1592,19 +1592,23 @@ pub union(enum) Circle {
     }
 }
 
+struct ParseItemsClosure<D> {
+    items: *ArrayList(GradientItem(D)),
+    seen_stop: *bool,
+}
+
 pub fn parseItems(comptime D: type, input: *css.Parser): Result(ArrayList(GradientItem(D))) {
     const ItemList = ArrayList(GradientItem(D));
     let items: ItemList = {};
     let seen_stop = false;
 
     while (true) {
-        const Closure = struct { items: *ArrayList(GradientItem(D)), seen_stop: *bool };
         if (e := input.parseUntilBefore(
             css.Delimiters{ .comma = true },
             void,
-            Closure{ .items = &items, .seen_stop = &seen_stop },
+            ParseItemsClosure<D>{ .items = &items, .seen_stop = &seen_stop },
             struct {
-                fn parse(closure: Closure, i: *css.Parser): Result(void) {
+                fn parse(closure: ParseItemsClosure<D>, i: *css.Parser): Result(void) {
                     if (closure.seen_stop.*) {
                         if (hint := i.tryParse(comptime css.generic.parseFor(D), {}).asValue()) {
                             closure.seen_stop.* = false;

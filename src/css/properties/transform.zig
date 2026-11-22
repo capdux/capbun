@@ -144,6 +144,16 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const TransformParseClosure = struct {
+    function: []const u8,
+};
+
+pub const RotateXYZ = struct {
+    x: f32,
+    y: f32,
+    z: f32,
+};
+
 pub const TransformList = struct {
     v: ArrayList(Transform),
 
@@ -429,14 +439,9 @@ pub fn parse(input: *css.Parser) css.Result(@This()) {
                 return .{ .result = .{ .x = 0.0, .y = 0.0, .z = 1.0, .angle = .{ .deg = 0.0 } } };
             }
             const angle = input.tryParse(Angle.parse, .{});
-            const XYZ = struct {
-    x: f32,
-    y: f32,
-    z: f32,
-};
             const xyz = (switch (input.tryParse((struct {
 
-pub fn parse(i: *css.Parser) css.Result(XYZ) {
+pub fn parse(i: *css.Parser) css.Result(RotateXYZ) {
             const location = i.currentSourceLocation();
             const ident = (switch (i.expectIdent()) {
 .result => |v| v,
@@ -461,7 +466,7 @@ return .{ .err = e };
 .result => |v| v,
 .err => input.tryParse((struct {
 
-pub fn parse(i: *css.Parser) css.Result(XYZ) {
+pub fn parse(i: *css.Parser) css.Result(RotateXYZ) {
             const x = (switch (css.CSSNumberFns.parse(i)) {
 .result => |v| v,
 .err => |e| {
@@ -575,18 +580,7 @@ pub const TransformHandler = struct {
     has_any: bool = false,
 
 pub fn handleProperty(self: *TransformHandler, property: *const css.Property, dest: *css.DeclarationList, context: *css.PropertyHandlerContext) bool {
-            const individualProperty = (struct {
-
-pub fn individualProperty(handler: *TransformHandler, allocator: std.mem.Allocator, comptime field: []const u8, val: anytype) void {
-            if (handler.transform) |*transform| {
-                _ = &transform;
-                _ = bun.handleOom((transform.*)[0].v.append(allocator, val.toTransform(allocator)));
-            } else {
-                @field(handler, field) = val.deepClone(allocator);
-                handler.has_any = true;
-            }
-    }
-}).individualProperty;
+            const individualProperty = handleIndividualTransformProperty;
             const allocator = context.allocator;
             switch (property.*) {
 .transform => |val| {
@@ -683,18 +677,25 @@ const Angle = css.css_values.angle.Angle;
 const ArrayList = std.ArrayListUnmanaged;
 const Allocator = std.mem.Allocator;
 
+pub fn handleIndividualTransformProperty(handler: *TransformHandler, allocator: std.mem.Allocator, comptime field: []const u8, val: anytype) void {
+        if (handler.transform) |*transform| {
+            _ = &transform;
+            _ = bun.handleOom((transform.*)[0].v.append(allocator, val.toTransform(allocator)));
+        } else {
+            @field(handler, field) = val.deepClone(allocator);
+            handler.has_any = true;
+        }
+}
+
 pub fn parseTransform(input: *css.Parser) Result(Transform) {
         const fn_res = input.expectFunction();
         if ((fn_res == .err)) {
             return .{ .err = fn_res.err };
         }
         const function = fn_res.result;
-        const Closure = struct {
-    function: []const u8,
-};
-        return input.parseNestedBlock(Transform, Closure{ .function = function }, (struct {
+        return input.parseNestedBlock(Transform, TransformParseClosure{ .function = function }, (struct {
 
-pub fn parse(closure: Closure, i: *css.Parser) css.Result(Transform) {
+pub fn parse(closure: TransformParseClosure, i: *css.Parser) css.Result(Transform) {
             const location = i.currentSourceLocation();
             if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(closure.function, "matrix")) {
                 const a = (switch (css.CSSNumberFns.parse(i)) {

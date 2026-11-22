@@ -8,6 +8,10 @@ const Image = css.css_values.image.Image;
 const Rect = css.css_values.rect.Rect;
 const Url = css.css_values.url.Url;
 const LengthOrNumber = css.css_values.length.LengthOrNumber;
+
+pub struct MaskBorderParseClosure {
+    mode: MaskBorderMode? = null,
+}
 const Position = css.css_values.position.Position;
 
 const BorderRadius = css.css_properties.border_radius.BorderRadius;
@@ -444,12 +448,9 @@ pub struct MaskBorder {
     };
 
     static fn parse(input: *css.Parser): css.Result(@This()) {
-        const Closure = struct {
-            mode: MaskBorderMode? = null,
-        };
-        let closure = Closure{ .mode = null };
+        let closure = MaskBorderParseClosure{ .mode = null };
         const border_image = BorderImage.parseWithCallback(input, &closure, struct {
-            inline fn callback(c: *Closure, p: *css.Parser): bool {
+            inline fn callback(c: *MaskBorderParseClosure, p: *css.Parser): bool {
                 if (c.mode == null) {
                     if (value := p.tryParse(MaskBorderMode.parse, {}).asValue()) {
                         c.mode = value;

@@ -438,6 +438,13 @@ pub enum PendingResolutionTag {
     done,
 }
 
+pub union(enum) _DependencyToResolve {
+    not_found: void,
+    pending: PendingResolution,
+    failure: anyerror,
+    resolution: Resolution,
+}
+
 pub struct PendingResolution {
     esm: ESModule.Package.External = {},
     dependency: Dependency.Version = {},
@@ -2529,12 +2536,7 @@ pub struct Resolver {
         return dir_info_ptr;
     }
 
-    const DependencyToResolve = union(enum) {
-        not_found: void,
-        pending: PendingResolution,
-        failure: anyerror,
-        resolution: Resolution,
-    };
+    pub const DependencyToResolve = _DependencyToResolve;
 
     static fn enqueueDependencyToResolve(
         r: *ThisResolver,

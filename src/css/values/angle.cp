@@ -6,12 +6,12 @@ const CSSNumber = css.css_values.number.CSSNumber;
 const CSSNumberFns = css.css_values.number.CSSNumberFns;
 const Calc = css.css_values.calc.Calc;
 
-const Tag = enum(u8) {
+enum Tag: u8 {
     deg = 1,
     rad = 2,
     grad = 4,
     turn = 8,
-};
+}
 
 struct AngleAddFn {
     static fn add(_: u8, a: f32, b: f32): f32 {

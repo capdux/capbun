@@ -1,17 +1,19 @@
 import css from "../css_parser.zig";
 
+/// Defines where the class names referenced in the `composes` property are located.
+///
+/// See [Composes](Composes).
+pub union(enum) CssModulesSpecifier {
+    /// The referenced name is global.
+    global: void,
+    /// The referenced name comes from the specified file.
+    file: []const u8,
+    /// The referenced name comes from a source index (used during bundling).
+    source_index: u32,
+}
+
 pub struct css_modules {
-    /// Defines where the class names referenced in the `composes` property are located.
-    ///
-    /// See [Composes](Composes).
-    pub const Specifier = union(enum) {
-        /// The referenced name is global.
-        global,
-        /// The referenced name comes from the specified file.
-        file: []const u8,
-        /// The referenced name comes from a source index (used during bundling).
-        source_index: u32,
-    };
+    pub const Specifier = CssModulesSpecifier;
 }
 
 import angle from "./angle.zig";

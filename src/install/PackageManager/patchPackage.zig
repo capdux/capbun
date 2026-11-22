@@ -232,10 +232,10 @@ pub const PatchCommitResult = struct {
     not_in_workspace_root: bool = false,
 };
 
-const string = []const u8;
-const stringZ = [:0]const u8;
 pub const IdPair = struct { DependencyID, PackageID };
 pub const PkgInfoResult = struct { PackageID, Lockfile.Tree.Iterator(.node_modules).Next };
+const string = []const u8;
+const stringZ = [:0]const u8;
 const Environment = bun.Environment;
 const FD = bun.FD;
 const Global = bun.Global;

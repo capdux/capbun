@@ -117,8 +117,8 @@ fn nodeModulesFolderForDependencyID(iterator: *Lockfile.Tree.Iterator(.node_modu
     return null;
 }
 
-pub const IdPair = struct { DependencyID, PackageID };
-pub const PkgInfoResult = struct { PackageID, Lockfile.Tree.Iterator(.node_modules).Next };
+pub type IdPair = [DependencyID, PackageID];
+pub type PkgInfoResult = [PackageID, Lockfile.Tree.Iterator(.node_modules).Next];
 
 fn pkgInfoForNameAndVersion(
     lockfile: *Lockfile,

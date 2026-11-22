@@ -176,6 +176,16 @@ pub const safety = @import("./safety/safety.zig");
 pub const deprecated = @import("./bun_core/deprecated.zig");
 pub const CopyFile = @import("./sys/copy_file.zig");
 pub const builtin = @import("builtin");
+pub const PollFlag = enum {
+    ready,
+    not_ready,
+    hup,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const LazyBoolValue = enum {
     unknown,
     no,
@@ -290,32 +300,43 @@ pub fn free(_: *anyopaque, mem: []u8, alignment: std.mem.Alignment, ret_addr: us
     pub const allocator: std.mem.Allocator = .{ .ptr = undefined, .vtable = (&.{ .alloc = (&alloc), .resize = (&resize), .remap = (&remap), .free = (&free) }) };
 };
 
+pub fn ThreadlocalBuffersStorage(comptime T: type) type {
+    return struct {
+        node: ThreadlocalBuffersNode,
+        data: T,
+    };
+}
+
 pub const ThreadlocalBuffersNode = struct {
     next: ?*ThreadlocalBuffersNode,
     free: *const fn (*ThreadlocalBuffersNode) void,
 };
 
+pub const StringHashMapUnowned_Key = struct {
+    hash: u64,
+    len: usize,
+
+pub fn init(str: []const u8) StringHashMapUnowned_Key {
+            return StringHashMapUnowned_Key{ .hash = hash(str), .len = str.len };
+    }
+};
+
+pub const StringHashMapUnowned_Adapter = struct {
+
+pub fn eql(self: StringHashMapUnowned_Adapter, a: StringHashMapUnowned_Key, b: StringHashMapUnowned_Key) bool {
+            _ = self;
+            return ((a.hash == b.hash) and (a.len == b.len));
+    }
+
+pub fn hash(self: StringHashMapUnowned_Adapter, key: StringHashMapUnowned_Key) u64 {
+            _ = self;
+            return key.hash;
+    }
+};
+
 pub const StringHashMapUnowned = struct {
-    pub const Key = struct {
-        hash: u64,
-        len: usize,
-    
-    pub fn init(str: []const u8) Key {
-                return Key{ .hash = hash(str), .len = str.len };
-        }
-    };
-    pub const Adapter = struct {
-    
-    pub fn eql(self: @This(), a: Key, b: Key) bool {
-            _ = self;
-                return ((a.hash == b.hash) and (a.len == b.len));
-        }
-    
-    pub fn hash(self: @This(), key: Key) u64 {
-            _ = self;
-                return key.hash;
-        }
-    };
+    pub const Key = StringHashMapUnowned_Key;
+    pub const Adapter = StringHashMapUnowned_Adapter;
 };
 
 pub const FastRandomSeed = struct {
@@ -350,6 +371,23 @@ pub fn get() u64 {
     }
 };
 
+pub const U32HashMapContext_Prehashed = struct {
+    value: u64,
+    input: u32,
+
+pub fn hash(self: U32HashMapContext_Prehashed, value: u32) u64 {
+            if ((value == self.input)) {
+                return self.value;
+            }
+            return (if (comptime @typeInfo(@TypeOf(value)) == .@"enum") cp_cast_int(i32, @intFromEnum(value)) else cp_cast_int(i32, value));
+    }
+
+pub fn eql(self: U32HashMapContext_Prehashed, a: u32, b: u32) bool {
+            _ = self;
+            return (a == b);
+    }
+};
+
 pub const U32HashMapContext = struct {
 
 pub fn hash(self: U32HashMapContext, value: u32) u64 {
@@ -365,22 +403,25 @@ pub fn eql(self: U32HashMapContext, a: u32, b: u32) bool {
 pub fn pre(input: u32) Prehashed {
             return Prehashed{ .value = @This().hash(.{}, input), .input = input };
     }
-    pub const Prehashed = struct {
-        value: u64,
-        input: u32,
-    
-    pub fn hash(self: @This(), value: u32) u64 {
-                if ((value == self.input)) {
-                    return self.value;
-                }
-                return (if (comptime @typeInfo(@TypeOf(value)) == .@"enum") cp_cast_int(i32, @intFromEnum(value)) else cp_cast_int(i32, value));
-        }
-    
-    pub fn eql(self: @This(), a: u32, b: u32) bool {
+    pub const Prehashed = U32HashMapContext_Prehashed;
+};
+
+pub const StringArrayHashMapContext_Prehashed = struct {
+    value: u32,
+    input: []const u8,
+
+pub fn hash(self: StringArrayHashMapContext_Prehashed, s: []const u8) u32 {
+            if (((s.ptr == self.input.ptr) and (s.len == self.input.len))) {
+                return self.value;
+            }
+            return @as(u32, @truncate(std.hash.Wyhash.hash(0, s)));
+    }
+
+pub fn eql(self: StringArrayHashMapContext_Prehashed, a: []const u8, b: []const u8, idx: usize) bool {
             _ = self;
-                return (a == b);
-        }
-    };
+            _ = &idx;
+            return strings.eqlLong(a, b, true);
+    }
 };
 
 pub const StringArrayHashMapContext = struct {
@@ -398,22 +439,24 @@ pub fn eql(self: StringArrayHashMapContext, a: []const u8, b: []const u8, _: usi
 pub fn pre(input: []const u8) Prehashed {
             return Prehashed{ .value = @This().hash(.{}, input), .input = input };
     }
-    pub const Prehashed = struct {
-        value: u32,
-        input: []const u8,
-    
-    pub fn hash(self: @This(), s: []const u8) u32 {
-                if (((s.ptr == self.input.ptr) and (s.len == self.input.len))) {
-                    return self.value;
-                }
-                return @as(u32, @truncate(std.hash.Wyhash.hash(0, s)));
-        }
-    
-    pub fn eql(self: @This(), a: []const u8, b: []const u8, _: usize) bool {
+    pub const Prehashed = StringArrayHashMapContext_Prehashed;
+};
+
+pub const CaseInsensitiveASCIIStringContext_Prehashed = struct {
+    value: u32,
+    input: []const u8,
+
+pub fn hash(self: CaseInsensitiveASCIIStringContext_Prehashed, s: []const u8) u32 {
+            if (((s.ptr == self.input.ptr) and (s.len == self.input.len))) {
+                return self.value;
+            }
+            return CaseInsensitiveASCIIStringContext.hash(.{}, s);
+    }
+
+pub fn eql(self: CaseInsensitiveASCIIStringContext_Prehashed, a: []const u8, b: []const u8) bool {
             _ = self;
-                return strings.eqlLong(a, b, true);
-        }
-    };
+            return strings.eqlCaseInsensitiveASCIIICheckLength(a, b);
+    }
 };
 
 pub const CaseInsensitiveASCIIStringContext = struct {
@@ -445,22 +488,51 @@ pub fn eql(self: CaseInsensitiveASCIIStringContext, a: []const u8, b: []const u8
 pub fn pre(input: []const u8) Prehashed {
             return Prehashed{ .value = @This().hash(.{}, input), .input = input };
     }
-    pub const Prehashed = struct {
-        value: u32,
-        input: []const u8,
-    
-    pub fn hash(self: @This(), s: []const u8) u32 {
-                if (((s.ptr == self.input.ptr) and (s.len == self.input.len))) {
-                    return self.value;
-                }
-                return CaseInsensitiveASCIIStringContext.hash(.{}, s);
-        }
-    
-    pub fn eql(self: @This(), a: []const u8, b: []const u8) bool {
+    pub const Prehashed = CaseInsensitiveASCIIStringContext_Prehashed;
+};
+
+pub const StringHashMapContext_Prehashed = struct {
+    value: u64,
+    input: []const u8,
+
+pub fn hash(self: StringHashMapContext_Prehashed, s: []const u8) u64 {
+            if (((s.ptr == self.input.ptr) and (s.len == self.input.len))) {
+                return self.value;
+            }
+            return StringHashMapContext.hash(.{}, s);
+    }
+
+pub fn eql(self: StringHashMapContext_Prehashed, a: []const u8, b: []const u8) bool {
             _ = self;
-                return strings.eqlCaseInsensitiveASCIIICheckLength(a, b);
-        }
-    };
+            return strings.eqlLong(a, b, true);
+    }
+};
+
+pub const StringHashMapContext_PrehashedCaseInsensitive = struct {
+    value: u64,
+    input: []const u8,
+
+pub fn init(allocator: std.mem.Allocator, input: []const u8) StringHashMapContext_PrehashedCaseInsensitive {
+            const out = ((allocator.alloc(u8, input.len)) catch unreachable);
+            _ = strings.copyLowercase(input, out);
+            return StringHashMapContext_PrehashedCaseInsensitive{ .value = StringHashMapContext.hash(.{}, out), .input = out };
+    }
+
+pub fn deinit(self: StringHashMapContext_PrehashedCaseInsensitive, allocator: std.mem.Allocator) void {
+            _ = allocator.free(self.input);
+    }
+
+pub fn hash(self: StringHashMapContext_PrehashedCaseInsensitive, s: []const u8) u64 {
+            if (((s.ptr == self.input.ptr) and (s.len == self.input.len))) {
+                return self.value;
+            }
+            return StringHashMapContext.hash(.{}, s);
+    }
+
+pub fn eql(self: StringHashMapContext_PrehashedCaseInsensitive, a: []const u8, b: []const u8) bool {
+            _ = self;
+            return strings.eqlCaseInsensitiveASCIIICheckLength(a, b);
+    }
 };
 
 pub const StringHashMapContext = struct {
@@ -478,48 +550,8 @@ pub fn eql(self: StringHashMapContext, a: []const u8, b: []const u8) bool {
 pub fn pre(input: []const u8) Prehashed {
             return Prehashed{ .value = @This().hash(.{}, input), .input = input };
     }
-    pub const Prehashed = struct {
-        value: u64,
-        input: []const u8,
-    
-    pub fn hash(self: @This(), s: []const u8) u64 {
-                if (((s.ptr == self.input.ptr) and (s.len == self.input.len))) {
-                    return self.value;
-                }
-                return StringHashMapContext.hash(.{}, s);
-        }
-    
-    pub fn eql(self: @This(), a: []const u8, b: []const u8) bool {
-            _ = self;
-                return strings.eqlLong(a, b, true);
-        }
-    };
-    pub const PrehashedCaseInsensitive = struct {
-        value: u64,
-        input: []const u8,
-    
-    pub fn init(allocator: std.mem.Allocator, input: []const u8) PrehashedCaseInsensitive {
-                const out = ((allocator.alloc(u8, input.len)) catch unreachable);
-                _ = strings.copyLowercase(input, out);
-                return PrehashedCaseInsensitive{ .value = StringHashMapContext.hash(.{}, out), .input = out };
-        }
-    
-    pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
-                _ = allocator.free(self.input);
-        }
-    
-    pub fn hash(self: @This(), s: []const u8) u64 {
-                if (((s.ptr == self.input.ptr) and (s.len == self.input.len))) {
-                    return self.value;
-                }
-                return StringHashMapContext.hash(.{}, s);
-        }
-    
-    pub fn eql(self: @This(), a: []const u8, b: []const u8) bool {
-            _ = self;
-                return strings.eqlCaseInsensitiveASCIIICheckLength(a, b);
-        }
-    };
+    pub const Prehashed = StringHashMapContext_Prehashed;
+    pub const PrehashedCaseInsensitive = StringHashMapContext_PrehashedCaseInsensitive;
 };
 
 pub const FailingAllocator = struct {
@@ -699,7 +731,6 @@ const WindowsStat = extern struct {
 
 pub fn birthtime() std.c.timespec {
             const Ts = std.c.timespec;
-            _ = &Ts;
             return Ts{ .tv_nsec = 0, .tv_sec = 0 };
     }
 
@@ -729,7 +760,7 @@ pub fn makeOpenPathAccessMaskW(dir: std.fs.Dir, comptime T: type, sub_path: []co
                 break :blk @ptrCast(component.path);
 
 })) else try w.sliceToPrefixedFileW(dir.fd, component.path));
-                var result = (blk_catch_1: { break :blk_catch_1 ((makeOpenDirAccessMaskW(dir, sub_path_w.span().ptr, access_mask, .{ .no_follow = no_follow, .create_disposition = w.FILE_OPEN_IF })) catch |e| { _ = &e; if ((e == error.FileNotFound)) {
+                var result = (blk_catch_2: { break :blk_catch_2 ((makeOpenDirAccessMaskW(dir, sub_path_w.span().ptr, access_mask, .{ .no_follow = no_follow, .create_disposition = w.FILE_OPEN_IF })) catch |e| { _ = &e; if ((e == error.FileNotFound)) {
                     if (it.previous()) |prev| {
                         _ = &prev;
                         component = prev;
@@ -812,7 +843,7 @@ pub fn makePath(comptime T: type, self: std.fs.Dir, sub_path: []const T) !void {
             var component = ((it.last()) orelse { return; });
             _ = &component;
             while (true) {
-                _ = (blk_catch_2: { break :blk_catch_2 ((std.fs.Dir.makeDir(self, component.path)) catch |e| { _ = &e; if ((e == error.PathAlreadyExists)) {
+                _ = (blk_catch_3: { break :blk_catch_3 ((std.fs.Dir.makeDir(self, component.path)) catch |e| { _ = &e; if ((e == error.PathAlreadyExists)) {
                 } else {
                     if ((e == error.FileNotFound)) {
                         if (it.previous()) |prev| {
@@ -847,10 +878,7 @@ pub fn componentIterator(comptime T: type, path_: []const T) !ComponentIter(T) {
             return ComponentIter(T).init(path_);
     }
     const w = std.os.windows;
-    const MakeOpenDirAccessMaskWOptions = struct {
-        no_follow: bool,
-        create_disposition: u32,
-    };
+    const MakeOpenDirAccessMaskWOptions = BunMakeOpenDirAccessMaskWOptions;
 };
 
 pub const Dirname = struct {
@@ -933,10 +961,14 @@ pub fn WindowsPath(comptime T: type) type {
     kind: Kind,
     disk_designator: []const T,
     pub const Kind = enum {
-                    None,
-                    Drive,
-                    NetworkShare,
-                };
+        None,
+        Drive,
+        NetworkShare,
+        pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+        pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+        pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+        pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+    };
 };
     }
 };
@@ -995,6 +1027,20 @@ pub fn free(ctx: *anyopaque, buf: []u8, alignment: std.mem.Alignment, ra: usize)
     }
 };
 
+pub const BunMakeOpenDirAccessMaskWOptions = struct {
+    no_follow: bool,
+    create_disposition: u32,
+};
+
+pub fn TrivialDeinitHolder(comptime T: type) type {
+    return struct {
+
+pub fn deinit(self_: *T) void {
+                _ = &self_;
+        }
+    };
+}
+
 pub const SelfExePathMemo = struct {
     pub var set: bool = false;
     pub var value: [4097]u8 = undefined;
@@ -1038,7 +1084,6 @@ pub fn duration(self: timespec, other: *const timespec) timespec {
                 nsec_diff = (nsec_diff +% std.time.ns_per_s);
             }
             const Timespec = timespec;
-            _ = &Timespec;
             return Timespec{ .sec = sec_diff, .nsec = nsec_diff };
     }
 
@@ -1056,8 +1101,8 @@ pub fn ns(self: timespec) u64 {
             }
             _ = assert((self.sec >= 0));
             _ = assert((self.nsec >= 0));
-            const s_ns = (blk_catch_3: { break :blk_catch_3 ((std.math.mul(u64, (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(@max(self.sec, 0))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(self.sec, 0))) else cp_cast_int(i32, @max(self.sec, 0))))) == .@"enum") cp_cast_int(u64, @intFromEnum((if (comptime @typeInfo(@TypeOf(@max(self.sec, 0))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(self.sec, 0))) else cp_cast_int(i32, @max(self.sec, 0))))) else cp_cast_int(u64, (if (comptime @typeInfo(@TypeOf(@max(self.sec, 0))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(self.sec, 0))) else cp_cast_int(i32, @max(self.sec, 0))))), std.time.ns_per_s)) catch |__ce_3| { _ = &__ce_3; return std.math.maxInt(u64); }); });
-            return (blk_catch_4: { break :blk_catch_4 ((std.math.add(u64, s_ns, (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(@max(self.nsec, 0))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(self.nsec, 0))) else cp_cast_int(i32, @max(self.nsec, 0))))) == .@"enum") cp_cast_int(u64, @intFromEnum((if (comptime @typeInfo(@TypeOf(@max(self.nsec, 0))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(self.nsec, 0))) else cp_cast_int(i32, @max(self.nsec, 0))))) else cp_cast_int(u64, (if (comptime @typeInfo(@TypeOf(@max(self.nsec, 0))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(self.nsec, 0))) else cp_cast_int(i32, @max(self.nsec, 0))))))) catch |__ce_4| { _ = &__ce_4; return std.math.maxInt(i64); }); });
+            const s_ns = (blk_catch_4: { break :blk_catch_4 ((std.math.mul(u64, (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(@max(self.sec, 0))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(self.sec, 0))) else cp_cast_int(i32, @max(self.sec, 0))))) == .@"enum") cp_cast_int(u64, @intFromEnum((if (comptime @typeInfo(@TypeOf(@max(self.sec, 0))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(self.sec, 0))) else cp_cast_int(i32, @max(self.sec, 0))))) else cp_cast_int(u64, (if (comptime @typeInfo(@TypeOf(@max(self.sec, 0))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(self.sec, 0))) else cp_cast_int(i32, @max(self.sec, 0))))), std.time.ns_per_s)) catch |__ce_4| { _ = &__ce_4; return std.math.maxInt(u64); }); });
+            return (blk_catch_5: { break :blk_catch_5 ((std.math.add(u64, s_ns, (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(@max(self.nsec, 0))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(self.nsec, 0))) else cp_cast_int(i32, @max(self.nsec, 0))))) == .@"enum") cp_cast_int(u64, @intFromEnum((if (comptime @typeInfo(@TypeOf(@max(self.nsec, 0))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(self.nsec, 0))) else cp_cast_int(i32, @max(self.nsec, 0))))) else cp_cast_int(u64, (if (comptime @typeInfo(@TypeOf(@max(self.nsec, 0))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(self.nsec, 0))) else cp_cast_int(i32, @max(self.nsec, 0))))))) catch |__ce_5| { _ = &__ce_5; return std.math.maxInt(i64); }); });
     }
 
 pub fn nsSigned(self: timespec) i64 {
@@ -1169,7 +1214,7 @@ pub fn getThreadCountFromUser() ?u16 {
                 _ = &envname;
                 if (getenvZ(envname)) |env| {
                     _ = &env;
-                    if ((blk_catch_5: { break :blk_catch_5 ((std.fmt.parseInt(u16, env, 10)) catch |__ce_5| { _ = &__ce_5; break :blk_catch_5 null; }); })) |parsed| {
+                    if ((blk_catch_6: { break :blk_catch_6 ((std.fmt.parseInt(u16, env, 10)) catch |__ce_6| { _ = &__ce_6; break :blk_catch_6 null; }); })) |parsed| {
                         _ = &parsed;
                         if ((parsed >= min_threads)) {
                             if (bun.logger.Log.default_log_level.atLeast(.debug)) {
@@ -1298,7 +1343,6 @@ pub const LinearFifo = @import("./collections/linear_fifo.zig").LinearFifo;
 pub const LinearFifoBufferType = @import("./collections/linear_fifo.zig").LinearFifoBufferType;
 pub const ObjectPool = @import("./collections/pool.zig").ObjectPool;
 const global_scope_log = sys.syslog;
-pub const PollFlag = enum { ready, not_ready, hup };
 pub const Bunfig = @import("./cli/bunfig.zig").Bunfig;
 pub const HTTPThread = @import("./http/http.zig").HTTPThread;
 pub const TaggedPointer = ptr.TaggedPointer;
@@ -1326,6 +1370,7 @@ pub const copyFile = CopyFile.copyFile;
 pub const copyFileWithState = CopyFile.copyFileWithState;
 pub const CopyFileState = CopyFile.CopyFileState;
 pub const SignalCode = @import("./sys/SignalCode.zig").SignalCode;
+var is_missing_io_uring_cache: ?bool = null;
 pub const PackageManager = install.PackageManager;
 pub const RunCommand = @import("./cli/run_command.zig").RunCommand;
 pub const Transpiler = transpiler.Transpiler;
@@ -1335,6 +1380,7 @@ pub const URL = @import("./url/url.zig").URL;
 pub const FormData = @import("./runtime/webcore/FormData.zig").FormData;
 var needs_proc_self_workaround: bool = false;
 pub const getcwd = std.posix.getcwd;
+var proc_self_workaround_has_checked = false;
 pub const ImportRecord = @import("./options_types/import_record.zig").ImportRecord;
 pub const ImportKind = @import("./options_types/import_record.zig").ImportKind;
 pub const failing_allocator = std.mem.Allocator{ .ptr = undefined, .vtable = (&.{ .alloc = FailingAllocator.alloc, .resize = FailingAllocator.resize, .free = FailingAllocator.free }) };
@@ -1519,10 +1565,7 @@ pub fn free(node: *ThreadlocalBuffersNode) void {
             const s: *Storage = @alignCast(@fieldParentPtr("node", node));
             _ = default_allocator.destroy(s);
     }
-    const Storage = struct {
-        node: ThreadlocalBuffersNode,
-        data: T,
-    };
+    pub const Storage = ThreadlocalBuffersStorage(T);
 };
 }
 
@@ -1747,8 +1790,8 @@ pub fn assertNonBlocking(fd: anytype) void {
 }
 
 pub fn ensureNonBlocking(fd: anytype) void {
-        const current = (blk_catch_8: { break :blk_catch_8 ((std.posix.fcntl(fd, std.posix.F.GETFL, 0)) catch |__ce_8| { _ = &__ce_8; break :blk_catch_8 0; }); });
-        _ = (blk_catch_9: { break :blk_catch_9 ((std.posix.fcntl(fd, std.posix.F.SETFL, (current | O.NONBLOCK))) catch |__ce_9| { _ = &__ce_9; break :blk_catch_9 0; }); });
+        const current = (blk_catch_9: { break :blk_catch_9 ((std.posix.fcntl(fd, std.posix.F.GETFL, 0)) catch |__ce_9| { _ = &__ce_9; break :blk_catch_9 0; }); });
+        _ = (blk_catch_10: { break :blk_catch_10 ((std.posix.fcntl(fd, std.posix.F.SETFL, (current | O.NONBLOCK))) catch |__ce_10| { _ = &__ce_10; break :blk_catch_10 0; }); });
 }
 
 pub fn isReadable(fd: FD) PollFlag {
@@ -1757,10 +1800,9 @@ pub fn isReadable(fd: FD) PollFlag {
         }
         _ = assert((fd != invalid_fd));
         const PollFd = std.posix.pollfd;
-        _ = &PollFd;
         var polls: [1]PollFd = .{ PollFd{ .fd = fd.cast(), .events = ((std.posix.POLL.IN | std.posix.POLL.ERR) | std.posix.POLL.HUP), .revents = 0 } };
         _ = &polls;
-        const result = ((blk_catch_10: { break :blk_catch_10 ((std.posix.poll((&polls), 0)) catch |__ce_10| { _ = &__ce_10; break :blk_catch_10 0; }); }) != 0);
+        const result = ((blk_catch_11: { break :blk_catch_11 ((std.posix.poll((&polls), 0)) catch |__ce_11| { _ = &__ce_11; break :blk_catch_11 0; }); }) != 0);
         const rc = (if ((result and ((polls[0].revents & (std.posix.POLL.HUP | std.posix.POLL.ERR)) != 0))) PollFlag.hup else (if (result) PollFlag.ready else PollFlag.not_ready));
         _ = global_scope_log("poll({f}, .readable): {} ({s}{s})", .{ fd, result, @tagName(rc), (if (((polls[0].revents & std.posix.POLL.ERR) != 0)) " ERR " else "") });
         return rc;
@@ -1769,11 +1811,10 @@ pub fn isReadable(fd: FD) PollFlag {
 pub fn isWritable(fd: FD) PollFlag {
         if (comptime Environment.isWindows) {
             const WsaPollFd = std.os.windows.ws2_32.WSAPOLLFD;
-            _ = &WsaPollFd;
             var polls: [1]WsaPollFd = .{ WsaPollFd{ .fd = fd.asSocketFd(), .events = std.posix.POLL.WRNORM, .revents = 0 } };
             _ = &polls;
             const rc = std.os.windows.ws2_32.WSAPoll((&polls), 1, 0);
-            const result = ((if ((rc != std.os.windows.ws2_32.SOCKET_ERROR)) (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) == .@"enum") cp_cast_int(usize, @intFromEnum((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) else cp_cast_int(usize, (if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) else 0) != 0);
+            const result = ((if ((rc != std.os.windows.ws2_32.SOCKET_ERROR)) (if (comptime @typeInfo(@TypeOf(cp_cast_int(i32, @intFromEnum(rc)))) == .@"enum") cp_cast_int(usize, @intFromEnum(cp_cast_int(i32, @intFromEnum(rc)))) else cp_cast_int(usize, cp_cast_int(i32, @intFromEnum(rc)))) else 0) != 0);
             _ = global_scope_log("poll({f}) writable: {f} ({d})", .{ fd, result, polls[0].revents });
             if ((result and (polls[0].revents & (std.posix.POLL.WRNORM != 0)))) {
                 return .hup;
@@ -1788,10 +1829,9 @@ pub fn isWritable(fd: FD) PollFlag {
         }
         _ = assert((fd != invalid_fd));
         const PollFd = std.posix.pollfd;
-        _ = &PollFd;
         var polls: [1]PollFd = .{ PollFd{ .fd = fd.cast(), .events = ((std.posix.POLL.OUT | std.posix.POLL.ERR) | std.posix.POLL.HUP), .revents = 0 } };
         _ = &polls;
-        const result = ((blk_catch_11: { break :blk_catch_11 ((std.posix.poll((&polls), 0)) catch |__ce_11| { _ = &__ce_11; break :blk_catch_11 0; }); }) != 0);
+        const result = ((blk_catch_12: { break :blk_catch_12 ((std.posix.poll((&polls), 0)) catch |__ce_12| { _ = &__ce_12; break :blk_catch_12 0; }); }) != 0);
         const rc = (if ((result and ((polls[0].revents & (std.posix.POLL.HUP | std.posix.POLL.ERR)) != 0))) PollFlag.hup else (if (result) PollFlag.ready else PollFlag.not_ready));
         _ = global_scope_log("poll({f}, .writable): {} ({s}{s})", .{ fd, result, @tagName(rc), (if (((polls[0].revents & std.posix.POLL.ERR) != 0)) " ERR " else "") });
         return rc;
@@ -2024,13 +2064,10 @@ pub fn isMissingIOUring() bool {
         if (comptime (!Environment.isLinux)) {
             return false;
         }
-        const Missing = struct {
-    is_missing_io_uring: ?bool = null,
-};
-        return ((Missing.is_missing_io_uring) orelse (brk: {
+        return ((is_missing_io_uring_cache) orelse (brk: {
         const kernel = analytics.GenerateHeader.GeneratePlatform.kernelVersion();
         const result = ((kernel.major < 5) or ((kernel.major == 5) and (kernel.minor < 3)));
-        Missing.is_missing_io_uring = result;
+        is_missing_io_uring_cache = result;
         break :brk result;
 }));
 }
@@ -2108,11 +2145,8 @@ pub fn getFdPath(fd: FD, buf: *bun.PathBuffer) ![]u8 {
             return buf[0..res.written];
         }
         if (comptime Environment.allow_assert) {
-            const ProcSelfWorkAroundForDebugging = struct {
-            pub var has_checked = false;
-        };
-            if ((!ProcSelfWorkAroundForDebugging.has_checked)) {
-                ProcSelfWorkAroundForDebugging.has_checked = true;
+            if ((!proc_self_workaround_has_checked)) {
+                proc_self_workaround_has_checked = true;
                 needs_proc_self_workaround = bun.env_var.BUN_NEEDS_PROC_SELF_WORKAROUND.get();
             }
         } else {
@@ -2123,7 +2157,7 @@ pub fn getFdPath(fd: FD, buf: *bun.PathBuffer) ![]u8 {
         if (needs_proc_self_workaround) {
             return getFdPathViaCWD(fd.native(), buf);
         }
-        return (blk_catch_12: { break :blk_catch_12 ((std.os.getFdPath(fd.native(), buf)) catch |e| { _ = &e; if (((e == error.FileNotFound) and (!needs_proc_self_workaround))) {
+        return (blk_catch_13: { break :blk_catch_13 ((std.os.getFdPath(fd.native(), buf)) catch |e| { _ = &e; if (((e == error.FileNotFound) and (!needs_proc_self_workaround))) {
             needs_proc_self_workaround = true;
             return getFdPathViaCWD(fd.native(), buf);
         }
@@ -2437,7 +2471,7 @@ pub fn reloadProcess(allocator: std.mem.Allocator, clear_terminal: bool, comptim
             _ = ((actions.inherit(.stderr())) catch unreachable);
             var attrs = ((spawn.Attr.init()) catch unreachable);
             _ = &attrs;
-            _ = (blk_catch_23: { break :blk_catch_23 ((attrs.resetSignals()) catch |__ce_23| { _ = &__ce_23;  }); });
+            _ = (blk_catch_24: { break :blk_catch_24 ((attrs.resetSignals()) catch |__ce_24| { _ = &__ce_24;  }); });
             _ = ((attrs.set((((c.POSIX_SPAWN_CLOEXEC_DEFAULT | c.POSIX_SPAWN_SETEXEC) | c.POSIX_SPAWN_SETSIGDEF) | c.POSIX_SPAWN_SETSIGMASK))) catch unreachable);
             switch ((blk: {
             break :blk spawn.spawnZ(exec_path, actions, attrs, @as(ArgvPtr, @ptrCast(newargv)), @as(ArgvPtr, @ptrCast(envp)));
@@ -2801,7 +2835,7 @@ pub fn makePath(dir: std.fs.Dir, sub_path: []const u8) !void {
         var component = ((it.last()) orelse { return; });
         _ = &component;
         while (true) {
-            _ = (blk_catch_25: { break :blk_catch_25 ((dir.makeDir(component.path)) catch |e| { _ = &e; if ((e == error.PathAlreadyExists)) {
+            _ = (blk_catch_26: { break :blk_catch_26 ((dir.makeDir(component.path)) catch |e| { _ = &e; if ((e == error.PathAlreadyExists)) {
                 const path_buf2_len = (MAX_PATH_BYTES * 2);
                 var path_buf2: [path_buf2_len]u8 = undefined;
                 _ = &path_buf2;
@@ -2811,7 +2845,7 @@ pub fn makePath(dir: std.fs.Dir, sub_path: []const u8) !void {
                 const result = try sys.lstat(path_to_use).unwrap();
                 const is_dir = S.ISDIR(@intCast(result.mode));
                 if ((!is_dir)) {
-                    _ = (blk_catch_26: { break :blk_catch_26 ((dir.deleteTree(component.path)) catch |__ce_26| { _ = &__ce_26;  }); });
+                    _ = (blk_catch_27: { break :blk_catch_27 ((dir.deleteTree(component.path)) catch |__ce_27| { _ = &__ce_27;  }); });
                     continue;
                 }
             } else {
@@ -2918,7 +2952,7 @@ pub fn todoPanic(src: std.builtin.SourceLocation, comptime format: []const u8, a
 }
 
 pub fn create(allocator: std.mem.Allocator, comptime T: type, t: T) *T {
-        const pointer = (blk_catch_27: { break :blk_catch_27 ((allocator.create(T)) catch |__ce_27| { _ = &__ce_27; break :blk_catch_27 outOfMemory(); }); });
+        const pointer = (blk_catch_28: { break :blk_catch_28 ((allocator.create(T)) catch |__ce_28| { _ = &__ce_28; break :blk_catch_28 outOfMemory(); }); });
         pointer.* = t;
         return pointer;
 }
@@ -2971,13 +3005,7 @@ pub fn new(t: T) *T {
 }
 
 pub fn TrivialDeinitType(comptime T: type) type {
-        const _TrivialDeinitHolder = struct {
-
-pub fn deinit(self_: *T) void {
-            _ = &self_;
-    }
-};
-        return @TypeOf(_TrivialDeinitHolder.deinit);
+        return @TypeOf(TrivialDeinitHolder(T).deinit);
 }
 
 pub fn TrivialDeinit(comptime T: type) TrivialDeinitType(T) {
@@ -3057,10 +3085,10 @@ pub inline fn resolveSourcePath(comptime root: SourceRoot, comptime sub_path: []
         _ = &buf;
         var fba = std.heap.FixedBufferAllocator.init((&buf));
         _ = &fba;
-        const resolved = ((blk_catch_28: { break :blk_catch_28 ((std.fs.path.resolve(fba.allocator(), (&.{ (switch (root) {
+        const resolved = ((blk_catch_29: { break :blk_catch_29 ((std.fs.path.resolve(fba.allocator(), (&.{ (switch (root) {
 .codegen => Environment.codegen_path,
 .src => (Environment.base_path ++ "/src"),
-}), sub_path }))) catch |__ce_28| { _ = &__ce_28; @compileError("unreachable"); }); })[0..]).*;
+}), sub_path }))) catch |__ce_29| { _ = &__ce_29; @compileError("unreachable"); }); })[0..]).*;
         break :path (&resolved);
 });
 }
@@ -3276,7 +3304,6 @@ pub fn getRoughTickCount(comptime mock_mode: timespec.MockMode) timespec {
         }
         const ns_value = hw_timer.nowNs();
         const Timespec = timespec;
-        _ = &Timespec;
         return Timespec{ .sec = (if (comptime @typeInfo(@TypeOf((ns_value / std.time.ns_per_s))) == .@"enum") cp_cast_int(i32, @intFromEnum((ns_value / std.time.ns_per_s))) else cp_cast_int(i32, (ns_value / std.time.ns_per_s))), .nsec = (if (comptime @typeInfo(@TypeOf((ns_value % std.time.ns_per_s))) == .@"enum") cp_cast_int(i32, @intFromEnum((ns_value % std.time.ns_per_s))) else cp_cast_int(i32, (ns_value % std.time.ns_per_s))) };
 }
 
@@ -3368,6 +3395,40 @@ pub fn getTotalMemorySize() usize {
         return cpp.Bun__ramSize();
 }
 
+pub fn GenericIndexOptional(backing_int: type, IndexType: type) type {
+        return enum(backing_int) {
+        none = std.math.maxInt(backing_int),
+        _,
+
+        const OptInt = @Type(.{ .optional = .{ .child = backing_int } });
+        const OptIndex = @Type(.{ .optional = .{ .child = IndexType } });
+
+        /// Signatures:
+        /// - `init(maybe: ?Index) Optional`
+        /// - `init(maybe: ?backing_int) Optional`
+        pub inline fn init(maybe: anytype) @This() {
+            comptime var t = @typeInfo(@TypeOf(maybe));
+            if (t == .optional) t = @typeInfo(t.optional.child);
+            if (t == .int or t == .comptime_int) {
+                const v = @as(OptInt, maybe);
+                if (v != null) return IndexType.init(v.?).toOptional();
+                return .none;
+            }
+            const v = @as(OptIndex, maybe);
+            if (v != null) return v.?.toOptional();
+            return .none;
+        }
+
+        pub inline fn unwrap(oi: @This()) OptIndex {
+            return if (oi == .none) null else @enumFromInt(@intFromEnum(oi));
+        }
+
+        pub inline fn unwrapGet(oi: @This()) OptInt {
+            return if (oi == .none) null else @intFromEnum(oi);
+        }
+    };
+}
+
 pub fn GenericIndex(backing_int: type, uid: anytype) type {
         const null_value = std.math.maxInt(backing_int);
         return enum(backing_int) {
@@ -3403,37 +3464,7 @@ pub fn GenericIndex(backing_int: type, uid: anytype) type {
             return writer.print("{d}", .{@intFromEnum(this)});
         }
 
-        pub const Optional = enum(backing_int) {
-            none = std.math.maxInt(backing_int),
-            _,
-
-            const OptInt = @Type(.{ .optional = .{ .child = backing_int } });
-            const OptIndex = @Type(.{ .optional = .{ .child = Index } });
-
-            /// Signatures:
-            /// - `init(maybe: ?Index) Optional`
-            /// - `init(maybe: ?backing_int) Optional`
-            pub inline fn init(maybe: anytype) Optional {
-                comptime var t = @typeInfo(@TypeOf(maybe));
-                if (t == .optional) t = @typeInfo(t.optional.child);
-                if (t == .int or t == .comptime_int) {
-                    const v = @as(OptInt, maybe);
-                    if (v != null) return Index.init(v.?).toOptional();
-                    return .none;
-                }
-                const v = @as(OptIndex, maybe);
-                if (v != null) return v.?.toOptional();
-                return .none;
-            }
-
-            pub inline fn unwrap(oi: Optional) OptIndex {
-                return if (oi == .none) null else @enumFromInt(@intFromEnum(oi));
-            }
-
-            pub inline fn unwrapGet(oi: Optional) OptInt {
-                return if (oi == .none) null else @intFromEnum(oi);
-            }
-        };
+        pub const Optional = GenericIndexOptional(backing_int, Index);
     };
 }
 

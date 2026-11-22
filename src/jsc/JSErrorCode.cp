@@ -1,5 +1,5 @@
 /// Represents JavaScript error types
-pub const JSErrorCode = enum(u8) {
+pub enum JSErrorCode: u8 {
     Error = 0,
     EvalError = 1,
     RangeError = 2,
@@ -15,10 +15,10 @@ pub const JSErrorCode = enum(u8) {
     StackOverflow = 253,
     UserErrorCode = 254,
     _,
-};
+}
 
 // keep in sync with ExceptionCode in src/jsc/bindings/ExceptionCode.h
-pub const DOMExceptionCode = enum(u8) {
+pub enum DOMExceptionCode: u8 {
     // DOMException error names (https://webidl.spec.whatwg.org/#idl-DOMException-error-names).
     // Those need to be kept in sync with the array in DOMException.cpp.
     IndexSizeError, // Deprecated. Use RangeError instead.
@@ -69,4 +69,4 @@ pub const DOMExceptionCode = enum(u8) {
     InvalidThisError,
     InvalidURLError,
     CryptoOperationFailedError,
-};
+}

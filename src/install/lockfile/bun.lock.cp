@@ -1,11 +1,11 @@
-pub const Version = enum(u32) {
+pub enum Version: u32 {
     v0 = 0,
 
     // fixed unnecessary listing of workspace dependencies
     v1,
 
-    pub const current: Version = .v1;
-};
+    const current: Version = .v1;
+}
 
 pub struct DeinitGuard<T> {
     ptr: *T!,
@@ -46,8 +46,10 @@ struct WorkspaceSorter {
     }
 }
 
+type TreeSortCtxItem = [ []const DependencyID, string, usize ];
+
 struct TreeSortCtx {
-    pub const Item = struct { []const DependencyID, string, usize };
+    pub const Item = TreeSortCtxItem;
 
     static fn isLessThan(_ctx: TreeSortCtx, l: Item, r: Item): bool {
         * = _ctx;

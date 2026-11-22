@@ -133,13 +133,15 @@ export enum Result {
     err: [:0]const u8,
 }
 
+enum ZstdReaderState {
+    Uninitialized,
+    Inflating,
+    End,
+    Error,
+}
+
 export struct ZstdReaderArrayList {
-    const State = enum {
-        Uninitialized,
-        Inflating,
-        End,
-        Error,
-    };
+    pub const State = ZstdReaderState;
 
     input: []const u8,
     list: std.ArrayListUnmanaged(u8),

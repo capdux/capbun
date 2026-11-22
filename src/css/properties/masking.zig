@@ -247,6 +247,10 @@ pub const WebKitMaskSourceType = enum {
     pub const deepClone = css_impl.deepClone;
 };
 
+pub const MaskBorderParseClosure = struct {
+    mode: ?MaskBorderMode = null,
+};
+
 pub const ClipPathShape = struct {
     shape: *BasicShape,
     reference_box: GeometryBox,
@@ -468,14 +472,11 @@ pub const MaskBorder = struct {
     mode: MaskBorderMode,
 
 pub fn parse(input: *css.Parser) css.Result(@This()) {
-            const Closure = struct {
-    mode: ?MaskBorderMode = null,
-};
-            var closure = Closure{ .mode = null };
+            var closure = MaskBorderParseClosure{ .mode = null };
             _ = &closure;
             const border_image = BorderImage.parseWithCallback(input, (&closure), (struct {
 
-pub inline fn callback(c: *Closure, p: *css.Parser) bool {
+pub inline fn callback(c: *MaskBorderParseClosure, p: *css.Parser) bool {
             if ((c.mode == null)) {
                 if (p.tryParse(MaskBorderMode.parse, .{}).asValue()) |value| {
                     _ = &value;

@@ -115,6 +115,82 @@ pub const small_list = @import("./small_list.zig");
 pub const context = @import("./context.zig");
 pub const css_decls = @import("./declaration.zig");
 pub const errors_ = @import("./error.zig");
+pub const _BundlerPreludeNames = enum {
+    tailwind,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const _StylesheetParserState = enum(u8) {
+    start = 1,
+    layers = 2,
+    imports = 3,
+    namespaces = 4,
+    body = 5,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const _TopLevelPreludeEnum = enum {
+    import,
+    charset,
+    namespace,
+    @"custom-media",
+    property,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const _NestedPreludeEnum = enum {
+    media,
+    supports,
+    @"font-face",
+    @"font-palette-values",
+    @"counter-style",
+    viewport,
+    @"-ms-viewport",
+    keyframes,
+    @"-webkit-keyframes",
+    @"-moz-keyframes",
+    @"-o-keyframes",
+    @"-ms-keyframes",
+    page,
+    @"-moz-document",
+    layer,
+    container,
+    @"starting-style",
+    scope,
+    nest,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const _PluckImportsState = enum {
+    count,
+    exec,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const ComposesState = union(enum) {
+    allow: SourceLocation,
+    disallow_nested: SourceLocation,
+    disallow_not_single_class: SourceLocation,
+    disallow_entirely,
+    pub fn has(s: []const u8) bool { if (comptime @typeInfo(@This()).@"union".tag_type) |TagType| { return std.meta.stringToEnum(TagType, s) != null; } return false; }
+    pub fn name(self: @This()) []const u8 { return @tagName(self); }
+};
+
 pub const ParseUntilErrorBehavior = enum {
     consume,
     stop,
@@ -150,6 +226,16 @@ pub fn closing(token: *const Token) ?BlockType {
 else => null,
 });
     }
+};
+
+pub const SeenStatus = enum {
+    dont_care,
+    looking_for_them,
+    seen_at_least_one,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
 pub const TokenKind = enum {
@@ -441,6 +527,41 @@ pub fn toCss(comptime T: type, self: *const T, dest: *Printer) PrintErr!void {
     }
 };
 
+pub fn AtRulePreludeClosure(comptime P: type) type {
+    return struct {
+        name: []const u8,
+        parser: *P,
+
+pub fn parsefn(self: *@This(), input2: *Parser) Result(P.AtRuleParser.Prelude) {
+                return P.AtRuleParser.parsePrelude(self.parser, self.name, input2);
+        }
+    };
+}
+
+pub fn AtRuleBlockClosure(comptime P: type) type {
+    return struct {
+        prelude: P.AtRuleParser.Prelude,
+        start: *const ParserState,
+        parser: *P,
+
+pub fn parsefn(self: *@This(), input2: *Parser) Result(P.AtRuleParser.AtRule) {
+                return P.AtRuleParser.parseBlock(self.parser, self.prelude, self.start, input2);
+        }
+    };
+}
+
+pub fn QualifiedRuleBlockClosure(comptime P: type) type {
+    return struct {
+        start: *const ParserState,
+        prelude: P.QualifiedRuleParser.Prelude,
+        parser: *P,
+
+pub fn parsefn(self: *@This(), input2: *Parser) Result(P.QualifiedRuleParser.QualifiedRule) {
+                return P.QualifiedRuleParser.parseBlock(self.parser, self.prelude, self.start, input2);
+        }
+    };
+}
+
 pub const DefaultAtRule = struct {
 
 pub fn toCss(self: *const DefaultAtRule, dest: *Printer) PrintErr!void {
@@ -502,9 +623,7 @@ pub const _BundlerAtRuleParser_CustomAtRuleParser = struct {
 
 pub fn parsePrelude(b: *BundlerAtRuleParser, name: []const u8, input: *Parser, _: *const ParserOptions) Result(Prelude) {
             if (comptime ENABLE_TAILWIND_PARSING) {
-                const PreludeNames = enum {
-                tailwind,
-            };
+                const PreludeNames = _BundlerPreludeNames;
                 const Map = (comptime bun.ComptimeEnumMap(PreludeNames));
                 if (Map.getASCIIICaseInsensitive(name)) |prelude| {
                     _ = &prelude;
@@ -654,6 +773,72 @@ pub const PropertyPreludeTuple = struct {
     name: DashedIdent,
 };
 
+pub const SupportsConditionFunc = struct {
+
+pub fn do(_: void, p: *Parser) Result(SupportsCondition) {
+            const result = p.tryParse(SupportsCondition.parse, .{});
+            if ((result == .err)) {
+                return SupportsCondition.parseDeclaration(p);
+            }
+            return result;
+    }
+};
+
+pub const PageSelectorsFn = struct {
+
+pub fn parsefn(input2: *Parser) Result(ArrayList(css_rules.page.PageSelector)) {
+            return input2.parseCommaSeparated(css_rules.page.PageSelector, css_rules.page.PageSelector.parse);
+    }
+};
+
+pub const MozDocumentFn = struct {
+
+pub fn parsefn(_: void, input2: *Parser) Result(void) {
+            _ = input2.tryParse(parseInner, .{});
+            if (input2.expectExhausted().asErr()) |e| {
+                _ = &e;
+                return .{ .err = e };
+            }
+            return .success;
+    }
+
+pub fn parseInner(input2: *Parser) Result(void) {
+            const s = (switch (input2.expectString()) {
+.err => |e| {
+return .{ .err = e };
+},
+.result => |v| v,
+});
+            if ((s.len > 0)) {
+                return .{ .err = input2.newCustomError(ParserError.invalid_value) };
+            }
+            return .success;
+    }
+};
+
+pub const ScopeClosure = struct {
+    selector_parser: *selector.parser.SelectorParser,
+
+pub fn parsefn(self: *ScopeClosure, input2: *Parser) Result(selector.parser.SelectorList) {
+            return selector.parser.SelectorList.parseRelative(self.selector_parser, input2, .ignore_invalid_selector, .none);
+    }
+};
+
+pub fn RuleBodyDeclClosure(comptime P: type, comptime I: type) type {
+    return struct {
+        parser: *P,
+        name: []const u8,
+
+pub fn parsefn(self: *@This(), input: *Parser) Result(I) {
+                if (input.expectColon().asErr()) |e| {
+                    _ = &e;
+                    return .{ .err = e };
+                }
+                return P.DeclarationParser.parseValue(self.parser, self.name, input);
+        }
+    };
+}
+
 pub const ToCssResult = struct {
     code: []const u8,
     exports: ?CssModuleExports,
@@ -797,6 +982,11 @@ pub fn minify(self: *StyleAttribute, allocator: Allocator, options: MinifyOption
             _ = &allocator;
             _ = &options;
     }
+};
+
+pub const UnexpectedTokenClosure = struct {
+    token: Token,
+    start: ParserState,
 };
 
 pub const ParserOptions = struct {
@@ -3394,7 +3584,7 @@ pub fn hslToRgb(hue: f32, saturation: f32, lightness: f32) struct { f32, f32, f3
             parse,
         };
     pub const AngleOrNumber = _ColorAngleOrNumber;
-    pub const RGB = struct { u8, u8, u8 };
+    pub const RGB = ColorRGB;
     pub const named_colors = bun.ComptimeStringMap(RGB, .{ .{ "aliceblue", .{ 240, 248, 255 } }, .{ "antiquewhite", .{ 250, 235, 215 } }, .{ "aqua", .{ 0, 255, 255 } }, .{ "aquamarine", .{ 127, 255, 212 } }, .{ "azure", .{ 240, 255, 255 } }, .{ "beige", .{ 245, 245, 220 } }, .{ "bisque", .{ 255, 228, 196 } }, .{ "black", .{ 0, 0, 0 } }, .{ "blanchedalmond", .{ 255, 235, 205 } }, .{ "blue", .{ 0, 0, 255 } }, .{ "blueviolet", .{ 138, 43, 226 } }, .{ "brown", .{ 165, 42, 42 } }, .{ "burlywood", .{ 222, 184, 135 } }, .{ "cadetblue", .{ 95, 158, 160 } }, .{ "chartreuse", .{ 127, 255, 0 } }, .{ "chocolate", .{ 210, 105, 30 } }, .{ "coral", .{ 255, 127, 80 } }, .{ "cornflowerblue", .{ 100, 149, 237 } }, .{ "cornsilk", .{ 255, 248, 220 } }, .{ "crimson", .{ 220, 20, 60 } }, .{ "cyan", .{ 0, 255, 255 } }, .{ "darkblue", .{ 0, 0, 139 } }, .{ "darkcyan", .{ 0, 139, 139 } }, .{ "darkgoldenrod", .{ 184, 134, 11 } }, .{ "darkgray", .{ 169, 169, 169 } }, .{ "darkgreen", .{ 0, 100, 0 } }, .{ "darkgrey", .{ 169, 169, 169 } }, .{ "darkkhaki", .{ 189, 183, 107 } }, .{ "darkmagenta", .{ 139, 0, 139 } }, .{ "darkolivegreen", .{ 85, 107, 47 } }, .{ "darkorange", .{ 255, 140, 0 } }, .{ "darkorchid", .{ 153, 50, 204 } }, .{ "darkred", .{ 139, 0, 0 } }, .{ "darksalmon", .{ 233, 150, 122 } }, .{ "darkseagreen", .{ 143, 188, 143 } }, .{ "darkslateblue", .{ 72, 61, 139 } }, .{ "darkslategray", .{ 47, 79, 79 } }, .{ "darkslategrey", .{ 47, 79, 79 } }, .{ "darkturquoise", .{ 0, 206, 209 } }, .{ "darkviolet", .{ 148, 0, 211 } }, .{ "deeppink", .{ 255, 20, 147 } }, .{ "deepskyblue", .{ 0, 191, 255 } }, .{ "dimgray", .{ 105, 105, 105 } }, .{ "dimgrey", .{ 105, 105, 105 } }, .{ "dodgerblue", .{ 30, 144, 255 } }, .{ "firebrick", .{ 178, 34, 34 } }, .{ "floralwhite", .{ 255, 250, 240 } }, .{ "forestgreen", .{ 34, 139, 34 } }, .{ "fuchsia", .{ 255, 0, 255 } }, .{ "gainsboro", .{ 220, 220, 220 } }, .{ "ghostwhite", .{ 248, 248, 255 } }, .{ "gold", .{ 255, 215, 0 } }, .{ "goldenrod", .{ 218, 165, 32 } }, .{ "gray", .{ 128, 128, 128 } }, .{ "green", .{ 0, 128, 0 } }, .{ "greenyellow", .{ 173, 255, 47 } }, .{ "grey", .{ 128, 128, 128 } }, .{ "honeydew", .{ 240, 255, 240 } }, .{ "hotpink", .{ 255, 105, 180 } }, .{ "indianred", .{ 205, 92, 92 } }, .{ "indigo", .{ 75, 0, 130 } }, .{ "ivory", .{ 255, 255, 240 } }, .{ "khaki", .{ 240, 230, 140 } }, .{ "lavender", .{ 230, 230, 250 } }, .{ "lavenderblush", .{ 255, 240, 245 } }, .{ "lawngreen", .{ 124, 252, 0 } }, .{ "lemonchiffon", .{ 255, 250, 205 } }, .{ "lightblue", .{ 173, 216, 230 } }, .{ "lightcoral", .{ 240, 128, 128 } }, .{ "lightcyan", .{ 224, 255, 255 } }, .{ "lightgoldenrodyellow", .{ 250, 250, 210 } }, .{ "lightgray", .{ 211, 211, 211 } }, .{ "lightgreen", .{ 144, 238, 144 } }, .{ "lightgrey", .{ 211, 211, 211 } }, .{ "lightpink", .{ 255, 182, 193 } }, .{ "lightsalmon", .{ 255, 160, 122 } }, .{ "lightseagreen", .{ 32, 178, 170 } }, .{ "lightskyblue", .{ 135, 206, 250 } }, .{ "lightslategray", .{ 119, 136, 153 } }, .{ "lightslategrey", .{ 119, 136, 153 } }, .{ "lightsteelblue", .{ 176, 196, 222 } }, .{ "lightyellow", .{ 255, 255, 224 } }, .{ "lime", .{ 0, 255, 0 } }, .{ "limegreen", .{ 50, 205, 50 } }, .{ "linen", .{ 250, 240, 230 } }, .{ "magenta", .{ 255, 0, 255 } }, .{ "maroon", .{ 128, 0, 0 } }, .{ "mediumaquamarine", .{ 102, 205, 170 } }, .{ "mediumblue", .{ 0, 0, 205 } }, .{ "mediumorchid", .{ 186, 85, 211 } }, .{ "mediumpurple", .{ 147, 112, 219 } }, .{ "mediumseagreen", .{ 60, 179, 113 } }, .{ "mediumslateblue", .{ 123, 104, 238 } }, .{ "mediumspringgreen", .{ 0, 250, 154 } }, .{ "mediumturquoise", .{ 72, 209, 204 } }, .{ "mediumvioletred", .{ 199, 21, 133 } }, .{ "midnightblue", .{ 25, 25, 112 } }, .{ "mintcream", .{ 245, 255, 250 } }, .{ "mistyrose", .{ 255, 228, 225 } }, .{ "moccasin", .{ 255, 228, 181 } }, .{ "navajowhite", .{ 255, 222, 173 } }, .{ "navy", .{ 0, 0, 128 } }, .{ "oldlace", .{ 253, 245, 230 } }, .{ "olive", .{ 128, 128, 0 } }, .{ "olivedrab", .{ 107, 142, 35 } }, .{ "orange", .{ 255, 165, 0 } }, .{ "orangered", .{ 255, 69, 0 } }, .{ "orchid", .{ 218, 112, 214 } }, .{ "palegoldenrod", .{ 238, 232, 170 } }, .{ "palegreen", .{ 152, 251, 152 } }, .{ "paleturquoise", .{ 175, 238, 238 } }, .{ "palevioletred", .{ 219, 112, 147 } }, .{ "papayawhip", .{ 255, 239, 213 } }, .{ "peachpuff", .{ 255, 218, 185 } }, .{ "peru", .{ 205, 133, 63 } }, .{ "pink", .{ 255, 192, 203 } }, .{ "plum", .{ 221, 160, 221 } }, .{ "powderblue", .{ 176, 224, 230 } }, .{ "purple", .{ 128, 0, 128 } }, .{ "rebeccapurple", .{ 102, 51, 153 } }, .{ "red", .{ 255, 0, 0 } }, .{ "rosybrown", .{ 188, 143, 143 } }, .{ "royalblue", .{ 65, 105, 225 } }, .{ "saddlebrown", .{ 139, 69, 19 } }, .{ "salmon", .{ 250, 128, 114 } }, .{ "sandybrown", .{ 244, 164, 96 } }, .{ "seagreen", .{ 46, 139, 87 } }, .{ "seashell", .{ 255, 245, 238 } }, .{ "sienna", .{ 160, 82, 45 } }, .{ "silver", .{ 192, 192, 192 } }, .{ "skyblue", .{ 135, 206, 235 } }, .{ "slateblue", .{ 106, 90, 205 } }, .{ "slategray", .{ 112, 128, 144 } }, .{ "slategrey", .{ 112, 128, 144 } }, .{ "snow", .{ 255, 250, 250 } }, .{ "springgreen", .{ 0, 255, 127 } }, .{ "steelblue", .{ 70, 130, 180 } }, .{ "tan", .{ 210, 180, 140 } }, .{ "teal", .{ 0, 128, 128 } }, .{ "thistle", .{ 216, 191, 216 } }, .{ "tomato", .{ 255, 99, 71 } }, .{ "turquoise", .{ 64, 224, 208 } }, .{ "violet", .{ 238, 130, 238 } }, .{ "wheat", .{ 245, 222, 179 } }, .{ "white", .{ 255, 255, 255 } }, .{ "whitesmoke", .{ 245, 245, 245 } }, .{ "yellow", .{ 255, 255, 0 } }, .{ "yellowgreen", .{ 154, 205, 50 } } });
 };
 
@@ -3839,17 +4029,13 @@ pub const BundlerLayerBlockRule = css_rules.layer.LayerBlockRule(BundlerAtRule);
 pub const BundlerSupportsRule = css_rules.supports.SupportsRule(BundlerAtRule);
 pub const BundlerMediaRule = css_rules.media.MediaRule(BundlerAtRule);
 pub const BundlerPrintResult = bun.css.PrintResult(BundlerAtRule);
-const SeenStatus = enum {
-    dont_care,
-    looking_for_them,
-    seen_at_least_one,
-};
 const FORM_FEED_BYTE = 12;
 const REPLACEMENT_CHAR = 65533;
 const REPLACEMENT_CHAR_UNICODE: [3]u8 = .{ 239, 191, 189 };
 const MAX_ONE_B: u32 = 128;
 const MAX_TWO_B: u32 = 2048;
 const MAX_THREE_B: u32 = 65536;
+pub const ColorRGB = struct { u8, u8, u8 };
 pub const implementEql = generic.implementEql;
 pub const implementHash = generic.implementHash;
 pub const implementDeepClone = generic.implementDeepClone;
@@ -4367,17 +4553,9 @@ pub fn parse_at_rule(allocator: Allocator, start: *const ParserState, name: []co
         _ = &allocator;
         _ = ValidAtRuleParser(P);
         const delimiters = Delimiters{ .semicolon = true, .curly_bracket = true };
-        const Closure = struct {
-    name: []const u8,
-    parser: *P,
-
-pub fn parsefn(self: *@This(), input2: *Parser) Result(P.AtRuleParser.Prelude) {
-            return P.AtRuleParser.parsePrelude(self.parser, self.name, input2);
-    }
-};
-        var closure = Closure{ .name = name, .parser = parser };
+        var closure: AtRulePreludeClosure(P) = .{ .name = name, .parser = parser };
         _ = &closure;
-        const prelude_res = input.parseUntilBefore(delimiters, P.AtRuleParser.Prelude, (&closure), Closure.parsefn);
+        const prelude_res = input.parseUntilBefore(delimiters, P.AtRuleParser.Prelude, (&closure), @TypeOf(closure).parsefn);
         if (prelude_res.asErr()) |e| {
             _ = &e;
             const next_t = input.next();
@@ -4415,18 +4593,9 @@ return .{ .err = input.newUnexpectedTokenError(.semicolon) };
 }
 },
 .open_curly => {
-const AnotherClosure = struct {
-    prelude: P.AtRuleParser.Prelude,
-    start: *const ParserState,
-    parser: *P,
-
-pub fn parsefn(self: *@This(), input2: *Parser) Result(P.AtRuleParser.AtRule) {
-            return P.AtRuleParser.parseBlock(self.parser, self.prelude, self.start, input2);
-    }
-};
-        var another_closure = AnotherClosure{ .prelude = prelude, .start = start, .parser = parser };
+var another_closure: AtRuleBlockClosure(P) = .{ .prelude = prelude, .start = start, .parser = parser };
         _ = &another_closure;
-        return parse_nested_block(input, P.AtRuleParser.AtRule, (&another_closure), AnotherClosure.parsefn);
+        return parse_nested_block(input, P.AtRuleParser.AtRule, (&another_closure), @TypeOf(another_closure).parsefn);
 },
 else => {
 _ = bun.unreachablePanic("", .{});
@@ -4495,18 +4664,9 @@ return .{ .err = e };
 },
 .result => |v| v,
 });
-        const Closure = struct {
-    start: *const ParserState,
-    prelude: P.QualifiedRuleParser.Prelude,
-    parser: *P,
-
-pub fn parsefn(self: *@This(), input2: *Parser) Result(P.QualifiedRuleParser.QualifiedRule) {
-            return P.QualifiedRuleParser.parseBlock(self.parser, self.prelude, self.start, input2);
-    }
-};
-        var closure = Closure{ .start = start, .prelude = prelude, .parser = parser };
+        var closure: QualifiedRuleBlockClosure(P) = .{ .start = start, .prelude = prelude, .parser = parser };
         _ = &closure;
-        return parse_nested_block(input, P.QualifiedRuleParser.QualifiedRule, (&closure), Closure.parsefn);
+        return parse_nested_block(input, P.QualifiedRuleParser.QualifiedRule, (&closure), @TypeOf(closure).parsefn);
 }
 
 pub fn parse_until_before(parser: *Parser, delimiters_: Delimiters, error_behavior: ParseUntilErrorBehavior, comptime T: type, closure: anytype, comptime parse_fn: *const fn (@TypeOf(closure), *Parser) Result(T)) Result(T) {
@@ -4678,24 +4838,12 @@ pub fn new(allocator: Allocator, options: *const ParserOptions, at_rule_parser: 
 pub fn nested(self: *@This()) NestedRuleParser(AtRuleParserT) {
             return .{ .options = self.options, .at_rule_parser = self.at_rule_parser, .declarations = DeclarationList{  }, .important_declarations = DeclarationList{  }, .rules = self.rules, .is_in_style_rule = false, .allow_declarations = false, .allocator = self.allocator, .composes = self.composes, .composes_refs = (&self.composes_refs), .local_properties = self.local_properties };
     }
-    const State = enum(u8) {
-                start = 1,
-                layers = 2,
-                imports = 3,
-                namespaces = 4,
-                body = 5,
-            };
+    const State = _StylesheetParserState;
     const This = @This();
     pub const AtRuleParser = struct {
     
     pub fn parsePrelude(parser: *This, name: []const u8, input: *Parser) Result(Prelude) {
-                const PreludeEnum = enum {
-                        import,
-                        charset,
-                        namespace,
-                        @"custom-media",
-                        property,
-                    };
+                const PreludeEnum = _TopLevelPreludeEnum;
                 const Map = (comptime bun.ComptimeEnumMap(PreludeEnum));
                 if (Map.getASCIIICaseInsensitive(name)) |prelude| {
                     _ = &prelude;
@@ -4720,17 +4868,7 @@ pub fn nested(self: *@This()) NestedRuleParser(AtRuleParserT) {
     }) };
     } else null));
                     const supports = (if ((input.tryParse(Parser.expectFunctionMatching, .{ "supports" }) == .result)) brk: {
-                    const Func = struct {
-    
-    pub fn do(_: void, p: *Parser) Result(SupportsCondition) {
-                const result = p.tryParse(SupportsCondition.parse, .{});
-                if ((result == .err)) {
-                    return SupportsCondition.parseDeclaration(p);
-                }
-                return result;
-        }
-    };
-                    break :brk (switch (input.parseNestedBlock(SupportsCondition, @as(void, undefined), Func.do)) {
+                    break :brk (switch (input.parseNestedBlock(SupportsCondition, @as(void, undefined), SupportsConditionFunc.do)) {
     .result => |v| v,
     .err => |e| {
     return .{ .err = e };
@@ -4988,38 +5126,12 @@ return .{ .err = e };
             }
             return .{ .result = rules };
     }
-    const ComposesState = union(enum) {
-                allow: SourceLocation,
-                disallow_nested: SourceLocation,
-                disallow_not_single_class: SourceLocation,
-                disallow_entirely,
-            };
     const This = @This();
     pub const AtRuleParser = struct {
     
     pub fn parsePrelude(parser: *This, name: []const u8, input: *Parser) Result(Prelude) {
                 const result: Prelude = brk: {
-                const PreludeEnum = enum {
-                            media,
-                            supports,
-                            @"font-face",
-                            @"font-palette-values",
-                            @"counter-style",
-                            viewport,
-                            @"-ms-viewport",
-                            keyframes,
-                            @"-webkit-keyframes",
-                            @"-moz-keyframes",
-                            @"-o-keyframes",
-                            @"-ms-keyframes",
-                            page,
-                            @"-moz-document",
-                            layer,
-                            container,
-                            @"starting-style",
-                            scope,
-                            nest,
-                        };
+                const PreludeEnum = _NestedPreludeEnum;
                 const Map = (comptime bun.ComptimeEnumMap(PreludeEnum));
                 if (Map.getASCIIICaseInsensitive(name)) |kind| {
                     _ = &kind;
@@ -5085,13 +5197,7 @@ return .{ .err = e };
     },
     .page => {
     const PageSelectors = ArrayList(css_rules.page.PageSelector);
-                    const Fn = struct {
-    
-    pub fn parsefn(input2: *Parser) Result(PageSelectors) {
-                return input2.parseCommaSeparated(css_rules.page.PageSelector, css_rules.page.PageSelector.parse);
-        }
-    };
-                    const selectors = (switch (input.tryParse(Fn.parsefn, .{})) {
+                    const selectors = (switch (input.tryParse(PageSelectorsFn.parsefn, .{})) {
     .result => |v| v,
     .err => PageSelectors{  },
     });
@@ -5102,31 +5208,7 @@ return .{ .err = e };
                         _ = &e;
                         return .{ .err = e };
                     }
-                    const Fn = struct {
-    
-    pub fn parsefn(_: void, input2: *Parser) Result(void) {
-                _ = input2.tryParse(parseInner, .{});
-                if (input2.expectExhausted().asErr()) |e| {
-                    _ = &e;
-                    return .{ .err = e };
-                }
-                return .success;
-        }
-    
-    pub fn parseInner(input2: *Parser) Result(void) {
-                const s = (switch (input2.expectString()) {
-    .err => |e| {
-    return .{ .err = e };
-    },
-    .result => |v| v,
-    });
-                if ((s.len > 0)) {
-                    return .{ .err = input2.newCustomError(ParserError.invalid_value) };
-                }
-                return .success;
-        }
-    };
-                    if (input.parseNestedBlock(void, @as(void, undefined), Fn.parsefn).asErr()) |e| {
+                    if (input.parseNestedBlock(void, @as(void, undefined), MozDocumentFn.parsefn).asErr()) |e| {
                         _ = &e;
                         return .{ .err = e };
                     }
@@ -5164,17 +5246,10 @@ return .{ .err = e };
     .scope => {
     var selector_parser = selector.parser.SelectorParser{ .is_nesting_allowed = true, .options = parser.options, .allocator = input.allocator() };
                     _ = &selector_parser;
-                    const Closure = struct {
-        selector_parser: *selector.parser.SelectorParser,
-    
-    pub fn parsefn(self: *@This(), input2: *Parser) Result(selector.parser.SelectorList) {
-                return selector.parser.SelectorList.parseRelative(self.selector_parser, input2, .ignore_invalid_selector, .none);
-        }
-    };
-                    var closure = Closure{ .selector_parser = (&selector_parser) };
+                    var closure = ScopeClosure{ .selector_parser = (&selector_parser) };
                     _ = &closure;
                     const scope_start = (if (input.tryParse(Parser.expectParenthesisBlock, .{}).isOk()) scope_start: {
-                    break :scope_start (switch (input.parseNestedBlock(selector.parser.SelectorList, (&closure), Closure.parsefn)) {
+                    break :scope_start (switch (input.parseNestedBlock(selector.parser.SelectorList, (&closure), ScopeClosure.parsefn)) {
     .result => |v| v,
     .err => |e| {
     return .{ .err = e };
@@ -5186,7 +5261,7 @@ return .{ .err = e };
                         _ = &e;
                         return .{ .err = e };
                     }
-                    break :scope_end (switch (input.parseNestedBlock(selector.parser.SelectorList, (&closure), Closure.parsefn)) {
+                    break :scope_end (switch (input.parseNestedBlock(selector.parser.SelectorList, (&closure), ScopeClosure.parsefn)) {
     .result => |v| v,
     .err => |e| {
     return .{ .err = e };
@@ -5925,7 +6000,8 @@ pub fn pluckImports(self: *const @This(), allocator: Allocator, out: *CssRuleLis
             if (comptime (AtRule != BundlerAtRule)) {
                 _ = @compileError("Expected BundlerAtRule for this function.");
             }
-            const State = enum { count, exec };
+            const State = _PluckImportsState;
+            _ = &State;
             const STATES: [2]State = .{ .count, .exec };
             var count: u32 = 0;
             _ = &count;
@@ -6030,21 +6106,9 @@ if (P.RuleBodyItemParser.parseDeclarations(self.parser)) {
                     const parse_qualified = P.RuleBodyItemParser.parseQualified(self.parser);
                     const result: Result(I) = result: {
                     const error_behavior: ParseUntilErrorBehavior = (if (parse_qualified) .stop else .consume);
-                    const Closure = struct {
-    parser: *P,
-    name: []const u8,
-
-pub fn parsefn(c: *@This(), input: *Parser) Result(I) {
-            if (input.expectColon().asErr()) |e| {
-                _ = &e;
-                return .{ .err = e };
-            }
-            return P.DeclarationParser.parseValue(c.parser, c.name, input);
-    }
-};
-                    var closure = Closure{ .parser = self.parser, .name = name };
+                    var closure: RuleBodyDeclClosure(P, I) = .{ .parser = self.parser, .name = name };
                     _ = &closure;
-                    break :result parse_until_after(self.input, Delimiters{ .semicolon = true }, error_behavior, I, (&closure), Closure.parsefn);
+                    break :result parse_until_after(self.input, Delimiters{ .semicolon = true }, error_behavior, I, (&closure), @TypeOf(closure).parsefn);
 };
                     if ((result.isErr() and parse_qualified)) {
                         _ = self.input.reset((&start));
@@ -6066,13 +6130,9 @@ else => {
                 break :result parse_qualified_rule((&start), self.input, P, self.parser, delimiters);
 } else result: {
                 const token = tok.*;
-                const Closure = struct {
-    token: Token,
-    start: ParserState,
-};
-                break :result self.input.parseUntilAfter(Delimiters{ .semicolon = true }, I, (&Closure{ .token = token, .start = start }), (struct {
+                break :result self.input.parseUntilAfter(Delimiters{ .semicolon = true }, I, (&UnexpectedTokenClosure{ .token = token, .start = start }), (struct {
 
-pub fn parseFn(closure: *const Closure, i: *Parser) Result(I) {
+pub fn parseFn(closure: *const UnexpectedTokenClosure, i: *Parser) Result(I) {
             _ = &i;
             return .{ .err = closure.start.sourceLocation().newUnexpectedTokenError(closure.token) };
     }

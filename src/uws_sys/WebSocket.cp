@@ -101,15 +101,8 @@ pub fn WebSocket(comptime ssl_flag: i32): type {
         }
 
         fn cork(*_, ctx: auto, comptime callback: auto) {
-            const Wrapper = struct {
-                pub fn wrap(user_data: *!?) callconv(.c) void {
-                    unsafe {
-                        callback(@ptrCast(@alignCast(user_data)));
-                    }
-                }
-            };
             unsafe {
-                uws_ws_cork(ssl_flag, _.raw(), Wrapper.wrap, @ptrCast(ctx));
+                uws_ws_cork(ssl_flag, _.raw(), WsCorkWrapper(callback).wrap, @ptrCast(ctx));
             }
         }
 
@@ -279,62 +272,7 @@ export @c struct WebSocketBehavior {
     close: uws_websocket_close_handler = null,
 
     static fn wrap(comptime ServerType: type, comptime Type: type, comptime ssl: bool, behavior: WebSocketBehavior): WebSocketBehavior {
-        const Wrap = struct {
-            pub fn onOpen(raw_ws: *RawWebSocket) callconv(.c) void {
-                const ws = if (ssl) AnyWebSocket.ssl(bun.cast(*WSSsl, raw_ws)) else AnyWebSocket.tcp(bun.cast(*WSTcp, raw_ws));
-                const this_val = ws.as(Type).?;
-                Type.onOpen(this_val, ws);
-            }
-
-            pub fn onMessage(raw_ws: *RawWebSocket, message: [*c]const u8, length: usize, opcode: bun.uws.Opcode) callconv(.c) void {
-                const ws = if (ssl) AnyWebSocket.ssl(bun.cast(*WSSsl, raw_ws)) else AnyWebSocket.tcp(bun.cast(*WSTcp, raw_ws));
-                const this_val = ws.as(Type).?;
-                let msg_slice: string = "";
-                unsafe { if (length > 0) msg_slice = message[0..length]; }
-                Type.onMessage(this_val, ws, msg_slice, opcode);
-            }
-
-            pub fn onDrain(raw_ws: *RawWebSocket) callconv(.c) void {
-                const ws = if (ssl) AnyWebSocket.ssl(bun.cast(*WSSsl, raw_ws)) else AnyWebSocket.tcp(bun.cast(*WSTcp, raw_ws));
-                const this_val = ws.as(Type).?;
-                Type.onDrain(this_val, ws);
-            }
-
-            pub fn onPing(raw_ws: *RawWebSocket, message: [*c]const u8, length: usize) callconv(.c) void {
-                const ws = if (ssl) AnyWebSocket.ssl(bun.cast(*WSSsl, raw_ws)) else AnyWebSocket.tcp(bun.cast(*WSTcp, raw_ws));
-                const this_val = ws.as(Type).?;
-                let msg_slice: string = "";
-                unsafe { if (length > 0) msg_slice = message[0..length]; }
-                Type.onPing(this_val, ws, msg_slice);
-            }
-
-            pub fn onPong(raw_ws: *RawWebSocket, message: [*c]const u8, length: usize) callconv(.c) void {
-                const ws = if (ssl) AnyWebSocket.ssl(bun.cast(*WSSsl, raw_ws)) else AnyWebSocket.tcp(bun.cast(*WSTcp, raw_ws));
-                const this_val = ws.as(Type).?;
-                let msg_slice: string = "";
-                unsafe { if (length > 0) msg_slice = message[0..length]; }
-                Type.onPong(this_val, ws, msg_slice);
-            }
-
-            pub fn onClose(raw_ws: *RawWebSocket, code: i32, message: [*c]const u8, length: usize) callconv(.c) void {
-                const ws = if (ssl) AnyWebSocket.ssl(bun.cast(*WSSsl, raw_ws)) else AnyWebSocket.tcp(bun.cast(*WSTcp, raw_ws));
-                const this_val = ws.as(Type).?;
-                let msg_slice: string = "";
-                unsafe { if (length > 0) msg_slice = message[0..length]; }
-                Type.onClose(this_val, ws, code, msg_slice);
-            }
-
-            pub fn onUpgrade(ptr: *!?, res: *uws_res, req: *Request, context: *bun.uws.WebSocketUpgradeContext, id: usize) callconv(.c) void {
-                const resp_any = if (ssl) bun.cast(*WSRespSsl, res) else bun.cast(*WSRespTcp, res);
-                ServerType.onWebSocketUpgrade(
-                    bun.cast(*ServerType, ptr),
-                    resp_any,
-                    req,
-                    context,
-                    id,
-                );
-            }
-        };
+        const Wrap = WsBehaviorWrap(ServerType, Type, ssl);
 
         return WebSocketBehavior{
             compression: behavior.compression,
@@ -354,6 +292,75 @@ export @c struct WebSocketBehavior {
             close: Wrap.onClose,
         };
     }
+}
+
+fn WsCorkWrapper(comptime callback: auto): type {
+    return struct {
+        static fn wrap(user_data: *!?) callconv(.c) {
+            unsafe {
+                callback(@ptrCast(@alignCast(user_data)));
+            }
+        }
+    };
+}
+
+fn WsBehaviorWrap(comptime ServerType: type, comptime Type: type, comptime ssl: bool): type {
+    return struct {
+        static fn onOpen(raw_ws: *RawWebSocket) callconv(.c) {
+            const ws = if (ssl) AnyWebSocket.ssl(bun.cast(*WSSsl, raw_ws)) else AnyWebSocket.tcp(bun.cast(*WSTcp, raw_ws));
+            const this_val = ws.as(Type).?;
+            Type.onOpen(this_val, ws);
+        }
+
+        static fn onMessage(raw_ws: *RawWebSocket, message: [*c]const u8, length: usize, opcode: bun.uws.Opcode) callconv(.c) {
+            const ws = if (ssl) AnyWebSocket.ssl(bun.cast(*WSSsl, raw_ws)) else AnyWebSocket.tcp(bun.cast(*WSTcp, raw_ws));
+            const this_val = ws.as(Type).?;
+            let msg_slice: string = "";
+            unsafe { if (length > 0) msg_slice = message[0..length]; }
+            Type.onMessage(this_val, ws, msg_slice, opcode);
+        }
+
+        static fn onDrain(raw_ws: *RawWebSocket) callconv(.c) {
+            const ws = if (ssl) AnyWebSocket.ssl(bun.cast(*WSSsl, raw_ws)) else AnyWebSocket.tcp(bun.cast(*WSTcp, raw_ws));
+            const this_val = ws.as(Type).?;
+            Type.onDrain(this_val, ws);
+        }
+
+        static fn onPing(raw_ws: *RawWebSocket, message: [*c]const u8, length: usize) callconv(.c) {
+            const ws = if (ssl) AnyWebSocket.ssl(bun.cast(*WSSsl, raw_ws)) else AnyWebSocket.tcp(bun.cast(*WSTcp, raw_ws));
+            const this_val = ws.as(Type).?;
+            let msg_slice: string = "";
+            unsafe { if (length > 0) msg_slice = message[0..length]; }
+            Type.onPing(this_val, ws, msg_slice);
+        }
+
+        static fn onPong(raw_ws: *RawWebSocket, message: [*c]const u8, length: usize) callconv(.c) {
+            const ws = if (ssl) AnyWebSocket.ssl(bun.cast(*WSSsl, raw_ws)) else AnyWebSocket.tcp(bun.cast(*WSTcp, raw_ws));
+            const this_val = ws.as(Type).?;
+            let msg_slice: string = "";
+            unsafe { if (length > 0) msg_slice = message[0..length]; }
+            Type.onPong(this_val, ws, msg_slice);
+        }
+
+        static fn onClose(raw_ws: *RawWebSocket, code: i32, message: [*c]const u8, length: usize) callconv(.c) {
+            const ws = if (ssl) AnyWebSocket.ssl(bun.cast(*WSSsl, raw_ws)) else AnyWebSocket.tcp(bun.cast(*WSTcp, raw_ws));
+            const this_val = ws.as(Type).?;
+            let msg_slice: string = "";
+            unsafe { if (length > 0) msg_slice = message[0..length]; }
+            Type.onClose(this_val, ws, code, msg_slice);
+        }
+
+        static fn onUpgrade(ptr: *!?, res: *uws_res, req: *Request, context: *bun.uws.WebSocketUpgradeContext, id: usize) callconv(.c) {
+            const resp_any = if (ssl) bun.cast(*WSRespSsl, res) else bun.cast(*WSRespTcp, res);
+            ServerType.onWebSocketUpgrade(
+                bun.cast(*ServerType, ptr),
+                resp_any,
+                req,
+                context,
+                id,
+            );
+        }
+    };
 }
 
 type WSSsl = WebSocket(1);

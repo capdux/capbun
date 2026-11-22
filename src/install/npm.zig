@@ -822,6 +822,340 @@ pub const DependencyGroup = struct {
     field: []const u8,
 };
 
+pub const SerializerFieldData = struct {
+    size: usize,
+    name: []const u8,
+    alignment: usize,
+};
+
+pub const SerializerSort = struct {
+
+pub fn lessThan(_: void, lhs: SerializerFieldData, rhs: SerializerFieldData) bool {
+            return (lhs.alignment > rhs.alignment);
+    }
+};
+
+pub const SerializerSaveTask = struct {
+    manifest: PackageManifest,
+    scope: *const Registry.Scope,
+    tmpdir: std.fs.Dir,
+    cache_dir: std.fs.Dir,
+    task: bun.ThreadPool.Task = .{ .callback = (&run) },
+
+pub fn run(task: *bun.ThreadPool.Task) void {
+            var tracer = bun.perf.trace("PackageManifest.Serializer.save");
+            _ = &tracer;
+            var _guard_tracer = EndGuard(*@TypeOf(tracer)){ .ptr = (&tracer) };
+            _ = &_guard_tracer;
+            var ___guard_tracer_moved = false; _ = &___guard_tracer_moved;
+            defer if (!___guard_tracer_moved) { ___guard_tracer_moved = true; const __T = @TypeOf(_guard_tracer); if (@typeInfo(__T) == .optional) { if (_guard_tracer) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_tracer.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_tracer; _drop_val.__cp_deinit(); } };
+            const save_task: *@This() = @fieldParentPtr("task", task);
+            var _guard_save_task = DestroyGuard(@TypeOf(save_task)){ .ptr = save_task };
+            _ = &_guard_save_task;
+            var ___guard_save_task_moved = false; _ = &___guard_save_task_moved;
+            defer if (!___guard_save_task_moved) { ___guard_save_task_moved = true; const __T = @TypeOf(_guard_save_task); if (@typeInfo(__T) == .optional) { if (_guard_save_task) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_save_task.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_save_task; _drop_val.__cp_deinit(); } };
+            _ = (blk_catch_1: { break :blk_catch_1 ((PackageManifestSerializer.save((&save_task.manifest), save_task.scope, save_task.tmpdir, save_task.cache_dir)) catch |e| { _ = &e; if (PackageManager.verbose_install) {
+                _ = Output.warn("Error caching manifest for {s}: {s}", .{ save_task.manifest.name(), @errorName(e) });
+                _ = Output.flush();
+            } }); });
+    }
+    pub const new = bun.TrivialNew(@This());
+};
+
+pub const PackageManifestSerializer = struct {
+
+pub fn writeArray(comptime Writer: type, writer: Writer, comptime Type: type, array: []const Type, pos: *u64) !void {
+            const bytes = std.mem.sliceAsBytes(array);
+            if ((bytes.len == 0)) {
+                _ = try writer.writeInt(u64, 0, .little);
+                pos.* = (pos.* + 8);
+                return;
+            }
+            _ = try writer.writeInt(u64, bytes.len, .little);
+            pos.* = (pos.* + 8);
+            pos.* = (pos.* + try Aligner.write(Type, Writer, writer, pos.*));
+            _ = try writer.writeAll(bytes);
+            pos.* = (pos.* + bytes.len);
+    }
+
+pub fn readArray(stream: *ByteFixedStream, comptime Type: type) ![]const Type {
+            var reader = stream.reader();
+            _ = &reader;
+            const byte_len = try reader.readInt(u64, .little);
+            if ((byte_len == 0)) {
+                return &.{};
+            }
+            stream.pos = (stream.pos + Aligner.skipAmount(Type, stream.pos));
+            const remaining = stream.buffer[@min(stream.pos, stream.buffer.len)..];
+            if ((remaining.len < byte_len)) {
+                return error.BufferTooSmall;
+            }
+            const result_bytes = remaining[0..byte_len];
+            const result = (blk: {
+            break :blk @as([*]const Type, @ptrCast(@alignCast(result_bytes.ptr)))[0..(result_bytes.len / @sizeOf(Type))];
+
+});
+            stream.pos = (stream.pos + result_bytes.len);
+            return result;
+    }
+
+pub fn write(manifest: *const PackageManifest, scope: *const Registry.Scope, comptime Writer: type, writer: Writer) !void {
+            var pos: u64 = 0;
+            _ = &pos;
+            _ = try writer.writeAll(header_bytes);
+            pos = (pos + header_bytes.len);
+            _ = try writer.writeInt(u64, scope.url_hash, .little);
+            _ = try writer.writeInt(u64, strings.withoutTrailingSlash(scope.url.href).len, .little);
+            pos = (pos + (128 / 8));
+            inline for (sizes.fields) |field_name| {
+                if (comptime strings.eqlComptime(field_name, "pkg")) {
+                    const bytes = std.mem.asBytes((&manifest.pkg));
+                    pos = (pos + try Aligner.write(NpmPackage, Writer, writer, pos));
+                    _ = try writer.writeAll(bytes);
+                    pos = (pos + bytes.len);
+                } else {
+                    const field = @field(manifest, field_name);
+                    _ = try writeArray(Writer, writer, std.@"meta".Child(@TypeOf(field)), field, (&pos));
+                }
+            }
+    }
+
+pub fn writeFile(manifest: *const PackageManifest, scope: *const Registry.Scope, tmp_path: [:0]const u8, tmpdir: std.fs.Dir, cache_dir_std: std.fs.Dir, outpath: [:0]const u8) !void {
+            const cache_dir: bun.FD = .fromStdDir(cache_dir_std);
+            var stack_fallback = std.heap.stackFallback((64 * 1024), bun.default_allocator);
+            _ = &stack_fallback;
+            const allocator = stack_fallback.get();
+            var buffer = try std.array_list.Managed(u8).initCapacity(allocator, (manifest.byteLength(scope) + 64));
+            _ = &buffer;
+            var _guard_buffer = DeinitGuard(*@TypeOf(buffer)){ .ptr = (&buffer) };
+            _ = &_guard_buffer;
+            var ___guard_buffer_moved = false; _ = &___guard_buffer_moved;
+            defer if (!___guard_buffer_moved) { ___guard_buffer_moved = true; const __T = @TypeOf(_guard_buffer); if (@typeInfo(__T) == .optional) { if (_guard_buffer) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_buffer.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_buffer; _drop_val.__cp_deinit(); } };
+            const writer = (&buffer.writer());
+            _ = try PackageManifestSerializer.write(manifest, scope, @TypeOf(writer), writer);
+            var realpath_buf: bun.PathBuffer = undefined;
+            _ = &realpath_buf;
+            const path_to_use_for_opening_file = (if (Environment.isWindows) bun.path.joinAbsStringBufZ(PackageManager.get().getTemporaryDirectory().path, (&realpath_buf), (&.{ tmp_path }), .auto) else tmp_path);
+            var is_using_o_tmpfile = (if (Environment.isLinux) false else null);
+            _ = &is_using_o_tmpfile;
+            const file = brk: {
+            const flags = bun.O.WRONLY;
+            const mask = (if (Environment.isPosix) 436 else 0);
+            if (Environment.isLinux) {
+                switch (bun.sys.File.openat(cache_dir, ".", (flags | bun.O.TMPFILE), mask)) {
+.err => {
+if (PackageManager.verbose_install) {
+                    _ = warnTmpfileOnce();
+                }
+},
+.result => |f| {
+is_using_o_tmpfile = true;
+                break :brk f;
+},
+}
+            }
+            break :brk try bun.sys.File.openat(.fromStdDir(tmpdir), path_to_use_for_opening_file, ((flags | bun.O.CREAT) | bun.O.TRUNC), (if (Environment.isPosix) 436 else 0)).unwrap();
+};
+            {
+                var _guard_file = CloseIfValGuard(@TypeOf(file)){ .val = file };
+                _ = &_guard_file;
+                var ___guard_file_moved = false; _ = &___guard_file_moved;
+                defer if (!___guard_file_moved) { ___guard_file_moved = true; const __T = @TypeOf(_guard_file); if (@typeInfo(__T) == .optional) { if (_guard_file) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_file.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_file; _drop_val.__cp_deinit(); } };
+                _ = try file.writeAll(buffer.items).unwrap();
+                _guard_file.active = false;
+            }
+            if (comptime Environment.isWindows) {
+                var realpath2_buf: bun.PathBuffer = undefined;
+                _ = &realpath2_buf;
+                var _guard_file = CloseIfValGuard(@TypeOf(file)){ .val = file };
+                _ = &_guard_file;
+                var ___guard_file_moved = false; _ = &___guard_file_moved;
+                defer if (!___guard_file_moved) { ___guard_file_moved = true; const __T = @TypeOf(_guard_file); if (@typeInfo(__T) == .optional) { if (_guard_file) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_file.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_file; _drop_val.__cp_deinit(); } };
+                const cache_dir_abs = PackageManager.get().cache_directory_path;
+                const cache_path_abs = bun.path.joinAbsStringBufZ(cache_dir_abs, (&realpath2_buf), (&.{ cache_dir_abs, outpath }), .auto);
+                _ = file.close();
+                _guard_file.active = false;
+                _ = try bun.sys.renameat(bun.FD.cwd(), path_to_use_for_opening_file, bun.FD.cwd(), cache_path_abs).unwrap();
+            } else {
+                if ((Environment.isLinux and is_using_o_tmpfile)) {
+                    var _guard_file = CloseValGuard(@TypeOf(file)){ .val = file };
+                    _ = &_guard_file;
+                    var ___guard_file_moved = false; _ = &___guard_file_moved;
+                    defer if (!___guard_file_moved) { ___guard_file_moved = true; const __T = @TypeOf(_guard_file); if (@typeInfo(__T) == .optional) { if (_guard_file) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_file.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_file; _drop_val.__cp_deinit(); } };
+                    _ = (blk_catch_2: { break :blk_catch_2 ((bun.sys.linkatTmpfile(file.handle, cache_dir, outpath).unwrap()) catch |__ce_2| { _ = &__ce_2; _ = (blk_catch_3: { break :blk_catch_3 ((bun.sys.unlinkat(cache_dir, outpath).unwrap()) catch |__ce_3| { _ = &__ce_3;  }); });
+                    break :blk_catch_2 try bun.sys.linkatTmpfile(file.handle, cache_dir, outpath).unwrap(); }); });
+                } else {
+                    var _guard_file = CloseValGuard(@TypeOf(file)){ .val = file };
+                    _ = &_guard_file;
+                    var ___guard_file_moved = false; _ = &___guard_file_moved;
+                    defer if (!___guard_file_moved) { ___guard_file_moved = true; const __T = @TypeOf(_guard_file); if (@typeInfo(__T) == .optional) { if (_guard_file) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_file.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_file; _drop_val.__cp_deinit(); } };
+                    const rc = bun.sys.renameat(.fromStdDir(tmpdir), tmp_path, cache_dir, outpath);
+                    switch (rc) {
+.err => |e| {
+var _guard_unlink = UnlinkAtGuard{ .dir = tmpdir, .path = tmp_path };
+                    _ = &_guard_unlink;
+                    var ___guard_unlink_moved = false; _ = &___guard_unlink_moved;
+                    defer if (!___guard_unlink_moved) { ___guard_unlink_moved = true; const __T = @TypeOf(_guard_unlink); if (@typeInfo(__T) == .optional) { if (_guard_unlink) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_unlink.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_unlink; _drop_val.__cp_deinit(); } };
+                    if ((switch (e.getErrno()) {
+.EXIST, .NOTEMPTY, .OPNOTSUPP => true,
+else => false,
+})) {
+                        _ = try bun.sys.renameat2(.fromStdDir(tmpdir), tmp_path, cache_dir, outpath, .{ .exchange = true }).unwrap();
+                        return;
+                    }
+},
+.result => {
+
+},
+}
+                    _ = try rc.unwrap();
+                }
+            }
+    }
+
+pub fn saveAsync(manifest: *const PackageManifest, scope: *const Registry.Scope, tmpdir: std.fs.Dir, cache_dir: std.fs.Dir) void {
+            const task = SerializerSaveTask.new(.{ .manifest = manifest.*, .scope = scope, .tmpdir = tmpdir, .cache_dir = cache_dir });
+            const batch = bun.ThreadPool.Batch.@"from"((&task.task));
+            _ = PackageManager.get().thread_pool.schedule(batch);
+    }
+
+pub fn manifestFileName(buf: []u8, file_id: u64, scope: *const Registry.Scope) ![:0]const u8 {
+            const file_id_hex_fmt = bun.fmt.hexIntLower(file_id);
+            return (if ((scope.url_hash == Registry.default_url_hash)) try std.fmt.bufPrintZ(buf, "{f}.npm", .{ file_id_hex_fmt }) else try std.fmt.bufPrintZ(buf, "{f}-{f}.npm", .{ file_id_hex_fmt, bun.fmt.hexIntLower(scope.url_hash) }));
+    }
+
+pub fn save(manifest: *const PackageManifest, scope: *const Registry.Scope, tmpdir: std.fs.Dir, cache_dir: std.fs.Dir) !void {
+            const file_id = bun.Wyhash11.hash(0, manifest.name());
+            var dest_path_buf: [576]u8 = undefined;
+            _ = &dest_path_buf;
+            var out_path_buf: [46]u8 = undefined;
+            _ = &out_path_buf;
+            var dest_path_stream = std.io.fixedBufferStream((&dest_path_buf));
+            _ = &dest_path_stream;
+            var dest_path_stream_writer = dest_path_stream.writer();
+            _ = &dest_path_stream_writer;
+            const file_id_hex_fmt = bun.fmt.hexIntLower(file_id);
+            const hex_timestamp = @as(usize, @intCast(@max(std.time.milliTimestamp(), 0)));
+            const hex_timestamp_fmt = bun.fmt.hexIntLower(hex_timestamp);
+            _ = try dest_path_stream_writer.print("{f}.npm-{f}", .{ file_id_hex_fmt, hex_timestamp_fmt });
+            _ = try dest_path_stream_writer.writeByte(0);
+            const tmp_path: [:0]u8 = dest_path_buf[0..(dest_path_stream.pos - 1) :0];
+            const out_path = try manifestFileName((&out_path_buf), file_id, scope);
+            _ = try writeFile(manifest, scope, tmp_path, tmpdir, cache_dir, out_path);
+    }
+
+pub fn loadByFileID(allocator: std.mem.Allocator, scope: *const Registry.Scope, cache_dir: std.fs.Dir, file_id: u64) !?PackageManifest {
+            var file_path_buf: [576]u8 = undefined;
+            _ = &file_path_buf;
+            const file_name = try manifestFileName((&file_path_buf), file_id, scope);
+            const cache_file = (blk_catch_4: { break :blk_catch_4 ((File.openat(.fromStdDir(cache_dir), file_name, bun.O.RDONLY, 0).unwrap()) catch |__ce_4| { _ = &__ce_4; return null; }); });
+            var _guard_cache_file = CloseValGuard(@TypeOf(cache_file)){ .val = cache_file };
+            _ = &_guard_cache_file;
+            var ___guard_cache_file_moved = false; _ = &___guard_cache_file_moved;
+            defer if (!___guard_cache_file_moved) { ___guard_cache_file_moved = true; const __T = @TypeOf(_guard_cache_file); if (@typeInfo(__T) == .optional) { if (_guard_cache_file) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_cache_file.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_cache_file; _drop_val.__cp_deinit(); } };
+            const loaded = (blk_catch_5: { break :blk_catch_5 ((loadByFile(allocator, scope, cache_file)) catch |__ce_5| { _ = &__ce_5; break :blk_catch_5 @as(?PackageManifest, null); }); });
+            if (loaded) |m| {
+                _ = &m;
+                return m;
+            }
+            _ = try bun.sys.unlinkat(.fromStdDir(cache_dir), file_name).unwrap();
+            return null;
+    }
+
+pub fn loadByFile(allocator: std.mem.Allocator, scope: *const Registry.Scope, manifest_file: File) !?PackageManifest {
+            var tracer = bun.perf.trace("PackageManifest.Serializer.loadByFile");
+            _ = &tracer;
+            var _guard_tracer = EndGuard(*@TypeOf(tracer)){ .ptr = (&tracer) };
+            _ = &_guard_tracer;
+            var ___guard_tracer_moved = false; _ = &___guard_tracer_moved;
+            defer if (!___guard_tracer_moved) { ___guard_tracer_moved = true; const __T = @TypeOf(_guard_tracer); if (@typeInfo(__T) == .optional) { if (_guard_tracer) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_tracer.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_tracer; _drop_val.__cp_deinit(); } };
+            const bytes = try manifest_file.readToEnd(allocator).unwrap();
+            var _guard_bytes = FreeIfGuard([]const u8){ .allocator = allocator, .slice = bytes, .active = true };
+            _ = &_guard_bytes;
+            var ___guard_bytes_moved = false; _ = &___guard_bytes_moved;
+            defer if (!___guard_bytes_moved) { ___guard_bytes_moved = true; const __T = @TypeOf(_guard_bytes); if (@typeInfo(__T) == .optional) { if (_guard_bytes) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_bytes.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_bytes; _drop_val.__cp_deinit(); } };
+            if ((bytes.len < header_bytes.len)) {
+                _guard_bytes.active = false;
+                return null;
+            }
+            var manifest: PackageManifest = undefined;
+            _ = &manifest;
+            if (try readAll(bytes, scope)) |m| {
+                _ = &m;
+                manifest = m;
+            } else {
+                _guard_bytes.active = false;
+                return null;
+            }
+            _guard_bytes.active = false;
+            if ((manifest.versions.len == 0)) {
+                return null;
+            }
+            return manifest;
+    }
+
+pub fn readAll(bytes: []const u8, scope: *const Registry.Scope) !?PackageManifest {
+            if ((!strings.eqlComptime(bytes[0..header_bytes.len], header_bytes))) {
+                return null;
+            }
+            var pkg_stream = std.io.fixedBufferStream(bytes);
+            _ = &pkg_stream;
+            pkg_stream.pos = header_bytes.len;
+            var reader = pkg_stream.reader();
+            _ = &reader;
+            var package_manifest = PackageManifest{  };
+            _ = &package_manifest;
+            const registry_hash = try reader.readInt(u64, .little);
+            if ((scope.url_hash != registry_hash)) {
+                return null;
+            }
+            const registry_length = try reader.readInt(u64, .little);
+            if ((strings.withoutTrailingSlash(scope.url.href).len != registry_length)) {
+                return null;
+            }
+            inline for (sizes.fields) |field_name| {
+                if (comptime strings.eqlComptime(field_name, "pkg")) {
+                    pkg_stream.pos = std.mem.alignForward(usize, pkg_stream.pos, @alignOf(NpmPackage));
+                    package_manifest.pkg = try reader.readStruct(NpmPackage);
+                } else {
+                    @field(package_manifest, field_name) = try readArray((&pkg_stream), std.@"meta".Child(@TypeOf(@field(package_manifest, field_name))));
+                }
+            }
+            return package_manifest;
+    }
+    pub const version = "bun-npm-manifest-cache-v0.0.7\n";
+    const header_bytes: []const u8 = ("#!/usr/bin/env bun\n" ++ version);
+    pub const sizes = blk: {
+            if ((header_bytes.len != 49)) {
+                _ = @compileError("header bytes must be exactly 49 bytes long, length is not serialized");
+            }
+            const fields = std.@"meta".fields(PackageManifest);
+            _ = &fields;
+            const field_count = fields.len;
+            _ = &field_count;
+            var data: [field_count]SerializerFieldData = undefined;
+            _ = &data;
+            for (fields, &data) |field_info, *dat| {
+                _ = &field_info;
+                _ = &dat;
+                dat.* = SerializerFieldData{ .size = @sizeOf(field_info.@"type"), .name = (if (@typeInfo(@TypeOf(field_info)) == .@"enum" or @typeInfo(@TypeOf(field_info)) == .@"union") @tagName(field_info) else field_info.name), .alignment = (if ((@sizeOf(field_info.@"type") == 0)) 1 else field_info.alignment) };
+            }
+            _ = std.sort.pdq(SerializerFieldData, (&data), @as(void, undefined), SerializerSort.lessThan);
+            var sizes_bytes: [field_count]usize = undefined;
+            _ = &sizes_bytes;
+            var names: [field_count][]const u8 = undefined;
+            _ = &names;
+            for (data, &sizes_bytes, &names) |elem, *size_, *name_| {
+                _ = &elem;
+                _ = &size_;
+                _ = &name_;
+                size_.* = elem.size;
+                name_.* = (if (@typeInfo(@TypeOf(elem)) == .@"enum" or @typeInfo(@TypeOf(elem)) == .@"union") @tagName(elem) else elem.name);
+            }
+            break :blk .{ .bytes = sizes_bytes, .fields = names };
+    };
+};
+
 pub const PackageManifest = struct {
     pkg: NpmPackage = NpmPackage{  },
     string_buf: []const u8 = "",
@@ -840,10 +1174,10 @@ pub fn byteLength(self: PackageManifest, scope: *const Registry.Scope) usize {
             var counter = std.Io.Writer.Discarding.init(&.{});
             _ = &counter;
             const writer = (&counter.writer);
-            _ = (blk_catch_1: { break :blk_catch_1 ((Serializer.write((blk: {
+            _ = (blk_catch_6: { break :blk_catch_6 ((Serializer.write((blk: {
             break :blk (&self);
 
-}), scope, @TypeOf(writer), writer)) catch |__ce_1| { _ = &__ce_1; return 0; }); });
+}), scope, @TypeOf(writer), writer)) catch |__ce_6| { _ = &__ce_6; return 0; }); });
             return counter.count;
     }
 
@@ -1177,7 +1511,7 @@ pub fn parse(allocator: std.mem.Allocator, scope: *const Registry.Scope, log: *l
             _ = &_guard_arena;
             var ___guard_arena_moved = false; _ = &___guard_arena_moved;
             defer if (!___guard_arena_moved) { ___guard_arena_moved = true; const __T = @TypeOf(_guard_arena); if (@typeInfo(__T) == .optional) { if (_guard_arena) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_arena.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_arena; _drop_val.__cp_deinit(); } };
-            const json = (blk_catch_2: { break :blk_catch_2 ((BunJSON.parseUTF8(source, log, arena_.allocator())) catch |__ce_2| { _ = &__ce_2; var cloned_log: logger.Log = .init(bun.default_allocator);
+            const json = (blk_catch_7: { break :blk_catch_7 ((BunJSON.parseUTF8(source, log, arena_.allocator())) catch |__ce_7| { _ = &__ce_7; var cloned_log: logger.Log = .init(bun.default_allocator);
             _ = &cloned_log;
             _ = try log.cloneToWithRecycled((&cloned_log), true);
             log.* = cloned_log;
@@ -1716,7 +2050,7 @@ else => {
                                 _ = &shasum;
                                 if (shasum.expr.asString(allocator)) |shasum_str| {
                                     _ = &shasum_str;
-                                    package_version.integrity = (blk_catch_5: { break :blk_catch_5 ((Integrity.parseSHASum(shasum_str)) catch |__ce_5| { _ = &__ce_5; break :blk_catch_5 Integrity{  }; }); });
+                                    package_version.integrity = (blk_catch_10: { break :blk_catch_10 ((Integrity.parseSHASum(shasum_str)) catch |__ce_10| { _ = &__ce_10; break :blk_catch_10 Integrity{  }; }); });
                                 }
                             }
                         }
@@ -1941,7 +2275,7 @@ else => {
                             _ = &publish_time_expr;
                             if (publish_time_expr.asString(allocator)) |publish_time_str| {
                                 _ = &publish_time_str;
-                                if ((blk_catch_6: { break :blk_catch_6 ((bun.jsc.wtf.parseES5Date(publish_time_str)) catch |__ce_6| { _ = &__ce_6; break :blk_catch_6 null; }); })) |time| {
+                                if ((blk_catch_11: { break :blk_catch_11 ((bun.jsc.wtf.parseES5Date(publish_time_str)) catch |__ce_11| { _ = &__ce_11; break :blk_catch_11 null; }); })) |time| {
                                     _ = &time;
                                     package_version.publish_timestamp_ms = time;
                                 }
@@ -2011,7 +2345,7 @@ else => {
             const how_many_bytes_to_store_indices = (switch (max_versions_count) {
 0 => 0,
 1 => 1,
-else => (blk_catch_7: { break :blk_catch_7 ((std.math.divCeil(usize, std.math.log2_int_ceil(usize, max_versions_count), 8)) catch |__ce_7| { _ = &__ce_7; break :blk_catch_7 0; }); }),
+else => (blk_catch_12: { break :blk_catch_12 ((std.math.divCeil(usize, std.math.log2_int_ceil(usize, max_versions_count), 8)) catch |__ce_12| { _ = &__ce_12; break :blk_catch_12 0; }); }),
 });
             switch (how_many_bytes_to_store_indices) {
 1 => {
@@ -2070,334 +2404,7 @@ _ = bun.assertWithLocation((max_versions_count == 0), @src());
             }
             return result;
     }
-    pub const Serializer = struct {
-    
-    pub fn writeArray(comptime Writer: type, writer: Writer, comptime Type: type, array: []const Type, pos: *u64) !void {
-                const bytes = std.mem.sliceAsBytes(array);
-                if ((bytes.len == 0)) {
-                    _ = try writer.writeInt(u64, 0, .little);
-                    pos.* = (pos.* + 8);
-                    return;
-                }
-                _ = try writer.writeInt(u64, bytes.len, .little);
-                pos.* = (pos.* + 8);
-                pos.* = (pos.* + try Aligner.write(Type, Writer, writer, pos.*));
-                _ = try writer.writeAll(bytes);
-                pos.* = (pos.* + bytes.len);
-        }
-    
-    pub fn readArray(stream: *ByteFixedStream, comptime Type: type) ![]const Type {
-                var reader = stream.reader();
-                _ = &reader;
-                const byte_len = try reader.readInt(u64, .little);
-                if ((byte_len == 0)) {
-                    return &.{};
-                }
-                stream.pos = (stream.pos + Aligner.skipAmount(Type, stream.pos));
-                const remaining = stream.buffer[@min(stream.pos, stream.buffer.len)..];
-                if ((remaining.len < byte_len)) {
-                    return error.BufferTooSmall;
-                }
-                const result_bytes = remaining[0..byte_len];
-                const result = @as([*]const Type, @ptrCast(@alignCast(result_bytes.ptr)))[0..(result_bytes.len / @sizeOf(Type))];
-                stream.pos = (stream.pos + result_bytes.len);
-                return result;
-        }
-    
-    pub fn write(manifest: *const PackageManifest, scope: *const Registry.Scope, comptime Writer: type, writer: Writer) !void {
-                var pos: u64 = 0;
-                _ = &pos;
-                _ = try writer.writeAll(header_bytes);
-                pos = (pos + header_bytes.len);
-                _ = try writer.writeInt(u64, scope.url_hash, .little);
-                _ = try writer.writeInt(u64, strings.withoutTrailingSlash(scope.url.href).len, .little);
-                pos = (pos + (128 / 8));
-                inline for (sizes.fields) |field_name| {
-                    _ = &field_name;
-                    if (comptime strings.eqlComptime(field_name, "pkg")) {
-                        const bytes = std.mem.asBytes((&manifest.pkg));
-                        pos = (pos + try Aligner.write(NpmPackage, Writer, writer, pos));
-                        _ = try writer.writeAll(bytes);
-                        pos = (pos + bytes.len);
-                    } else {
-                        const field = @field(manifest, field_name);
-                        _ = try writeArray(Writer, writer, std.@"meta".Child(@TypeOf(field)), field, (&pos));
-                    }
-                }
-        }
-    
-    pub fn writeFile(manifest: *const PackageManifest, scope: *const Registry.Scope, tmp_path: [:0]const u8, tmpdir: std.fs.Dir, cache_dir_std: std.fs.Dir, outpath: [:0]const u8) !void {
-                const cache_dir: bun.FD = .fromStdDir(cache_dir_std);
-                var stack_fallback = std.heap.stackFallback((64 * 1024), bun.default_allocator);
-                _ = &stack_fallback;
-                const allocator = stack_fallback.get();
-                var buffer = try std.array_list.Managed(u8).initCapacity(allocator, (manifest.byteLength(scope) + 64));
-                _ = &buffer;
-                var _guard_buffer = DeinitGuard(*@TypeOf(buffer)){ .ptr = (&buffer) };
-                _ = &_guard_buffer;
-                var ___guard_buffer_moved = false; _ = &___guard_buffer_moved;
-                defer if (!___guard_buffer_moved) { ___guard_buffer_moved = true; const __T = @TypeOf(_guard_buffer); if (@typeInfo(__T) == .optional) { if (_guard_buffer) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_buffer.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_buffer; _drop_val.__cp_deinit(); } };
-                const writer = (&buffer.writer());
-                _ = try Serializer.write(manifest, scope, @TypeOf(writer), writer);
-                var realpath_buf: bun.PathBuffer = undefined;
-                _ = &realpath_buf;
-                const path_to_use_for_opening_file = (if (Environment.isWindows) bun.path.joinAbsStringBufZ(PackageManager.get().getTemporaryDirectory().path, (&realpath_buf), (&.{ tmp_path }), .auto) else tmp_path);
-                var is_using_o_tmpfile = (if (Environment.isLinux) false else null);
-                _ = &is_using_o_tmpfile;
-                const file = brk: {
-                const flags = bun.O.WRONLY;
-                const mask = (if (Environment.isPosix) 436 else 0);
-                if (Environment.isLinux) {
-                    switch (bun.sys.File.openat(cache_dir, ".", (flags | bun.O.TMPFILE), mask)) {
-    .err => {
-    if (PackageManager.verbose_install) {
-                        _ = warnTmpfileOnce();
-                    }
-    },
-    .result => |f| {
-    is_using_o_tmpfile = true;
-                    break :brk f;
-    },
-    }
-                }
-                break :brk try bun.sys.File.openat(.fromStdDir(tmpdir), path_to_use_for_opening_file, ((flags | bun.O.CREAT) | bun.O.TRUNC), (if (Environment.isPosix) 436 else 0)).unwrap();
-    };
-                {
-                    var _guard_file = CloseIfValGuard(@TypeOf(file)){ .val = file };
-                    _ = &_guard_file;
-                    var ___guard_file_moved = false; _ = &___guard_file_moved;
-                    defer if (!___guard_file_moved) { ___guard_file_moved = true; const __T = @TypeOf(_guard_file); if (@typeInfo(__T) == .optional) { if (_guard_file) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_file.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_file; _drop_val.__cp_deinit(); } };
-                    _ = try file.writeAll(buffer.items).unwrap();
-                    _guard_file.active = false;
-                }
-                if (comptime Environment.isWindows) {
-                    var realpath2_buf: bun.PathBuffer = undefined;
-                    _ = &realpath2_buf;
-                    var _guard_file = CloseIfValGuard(@TypeOf(file)){ .val = file };
-                    _ = &_guard_file;
-                    var ___guard_file_moved = false; _ = &___guard_file_moved;
-                    defer if (!___guard_file_moved) { ___guard_file_moved = true; const __T = @TypeOf(_guard_file); if (@typeInfo(__T) == .optional) { if (_guard_file) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_file.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_file; _drop_val.__cp_deinit(); } };
-                    const cache_dir_abs = PackageManager.get().cache_directory_path;
-                    const cache_path_abs = bun.path.joinAbsStringBufZ(cache_dir_abs, (&realpath2_buf), (&.{ cache_dir_abs, outpath }), .auto);
-                    _ = file.close();
-                    _guard_file.active = false;
-                    _ = try bun.sys.renameat(bun.FD.cwd(), path_to_use_for_opening_file, bun.FD.cwd(), cache_path_abs).unwrap();
-                } else {
-                    if ((Environment.isLinux and is_using_o_tmpfile)) {
-                        var _guard_file = CloseValGuard(@TypeOf(file)){ .val = file };
-                        _ = &_guard_file;
-                        var ___guard_file_moved = false; _ = &___guard_file_moved;
-                        defer if (!___guard_file_moved) { ___guard_file_moved = true; const __T = @TypeOf(_guard_file); if (@typeInfo(__T) == .optional) { if (_guard_file) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_file.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_file; _drop_val.__cp_deinit(); } };
-                        _ = (blk_catch_0: { break :blk_catch_0 ((bun.sys.linkatTmpfile(file.handle, cache_dir, outpath).unwrap()) catch |__ce_0| { _ = &__ce_0; _ = (blk_catch_1: { break :blk_catch_1 ((bun.sys.unlinkat(cache_dir, outpath).unwrap()) catch |__ce_1| { _ = &__ce_1;  }); });
-                        break :blk_catch_0 try bun.sys.linkatTmpfile(file.handle, cache_dir, outpath).unwrap(); }); });
-                    } else {
-                        var _guard_file = CloseValGuard(@TypeOf(file)){ .val = file };
-                        _ = &_guard_file;
-                        var ___guard_file_moved = false; _ = &___guard_file_moved;
-                        defer if (!___guard_file_moved) { ___guard_file_moved = true; const __T = @TypeOf(_guard_file); if (@typeInfo(__T) == .optional) { if (_guard_file) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_file.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_file; _drop_val.__cp_deinit(); } };
-                        const rc = bun.sys.renameat(.fromStdDir(tmpdir), tmp_path, cache_dir, outpath);
-                        switch (rc) {
-    .err => |e| {
-    var _guard_unlink = UnlinkAtGuard{ .dir = tmpdir, .path = tmp_path };
-                        _ = &_guard_unlink;
-                        var ___guard_unlink_moved = false; _ = &___guard_unlink_moved;
-                        defer if (!___guard_unlink_moved) { ___guard_unlink_moved = true; const __T = @TypeOf(_guard_unlink); if (@typeInfo(__T) == .optional) { if (_guard_unlink) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_unlink.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_unlink; _drop_val.__cp_deinit(); } };
-                        if ((switch (e.getErrno()) {
-    .EXIST, .NOTEMPTY, .OPNOTSUPP => true,
-    else => false,
-    })) {
-                            _ = try bun.sys.renameat2(.fromStdDir(tmpdir), tmp_path, cache_dir, outpath, .{ .exchange = true }).unwrap();
-                            return;
-                        }
-    },
-    .result => {
-    
-    },
-    }
-                        _ = try rc.unwrap();
-                    }
-                }
-        }
-    
-    pub fn saveAsync(manifest: *const PackageManifest, scope: *const Registry.Scope, tmpdir: std.fs.Dir, cache_dir: std.fs.Dir) void {
-                const SaveTask = struct {
-        manifest: PackageManifest,
-        scope: *const Registry.Scope,
-        tmpdir: std.fs.Dir,
-        cache_dir: std.fs.Dir,
-        task: bun.ThreadPool.Task = .{ .callback = (&run) },
-    
-    pub fn run(task: *bun.ThreadPool.Task) void {
-                var tracer = bun.perf.trace("PackageManifest.Serializer.save");
-                _ = &tracer;
-                var _guard_tracer = EndGuard(*@TypeOf(tracer)){ .ptr = (&tracer) };
-                _ = &_guard_tracer;
-                var ___guard_tracer_moved = false; _ = &___guard_tracer_moved;
-                defer if (!___guard_tracer_moved) { ___guard_tracer_moved = true; const __T = @TypeOf(_guard_tracer); if (@typeInfo(__T) == .optional) { if (_guard_tracer) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_tracer.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_tracer; _drop_val.__cp_deinit(); } };
-                const save_task: *@This() = @fieldParentPtr("task", task);
-                var _guard_save_task = DestroyGuard(@TypeOf(save_task)){ .ptr = save_task };
-                _ = &_guard_save_task;
-                var ___guard_save_task_moved = false; _ = &___guard_save_task_moved;
-                defer if (!___guard_save_task_moved) { ___guard_save_task_moved = true; const __T = @TypeOf(_guard_save_task); if (@typeInfo(__T) == .optional) { if (_guard_save_task) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_save_task.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_save_task; _drop_val.__cp_deinit(); } };
-                _ = (blk_catch_0: { break :blk_catch_0 ((Serializer.save((&save_task.manifest), save_task.scope, save_task.tmpdir, save_task.cache_dir)) catch |e| { _ = &e; if (PackageManager.verbose_install) {
-                    _ = Output.warn("Error caching manifest for {s}: {s}", .{ save_task.manifest.name(), @errorName(e) });
-                    _ = Output.flush();
-                } }); });
-        }
-        pub const new = bun.TrivialNew(@This());
-    };
-                const task = SaveTask.new(.{ .manifest = manifest.*, .scope = scope, .tmpdir = tmpdir, .cache_dir = cache_dir });
-                const batch = bun.ThreadPool.Batch.@"from"((&task.task));
-                _ = PackageManager.get().thread_pool.schedule(batch);
-        }
-    
-    pub fn manifestFileName(buf: []u8, file_id: u64, scope: *const Registry.Scope) ![:0]const u8 {
-                const file_id_hex_fmt = bun.fmt.hexIntLower(file_id);
-                return (if ((scope.url_hash == Registry.default_url_hash)) try std.fmt.bufPrintZ(buf, "{f}.npm", .{ file_id_hex_fmt }) else try std.fmt.bufPrintZ(buf, "{f}-{f}.npm", .{ file_id_hex_fmt, bun.fmt.hexIntLower(scope.url_hash) }));
-        }
-    
-    pub fn save(manifest: *const PackageManifest, scope: *const Registry.Scope, tmpdir: std.fs.Dir, cache_dir: std.fs.Dir) !void {
-                const file_id = bun.Wyhash11.hash(0, manifest.name());
-                var dest_path_buf: [576]u8 = undefined;
-                _ = &dest_path_buf;
-                var out_path_buf: [46]u8 = undefined;
-                _ = &out_path_buf;
-                var dest_path_stream = std.io.fixedBufferStream((&dest_path_buf));
-                _ = &dest_path_stream;
-                var dest_path_stream_writer = dest_path_stream.writer();
-                _ = &dest_path_stream_writer;
-                const file_id_hex_fmt = bun.fmt.hexIntLower(file_id);
-                const hex_timestamp = @as(usize, @intCast(@max(std.time.milliTimestamp(), 0)));
-                const hex_timestamp_fmt = bun.fmt.hexIntLower(hex_timestamp);
-                _ = try dest_path_stream_writer.print("{f}.npm-{f}", .{ file_id_hex_fmt, hex_timestamp_fmt });
-                _ = try dest_path_stream_writer.writeByte(0);
-                const tmp_path: [:0]u8 = dest_path_buf[0..(dest_path_stream.pos - 1) :0];
-                const out_path = try manifestFileName((&out_path_buf), file_id, scope);
-                _ = try writeFile(manifest, scope, tmp_path, tmpdir, cache_dir, out_path);
-        }
-    
-    pub fn loadByFileID(allocator: std.mem.Allocator, scope: *const Registry.Scope, cache_dir: std.fs.Dir, file_id: u64) !?PackageManifest {
-                var file_path_buf: [576]u8 = undefined;
-                _ = &file_path_buf;
-                const file_name = try manifestFileName((&file_path_buf), file_id, scope);
-                const cache_file = (blk_catch_2: { break :blk_catch_2 ((File.openat(.fromStdDir(cache_dir), file_name, bun.O.RDONLY, 0).unwrap()) catch |__ce_2| { _ = &__ce_2; return null; }); });
-                var _guard_cache_file = CloseValGuard(@TypeOf(cache_file)){ .val = cache_file };
-                _ = &_guard_cache_file;
-                var ___guard_cache_file_moved = false; _ = &___guard_cache_file_moved;
-                defer if (!___guard_cache_file_moved) { ___guard_cache_file_moved = true; const __T = @TypeOf(_guard_cache_file); if (@typeInfo(__T) == .optional) { if (_guard_cache_file) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_cache_file.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_cache_file; _drop_val.__cp_deinit(); } };
-                const loaded = (blk_catch_3: { break :blk_catch_3 ((loadByFile(allocator, scope, cache_file)) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 null; }); });
-                if (loaded) |m| {
-                    _ = &m;
-                    return m;
-                }
-                _ = try bun.sys.unlinkat(.fromStdDir(cache_dir), file_name).unwrap();
-                return null;
-        }
-    
-    pub fn loadByFile(allocator: std.mem.Allocator, scope: *const Registry.Scope, manifest_file: File) !?PackageManifest {
-                var tracer = bun.perf.trace("PackageManifest.Serializer.loadByFile");
-                _ = &tracer;
-                var _guard_tracer = EndGuard(*@TypeOf(tracer)){ .ptr = (&tracer) };
-                _ = &_guard_tracer;
-                var ___guard_tracer_moved = false; _ = &___guard_tracer_moved;
-                defer if (!___guard_tracer_moved) { ___guard_tracer_moved = true; const __T = @TypeOf(_guard_tracer); if (@typeInfo(__T) == .optional) { if (_guard_tracer) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_tracer.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_tracer; _drop_val.__cp_deinit(); } };
-                const bytes = try manifest_file.readToEnd(allocator).unwrap();
-                var _guard_bytes = FreeIfGuard([]const u8){ .allocator = allocator, .slice = bytes, .active = true };
-                _ = &_guard_bytes;
-                var ___guard_bytes_moved = false; _ = &___guard_bytes_moved;
-                defer if (!___guard_bytes_moved) { ___guard_bytes_moved = true; const __T = @TypeOf(_guard_bytes); if (@typeInfo(__T) == .optional) { if (_guard_bytes) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_bytes.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_bytes; _drop_val.__cp_deinit(); } };
-                if ((bytes.len < header_bytes.len)) {
-                    _guard_bytes.active = false;
-                    return null;
-                }
-                var manifest: PackageManifest = undefined;
-                _ = &manifest;
-                if (try readAll(bytes, scope)) |m| {
-                    _ = &m;
-                    manifest = m;
-                } else {
-                    _guard_bytes.active = false;
-                    return null;
-                }
-                _guard_bytes.active = false;
-                if ((manifest.versions.len == 0)) {
-                    return null;
-                }
-                return manifest;
-        }
-    
-    pub fn readAll(bytes: []const u8, scope: *const Registry.Scope) !?PackageManifest {
-                if ((!strings.eqlComptime(bytes[0..header_bytes.len], header_bytes))) {
-                    return null;
-                }
-                var pkg_stream = std.io.fixedBufferStream(bytes);
-                _ = &pkg_stream;
-                pkg_stream.pos = header_bytes.len;
-                var reader = pkg_stream.reader();
-                _ = &reader;
-                var package_manifest = PackageManifest{  };
-                _ = &package_manifest;
-                const registry_hash = try reader.readInt(u64, .little);
-                if ((scope.url_hash != registry_hash)) {
-                    return null;
-                }
-                const registry_length = try reader.readInt(u64, .little);
-                if ((strings.withoutTrailingSlash(scope.url.href).len != registry_length)) {
-                    return null;
-                }
-                inline for (sizes.fields) |field_name| {
-                    _ = &field_name;
-                    if (comptime strings.eqlComptime(field_name, "pkg")) {
-                        pkg_stream.pos = std.mem.alignForward(usize, pkg_stream.pos, @alignOf(NpmPackage));
-                        package_manifest.pkg = try reader.readStruct(NpmPackage);
-                    } else {
-                        @field(package_manifest, field_name) = try readArray((&pkg_stream), std.@"meta".Child(@TypeOf(@field(package_manifest, field_name))));
-                    }
-                }
-                return package_manifest;
-        }
-        pub const version = "bun-npm-manifest-cache-v0.0.7\n";
-        const header_bytes: []const u8 = ("#!/usr/bin/env bun\n" ++ version);
-        const FieldData = struct {
-            size: usize,
-            name: []const u8,
-            alignment: usize,
-        };
-        pub const sizes = blk: {
-                if ((header_bytes.len != 49)) {
-                    _ = @compileError("header bytes must be exactly 49 bytes long, length is not serialized");
-                }
-                const fields = std.@"meta".fields(PackageManifest);
-                const field_count = fields.len;
-                _ = &field_count;
-                var data: [field_count]FieldData = undefined;
-                _ = &data;
-                for (fields, &data) |field_info, *dat| {
-                    _ = &field_info;
-                    _ = &dat;
-                    dat.* = FieldData{ .size = @sizeOf(field_info.@"type"), .name = (if (@typeInfo(@TypeOf(field_info)) == .@"enum" or @typeInfo(@TypeOf(field_info)) == .@"union") @tagName(field_info) else field_info.name), .alignment = (if ((@sizeOf(field_info.@"type") == 0)) 1 else field_info.alignment) };
-                }
-                const Sort = struct {
-        
-        pub fn lessThan(_: void, lhs: FieldData, rhs: FieldData) bool {
-                    return (lhs.alignment > rhs.alignment);
-            }
-        };
-                _ = std.sort.pdq(FieldData, (&data), @as(void, undefined), Sort.lessThan);
-                var sizes_bytes: [field_count]usize = undefined;
-                _ = &sizes_bytes;
-                var names: [field_count][]const u8 = undefined;
-                _ = &names;
-                for (data, &sizes_bytes, &names) |elem, *size_, *name_| {
-                    _ = &elem;
-                    _ = &size_;
-                    _ = &name_;
-                    size_.* = elem.size;
-                    name_.* = (if (@typeInfo(@TypeOf(elem)) == .@"enum" or @typeInfo(@TypeOf(elem)) == .@"union") @tagName(elem) else elem.name);
-                }
-                break :blk .{ .bytes = sizes_bytes, .fields = names };
-        };
-    };
+    pub const Serializer = PackageManifestSerializer;
     pub const bindings = npm_jsc_mod.ManifestBindings;
     pub const FindResult = PackageManifestFindResult;
     pub const FindVersionResult = PackageManifestFindVersionResult;
@@ -2510,11 +2517,11 @@ pub fn whoami(allocator: std.mem.Allocator, manager: *PackageManager) WhoamiErro
         const url = URL.parse(print_buf.items);
         var req = http.AsyncHTTP.initSync(allocator, .GET, url, headers.entries, headers.content.ptr.?[0..headers.content.len], (&response_buf), "", null, null, .follow);
         _ = &req;
-        const res = (blk_catch_8: { break :blk_catch_8 ((req.sendSync()) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+        const res = (blk_catch_13: { break :blk_catch_13 ((req.sendSync()) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
             return error.OutOfMemory;
         }
         _ = Output.err(e, "whoami request failed to send", .{});
-        break :blk_catch_8 Global.crash(); }); });
+        break :blk_catch_13 Global.crash(); }); });
         if ((res.status_code >= 400)) {
             const otp_response = false;
             _ = try responseError(allocator, (&req), (&res), null, (&response_buf), otp_response);
@@ -2528,11 +2535,11 @@ pub fn whoami(allocator: std.mem.Allocator, manager: *PackageManager) WhoamiErro
         var log = logger.Log.init(allocator);
         _ = &log;
         const source = (&logger.Source.initPathString("???", response_buf.list.items));
-        const json = (blk_catch_9: { break :blk_catch_9 ((BunJSON.parseUTF8(source, (&log), allocator)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+        const json = (blk_catch_14: { break :blk_catch_14 ((BunJSON.parseUTF8(source, (&log), allocator)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
             return error.OutOfMemory;
         }
         _ = Output.err(e, "failed to parse '/-/whoami' response body as JSON", .{});
-        break :blk_catch_9 Global.crash(); }); });
+        break :blk_catch_14 Global.crash(); }); });
         const user_pair = try json.getString(allocator, "username");
         if (user_pair) |pair| {
             _ = &pair;
@@ -2542,7 +2549,7 @@ pub fn whoami(allocator: std.mem.Allocator, manager: *PackageManager) WhoamiErro
 }
 
 pub fn parseOptionalJson(source: *const logger.Source, log: *logger.Log, allocator: std.mem.Allocator) !?BunJSON.Expr {
-        return (blk_catch_10: { break :blk_catch_10 ((BunJSON.parseUTF8(source, log, allocator)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+        return (blk_catch_15: { break :blk_catch_15 ((BunJSON.parseUTF8(source, log, allocator)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
             return error.OutOfMemory;
         }
         return null; }); });

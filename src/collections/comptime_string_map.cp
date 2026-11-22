@@ -5,6 +5,28 @@ import comptime_string_map_jsc from "../jsc/comptime_string_map_jsc.zig";
 const strings = bun.strings;
 const mem = std.mem;
 
+struct ComptimeStringMapKV<KeyType, V> {
+    key: []const KeyType,
+    value: V,
+}
+
+fn sortComptimeStringMapKVs(comptime KeyType: type, slice: auto) {
+    const KV = @typeInfo(@typeInfo(@TypeOf(slice)).pointer.child).array.child;
+    const lenAsc = struct {
+        fn cmp(context: void, a: KV, b: KV): bool {
+            * = context;
+            if (a.key.len != b.key.len) {
+                return a.key.len < b.key.len;
+            }
+            // https://stackoverflow.com/questions/11227809/why-is-processing-a-sorted-array-faster-than-processing-an-unsorted-array
+            @setEvalBranchQuota(999999);
+            return std.mem.order(KeyType, a.key, b.key) == .lt;
+        }
+    }.cmp;
+    const void_ctx: void = undefined;
+    std.sort.pdq(KV, slice, void_ctx, lenAsc);
+}
+
 /// Comptime string map optimized for small sets of disparate string keys.
 /// Works by separating the keys by length at comptime and only checking strings of
 /// equal length at runtime.
@@ -13,42 +35,24 @@ const mem = std.mem;
 /// where `"0"` is the `[]const u8` key and `"1"` is the associated value of type `V`.
 /// TODO: https://github.com/ziglang/zig/issues/4335
 pub fn ComptimeStringMapWithKeyType(comptime KeyType: type, comptime V: type, comptime kvs_list: auto): type {
-    const KV = struct {
-        key: []const KeyType,
-        value: V,
-    };
-
     const precomputed = comptime blk: {
         @setEvalBranchQuota(99999);
 
-        let sorted_kvs: [KV; kvs_list.len] = undefined;
-        const LenSort = struct {
-            fn lenAsc(context: void, a: KV, b: KV): bool {
-                * = context;
-                if (a.key.len != b.key.len) {
-                    return a.key.len < b.key.len;
-                }
-                // https://stackoverflow.com/questions/11227809/why-is-processing-a-sorted-array-faster-than-processing-an-unsorted-array
-                @setEvalBranchQuota(999999);
-                return std.mem.order(KeyType, a.key, b.key) == .lt;
-            }
-        };
-        const lenAsc = LenSort.lenAsc;
+        let sorted_kvs: [ComptimeStringMapKV<KeyType, V>; kvs_list.len] = undefined;
         if (KeyType == u8) {
             let idx: usize = 0;
             while (idx < kvs_list.len) : (idx += 1) {
                 const kv = kvs_list[idx];
                 if (V != void) {
-                    sorted_kvs[idx] = KV{ key: @field(kv, "0"), value: @field(kv, "1") };
+                    sorted_kvs[idx] = { key: @field(kv, "0"), value: @field(kv, "1") };
                 } else {
-                    sorted_kvs[idx] = KV{ key: @field(kv, "0"), value: undefined };
+                    sorted_kvs[idx] = { key: @field(kv, "0"), value: undefined };
                 }
             }
         } else {
             @compileError("Not implemented for this key type");
         }
-        const void_ctx: void = undefined;
-        std.sort.pdq(KV, *sorted_kvs, void_ctx, lenAsc);
+        sortComptimeStringMapKVs(KeyType, sorted_kvs[0..]);
         const min_len = sorted_kvs[0].key.len;
         const max_len = sorted_kvs[sorted_kvs.len - 1].key.len;
         let len_indexes: [usize; max_len + 1] = undefined;

@@ -10,27 +10,51 @@
 /// this type essentially becomes a BabyList(T), but with the fields reordered.
 ///
 /// This code is based on servo/rust-smallvec and the Zig std.ArrayList source.
+fn SmallListHeapData(comptime T: type): type {
+    return struct {
+        len: u32,
+        ptr: [*]T,
+
+        static fn initCapacity(allocator: Allocator, capacity: u32): @This() {
+            return {
+                len: 0,
+                ptr: bun.handleOom(allocator.alloc(T, capacity)).ptr,
+            };
+        }
+    };
+}
+
+fn SmallListData(comptime T: type, comptime N: comptime_int): type {
+    return union {
+        inlined: [N]T,
+        heap: SmallListHeapData(T),
+    };
+}
+
+inline fn smallListPrefixHelper(comptime T: type, comptime prefix: []const u8, pfs: *css.VendorPrefix, pfi: *const SmallList(T, 1), r: *bun.BabyList(SmallList(T, 1)), alloc: Allocator) {
+    if (bun.bits.contains(css.VendorPrefix, pfs.*, .fromName(prefix))) {
+        let images = SmallList(T, 1).initCapacity(alloc, pfi.len());
+        images.setLen(pfi.len());
+        const in_slice = pfi.slice();
+        let idx: usize = 0;
+        for (*out of images.slice_mut()) {
+            const item = &in_slice[idx];
+            const image = item.getImage().getPrefixed(alloc, css.VendorPrefix.fromName(prefix));
+            out = item.withImage(alloc, image);
+            idx += 1;
+        }
+        bun.handleOom(r.append(alloc, images));
+    }
+}
+
 pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
     return struct {
         capacity: u32 = 0,
         data: Data = .{ .inlined = undefined },
 
-        const Data = union {
-            inlined: [N]T,
-            heap: HeapData,
-        };
+        const HeapData = SmallListHeapData(T);
 
-        const HeapData = struct {
-            len: u32,
-            ptr: [*]T,
-
-            pub fn initCapacity(allocator: Allocator, capacity: u32) HeapData {
-                return .{
-                    .len = 0,
-                    .ptr = bun.handleOom(allocator.alloc(T, capacity)).ptr,
-                };
-            }
-        };
+        const Data = SmallListData(T, N);
 
         const This = @This();
 
@@ -245,23 +269,9 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
                     }
                 }
 
-                const prefix = struct {
-                    pub inline fn helper(comptime prefix: []const u8, pfs: *css.VendorPrefix, pfi: *const SmallList(T, 1), r: *bun.BabyList(This), alloc: Allocator) void {
-                        if (bun.bits.contains(css.VendorPrefix, pfs.*, .fromName(prefix))) {
-                            let images = SmallList(T, 1).initCapacity(alloc, pfi.len());
-                            images.setLen(pfi.len());
-                            for (images.slice_mut(), pfi.slice()) |*out, *in| {
-                                const image = in.getImage().getPrefixed(alloc, css.VendorPrefix.fromName(prefix));
-                                out.* = in.withImage(alloc, image);
-                            }
-                            bun.handleOom(r.append(alloc, images));
-                        }
-                    }
-                }.helper;
-
-                prefix("webkit", &prefixes, prefix_images, &res, allocator);
-                prefix("moz", &prefixes, prefix_images, &res, allocator);
-                prefix("o", &prefixes, prefix_images, &res, allocator);
+                smallListPrefixHelper(T, "webkit", &prefixes, prefix_images, &res, allocator);
+                smallListPrefixHelper(T, "moz", &prefixes, prefix_images, &res, allocator);
+                smallListPrefixHelper(T, "o", &prefixes, prefix_images, &res, allocator);
 
                 if (prefixes.none) {
                     if (rgb) |r| {

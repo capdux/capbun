@@ -87,6 +87,42 @@ fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub const HandleType = enum(c_uint) {
+    unknown = 0,
+    @"async" = 1,
+    check = 2,
+    fs_event = 3,
+    fs_poll = 4,
+    handle = 5,
+    idle = 6,
+    named_pipe = 7,
+    poll = 8,
+    prepare = 9,
+    process = 10,
+    stream = 11,
+    tcp = 12,
+    timer = 13,
+    tty = 14,
+    udp = 15,
+    signal = 16,
+    file = 17,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const TtyMode = enum(c_uint) {
+    normal = 0,
+    raw = 1,
+    io = 2,
+    vt = 3,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const RunMode = enum(c_uint) {
     default = 0,
     once = 1,
@@ -478,26 +514,7 @@ pub const Handle = extern struct {
     pub const isClosed = handle_impl.isClosed;
     pub const isActive = handle_impl.isActive;
     pub const fd = handle_impl.fd;
-    pub const Type = enum(c_uint) {
-            unknown = 0,
-            async = 1,
-            check = 2,
-            fs_event = 3,
-            fs_poll = 4,
-            handle = 5,
-            idle = 6,
-            named_pipe = 7,
-            poll = 8,
-            prepare = 9,
-            process = 10,
-            stream = 11,
-            tcp = 12,
-            timer = 13,
-            tty = 14,
-            udp = 15,
-            signal = 16,
-            file = 17,
-        };
+    pub const Type = HandleType;
 };
 
 const union_unnamed_375 = extern union {
@@ -1444,12 +1461,7 @@ pub fn init(self: *struct_uv_tty_s, loop: *uv_loop_t, file: uv_file) Maybe(void)
 pub fn setMode(self: *struct_uv_tty_s, mode: Mode) ReturnCode {
             return uv_tty_set_mode(self, @intFromEnum(mode));
     }
-    const Mode = enum(c_uint) {
-            normal = 0,
-            raw = 1,
-            io = 2,
-            vt = 3,
-        };
+    pub const Mode = TtyMode;
     const handle_impl = HandleMixin(@This());
     pub const getData = handle_impl.getData;
     pub const getLoop = handle_impl.getLoop;

@@ -19,7 +19,7 @@ struct ErrDestroyGuard<T> {
     ~init() { if (p := _.ptr) unsafe { _.gpa.destroy(p); } }
 }
 
-pub const RecordKind = enum(u8) {
+pub enum RecordKind: u8 {
     /// var_name
     declared_variable,
     /// let_name
@@ -40,8 +40,8 @@ pub const RecordKind = enum(u8) {
     export_info_star,
     _,
 
-    pub fn len(record: RecordKind): !usize {
-        return switch (record) {
+    fn len(): !usize {
+        return switch (_) {
             .declared_variable, .lexical_variable => 1,
             .import_info_single => 3,
             .import_info_single_type_script => 3,
@@ -53,7 +53,7 @@ pub const RecordKind = enum(u8) {
             else => return error.InvalidRecordKind,
         };
     }
-};
+}
 
 @packed(u8) pub struct Flags {
     contains_import_meta: bool = false,
@@ -189,9 +189,9 @@ pub struct ModuleInfoDeserialized {
     }
 }
 
-pub const StringMapKey = enum(u32) {
+pub enum StringMapKey: u32 {
     _,
-};
+}
 
 pub struct StringContext {
     strings_buf: []const u8,
@@ -214,6 +214,19 @@ pub struct LocalNameToModuleName {
     is_namespace: bool,
 }
 
+pub enum ModuleInfoFetchParameters: u32 {
+    none = std.math.maxInt(u32),
+    javascript = std.math.maxInt(u32) - 1,
+    webassembly = std.math.maxInt(u32) - 2,
+    json = std.math.maxInt(u32) - 3,
+    _, // host_defined: cast to StringID
+    static fn hostDefined(value: StringID): ModuleInfoFetchParameters {
+        return @enumFromInt(@intFromEnum(value));
+    }
+}
+
+pub enum ModuleInfoVarKind { declared, lexical }
+
 pub struct ModuleInfo {
     /// all strings in wtf-8. index in hashmap = StringID
     gpa: std.mem.Allocator,
@@ -235,18 +248,8 @@ pub struct ModuleInfo {
         return &_._deserialized;
     }
 
-    pub const FetchParameters = enum(u32) {
-        none = std.math.maxInt(u32),
-        javascript = std.math.maxInt(u32) - 1,
-        webassembly = std.math.maxInt(u32) - 2,
-        json = std.math.maxInt(u32) - 3,
-        _, // host_defined: cast to StringID
-        pub fn hostDefined(value: StringID): FetchParameters {
-            return @enumFromInt(@intFromEnum(value));
-        }
-    };
-
-    pub const VarKind = enum { declared, lexical };
+    pub const FetchParameters = ModuleInfoFetchParameters;
+    pub const VarKind = ModuleInfoVarKind;
 
     fn addVar(*_, name: StringID, kind: VarKind)! {
         switch (kind) {
@@ -444,11 +447,11 @@ pub struct ModuleInfo {
     }
 }
 
-pub const StringID = enum(u32) {
+pub enum StringID: u32 {
     star_default = std.math.maxInt(u32),
     star_namespace = std.math.maxInt(u32) - 1,
     _,
-};
+}
 
 // zig__renderDiff, zig__ModuleInfoDeserialized__toJSModuleRecord, and the
 // JSModuleRecord/IdentifierArray opaques: see src/bundler_jsc/analyze_jsc.zig

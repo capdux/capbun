@@ -10,12 +10,12 @@ pub const RouteId = i32;
 pub const HotReloadId = i32;
 pub const HTTPMethod = bun.http.Method;
 
-pub const RouteType = enum(u8) {
+pub enum RouteType: u8 {
     default = 1,
     api = 2,
     html = 3,
     @"static" = 4,
-};
+}
 
 let empty_strings: [0]BunString = undefined;
 

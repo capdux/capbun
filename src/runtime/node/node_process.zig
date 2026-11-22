@@ -160,6 +160,7 @@ pub fn __cp_deinit(self: *MutexGuard) void {
     }
 };
 
+const ComptimeKV = struct { []const u8, void };
 var title_mutex = bun.Mutex{  };
 pub const getCwd = jsc.host_fn.wrap1(getCwd_);
 pub const setCwd = jsc.host_fn.wrap2(setCwd_);
@@ -315,7 +316,7 @@ pub fn createExecArgv(globalObject: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue
             const map = bun.ComptimeStringMap(void, (comptime brk: {
             const auto_params = bun.cli.Arguments.auto_params;
             const auto_params_len = auto_params.len;
-            const KV = struct { []const u8, void };
+            const KV = ComptimeKV;
             var entries: [auto_params_len]KV = undefined;
             _ = &entries;
             var i: i32 = 0;

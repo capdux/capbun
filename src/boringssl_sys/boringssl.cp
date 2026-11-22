@@ -141,14 +141,14 @@ const pthread_rwlock_t = (if (bun.Environment.isPosix) std.c.pthread_rwlock_t el
 const ossl_ssize_t = isize;
 
 pub const CRYPTO_THREADID = c_int;
-pub const struct_asn1_null_st = opaque {};
+@opaque pub struct struct_asn1_null_st {}
 pub const ASN1_NULL = struct_asn1_null_st;
 pub const ASN1_BOOLEAN = c_int;
-pub const struct_ASN1_ITEM_st = opaque {};
+@opaque pub struct struct_ASN1_ITEM_st {}
 pub const ASN1_ITEM = struct_ASN1_ITEM_st;
-pub const struct_asn1_object_st = opaque {};
+@opaque pub struct struct_asn1_object_st {}
 pub const ASN1_OBJECT = struct_asn1_object_st;
-pub const struct_asn1_pctx_st = opaque {};
+@opaque pub struct struct_asn1_pctx_st {}
 pub const ASN1_PCTX = struct_asn1_pctx_st;
 @c pub struct struct_asn1_string_st {
     length: c_int,
@@ -172,7 +172,7 @@ pub const ASN1_UNIVERSALSTRING = struct_asn1_string_st;
 pub const ASN1_UTCTIME = struct_asn1_string_st;
 pub const ASN1_UTF8STRING = struct_asn1_string_st;
 pub const ASN1_VISIBLESTRING = struct_asn1_string_st;
-pub const struct_ASN1_VALUE_st = opaque {};
+@opaque pub struct struct_ASN1_VALUE_st {}
 pub const ASN1_VALUE = struct_ASN1_VALUE_st;
 @c union union_unnamed_1 {
     ptr: [*c]u8,
@@ -202,11 +202,11 @@ pub const ASN1_VALUE = struct_ASN1_VALUE_st;
     value: union_unnamed_1,
 }
 pub const ASN1_TYPE = struct_asn1_type_st;
-pub const struct_AUTHORITY_KEYID_st = opaque {};
+@opaque pub struct struct_AUTHORITY_KEYID_st {}
 pub const AUTHORITY_KEYID = struct_AUTHORITY_KEYID_st;
-pub const struct_BASIC_CONSTRAINTS_st = opaque {};
+@opaque pub struct struct_BASIC_CONSTRAINTS_st {}
 pub const BASIC_CONSTRAINTS = struct_BASIC_CONSTRAINTS_st;
-pub const struct_DIST_POINT_st = opaque {};
+@opaque pub struct struct_DIST_POINT_st {}
 pub const DIST_POINT = struct_DIST_POINT_st;
 pub const BN_ULONG = u64;
 @c pub struct struct_bignum_st {
@@ -222,11 +222,11 @@ pub const BIGNUM = struct_bignum_st;
     s: [*c]BIGNUM,
 }
 pub const DSA_SIG = struct_DSA_SIG_st;
-pub const struct_ISSUING_DIST_POINT_st = opaque {};
+@opaque pub struct struct_ISSUING_DIST_POINT_st {}
 pub const ISSUING_DIST_POINT = struct_ISSUING_DIST_POINT_st;
-pub const struct_NAME_CONSTRAINTS_st = opaque {};
+@opaque pub struct struct_NAME_CONSTRAINTS_st {}
 pub const NAME_CONSTRAINTS = struct_NAME_CONSTRAINTS_st;
-pub const struct_X509_pubkey_st = opaque {};
+@opaque pub struct struct_X509_pubkey_st {}
 pub const X509_PUBKEY = struct_X509_pubkey_st;
 @c pub struct struct_Netscape_spkac_st {
     pubkey: Opt__X509_PUBKEY,
@@ -244,13 +244,13 @@ pub const X509_ALGOR = struct_X509_algor_st;
     signature: [*c]ASN1_BIT_STRING,
 }
 pub const NETSCAPE_SPKI = struct_Netscape_spki_st;
-pub const struct_RIPEMD160state_st = opaque {};
+@opaque pub struct struct_RIPEMD160state_st {}
 pub const RIPEMD160_CTX = struct_RIPEMD160state_st;
-pub const struct_X509_VERIFY_PARAM_st = opaque {};
+@opaque pub struct struct_X509_VERIFY_PARAM_st {}
 pub const X509_VERIFY_PARAM = struct_X509_VERIFY_PARAM_st;
-pub const struct_X509_crl_st = opaque {};
+@opaque pub struct struct_X509_crl_st {}
 pub const X509_CRL = struct_X509_crl_st;
-pub const struct_X509_extension_st = opaque {};
+@opaque pub struct struct_X509_extension_st {}
 pub const X509_EXTENSION = struct_X509_extension_st;
 @opaque pub struct struct_x509_st {
     fn dup(*_): (*X509)? {
@@ -285,7 +285,7 @@ pub const CRYPTO_refcount_t = u32;
     flags: c_int,
 }
 pub const RSA_METHOD = struct_rsa_meth_st;
-pub const struct_stack_st_void = opaque {};
+@opaque pub struct struct_stack_st_void {}
 @c pub struct struct_crypto_ex_data_st {
     sk: Opt__struct_stack_st_void,
 }
@@ -297,9 +297,9 @@ pub const CRYPTO_MUTEX = pthread_rwlock_t;
     n0: [2]BN_ULONG,
 }
 pub const BN_MONT_CTX = struct_bn_mont_ctx_st;
-pub const struct_bn_blinding_st = opaque {};
+@opaque pub struct struct_bn_blinding_st {}
 pub const BN_BLINDING = struct_bn_blinding_st; // boringssl/include/openssl/rsa.h:788:12: warning: struct demoted to opaque type - has bitfield
-pub const struct_rsa_st = opaque {};
+@opaque pub struct struct_rsa_st {}
 pub const RSA = struct_rsa_st;
 @c pub struct struct_dsa_st {
     version: c_long,
@@ -316,9 +316,9 @@ pub const RSA = struct_rsa_st;
     ex_data: CRYPTO_EX_DATA,
 }
 pub const DSA = struct_dsa_st;
-pub const struct_dh_st = opaque {};
+@opaque pub struct struct_dh_st {}
 pub const DH = struct_dh_st;
-pub const struct_ec_key_st = opaque {};
+@opaque pub struct struct_ec_key_st {}
 pub const EC_KEY = struct_ec_key_st;
 @c union union_unnamed_2 {
     ptr: *!?,
@@ -327,7 +327,7 @@ pub const EC_KEY = struct_ec_key_st;
     dh: Opt__DH,
     ec: Opt__EC_KEY,
 }
-pub const struct_evp_pkey_asn1_method_st = opaque {};
+@opaque pub struct struct_evp_pkey_asn1_method_st {}
 pub const EVP_PKEY_ASN1_METHOD = struct_evp_pkey_asn1_method_st;
 @c pub struct struct_evp_pkey_st {
     references: CRYPTO_refcount_t,
@@ -336,7 +336,7 @@ pub const EVP_PKEY_ASN1_METHOD = struct_evp_pkey_asn1_method_st;
     ameth: Opt__const_EVP_PKEY_ASN1_METHOD,
 }
 pub const EVP_PKEY = struct_evp_pkey_st;
-pub const struct_evp_cipher_st = opaque {};
+@opaque pub struct struct_evp_cipher_st {}
 pub const EVP_CIPHER = struct_evp_cipher_st;
 @c pub struct struct_evp_cipher_info_st {
     cipher: Opt__const_EVP_CIPHER,
@@ -363,15 +363,15 @@ pub const X509_PKEY = struct_private_key_st;
     enc_data: [*c]u8,
 }
 pub const X509_INFO = struct_X509_info_st;
-pub const struct_X509_name_entry_st = opaque {};
+@opaque pub struct struct_X509_name_entry_st {}
 pub const X509_NAME_ENTRY = struct_X509_name_entry_st;
-pub const struct_X509_name_st = opaque {};
+@opaque pub struct struct_X509_name_st {}
 pub const X509_NAME = struct_X509_name_st;
-pub const struct_X509_req_st = opaque {};
+@opaque pub struct struct_X509_req_st {}
 pub const X509_REQ = struct_X509_req_st;
-pub const struct_X509_sig_st = opaque {};
+@opaque pub struct struct_X509_sig_st {}
 pub const X509_SIG = struct_X509_sig_st;
-pub const struct_bignum_ctx = opaque {};
+@opaque pub struct struct_bignum_ctx {}
 pub const BN_CTX = struct_bignum_ctx;
 pub const BIO_METHOD = struct_bio_method_st;
 // pub const struct_bio_st = extern struct {
@@ -402,7 +402,7 @@ pub const bio_info_cb = (bio_info_cb__fn)?;
     destroy: FnPtr_14,
     callback_ctrl: FnPtr_15,
 }
-pub const struct_blake2b_state_st = opaque {};
+@opaque pub struct struct_blake2b_state_st {}
 pub const BLAKE2B_CTX = struct_blake2b_state_st;
 @c pub struct struct_bn_gencb_st {
     arg: *!?,
@@ -416,8 +416,8 @@ pub const BN_GENCB = struct_bn_gencb_st;
 }
 pub const BUF_MEM = struct_buf_mem_st;
 pub const CBB = struct_cbb_st; // boringssl/include/openssl/bytestring.h:403:12: warning: struct demoted to opaque type - has bitfield
-pub const struct_cbb_buffer_st = opaque {}; // boringssl/include/openssl/bytestring.h:418:12: warning: struct demoted to opaque type - has bitfield
-pub const struct_cbb_child_st = opaque {};
+@opaque pub struct struct_cbb_buffer_st {} // boringssl/include/openssl/bytestring.h:418:12: warning: struct demoted to opaque type - has bitfield
+@opaque pub struct struct_cbb_child_st {}
 @c union union_unnamed_3 {
     base: struct_cbb_buffer_st,
     child: struct_cbb_child_st,
@@ -432,21 +432,21 @@ pub const struct_cbb_child_st = opaque {};
     len: usize,
 }
 pub const CBS = struct_cbs_st;
-pub const struct_cmac_ctx_st = opaque {};
+@opaque pub struct struct_cmac_ctx_st {}
 pub const CMAC_CTX = struct_cmac_ctx_st;
-pub const struct_conf_st = opaque {};
+@opaque pub struct struct_conf_st {}
 pub const CONF = struct_conf_st;
-pub const struct_conf_value_st = opaque {};
+@opaque pub struct struct_conf_value_st {}
 pub const CONF_VALUE = struct_conf_value_st;
-pub const struct_crypto_buffer_pool_st = opaque {};
+@opaque pub struct struct_crypto_buffer_pool_st {}
 pub const CRYPTO_BUFFER_POOL = struct_crypto_buffer_pool_st;
-pub const struct_crypto_buffer_st = opaque {};
+@opaque pub struct struct_crypto_buffer_st {}
 pub const CRYPTO_BUFFER = struct_crypto_buffer_st;
-pub const struct_ctr_drbg_state_st = opaque {};
+@opaque pub struct struct_ctr_drbg_state_st {}
 pub const CTR_DRBG_STATE = struct_ctr_drbg_state_st;
-pub const struct_ec_group_st = opaque {};
+@opaque pub struct struct_ec_group_st {}
 pub const EC_GROUP = struct_ec_group_st;
-pub const struct_ec_point_st = opaque {};
+@opaque pub struct struct_ec_point_st {}
 pub const EC_POINT = struct_ec_point_st;
 @c pub struct struct_ecdsa_method_st {
     common: struct_openssl_method_common_st,
@@ -463,13 +463,13 @@ pub const ECDSA_METHOD = struct_ecdsa_method_st;
     s: [*c]BIGNUM,
 }
 pub const ECDSA_SIG = struct_ecdsa_sig_st;
-pub const struct_engine_st = opaque {};
+@opaque pub struct struct_engine_st {}
 pub const ENGINE = struct_engine_st;
-pub const struct_env_md_st = opaque {};
+@opaque pub struct struct_env_md_st {}
 pub const EVP_MD = struct_env_md_st;
-pub const struct_evp_pkey_ctx_st = opaque {};
+@opaque pub struct struct_evp_pkey_ctx_st {}
 pub const EVP_PKEY_CTX = struct_evp_pkey_ctx_st;
-pub const struct_evp_md_pctx_ops = opaque {};
+@opaque pub struct struct_evp_md_pctx_ops {}
 @c pub struct struct_env_md_ctx_st {
     // md_data contains the hash-specific context
     md_data: extern union {
@@ -484,7 +484,7 @@ pub const struct_evp_md_pctx_ops = opaque {};
     pctx_ops: Opt__const_struct_evp_md_pctx_ops,
 }
 pub const EVP_MD_CTX = struct_env_md_ctx_st;
-pub const struct_evp_aead_st = opaque {};
+@opaque pub struct struct_evp_aead_st {}
 pub const EVP_AEAD = struct_evp_aead_st;
 @c pub union union_evp_aead_ctx_st_state {
     @"opaque": [560]u8,
@@ -520,17 +520,17 @@ pub const EVP_CIPHER_CTX = struct_evp_cipher_ctx_st;
     error_encountered: u8,
 }
 pub const EVP_ENCODE_CTX = struct_evp_encode_ctx_st;
-pub const struct_evp_hpke_aead_st = opaque {};
+@opaque pub struct struct_evp_hpke_aead_st {}
 pub const EVP_HPKE_AEAD = struct_evp_hpke_aead_st;
-pub const struct_evp_hpke_ctx_st = opaque {};
+@opaque pub struct struct_evp_hpke_ctx_st {}
 pub const EVP_HPKE_CTX = struct_evp_hpke_ctx_st;
-pub const struct_evp_hpke_kdf_st = opaque {};
+@opaque pub struct struct_evp_hpke_kdf_st {}
 pub const EVP_HPKE_KDF = struct_evp_hpke_kdf_st;
-pub const struct_evp_hpke_kem_st = opaque {};
+@opaque pub struct struct_evp_hpke_kem_st {}
 pub const EVP_HPKE_KEM = struct_evp_hpke_kem_st;
-pub const struct_evp_hpke_key_st = opaque {};
+@opaque pub struct struct_evp_hpke_key_st {}
 pub const EVP_HPKE_KEY = struct_evp_hpke_key_st;
-pub const struct_evp_pkey_method_st = opaque {};
+@opaque pub struct struct_evp_pkey_method_st {}
 pub const EVP_PKEY_METHOD = struct_evp_pkey_method_st;
 @c pub struct struct_hmac_ctx_st {
     md: Opt__const_EVP_MD,
@@ -539,19 +539,19 @@ pub const EVP_PKEY_METHOD = struct_evp_pkey_method_st;
     o_ctx: EVP_MD_CTX,
 }
 pub const HMAC_CTX = struct_hmac_ctx_st;
-pub const struct_md4_state_st = opaque {};
+@opaque pub struct struct_md4_state_st {}
 pub const MD4_CTX = struct_md4_state_st;
-pub const struct_md5_state_st = opaque {};
+@opaque pub struct struct_md5_state_st {}
 pub const MD5_CTX = struct_md5_state_st;
-pub const struct_ossl_init_settings_st = opaque {};
+@opaque pub struct struct_ossl_init_settings_st {}
 pub const OPENSSL_INIT_SETTINGS = struct_ossl_init_settings_st;
-pub const struct_pkcs12_st = opaque {};
+@opaque pub struct struct_pkcs12_st {}
 pub const PKCS12 = struct_pkcs12_st;
-pub const struct_pkcs8_priv_key_info_st = opaque {};
+@opaque pub struct struct_pkcs8_priv_key_info_st {}
 pub const PKCS8_PRIV_KEY_INFO = struct_pkcs8_priv_key_info_st;
-pub const struct_rand_meth_st = opaque {};
+@opaque pub struct struct_rand_meth_st {}
 pub const RAND_METHOD = struct_rand_meth_st;
-pub const struct_rc4_key_st = opaque {};
+@opaque pub struct struct_rc4_key_st {}
 pub const RC4_KEY = struct_rc4_key_st;
 @c pub struct struct_rsa_pss_params_st {
     hashAlgorithm: [*c]X509_ALGOR,
@@ -598,14 +598,14 @@ pub const SHA512_CTX = struct_sha512_state_st;
     num: c_uint,
 }
 pub const SHA_CTX = struct_sha_state_st;
-pub const struct_spake2_ctx_st = opaque {};
+@opaque pub struct struct_spake2_ctx_st {}
 pub const SPAKE2_CTX = struct_spake2_ctx_st;
 @c pub struct struct_srtp_protection_profile_st {
     name: [*c]const u8,
     id: c_ulong,
 }
 pub const SRTP_PROTECTION_PROFILE = struct_srtp_protection_profile_st;
-pub const struct_ssl_cipher_st = opaque {};
+@opaque pub struct struct_ssl_cipher_st {}
 pub const SSL_CIPHER = struct_ssl_cipher_st;
 // pub const struct_ssl_ctx_st = opaque {};
 // pub const SSL_CTX = struct_ssl_ctx_st;
@@ -628,9 +628,9 @@ pub const SSL_CIPHER = struct_ssl_cipher_st;
     extensions_len: usize,
 }
 pub const SSL_CLIENT_HELLO = struct_ssl_early_callback_ctx;
-pub const struct_ssl_ech_keys_st = opaque {};
+@opaque pub struct struct_ssl_ech_keys_st {}
 pub const SSL_ECH_KEYS = struct_ssl_ech_keys_st;
-pub const struct_ssl_method_st = opaque {};
+@opaque pub struct struct_ssl_method_st {}
 pub const SSL_METHOD = struct_ssl_method_st;
 pub const ssl_private_key_success: c_int = 0;
 pub const ssl_private_key_retry: c_int = 1;
@@ -655,7 +655,7 @@ pub const enum_ssl_encryption_level_t = c_uint;
     send_alert: FnPtr_28,
 }
 pub const SSL_QUIC_METHOD = struct_ssl_quic_method_st;
-pub const struct_ssl_session_st = opaque {};
+@opaque pub struct struct_ssl_session_st {}
 pub const SSL_SESSION = struct_ssl_session_st;
 pub const ssl_ticket_aead_success: c_int = 0;
 pub const ssl_ticket_aead_retry: c_int = 1;
@@ -668,31 +668,31 @@ pub const enum_ssl_ticket_aead_result_t = c_uint;
     open: FnPtr_31,
 }
 pub const SSL_TICKET_AEAD_METHOD = struct_ssl_ticket_aead_method_st;
-pub const struct_st_ERR_FNS = opaque {};
+@opaque pub struct struct_st_ERR_FNS {}
 pub const ERR_FNS = struct_st_ERR_FNS;
-pub const struct_trust_token_st = opaque {};
+@opaque pub struct struct_trust_token_st {}
 pub const TRUST_TOKEN = struct_trust_token_st;
-pub const struct_trust_token_client_st = opaque {};
+@opaque pub struct struct_trust_token_client_st {}
 pub const TRUST_TOKEN_CLIENT = struct_trust_token_client_st;
-pub const struct_trust_token_issuer_st = opaque {};
+@opaque pub struct struct_trust_token_issuer_st {}
 pub const TRUST_TOKEN_ISSUER = struct_trust_token_issuer_st;
-pub const struct_trust_token_method_st = opaque {};
+@opaque pub struct struct_trust_token_method_st {}
 pub const TRUST_TOKEN_METHOD = struct_trust_token_method_st;
-pub const struct_v3_ext_ctx = opaque {};
+@opaque pub struct struct_v3_ext_ctx {}
 pub const X509V3_CTX = struct_v3_ext_ctx;
-pub const struct_x509_attributes_st = opaque {};
+@opaque pub struct struct_x509_attributes_st {}
 pub const X509_ATTRIBUTE = struct_x509_attributes_st;
-pub const struct_x509_lookup_st = opaque {};
+@opaque pub struct struct_x509_lookup_st {}
 pub const X509_LOOKUP = struct_x509_lookup_st;
-pub const struct_x509_lookup_method_st = opaque {};
+@opaque pub struct struct_x509_lookup_method_st {}
 pub const X509_LOOKUP_METHOD = struct_x509_lookup_method_st;
-pub const struct_x509_object_st = opaque {};
+@opaque pub struct struct_x509_object_st {}
 pub const X509_OBJECT = struct_x509_object_st;
-pub const struct_x509_revoked_st = opaque {};
+@opaque pub struct struct_x509_revoked_st {}
 pub const X509_REVOKED = struct_x509_revoked_st;
-pub const struct_x509_store_ctx_st = opaque {};
+@opaque pub struct struct_x509_store_ctx_st {}
 pub const X509_STORE_CTX = struct_x509_store_ctx_st;
-pub const struct_x509_store_st = opaque {};
+@opaque pub struct struct_x509_store_st {}
 pub const X509_STORE = struct_x509_store_st;
 @c pub struct struct_x509_trust_st {
     trust: c_int,
@@ -1010,7 +1010,7 @@ pub fn sk_void_deep_copy(arg_sk: (*const struct_stack_st_void)?, arg_copy_func: 
     return @as((*struct_stack_st_void)?, @ptrCast(sk_deep_copy(@as([*c]const _STACK, @ptrCast(@alignCast(sk))), &sk_void_call_copy_func, @as(OPENSSL_sk_copy_func, @ptrCast(@alignCast(copy_func))), &sk_void_call_free_func, @as(OPENSSL_sk_free_func, @ptrCast(@alignCast(free_func))))));
     }
 }
-pub const struct_stack_st_OPENSSL_STRING = opaque {};
+@opaque pub struct struct_stack_st_OPENSSL_STRING {}
 const sk_OPENSSL_STRING_free_func__fn = *const fn (_: [*c]u8) callconv(.c) void;
 pub const sk_OPENSSL_STRING_free_func = (sk_OPENSSL_STRING_free_func__fn)?;
 const sk_OPENSSL_STRING_copy_func__fn = *const fn (_: [*c]u8) callconv(.c) [*c]u8;
@@ -1211,7 +1211,7 @@ pub extern fn CRYPTO_THREADID_set_numeric(id: [*c]CRYPTO_THREADID, val: c_ulong)
 pub extern fn CRYPTO_THREADID_set_pointer(id: [*c]CRYPTO_THREADID, ptr: *!?);
 pub extern fn CRYPTO_THREADID_current(id: [*c]CRYPTO_THREADID);
 pub extern fn CRYPTO_set_id_callback(func: (*const fn () callconv(.c) c_ulong)?);
-pub const struct_CRYPTO_dynlock_value = opaque {};
+@opaque pub struct struct_CRYPTO_dynlock_value {}
 @c pub struct CRYPTO_dynlock {
     references: c_int,
     data: Opt__struct_CRYPTO_dynlock_value,
@@ -1223,7 +1223,7 @@ pub extern fn CRYPTO_set_dynlock_destroy_callback(dyn_destroy_function: (*const 
 pub extern fn CRYPTO_get_dynlock_create_callback(): (*const fn (_: [*c]const u8, _: c_int) callconv(.c) OptDynlockPtr)?;
 pub extern fn CRYPTO_get_dynlock_lock_callback(): (*const fn (_: c_int, _: (*struct_CRYPTO_dynlock_value)?, _: [*c]const u8, _: c_int) callconv(.c) void)?;
 pub extern fn CRYPTO_get_dynlock_destroy_callback(): (*const fn (_: (*struct_CRYPTO_dynlock_value)?, _: [*c]const u8, _: c_int) callconv(.c) void)?;
-pub const struct_stack_st_BIO = opaque {};
+@opaque pub struct struct_stack_st_BIO {}
 const sk_BIO_free_func__fn = *const fn (_: [*c]BIO) callconv(.c) void;
 pub const sk_BIO_free_func = (sk_BIO_free_func__fn)?;
 const sk_BIO_copy_func__fn = *const fn (_: [*c]BIO) callconv(.c) [*c]BIO;
@@ -1827,9 +1827,9 @@ pub extern fn i2d_EC_PUBKEY(ec_key: (*const EC_KEY)?, outp: [*c][*c]u8): c_int;
 pub extern fn d2i_EC_PUBKEY(out: [*c]Opt__EC_KEY, inp: [*c][*c]const u8, len: c_long): (*EC_KEY)?;
 pub extern fn EVP_PKEY_CTX_set_dsa_paramgen_bits(ctx: (*EVP_PKEY_CTX)?, nbits: c_int): c_int;
 pub extern fn EVP_PKEY_CTX_set_dsa_paramgen_q_bits(ctx: (*EVP_PKEY_CTX)?, qbits: c_int): c_int;
-pub const struct_stack_st_CRYPTO_BUFFER = opaque {};
-pub const struct_stack_st_X509 = opaque {};
-pub const struct_stack_st_X509_CRL = opaque {};
+@opaque pub struct struct_stack_st_CRYPTO_BUFFER {}
+@opaque pub struct struct_stack_st_X509 {}
+@opaque pub struct struct_stack_st_X509_CRL {}
 pub extern fn PKCS7_get_raw_certificates(out_certs: (*struct_stack_st_CRYPTO_BUFFER)?, cbs: [*c]CBS, pool: (*CRYPTO_BUFFER_POOL)?): c_int;
 pub extern fn PKCS7_get_certificates(out_certs: (*struct_stack_st_X509)?, cbs: [*c]CBS): c_int;
 pub extern fn PKCS7_bundle_raw_certificates(out: (*CBB)?, certs: (*const struct_stack_st_CRYPTO_BUFFER)?): c_int;
@@ -2084,7 +2084,7 @@ pub extern fn ASN1_BIT_STRING_num_bytes(str: [*c]const ASN1_BIT_STRING, out: [*c
 pub extern fn ASN1_BIT_STRING_set_bit(str: [*c]ASN1_BIT_STRING, n: c_int, value: c_int): c_int;
 pub extern fn ASN1_BIT_STRING_get_bit(str: [*c]const ASN1_BIT_STRING, n: c_int): c_int;
 pub extern fn ASN1_BIT_STRING_check(str: [*c]const ASN1_BIT_STRING, flags: [*c]const u8, flags_len: c_int): c_int;
-pub const struct_stack_st_ASN1_INTEGER = opaque {};
+@opaque pub struct struct_stack_st_ASN1_INTEGER {}
 const sk_ASN1_INTEGER_free_func__fn = *const fn (_: [*c]ASN1_INTEGER) callconv(.c) void;
 pub const sk_ASN1_INTEGER_free_func = (sk_ASN1_INTEGER_free_func__fn)?;
 const sk_ASN1_INTEGER_copy_func__fn = *const fn (_: [*c]ASN1_INTEGER) callconv(.c) [*c]ASN1_INTEGER;
@@ -2334,7 +2334,7 @@ pub extern fn ASN1_NULL_free(@"null": (*ASN1_NULL)?);
 pub extern fn d2i_ASN1_NULL(out: [*c]Opt__ASN1_NULL, inp: [*c][*c]const u8, len: c_long): (*ASN1_NULL)?;
 pub extern fn i2d_ASN1_NULL(@"in": (*const ASN1_NULL)?, outp: [*c][*c]u8): c_int;
 pub extern const ASN1_NULL_it: ASN1_ITEM;
-pub const struct_stack_st_ASN1_OBJECT = opaque {};
+@opaque pub struct struct_stack_st_ASN1_OBJECT {}
 const sk_ASN1_OBJECT_free_func__fn = *const fn (_: Opt__ASN1_OBJECT) callconv(.c) void;
 pub const sk_ASN1_OBJECT_free_func = (sk_ASN1_OBJECT_free_func__fn)?;
 const sk_ASN1_OBJECT_copy_func__fn = *const fn (_: Opt__ASN1_OBJECT) callconv(.c) Opt__ASN1_OBJECT;
@@ -2527,7 +2527,7 @@ pub extern fn d2i_ASN1_OBJECT(out: [*c]Opt__ASN1_OBJECT, inp: [*c][*c]const u8, 
 pub extern fn i2d_ASN1_OBJECT(a: (*const ASN1_OBJECT)?, outp: [*c][*c]u8): c_int;
 pub extern fn c2i_ASN1_OBJECT(out: [*c]Opt__ASN1_OBJECT, inp: [*c][*c]const u8, len: c_long): (*ASN1_OBJECT)?;
 pub extern const ASN1_OBJECT_it: ASN1_ITEM;
-pub const struct_stack_st_ASN1_TYPE = opaque {};
+@opaque pub struct struct_stack_st_ASN1_TYPE {}
 const sk_ASN1_TYPE_free_func__fn = *const fn (_: [*c]ASN1_TYPE) callconv(.c) void;
 pub const sk_ASN1_TYPE_free_func = (sk_ASN1_TYPE_free_func__fn)?;
 const sk_ASN1_TYPE_copy_func__fn = *const fn (_: [*c]ASN1_TYPE) callconv(.c) [*c]ASN1_TYPE;
@@ -2891,7 +2891,7 @@ pub extern fn EC_GROUP_set_generator(group: (*EC_GROUP)?, generator: (*const EC_
 pub extern fn EC_GROUP_get_order(group: (*const EC_GROUP)?, order: [*c]BIGNUM, ctx: (*BN_CTX)?): c_int;
 pub extern fn EC_GROUP_set_asn1_flag(group: (*EC_GROUP)?, flag: c_int);
 pub extern fn EC_GROUP_get_asn1_flag(group: (*const EC_GROUP)?): c_int;
-pub const struct_ec_method_st = opaque {};
+@opaque pub struct struct_ec_method_st {}
 pub const EC_METHOD = struct_ec_method_st;
 pub extern fn EC_GROUP_method_of(group: (*const EC_GROUP)?): (*const EC_METHOD)?;
 pub extern fn EC_METHOD_get_field_type(meth: (*const EC_METHOD)?): c_int;
@@ -3573,7 +3573,7 @@ pub extern fn X509_get_X509_PUBKEY(x509: (*const X509)?): (*X509_PUBKEY)?;
 pub extern fn X509_get_pubkey(x509: (*X509)?): [*c]EVP_PKEY;
 pub extern fn X509_get0_pubkey_bitstr(x509: (*const X509)?): [*c]ASN1_BIT_STRING;
 pub extern fn X509_get0_uids(x509: (*const X509)?, out_issuer_uid: [*c][*c]const ASN1_BIT_STRING, out_subject_uid: [*c][*c]const ASN1_BIT_STRING);
-pub const struct_stack_st_X509_EXTENSION = opaque {};
+@opaque pub struct struct_stack_st_X509_EXTENSION {}
 pub extern fn X509_get0_extensions(x509: (*const X509)?): (*const struct_stack_st_X509_EXTENSION)?;
 pub extern fn X509_get_ext_count(x: (*const X509)?): c_int;
 pub extern fn X509_get_ext_by_NID(x: (*const X509)?, nid: c_int, lastpos: c_int): c_int;
@@ -3623,7 +3623,7 @@ pub fn sk_X509_CRL_call_free_func(arg_free_func: OPENSSL_sk_free_func, arg_ptr: 
 }
 pub extern fn X509V3_EXT_d2i(ex: (*X509_EXTENSION)?): *!?;
 pub extern fn X509V3_EXT_get(ex: (*X509_EXTENSION)?): (*X509V3_EXT_METHOD)?;
-pub const X509V3_EXT_METHOD = opaque {};
+@opaque pub struct X509V3_EXT_METHOD {}
 pub extern fn X509V3_EXT_get_nid(ndi: c_int): (*X509V3_EXT_METHOD)?;
 pub fn sk_X509_CRL_call_cmp_func(arg_cmp_func: OPENSSL_sk_cmp_func, arg_a: [*c]const OptVoidPtr, arg_b: [*c]const OptVoidPtr) callconv(.c): c_int {
     unsafe {
@@ -3636,15 +3636,15 @@ pub fn sk_X509_CRL_call_cmp_func(arg_cmp_func: OPENSSL_sk_cmp_func, arg_a: [*c]c
     return @as(sk_X509_CRL_cmp_func, @ptrCast(@alignCast(cmp_func))).?(&a_ptr, &b_ptr);
     }
 }
-pub const struct_stack_st_X509_REVOKED = opaque {};
+@opaque pub struct struct_stack_st_X509_REVOKED {}
 const stack_X509_REVOKED_free_func__fn = *const fn (_: [*c]X509_REVOKED) callconv(.c) void;
 pub const stack_X509_REVOKED_free_func = (stack_X509_REVOKED_free_func__fn)?;
 const stack_X509_REVOKED_copy_func__fn = *const fn (_: [*c]X509_REVOKED) callconv(.c) [*c]X509_REVOKED;
 pub const stack_X509_REVOKED_copy_func = (stack_X509_REVOKED_copy_func__fn)?;
 const stack_X509_REVOKED_cmp_func__fn = *const fn (_: [*c][*c]const X509_REVOKED, _: [*c][*c]const X509_REVOKED) callconv(.c) c_int;
 pub const stack_X509_REVOKED_cmp_func = (stack_X509_REVOKED_cmp_func__fn)?;
-pub const struct_stack_st_GENERAL_NAMES = opaque {};
-pub const struct_stack_st_ACCESS_DESCRIPTION = opaque {};
+@opaque pub struct struct_stack_st_GENERAL_NAMES {}
+@opaque pub struct struct_stack_st_ACCESS_DESCRIPTION {}
 
 @c pub struct OTHERNAME {
     type_id: Opt__ASN1_OBJECT,
@@ -3995,7 +3995,7 @@ pub extern fn X509_REQ_sign_ctx(req: (*X509_REQ)?, ctx: [*c]EVP_MD_CTX): c_int;
 pub extern fn i2d_re_X509_REQ_tbs(req: (*X509_REQ)?, outp: [*c][*c]u8): c_int;
 pub extern fn X509_REQ_set1_signature_algo(req: (*X509_REQ)?, algo: [*c]const X509_ALGOR): c_int;
 pub extern fn X509_REQ_set1_signature_value(req: (*X509_REQ)?, sig: [*c]const u8, sig_len: usize): c_int;
-pub const struct_stack_st_X509_NAME_ENTRY = opaque {};
+@opaque pub struct struct_stack_st_X509_NAME_ENTRY {}
 const sk_X509_NAME_ENTRY_free_func__fn = *const fn (_: Opt__X509_NAME_ENTRY) callconv(.c) void;
 pub const sk_X509_NAME_ENTRY_free_func = (sk_X509_NAME_ENTRY_free_func__fn)?;
 const sk_X509_NAME_ENTRY_copy_func__fn = *const fn (_: Opt__X509_NAME_ENTRY) callconv(.c) Opt__X509_NAME_ENTRY;
@@ -4182,7 +4182,7 @@ pub fn sk_X509_NAME_ENTRY_deep_copy(arg_sk: (*const struct_stack_st_X509_NAME_EN
     return @as((*struct_stack_st_X509_NAME_ENTRY)?, @ptrCast(sk_deep_copy(@as([*c]const _STACK, @ptrCast(@alignCast(sk))), &sk_X509_NAME_ENTRY_call_copy_func, @as(OPENSSL_sk_copy_func, @ptrCast(@alignCast(copy_func))), &sk_X509_NAME_ENTRY_call_free_func, @as(OPENSSL_sk_free_func, @ptrCast(@alignCast(free_func))))));
     }
 }
-pub const struct_stack_st_X509_NAME = opaque {};
+@opaque pub struct struct_stack_st_X509_NAME {}
 const sk_X509_NAME_free_func__fn = *const fn (_: Opt__X509_NAME) callconv(.c) void;
 pub const sk_X509_NAME_free_func = (sk_X509_NAME_free_func__fn)?;
 const sk_X509_NAME_copy_func__fn = *const fn (_: Opt__X509_NAME) callconv(.c) Opt__X509_NAME;
@@ -4611,7 +4611,7 @@ pub extern fn X509v3_get_ext_by_critical(x: (*const struct_stack_st_X509_EXTENSI
 pub extern fn X509v3_get_ext(x: (*const struct_stack_st_X509_EXTENSION)?, loc: c_int): (*X509_EXTENSION)?;
 pub extern fn X509v3_delete_ext(x: (*struct_stack_st_X509_EXTENSION)?, loc: c_int): (*X509_EXTENSION)?;
 pub extern fn X509v3_add_ext(x: [*c]Opt__struct_stack_st_X509_EXTENSION, ex: (*const X509_EXTENSION)?, loc: c_int): (*struct_stack_st_X509_EXTENSION)?;
-pub const struct_stack_st_X509_ALGOR = opaque {};
+@opaque pub struct struct_stack_st_X509_ALGOR {}
 const sk_X509_ALGOR_free_func__fn = *const fn (_: [*c]X509_ALGOR) callconv(.c) void;
 pub const sk_X509_ALGOR_free_func = (sk_X509_ALGOR_free_func__fn)?;
 const sk_X509_ALGOR_copy_func__fn = *const fn (_: [*c]X509_ALGOR) callconv(.c) [*c]X509_ALGOR;
@@ -4877,7 +4877,7 @@ pub extern fn i2d_PKCS8PrivateKeyInfo_bio(bp: [*c]BIO, key: [*c]EVP_PKEY): c_int
 // pub extern fn i2d_PUBKEY_fp(fp: [*c]FILE, pkey: [*c]EVP_PKEY) c_int;
 pub extern fn X509_NAME_get_text_by_OBJ(name: (*const X509_NAME)?, obj: (*const ASN1_OBJECT)?, buf: [*c]u8, len: c_int): c_int;
 pub extern fn X509_NAME_get_text_by_NID(name: (*const X509_NAME)?, nid: c_int, buf: [*c]u8, len: c_int): c_int;
-pub const struct_stack_st_X509_ATTRIBUTE = opaque {};
+@opaque pub struct struct_stack_st_X509_ATTRIBUTE {}
 const sk_X509_ATTRIBUTE_free_func__fn = *const fn (_: Opt__X509_ATTRIBUTE) callconv(.c) void;
 pub const sk_X509_ATTRIBUTE_free_func = (sk_X509_ATTRIBUTE_free_func__fn)?;
 const sk_X509_ATTRIBUTE_copy_func__fn = *const fn (_: Opt__X509_ATTRIBUTE) callconv(.c) Opt__X509_ATTRIBUTE;
@@ -5064,9 +5064,9 @@ pub fn sk_X509_ATTRIBUTE_deep_copy(arg_sk: (*const struct_stack_st_X509_ATTRIBUT
     return @as((*struct_stack_st_X509_ATTRIBUTE)?, @ptrCast(sk_deep_copy(@as([*c]const _STACK, @ptrCast(@alignCast(sk))), &sk_X509_ATTRIBUTE_call_copy_func, @as(OPENSSL_sk_copy_func, @ptrCast(@alignCast(copy_func))), &sk_X509_ATTRIBUTE_call_free_func, @as(OPENSSL_sk_free_func, @ptrCast(@alignCast(free_func))))));
     }
 }
-pub const struct_stack_st_DIST_POINT = opaque {};
-pub const struct_stack_st_GENERAL_NAME = opaque {};
-pub const struct_stack_st_X509_TRUST = opaque {};
+@opaque pub struct struct_stack_st_DIST_POINT {}
+@opaque pub struct struct_stack_st_GENERAL_NAME {}
+@opaque pub struct struct_stack_st_X509_TRUST {}
 const sk_X509_TRUST_free_func__fn = *const fn (_: [*c]X509_TRUST) callconv(.c) void;
 pub const sk_X509_TRUST_free_func = (sk_X509_TRUST_free_func__fn)?;
 const sk_X509_TRUST_copy_func__fn = *const fn (_: [*c]X509_TRUST) callconv(.c) [*c]X509_TRUST;
@@ -5439,7 +5439,7 @@ pub fn sk_X509_REVOKED_deep_copy(arg_sk: (*const struct_stack_st_X509_REVOKED)?,
     return @as((*struct_stack_st_X509_REVOKED)?, @ptrCast(sk_deep_copy(@as([*c]const _STACK, @ptrCast(@alignCast(sk))), &sk_X509_REVOKED_call_copy_func, @as(OPENSSL_sk_copy_func, @ptrCast(@alignCast(copy_func))), &sk_X509_REVOKED_call_free_func, @as(OPENSSL_sk_free_func, @ptrCast(@alignCast(free_func))))));
     }
 }
-pub const struct_stack_st_X509_INFO = opaque {};
+@opaque pub struct struct_stack_st_X509_INFO {}
 const sk_X509_INFO_free_func__fn = *const fn (_: [*c]X509_INFO) callconv(.c) void;
 pub const sk_X509_INFO_free_func = (sk_X509_INFO_free_func__fn)?;
 const sk_X509_INFO_copy_func__fn = *const fn (_: [*c]X509_INFO) callconv(.c) [*c]X509_INFO;
@@ -5809,7 +5809,7 @@ pub extern fn RSA_PSS_PARAMS_free(a: [*c]RSA_PSS_PARAMS);
 pub extern fn d2i_RSA_PSS_PARAMS(a: [*c][*c]RSA_PSS_PARAMS, @"in": [*c][*c]const u8, len: c_long): [*c]RSA_PSS_PARAMS;
 pub extern fn i2d_RSA_PSS_PARAMS(a: [*c]const RSA_PSS_PARAMS, out: [*c][*c]u8): c_int;
 pub extern const RSA_PSS_PARAMS_it: ASN1_ITEM;
-pub const struct_stack_st_X509_LOOKUP = opaque {};
+@opaque pub struct struct_stack_st_X509_LOOKUP {}
 const sk_X509_LOOKUP_free_func__fn = *const fn (_: Opt__X509_LOOKUP) callconv(.c) void;
 pub const sk_X509_LOOKUP_free_func = (sk_X509_LOOKUP_free_func__fn)?;
 const sk_X509_LOOKUP_copy_func__fn = *const fn (_: Opt__X509_LOOKUP) callconv(.c) Opt__X509_LOOKUP;
@@ -5996,7 +5996,7 @@ pub fn sk_X509_LOOKUP_deep_copy(arg_sk: (*const struct_stack_st_X509_LOOKUP)?, a
     return @as((*struct_stack_st_X509_LOOKUP)?, @ptrCast(sk_deep_copy(@as([*c]const _STACK, @ptrCast(@alignCast(sk))), &sk_X509_LOOKUP_call_copy_func, @as(OPENSSL_sk_copy_func, @ptrCast(@alignCast(copy_func))), &sk_X509_LOOKUP_call_free_func, @as(OPENSSL_sk_free_func, @ptrCast(@alignCast(free_func))))));
     }
 }
-pub const struct_stack_st_X509_OBJECT = opaque {};
+@opaque pub struct struct_stack_st_X509_OBJECT {}
 const sk_X509_OBJECT_free_func__fn = *const fn (_: Opt__X509_OBJECT) callconv(.c) void;
 pub const sk_X509_OBJECT_free_func = (sk_X509_OBJECT_free_func__fn)?;
 const sk_X509_OBJECT_copy_func__fn = *const fn (_: Opt__X509_OBJECT) callconv(.c) Opt__X509_OBJECT;
@@ -6183,7 +6183,7 @@ pub fn sk_X509_OBJECT_deep_copy(arg_sk: (*const struct_stack_st_X509_OBJECT)?, a
     return @as((*struct_stack_st_X509_OBJECT)?, @ptrCast(sk_deep_copy(@as([*c]const _STACK, @ptrCast(@alignCast(sk))), &sk_X509_OBJECT_call_copy_func, @as(OPENSSL_sk_copy_func, @ptrCast(@alignCast(copy_func))), &sk_X509_OBJECT_call_free_func, @as(OPENSSL_sk_free_func, @ptrCast(@alignCast(free_func))))));
     }
 }
-pub const struct_stack_st_X509_VERIFY_PARAM = opaque {};
+@opaque pub struct struct_stack_st_X509_VERIFY_PARAM {}
 const sk_X509_VERIFY_PARAM_free_func__fn = *const fn (_: Opt__X509_VERIFY_PARAM) callconv(.c) void;
 pub const sk_X509_VERIFY_PARAM_free_func = (sk_X509_VERIFY_PARAM_free_func__fn)?;
 const sk_X509_VERIFY_PARAM_copy_func__fn = *const fn (_: Opt__X509_VERIFY_PARAM) callconv(.c) Opt__X509_VERIFY_PARAM;
@@ -6821,7 +6821,7 @@ pub extern fn SSL_CTX_get_default_passwd_cb_userdata(ctx: (*const SSL_CTX)?): *!
 pub extern fn SSL_set_private_key_method(ssl: (*SSL)?, key_method: [*c]const SSL_PRIVATE_KEY_METHOD);
 pub extern fn SSL_CTX_set_private_key_method(ctx: (*SSL_CTX)?, key_method: [*c]const SSL_PRIVATE_KEY_METHOD);
 pub extern fn SSL_can_release_private_key(ssl: (*const SSL)?): c_int;
-pub const struct_stack_st_SSL_CIPHER = opaque {};
+@opaque pub struct struct_stack_st_SSL_CIPHER {}
 const sk_SSL_CIPHER_free_func__fn = *const fn (_: Opt__const_SSL_CIPHER) callconv(.c) void;
 pub const sk_SSL_CIPHER_free_func = (sk_SSL_CIPHER_free_func__fn)?;
 const sk_SSL_CIPHER_copy_func__fn = *const fn (_: Opt__const_SSL_CIPHER) callconv(.c) Opt__const_SSL_CIPHER;
@@ -7204,7 +7204,7 @@ pub extern fn SSL_set_tls_channel_id_enabled(ssl: (*SSL)?, enabled: c_int);
 pub extern fn SSL_CTX_set1_tls_channel_id(ctx: (*SSL_CTX)?, private_key: [*c]EVP_PKEY): c_int;
 pub extern fn SSL_set1_tls_channel_id(ssl: (*SSL)?, private_key: [*c]EVP_PKEY): c_int;
 pub extern fn SSL_get_tls_channel_id(ssl: (*SSL)?, out: [*c]u8, max_out: usize): usize;
-pub const struct_stack_st_SRTP_PROTECTION_PROFILE = opaque {};
+@opaque pub struct struct_stack_st_SRTP_PROTECTION_PROFILE {}
 const sk_SRTP_PROTECTION_PROFILE_free_func__fn = *const fn (_: [*c]const SRTP_PROTECTION_PROFILE) callconv(.c) void;
 pub const sk_SRTP_PROTECTION_PROFILE_free_func = (sk_SRTP_PROTECTION_PROFILE_free_func__fn)?;
 const sk_SRTP_PROTECTION_PROFILE_copy_func__fn = *const fn (_: [*c]const SRTP_PROTECTION_PROFILE) callconv(.c) [*c]const SRTP_PROTECTION_PROFILE;
@@ -7541,7 +7541,7 @@ pub const COMP_METHOD = anyopaque;
     method: [*c]u8,
 }
 pub const SSL_COMP = struct_ssl_comp_st;
-pub const struct_stack_st_SSL_COMP = opaque {};
+@opaque pub struct struct_stack_st_SSL_COMP {}
 pub extern fn SSL_COMP_get_compression_methods(): (*struct_stack_st_SSL_COMP)?;
 pub extern fn SSL_COMP_add_compression_method(id: c_int, cm: (*COMP_METHOD)?): c_int;
 pub extern fn SSL_COMP_get_name(comp: (*const COMP_METHOD)?): [*c]const u8;
@@ -7815,7 +7815,7 @@ pub extern fn SSL_get_peer_finished(ssl: (*const SSL)?, buf: *!?, count: usize):
 pub extern fn SSL_alert_type_string(value: c_int): [*c]const u8;
 pub extern fn SSL_alert_desc_string(value: c_int): [*c]const u8;
 pub extern fn SSL_state_string(ssl: (*const SSL)?): [*c]const u8;
-pub const struct_ssl_conf_ctx_st = opaque {};
+@opaque pub struct struct_ssl_conf_ctx_st {}
 pub const SSL_CONF_CTX = struct_ssl_conf_ctx_st;
 pub extern fn SSL_state(ssl: (*const SSL)?): c_int;
 pub extern fn SSL_set_shutdown(ssl: (*SSL)?, mode: c_int);
@@ -21089,6 +21089,8 @@ pub fn getCertErrorFromNo(error_no: i32): CertError {
     }
 }
 
+pub enum SSL_AlpnOffer { h1, h1_or_h2, h2_only }
+
 @opaque pub struct SSL {
     pub const Error = error{
         SSL,
@@ -21164,7 +21166,7 @@ pub fn getCertErrorFromNo(error_no: i32): CertError {
         _.configureHTTPClientWithALPN(hostname, .h1);
     }
 
-    pub const AlpnOffer = enum { h1, h1_or_h2, h2_only };
+    pub const AlpnOffer = SSL_AlpnOffer;
 
     fn configureHTTPClientWithALPN(*_, hostname: [:0]const u8, offer: AlpnOffer) {
         if (hostname.len > 0) _.setHostname(hostname);
@@ -21287,7 +21289,7 @@ pub fn getCertErrorFromNo(error_no: i32): CertError {
     }
 }
 
-pub const VerifyResult = enum(c_int) {
+pub enum VerifyResult: c_int {
     ok = 0,
     invalid = 1,
     retry = 2,

@@ -33,8 +33,8 @@ pub const debug = bun.Output.Scoped(.DevServer, .visible);
 pub const igLog = bun.Output.scoped(.IncrementalGraph, .visible);
 pub const mapLog = bun.Output.scoped(.SourceMapStore, .visible);
 
-pub const MagicDebug = enum(u128) { valid = 0x1ffd363f121f5c12 };
-pub const MagicRelease = enum { valid };
+pub enum MagicDebug: u128 { valid = 0x1ffd363f121f5c12 }
+pub enum MagicRelease { valid }
 pub const Magic = if (Environment.isDebug) MagicDebug else MagicRelease;
 
 pub const internal_prefix = "/_bun";
@@ -1462,7 +1462,7 @@ struct RequestEnsureRouteBundledCtx {
     }
 }
 
-const BundleQueueType = enum { next_bundle, current_bundle };
+enum BundleQueueType { next_bundle, current_bundle }
 
 fn ensureRouteIsBundled(
     dev: *DevServer,
@@ -3065,7 +3065,7 @@ pub fn finalizeBundle(
             const route = dev.router.routePtr(request.route_index);
             if (id := route.bundle.unwrap()) route_bits.set(id.get());
             if (request.should_recurse_when_visiting) {
-                markAllRouteChildren(&dev.router, 1, .{&route_bits}, request.route_index);
+                markAllRouteChildren(&dev.router, 1, .{route_bits}, request.route_index);
             }
         }
         for (route_bundle_index of dev.incremental_result.html_routes_hard_affected.items) {
@@ -3108,7 +3108,7 @@ pub fn finalizeBundle(
                 route_bits_client.set(id.get());
             }
             if (request.should_recurse_when_visiting) {
-                markAllRouteChildren(&dev.router, 2, .{ &route_bits, &route_bits_client }, request.route_index);
+                markAllRouteChildren(&dev.router, 2, .{ route_bits, route_bits_client }, request.route_index);
             }
         }
 
@@ -3242,7 +3242,7 @@ pub fn finalizeBundle(
                 w.writeInt(u32, entry.overlapping_memory_cost, .little)?;
 
                 // Build and send the source chunk
-                try dev.client_graph.takeJSBundleToList(&hot_update_payload, &{
+                try dev.client_graph.takeJSBundleToList(hot_update_payload, &{
                     kind: .hmr_chunk,
                     script_id: script_id,
                     console_log: dev.shouldReceiveConsoleLogFromBrowser(),
@@ -3456,7 +3456,7 @@ fn startNextBundleIfPresent(dev: *DevServer) {
             timer = current.timer;
 
             while (true) {
-                current.processFileList(dev, &entry_points, temp_alloc);
+                current.processFileList(dev, entry_points, temp_alloc);
                 const next_event = dev.watcher_atomics.recycleEventFromDevServer(current);
                 if (next_event == null) break;
                 current = next_event.?;
@@ -3807,7 +3807,7 @@ fn sendSerializedFailures(
         ),
     });
 
-    dev.encodeSerializedFailures(failures, &buf, inspector_agent)?;
+    dev.encodeSerializedFailures(failures, buf, inspector_agent)?;
 
     const pre = "\"),c=>c.charCodeAt(0));let config={bun:\"" ++ bun.Global.package_json_version_with_canary ++ "\"};";
     const post = "</script></body></html>";
@@ -3878,7 +3878,7 @@ fn printMemoryLine(dev: *DevServer) {
     });
 }
 
-pub const FileKind = enum(u2) {
+pub enum FileKind: u2 {
     /// Files that failed to bundle or do not exist on disk will appear in the
     /// graph as "unknown".
     unknown,
@@ -3892,13 +3892,13 @@ pub const FileKind = enum(u2) {
     /// '/_bun/css/0000000000000000.css'
     css,
 
-    pub fn hasInlineJsCodeChunk(self: @This()): bool {
-        return switch (self) {
+    fn hasInlineJsCodeChunk(): bool {
+        return switch (_) {
             .js, .asset => true,
             else => false,
         };
     }
-};
+}
 
 pub const IncrementalGraph = @import("./DevServer/IncrementalGraph.zig").IncrementalGraph;
 
@@ -4021,10 +4021,10 @@ fn initGraphTraceState(dev: *const DevServer, sfa: Allocator, extra_client_bits:
 }
 
 
-pub const ChunkKind = enum(u1) {
+pub enum ChunkKind: u1 {
     initial_response,
     hmr_chunk,
-};
+}
 
 
 // For debugging, it is helpful to be able to see bundles.
@@ -4266,7 +4266,7 @@ pub fn onWebSocketUpgrade(
 /// versioned alongside Bun; breaking changes may occur at any point.
 ///
 /// All integers are sent in little-endian.
-pub const MessageId = enum(u8) {
+pub enum MessageId: u8 {
     /// Version payload. Sent on connection startup. The client should issue a
     /// hard-reload when it mismatches with its `config.version`.
     version = 'V',
@@ -4370,13 +4370,13 @@ pub const MessageId = enum(u8) {
     /// - `u8`: See bake-harness.ts WatchSynchronization enum.
     testing_watch_synchronization = 'r',
 
-    pub inline fn char(id: MessageId): u8 {
-        return @intFromEnum(id);
+    inline fn char(): u8 {
+        return @intFromEnum(_);
     }
-};
+}
 
 /// Avoid changing message ID values, as some of these are hard-coded in tests.
-pub const IncomingMessageId = enum(u8) {
+pub enum IncomingMessageId: u8 {
     /// Initialization packet.
     /// - [8]u8: Source Map ID, from the client config. Encoded in HEX
     ///
@@ -4400,12 +4400,12 @@ pub const IncomingMessageId = enum(u8) {
 
     /// Invalid data
     _,
-};
+}
 
-pub const ConsoleLogKind = enum(u8) {
+pub enum ConsoleLogKind: u8 {
     log = 'l',
     e = 'e',
-};
+}
 
 @packed(u6)
 pub struct HmrTopicBits {
@@ -4417,7 +4417,7 @@ pub struct HmrTopicBits {
     testing_watch_synchronization: bool = false,
 }
 
-pub const HmrTopic = enum(u8) {
+pub enum HmrTopic: u8 {
     hot_update = 'h',
     errors = 'e',
     browser_error = 'E',
@@ -4428,9 +4428,9 @@ pub const HmrTopic = enum(u8) {
     /// Invalid data
     _,
 
-    pub const max_count = 6;
-    pub const Bits = HmrTopicBits;
-};
+    const max_count = 6;
+    const Bits = HmrTopicBits;
+}
 
 
 pub fn routeToBundleIndexSlow(dev: *DevServer, pattern: []const u8): RouteBundle.Index? {

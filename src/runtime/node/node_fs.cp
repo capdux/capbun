@@ -667,6 +667,76 @@ pub const ShellAsyncCpTask = NewAsyncCpTask(true);
 
 type ShellCpTaskPtr = *bun.shell.Interpreter.Builtin.Cp.ShellCpTask;
 
+/// This task is used by `AsyncCpTask/fs.promises.cp` to copy a single file.
+/// When clonefile cannot be used, this task is started once per file.
+pub fn NewAsyncCpSingleTask(comptime ThisAsyncCpTask: type): type {
+    return struct {
+        cp_task: *ThisAsyncCpTask,
+        src: bun.OSPathSliceZ,
+        dest: bun.OSPathSliceZ,
+        task: jsc.WorkPoolTask = { callback: &workPoolCallback },
+
+        const ThisSingleTask = @This();
+
+        pub fn create(
+            parent: *ThisAsyncCpTask,
+            src: bun.OSPathSliceZ,
+            dest: bun.OSPathSliceZ,
+        ) {
+            let task = bun.new(ThisSingleTask, {
+                cp_task: parent,
+                src: src,
+                dest: dest,
+            });
+
+            jsc.WorkPool.schedule(&task.task);
+        }
+
+        static fn workPoolCallback(task: *jsc.WorkPoolTask) {
+            let st: *ThisSingleTask = @fieldParentPtr("task", task);
+            const parent = st.cp_task;
+
+            // TODO: error strings on node_fs will die
+            let node_fs = NodeFS{};
+
+            const args = parent.args;
+            const result = node_fs._copySingleFileSync(
+                st.src,
+                st.dest,
+                @enumFromInt((if (args.flags.errorOnExist || !args.flags.force) constants.COPYFILE_EXCL else @as(u8, 0))),
+                null,
+                parent.args,
+            );
+
+            brk: {
+                switch (result) {
+                    .err e => {
+                        if (e.errno == @intFromEnum(E.EXIST) && !args.flags.errorOnExist) {
+                            break :brk;
+                        }
+                        parent.finishConcurrently(result);
+                    },
+                    .result => {
+                        parent.onCopy(st.src, st.dest);
+                    },
+                }
+            }
+
+            st.deinit();
+            // Must be the very last use of `parent`: when the count reaches
+            // zero, runFromJSThread is enqueued and may destroy the parent.
+            parent.onSubtaskDone();
+        }
+
+        pub fn deinit(*_) {
+            // There is only one path buffer for both paths. 2 extra bytes are the nulls at the end of each
+            bun.default_allocator.free(_.src.ptr[0 .. _.src.len + _.dest.len + 2]);
+
+            bun.destroy(_);
+        }
+    };
+}
+
 pub fn NewAsyncCpTask(comptime is_shell: bool): type {
     const ShellTask = bun.shell.Interpreter.Builtin.Cp.ShellCpTask;
     const ShellTaskT = if (is_shell) ShellCpTaskPtr else u0;
@@ -698,71 +768,7 @@ pub fn NewAsyncCpTask(comptime is_shell: bool): type {
 
         /// This task is used by `AsyncCpTask/fs.promises.cp` to copy a single file.
         /// When clonefile cannot be used, this task is started once per file.
-        pub const SingleTask = struct {
-            cp_task: *ThisAsyncCpTask,
-            src: bun.OSPathSliceZ,
-            dest: bun.OSPathSliceZ,
-            task: jsc.WorkPoolTask = { callback: &SingleTask.workPoolCallback },
-
-            const ThisSingleTask = @This();
-
-            pub fn create(
-                parent: *ThisAsyncCpTask,
-                src: bun.OSPathSliceZ,
-                dest: bun.OSPathSliceZ,
-            ) {
-                let task = bun.new(ThisSingleTask, {
-                    cp_task: parent,
-                    src: src,
-                    dest: dest,
-                });
-
-                jsc.WorkPool.schedule(&task.task);
-            }
-
-            static fn workPoolCallback(task: *jsc.WorkPoolTask) {
-                let st: *ThisSingleTask = @fieldParentPtr("task", task);
-                const parent = st.cp_task;
-
-                // TODO: error strings on node_fs will die
-                let node_fs = NodeFS{};
-
-                const args = parent.args;
-                const result = node_fs._copySingleFileSync(
-                    st.src,
-                    st.dest,
-                    @enumFromInt((if (args.flags.errorOnExist || !args.flags.force) constants.COPYFILE_EXCL else @as(u8, 0))),
-                    null,
-                    parent.args,
-                );
-
-                brk: {
-                    switch (result) {
-                        .err e => {
-                            if (e.errno == @intFromEnum(E.EXIST) && !args.flags.errorOnExist) {
-                                break :brk;
-                            }
-                            parent.finishConcurrently(result);
-                        },
-                        .result => {
-                            parent.onCopy(st.src, st.dest);
-                        },
-                    }
-                }
-
-                st.deinit();
-                // Must be the very last use of `parent`: when the count reaches
-                // zero, runFromJSThread is enqueued and may destroy the parent.
-                parent.onSubtaskDone();
-            }
-
-            pub fn deinit(*_) {
-                // There is only one path buffer for both paths. 2 extra bytes are the nulls at the end of each
-                bun.default_allocator.free(_.src.ptr[0 .. _.src.len + _.dest.len + 2]);
-
-                bun.destroy(_);
-            }
-        };
+        pub const SingleTask = NewAsyncCpSingleTask(ThisAsyncCpTask);
 
         pub fn onCopy(*_, src: auto, dest: auto) {
             if (comptime !is_shell) return;

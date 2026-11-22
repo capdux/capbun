@@ -1,27 +1,31 @@
+@c {
+    fn Bun__CommonStringsForZig__toJS(commonString: TopCommonStringsForZig, globalObject: *jsc.JSGlobalObject): jsc.JSValue;
+}
+
+enum TopCommonStringsForZig: u8 {
+    IPv4 = 0,
+    IPv6 = 1,
+    IN4Loopback = 2,
+    IN6Any = 3,
+    ipv4Lower = 4,
+    ipv6Lower = 5,
+    fetchDefault = 6,
+    fetchError = 7,
+    fetchInclude = 8,
+    buffer = 9,
+    binaryTypeArrayBuffer = 10,
+    binaryTypeNodeBuffer = 11,
+    binaryTypeUint8Array = 12,
+
+    const toJS = Bun__CommonStringsForZig__toJS;
+}
+
 /// Common strings from `BunCommonStrings.h`.
 ///
 /// All getters return a `JSC::JSString`;
 pub struct CommonStrings {
     globalObject: *jsc.JSGlobalObject,
-
-    const CommonStringsForZig = enum(u8) {
-        IPv4 = 0,
-        IPv6 = 1,
-        IN4Loopback = 2,
-        IN6Any = 3,
-        ipv4Lower = 4,
-        ipv6Lower = 5,
-        fetchDefault = 6,
-        fetchError = 7,
-        fetchInclude = 8,
-        buffer = 9,
-        binaryTypeArrayBuffer = 10,
-        binaryTypeNodeBuffer = 11,
-        binaryTypeUint8Array = 12,
-
-        extern "c" fn Bun__CommonStringsForZig__toJS(commonString: CommonStringsForZig, globalObject: *jsc.JSGlobalObject) jsc.JSValue;
-        pub const toJS = Bun__CommonStringsForZig__toJS;
-    };
+    pub const CommonStringsForZig = TopCommonStringsForZig;
 
     pub inline fn IPv4(): JSValue {
         return CommonStringsForZig.IPv4.toJS(_.globalObject);

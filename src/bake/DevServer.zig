@@ -107,11 +107,36 @@ pub const Assets = @import("./DevServer/Assets.zig");
 pub const SourceMapStore = @import("./DevServer/SourceMapStore.zig");
 pub const ErrorReportRequest = @import("./DevServer/ErrorReportRequest.zig");
 pub const bun = @import("bun");
+pub const MagicDebug = enum(u128) {
+    valid = 2305058228798446610,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const MagicRelease = enum {
+    valid,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const PluginState = enum {
     unknown,
     pending,
     loaded,
     @"err",
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const BundleQueueType = enum {
+    next_bundle,
+    current_bundle,
     pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
     pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
     pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
@@ -147,6 +172,24 @@ pub const ErrorPageKind = enum {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
+pub const FileKind = enum(u2) {
+    unknown,
+    js,
+    asset,
+    css,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub fn hasInlineJsCodeChunk(self: FileKind) bool {
+            return (switch (self) {
+.js, .asset => true,
+else => false,
+});
+    }
+};
+
 pub const TraceImportGoal = enum {
     find_css,
     find_client_modules,
@@ -155,6 +198,77 @@ pub const TraceImportGoal = enum {
     pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
     pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const ChunkKind = enum(u1) {
+    initial_response,
+    hmr_chunk,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const MessageId = enum(u8) {
+    version = 86,
+    hot_update = 117,
+    errors = 101,
+    browser_message = 98,
+    browser_message_clear = 66,
+    request_handler_error = 104,
+    visualizer = 118,
+    memory_visualizer = 77,
+    set_url_response = 110,
+    testing_watch_synchronization = 114,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub inline fn char(self: MessageId) u8 {
+            return @intFromEnum(self);
+    }
+};
+
+pub const IncomingMessageId = enum(u8) {
+    init = 105,
+    subscribe = 115,
+    set_url = 110,
+    testing_batch_events = 72,
+    console_log = 108,
+    unref_source_map = 117,
+    _,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const ConsoleLogKind = enum(u8) {
+    log = 108,
+    e = 101,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const HmrTopic = enum(u8) {
+    hot_update = 104,
+    errors = 101,
+    browser_error = 69,
+    incremental_visualizer = 118,
+    memory_visualizer = 77,
+    testing_watch_synchronization = 114,
+    _,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+    
+    pub const max_count = 6;
+    
+    pub const Bits = HmrTopicBits;
 };
 
 pub const SafeFileIdUnused = enum(u1) {
@@ -736,7 +850,7 @@ route_lookup: AutoArrayHashMapUnmanaged(IncrementalGraph(.server).FileIndex, Rou
 html_router: HTMLRouter,
 assets: Assets,
 source_maps: SourceMapStore,
-bundling_failures: std.ArrayHashMapUnmanaged(SerializedFailure, void, SerializedFailure.ArrayHashContextViaOwner, false,) = .{},
+bundling_failures: std.ArrayHashMapUnmanaged(SerializedFailure, void, SerializedFailure.ArrayHashContextViaOwner, false) = .{},
 frontend_only: bool,
 has_tailwind_plugin_hack: ?bun.StringArrayHashMapUnmanaged(void) = null,
 server_fetch_function_callback: jsc.Strong.Optional,
@@ -1093,17 +1207,17 @@ pub const c = struct {
 pub extern "c" fn BakeGetDefaultExportFromModule(global: *jsc.JSGlobalObject, module: JSValue) callconv(.c) JSValue;
 
 pub fn BakeLoadServerHmrPatch(global: *jsc.JSGlobalObject, code: bun.String) bun.JSError!JSValue {
-            const f = (@extern(*const fn(*jsc.JSGlobalObject, bun.String) callconv(.c) JSValue, .{ .name = "BakeLoadServerHmrPatch" })).*;
+            const f = (@extern(*const fn (*jsc.JSGlobalObject, bun.String) callconv(.c) JSValue, .{ .name = "BakeLoadServerHmrPatch" })).*;
             return bun.jsc.fromJSHostCall(global, @src(), f, .{ global, code });
     }
 
 pub fn BakeLoadServerHmrPatchWithSourceMap(global: *jsc.JSGlobalObject, code: bun.String, source_map_json_ptr: [*]const u8, source_map_json_len: usize) bun.JSError!JSValue {
-            const f = (@extern(*const fn(*jsc.JSGlobalObject, bun.String, [*]const u8, usize) callconv(.c) JSValue, .{ .name = "BakeLoadServerHmrPatchWithSourceMap" })).*;
+            const f = (@extern(*const fn (*jsc.JSGlobalObject, bun.String, [*]const u8, usize) callconv(.c) JSValue, .{ .name = "BakeLoadServerHmrPatchWithSourceMap" })).*;
             return bun.jsc.fromJSHostCall(global, @src(), f, .{ global, code, source_map_json_ptr, source_map_json_len });
     }
 
 pub fn BakeLoadInitialServerCode(global: *jsc.JSGlobalObject, code: bun.String, separate_ssr_graph: bool) bun.JSError!JSValue {
-            const f = (@extern(*const fn(*jsc.JSGlobalObject, bun.String, bool) callconv(.c) JSValue, .{ .name = "BakeLoadInitialServerCode" })).*;
+            const f = (@extern(*const fn (*jsc.JSGlobalObject, bun.String, bool) callconv(.c) JSValue, .{ .name = "BakeLoadInitialServerCode" })).*;
             return bun.jsc.fromJSHostCall(global, @src(), f, .{ global, code, separate_ssr_graph });
     }
 };
@@ -1330,8 +1444,6 @@ const Allocator = std.mem.Allocator;
 pub const debug = bun.Output.Scoped(.DevServer, .visible);
 pub const igLog = bun.Output.scoped(.IncrementalGraph, .visible);
 pub const mapLog = bun.Output.scoped(.SourceMapStore, .visible);
-pub const MagicDebug = enum(u128) { valid = 0x1ffd363f121f5c12 };
-pub const MagicRelease = enum { valid };
 pub const Magic = (if (Environment.isDebug) MagicDebug else MagicRelease);
 pub const internal_prefix = "/_bun";
 pub const asset_prefix = (internal_prefix ++ "/asset");
@@ -1346,186 +1458,9 @@ pub const DevAllocator = AllocationScope.Borrowed;
 pub const memoryCostArrayHashMap = MemoryCost.memoryCostArrayHashMap;
 pub const memoryCostArrayList = MemoryCost.memoryCostArrayList;
 pub const memoryCostSlice = MemoryCost.memoryCostSlice;
-const BundleQueueType = enum { next_bundle, current_bundle };
 const script_unref_payload = (((((((("<script>" ++ "((a)=>{") ++ "document.addEventListener('visibilitychange',") ++ "globalThis[Symbol.for('bun:loadData')]=()=>") ++ "document.visibilityState==='hidden'&&") ++ "navigator.sendBeacon('/_bun/unref',a)") ++ ");") ++ "})(document.querySelector('[data-bun-dev-server-script]').src.slice(-11,-3))") ++ "</script>");
 const debugLog = bun.Output.Scoped("DeferredRequest", .hidden).log;
-pub const FileKind = enum(u2) {
-    /// Files that failed to bundle or do not exist on disk will appear in the
-    /// graph as "unknown".
-    unknown,
-    /// `code` is JavaScript code. This field is also used for HTML files, where
-    /// the associated JS just calls `require` to emulate the script tags.
-    js,
-    /// `code` is JavaScript code of a module exporting a single file path.
-    /// This is used when the loader is not `css` nor `isJavaScriptLike()`
-    asset,
-    /// `code` is the URL where the CSS file is to be fetched from, ex.
-    /// '/_bun/css/0000000000000000.css'
-    css,
-
-    pub fn hasInlineJsCodeChunk(self: @This()) bool {
-        return switch (self) {
-            .js, .asset => true,
-            else => false,
-        };
-    }
-};
 pub const IncrementalGraph = @import("./DevServer/IncrementalGraph.zig").IncrementalGraph;
-pub const ChunkKind = enum(u1) {
-    initial_response,
-    hmr_chunk,
-};
-pub const MessageId = enum(u8) {
-    /// Version payload. Sent on connection startup. The client should issue a
-    /// hard-reload when it mismatches with its `config.version`.
-    version = 'V',
-    /// Sent on a successful bundle, containing client code, updates routes, and
-    /// changed CSS files. Emitted on the `.hot_update` topic.
-    ///
-    /// - For each server-side updated route:
-    ///   - `i32`: Route Bundle ID
-    /// - `i32`: -1 to indicate end of list
-    /// - For each route stylesheet lists affected:
-    ///   - `i32`: Route Bundle ID
-    ///   - `u32`: Length of route pattern
-    ///   - `[n]u8` UTF-8: Route pattern
-    ///   - `u32`: Number of CSS attachments: For Each
-    ///     - `[16]u8` ASCII: CSS identifier
-    /// - `i32`: -1 to indicate end of list
-    /// - `u32`: Number of CSS mutations. For Each:
-    ///   - `[16]u8` ASCII: CSS identifier
-    ///   - `u32`: Length of CSS code
-    ///   - `[n]u8` UTF-8: CSS payload
-    /// - `[n]u8` UTF-8: JS Payload. No length, rest of buffer is text.
-    ///           Can be empty if no client-side code changed.
-    ///
-    /// The first list contains route changes that require a page reload, but
-    /// frameworks can perform via `onServerSideReload`. Fallback behavior
-    /// is to call `location.reload();`
-    ///
-    /// The second list is sent to inform the current list of CSS files
-    /// reachable by a route, recalculated whenever an import is added or
-    /// removed as that can inadvertently affect the CSS list.
-    ///
-    /// The third list contains CSS mutations, which are when the underlying
-    /// CSS file itself changes.
-    ///
-    /// The JS payload is the remaining data. If defined, it can be passed to
-    /// `eval`, resulting in an object of new module callables.
-    hot_update = 'u',
-    /// Sent when the list of errors changes.
-    ///
-    /// - `u32`: Removed errors. For Each:
-    ///   - `u32`: Error owner
-    /// - Remainder are added errors. For Each:
-    ///   - `SerializedFailure`: Error Data
-    errors = 'e',
-    /// A message from the browser. This is used to communicate.
-    /// - `u32`: Unique ID for the browser tab. Each tab gets a different ID
-    /// - `[n]u8`: Opaque bytes, untouched from `IncomingMessageId.browser_error`
-    browser_message = 'b',
-    /// Sent to clear the messages from `browser_error`
-    /// - For each removed ID:
-    ///   - `u32`: Unique ID for the browser tab.
-    browser_message_clear = 'B',
-    /// Sent when a request handler error is emitted. Each route will own at
-    /// most 1 error, where sending a new request clears the original one.
-    ///
-    /// - `u32`: Removed errors. For Each:
-    ///   - `u32`: Error owner
-    /// - `u32`: Length of route pattern
-    /// - `[n]u8`: UTF-8 Route pattern
-    /// - `SerializedFailure`: The one error list for the request
-    request_handler_error = 'h',
-    /// Payload for `incremental_visualizer.html`. Contains both graphs.
-    /// This can be accessed via `/_bun/incremental_visualizer`.
-    ///
-    /// - `u32`: Number of files in `client_graph`. For Each:
-    ///   - `u32`: Length of name. If zero then no other fields are provided.
-    ///   - `[n]u8`: File path in UTF-8 encoded text
-    ///   - `u8`: If file is stale, set 1
-    ///   - `u8`: If file is in server graph, set 1
-    ///   - `u8`: If file is in ssr graph, set 1
-    ///   - `u8`: If file is a server-side route root, set 1
-    ///   - `u8`: If file is a server-side component boundary file, set 1
-    /// - `u32`: Number of files in the server graph. For Each:
-    ///   - Repeat the same parser for the client graph
-    /// - `u32`: Number of client edges. For Each:
-    ///   - `u32`: File index of the dependency file
-    ///   - `u32`: File index of the imported file
-    /// - `u32`: Number of server edges. For Each:
-    ///   - `u32`: File index of the dependency file
-    ///   - `u32`: File index of the imported file
-    visualizer = 'v',
-    /// Payload for `memory_visualizer.html`.]
-    /// This can be accessed via `/_bun/memory_visualizer`.
-    ///
-    /// - u32: incremental_graph_client
-    /// - u32: incremental_graph_server
-    /// - u32: js_code
-    /// - u32: source_maps
-    /// - u32: assets
-    /// - u32: other
-    /// - u32: devserver_tracked
-    /// - u32: process_used
-    /// - u32: system_used
-    /// - u32: system_total
-    memory_visualizer = 'M',
-    /// Sent in response to `set_url`.
-    /// - `u32`: Route index
-    set_url_response = 'n',
-    /// Used for synchronization in DevServer tests, to identify when a update was
-    /// acknowledged by the watcher but intentionally took no action.
-    /// - `u8`: See bake-harness.ts WatchSynchronization enum.
-    testing_watch_synchronization = 'r',
-
-    pub inline fn char(id: MessageId) u8 {
-        return @intFromEnum(id);
-    }
-};
-pub const IncomingMessageId = enum(u8) {
-    /// Initialization packet.
-    /// - [8]u8: Source Map ID, from the client config. Encoded in HEX
-    ///
-    /// Responsibilities:
-    /// - Clear SourceMapStore's weak reference, move as a strong ref on HmrSocket.
-    init = 'i',
-    /// Subscribe to an event channel. Payload is a sequence of chars available
-    /// in HmrTopic.
-    subscribe = 's',
-    /// Emitted on client-side navigations.
-    /// Rest of payload is a UTF-8 string.
-    set_url = 'n',
-    /// Tells the DevServer to batch events together.
-    testing_batch_events = 'H',
-
-    /// Console log from the client
-    console_log = 'l',
-    /// Tells the DevServer to unref a source map.
-    /// - `u64`: SourceMapStore key
-    unref_source_map = 'u',
-
-    /// Invalid data
-    _,
-};
-pub const ConsoleLogKind = enum(u8) {
-    log = 'l',
-    e = 'e',
-};
-pub const HmrTopic = enum(u8) {
-    hot_update = 'h',
-    errors = 'e',
-    browser_error = 'E',
-    incremental_visualizer = 'v',
-    memory_visualizer = 'M',
-    testing_watch_synchronization = 'r',
-
-    /// Invalid data
-    _,
-
-    pub const max_count = 6;
-    pub const Bits = HmrTopicBits;
-};
 var dev_server_deinit_count_for_testing: usize = 0;
 const Environment = bun.Environment;
 const Output = bun.Output;
@@ -4188,7 +4123,6 @@ pub fn emitMemoryVisualizerMessage(dev: *DevServer) void {
 pub fn writeMemoryVisualizerMessage(dev: *DevServer, payload: *std.array_list.Managed(u8)) !void {
         const w = payload.writer();
         const Fields = MemoryVisualizerFields;
-        _ = &Fields;
         const cost = dev.memoryCostDetailed();
         const system_total = bun.api.node.os.totalmem();
         _ = try w.writeStruct(Fields{ .incremental_graph_client = @truncate(cost.incremental_graph_client), .incremental_graph_server = @truncate(cost.incremental_graph_server), .js_code = @truncate(cost.js_code), .source_maps = @truncate(cost.source_maps), .assets = @truncate(cost.assets), .other = @truncate(cost.other), .devserver_tracked = (if (comptime AllocationScope.enabled) @truncate(dev.allocation_scope.stats().total_memory_allocated) else 0), .process_used = @truncate(((bun.sys.selfProcessMemoryUsage()) orelse (0))), .system_used = @truncate((system_total -| bun.api.node.os.freemem())), .system_total = @truncate(system_total) });

@@ -134,14 +134,13 @@ pub const TextShadow = struct {
 pub fn parse(input: *css.Parser) css.Result(@This()) {
             var color: ?CssColor = null;
             _ = &color;
-            const Lengths = struct { Length, Length, Length, Length };
-            var lengths: ?Lengths = null;
+            var lengths: ?TextShadowLengths = null;
             _ = &lengths;
             while (true) {
                 if ((lengths == null)) {
                     const value = input.tryParse((struct {
 
-pub fn parseFn(i: *css.Parser) css.Result(Lengths) {
+pub fn parseFn(i: *css.Parser) css.Result(TextShadowLengths) {
             const horizontal = (switch (Length.parse(i)) {
 .result => |v| v,
 .err => |e| {
@@ -217,6 +216,7 @@ pub const TextSizeAdjust = union(enum) {
     percentage: Percentage,
 };
 
+pub const TextShadowLengths = struct { Length, Length, Length, Length };
 const Printer = css.Printer;
 const PrintErr = css.PrintErr;
 const LengthPercentage = css.css_values.length.LengthPercentage;

@@ -98,6 +98,24 @@ pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub const IncrementalGraphProcessEdgeResult = enum {
+    @"continue",
+    stop,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const IncrementalGraphTraceDependencyGoal = enum {
+    stop_at_boundary,
+    no_stop,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         value: T,
@@ -334,6 +352,53 @@ pub fn fileKind(self: ClientFile) FileKind {
     }
     const Packed = ClientFilePacked;
 };
+
+pub const IncrementalGraphMemoryCost = struct {
+    graph: usize,
+    code: usize,
+    source_maps: usize,
+};
+
+pub const IncrementalGraphSourceMapGeneration = struct {
+    json: []u8,
+    mappings: bun.StringPointer,
+    file_paths: [][]const u8,
+};
+
+pub fn IncrementalGraphCurrentChunkSourceMapData(comptime FileIndex: type) type {
+    return struct {
+        file_index: FileIndex,
+        source_map: PackedMap.Shared,
+
+pub fn deinit(self: *@This()) void {
+                _ = self.source_map.deinit();
+        }
+    };
+}
+
+pub fn IncrementalGraphInsertEmptyResult(comptime FileIndex: type) type {
+    return struct {
+        index: FileIndex,
+        key: []const u8,
+    };
+}
+
+pub fn IncrementalGraphEdge(comptime FileIndex: type) type {
+    return struct {
+        dependency: FileIndex,
+        imported: FileIndex,
+        next_import: bun.GenericIndex(u32, @This()).Optional,
+        next_dependency: bun.GenericIndex(u32, @This()).Optional,
+        prev_dependency: bun.GenericIndex(u32, @This()).Optional,
+    };
+}
+
+pub fn IncrementalGraphTempLookup(comptime EdgeIndex: type) type {
+    return extern struct {
+        edge_index: EdgeIndex,
+        seen: bool,
+    };
+}
 
 const JsCode = []const u8;
 const CssAssetId = u64;
@@ -705,7 +770,7 @@ pub fn processChunkDependencies(self: *@This(), ctx: *HotUpdateContext, comptime
             const log = bun.Output.scoped(.processChunkDependencies, .visible);
             const file_index: FileIndex = (((ctx.getCachedIndex(side, bundle_graph_index)).*.unwrap()) orelse (@panic("unresolved index")));
             _ = log("index id={d} {f}:", .{ file_index.get(), bun.fmt.quote(self.bundled_files.keys()[@as(usize, @intCast(file_index.get()))]) });
-            var quick_lookup = DeinitWithAllocGuard(TempLookup.HashTable){ .value = .empty, .alloc = temp_alloc };
+            var quick_lookup = DeinitWithAllocGuard(TempLookupHashTable){ .value = .empty, .alloc = temp_alloc };
             _ = &quick_lookup;
             var __quick_lookup_moved = false; _ = &__quick_lookup_moved;
             defer if (!__quick_lookup_moved) { __quick_lookup_moved = true; const __T = @TypeOf(quick_lookup); if (@typeInfo(__T) == .optional) { if (quick_lookup) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { quick_lookup.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = quick_lookup; _drop_val.__cp_deinit(); } };
@@ -784,7 +849,7 @@ pub fn disconnectEdgeFromDependencyList(self: *@This(), edge_index: EdgeIndex) v
             }
     }
 
-pub fn processCSSChunkImportRecords(self: *@This(), ctx: *HotUpdateContext, temp_alloc: Allocator, quick_lookup: *TempLookup.HashTable, new_imports: *EdgeIndex.Optional, file_index: FileIndex, bundler_index: bun.ast.Index) !void {
+pub fn processCSSChunkImportRecords(self: *@This(), ctx: *HotUpdateContext, temp_alloc: Allocator, quick_lookup: *TempLookupHashTable, new_imports: *EdgeIndex.Optional, file_index: FileIndex, bundler_index: bun.ast.Index) !void {
             _ = bun.assert(bundler_index.isValid());
             _ = bun.assert(ctx.loaders[@as(usize, @intCast(bundler_index.get()))].isCSS());
             var sfb = std.heap.stackFallback((@sizeOf(bun.ast.Index) * 64), temp_alloc);
@@ -812,7 +877,7 @@ pub fn processCSSChunkImportRecords(self: *@This(), ctx: *HotUpdateContext, temp
             }
     }
 
-pub fn processEdgeAttachment(self: *@This(), ctx: *HotUpdateContext, temp_alloc: Allocator, quick_lookup: *TempLookup.HashTable, new_imports: *EdgeIndex.Optional, file_index: FileIndex, import_record: bun.ImportRecord, comptime mode: enum {
+pub fn processEdgeAttachment(self: *@This(), ctx: *HotUpdateContext, temp_alloc: Allocator, quick_lookup: *TempLookupHashTable, new_imports: *EdgeIndex.Optional, file_index: FileIndex, import_record: bun.ImportRecord, comptime mode: enum {
                 js_or_html,
                 /// When set, the graph tracing state bits are used to prevent
                 /// infinite recursion. This is only done for CSS, since it:
@@ -891,7 +956,7 @@ return .stop;
             return .@"continue";
     }
 
-pub fn processChunkImportRecords(self: *@This(), ctx: *HotUpdateContext, temp_alloc: Allocator, quick_lookup: *TempLookup.HashTable, new_imports: *EdgeIndex.Optional, file_index: FileIndex, index: bun.ast.Index) !void {
+pub fn processChunkImportRecords(self: *@This(), ctx: *HotUpdateContext, temp_alloc: Allocator, quick_lookup: *TempLookupHashTable, new_imports: *EdgeIndex.Optional, file_index: FileIndex, index: bun.ast.Index) !void {
             _ = bun.assert(index.isValid());
             _ = bun.assert((ctx.loaders[@as(usize, @intCast(index.get()))] != .css));
             const log = bun.Output.scoped(.processChunkDependencies, .visible);
@@ -1639,48 +1704,21 @@ pub fn dev_allocator(self: *@This()) DevAllocator {
     pub const empty: Self = .{ .bundled_files = .empty, .stale_files = .empty, .first_dep = .empty, .first_import = .empty, .edges = .empty, .edges_free_list = .empty, .current_chunk_len = 0, .current_chunk_parts = .empty, .current_css_files = (if ((side == .client)) .empty else ({
     })), .current_chunk_source_maps = (if ((side == .server)) .empty else ({
     })) };
-    const CurrentChunkSourceMapData = struct {
-        file_index: FileIndex,
-        source_map: PackedMap.Shared,
-    
-    pub fn deinit(self: *@This()) void {
-                _ = self.source_map.deinit();
-        }
-    };
+    pub const CurrentChunkSourceMapData = IncrementalGraphCurrentChunkSourceMapData(FileIndex);
     const File = (switch (side) {
     .server => ServerFile,
     .client => ClientFile,
     });
-    const Edge = struct {
-        dependency: FileIndex,
-        imported: FileIndex,
-        next_import: EdgeIndex.Optional,
-        next_dependency: EdgeIndex.Optional,
-        prev_dependency: EdgeIndex.Optional,
-    };
+    pub const Edge = IncrementalGraphEdge(FileIndex);
     pub const FileIndex = bun.GenericIndex(u30, File);
     pub const react_refresh_index = (if ((side == .client)) FileIndex.init(0) else null);
     pub const EdgeIndex = bun.GenericIndex(u32, Edge);
-    const MemoryCost = struct {
-        graph: usize,
-        code: usize,
-        source_maps: usize,
-    };
-    const TempLookup = extern struct {
-                edge_index: EdgeIndex,
-                seen: bool,
-    
-                const HashTable = AutoArrayHashMapUnmanaged(FileIndex, TempLookup);
-            };
-    const ProcessEdgeResult = enum { @"continue", stop };
-    const TraceDependencyGoal = enum {
-                stop_at_boundary,
-                no_stop,
-            };
-    const InsertEmptyResult = struct {
-        index: FileIndex,
-        key: []const u8,
-    };
+    pub const MemoryCost = IncrementalGraphMemoryCost;
+    pub const TempLookup = IncrementalGraphTempLookup(EdgeIndex);
+    const TempLookupHashTable = AutoArrayHashMapUnmanaged(FileIndex, TempLookup);
+    pub const ProcessEdgeResult = IncrementalGraphProcessEdgeResult;
+    pub const TraceDependencyGoal = IncrementalGraphTraceDependencyGoal;
+    pub const InsertEmptyResult = IncrementalGraphInsertEmptyResult(FileIndex);
     const TakeJSBundleOptions = (switch (side) {
     .client => struct {
         kind: ChunkKind,
@@ -1694,10 +1732,6 @@ pub fn dev_allocator(self: *@This()) DevAllocator {
         script_id: SourceMapStore.Key,
     },
     });
-    const SourceMapGeneration = struct {
-        json: []u8,
-        mappings: bun.StringPointer,
-        file_paths: [][]const u8,
-    };
+    pub const SourceMapGeneration = IncrementalGraphSourceMapGeneration;
 };
 }

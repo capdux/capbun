@@ -26,6 +26,32 @@ const streams = webcore.streams;
 
 const stack_size = 1024;
 
+pub @c struct JSSinkSignal<ParentSink> {
+    cpp: JSValue,
+
+    static fn init(cpp: JSValue): streams.Signal {
+        @setRuntimeSafety(false);
+        unsafe {
+            const sig: *@This()! = @ptrFromInt(@as(usize, @bitCast(@intFromEnum(cpp))));
+            return streams.Signal.initWithType(@This(), sig);
+        }
+    }
+
+    fn close(*_, _: Syscall.Error?) {
+        unsafe {
+            ParentSink.onClose(@as(@This(), @bitCast(@intFromPtr(_))).cpp, .js_undefined);
+        }
+    }
+
+    fn ready(*_, _: Blob.SizeType?, _: Blob.SizeType?) {
+        unsafe {
+            ParentSink.onReady(@as(@This(), @bitCast(@intFromPtr(_))).cpp, .js_undefined, .js_undefined);
+        }
+    }
+
+    fn start(*_) {}
+}
+
 export class UTF8Fallback {
     pub static fn writeLatin1(comptime Ctx: type, ctx: *Ctx, input: streams.Result, comptime writeFn: auto): streams.Result.Writable {
         const str = input.slice();
@@ -254,24 +280,7 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
 
         const ThisSink = @This();
 
-        pub const SinkSignal = extern struct {
-            cpp: JSValue,
-
-            pub fn init(cpp: JSValue): streams.Signal {
-                @setRuntimeSafety(false);
-                return streams.Signal.initWithType(SinkSignal, @as(*SinkSignal, @ptrFromInt(@as(usize, @bitCast(@intFromEnum(cpp))))));
-            }
-
-            pub fn close(this: *@This(), _: ?Syscall.Error) void {
-                onClose(@as(SinkSignal, @bitCast(@intFromPtr(this))).cpp, .js_undefined);
-            }
-
-            pub fn ready(this: *@This(), _: ?Blob.SizeType, _: ?Blob.SizeType) void {
-                onReady(@as(SinkSignal, @bitCast(@intFromPtr(this))).cpp, .js_undefined, .js_undefined);
-            }
-
-            pub fn start(_: *@This()) void {}
-        };
+        pub const SinkSignal = JSSinkSignal(ThisSink);
 
         pub fn memoryCost(this: *ThisSink) callconv(.c) usize {
             return @sizeOf(ThisSink) + this.sink.memoryCost();
@@ -363,11 +372,6 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
             detachPtr(globalThis, value) catch {};
         }
 
-        const FromJSResult = enum(usize) {
-            detached = 0,
-            cast_failed = 1,
-            _,
-        };
         const FromJSFn = fn (value: JSValue) callconv(.c) FromJSResult;
         const fromJSExtern = @extern(
             FromJSFn,
@@ -640,7 +644,12 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
     };
 }
 
-const Detached = opaque {};
+enum FromJSResult: usize {
+    detached = 0,
+    cast_failed = 1,
+    _,
+}
+@opaque struct Detached {}
 pub const DestructorPtr = bun.TaggedPointerUnion(.{
     Detached,
     Subprocess,

@@ -1,4 +1,4 @@
-pub const EventType = enum(u8) {
+pub enum EventType: u8 {
     Event,
     MessageEvent,
     CloseEvent,
@@ -7,7 +7,7 @@ pub const EventType = enum(u8) {
     unknown = 254,
     _,
 
-    pub const map = bun.ComptimeStringMap(EventType, .{ 
+    const map = bun.ComptimeStringMap(EventType, .{ 
         .{ EventType.Event.label(), EventType.Event },
         .{ EventType.MessageEvent.label(), EventType.MessageEvent },
         .{ EventType.CloseEvent.label(), EventType.CloseEvent },
@@ -15,8 +15,8 @@ pub const EventType = enum(u8) {
         .{ EventType.OpenEvent.label(), EventType.OpenEvent },
     });
 
-    pub fn label(this: EventType): string {
-        return switch (this) {
+    fn label(): string {
+        return switch (_) {
             .Event => "event",
             .MessageEvent => "message",
             .CloseEvent => "close",
@@ -25,6 +25,6 @@ pub const EventType = enum(u8) {
             else => "event",
         };
     }
-};
+}
 
 import bun from "bun";

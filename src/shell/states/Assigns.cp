@@ -20,11 +20,11 @@ const EnvStr = bun.shell.interpret.EnvStr;
 const StatePtrUnion = bun.shell.interpret.StatePtrUnion;
 const log = bun.shell.interpret.log;
 
-pub const AssignCtx = enum {
+pub enum AssignCtx {
     cmd,
     shell,
     exported,
-};
+}
 
 pub const ParentPtr = StatePtrUnion(.{
     Stmt,

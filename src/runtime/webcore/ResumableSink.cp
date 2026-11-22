@@ -48,6 +48,13 @@ pub struct StreamResultGuard {
     }
 }
 
+pub enum ResumableSinkStatus: u8 {
+    started,
+    piped,
+    paused,
+    done,
+}
+
 extern fn Bun__assignStreamIntoResumableSink(globalThis: *JSGlobalObject, stream: JSValue, sink: JSValue): JSValue;
 
 pub fn ResumableSink(
@@ -83,12 +90,7 @@ pub fn ResumableSink(
         highWaterMark: i64 = 16384,
         status: Status = .started,
 
-        const Status = enum(u8) {
-            started,
-            piped,
-            paused,
-            done,
-        };
+        pub const Status = ResumableSinkStatus;
 
         pub fn constructor(globalThis: *JSGlobalObject, _: *jsc.CallFrame) JSError!*ThisSink {
             return globalThis.throwInvalidArguments("ResumableSink is not constructable", .{});

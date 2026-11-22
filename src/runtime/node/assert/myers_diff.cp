@@ -75,6 +75,24 @@ struct DeinitWithAllocGuard<T> {
     }
 }
 
+struct CharEql<Line> {
+    static fn eql(a: Line, b: Line): bool {
+        return a == b;
+    }
+}
+
+struct StrLineEqlStrict<Line> {
+    static fn eql(a: Line, b: Line): bool {
+        return areStrLinesEqual(Line, a, b, false);
+    }
+}
+
+struct StrLineEqlComma<Line> {
+    static fn eql(a: Line, b: Line): bool {
+        return areStrLinesEqual(Line, a, b, true);
+    }
+}
+
 /// diffs two sets of lines, returning the minimal number of edits needed to
 /// make them equal.
 ///
@@ -83,14 +101,7 @@ struct DeinitWithAllocGuard<T> {
 pub fn Differ(comptime Line: type, comptime opts: Options): type {
     const eql: LineCmp(Line) = switch (Line) {
         // char-by-char comparison. u16 is for utf16
-        u8, u16 => blk: {
-            const gen = struct {
-                pub fn eql(a: Line, b: Line): bool {
-                    return a == b;
-                }
-            };
-            break :blk gen.eql;
-        },
+        u8, u16 => CharEql<Line>.eql,
         StringConst,
         StringMut,
         StringZConst,
@@ -98,14 +109,7 @@ pub fn Differ(comptime Line: type, comptime opts: Options): type {
         String16Const,
         String16Mut,
         String16ZConst,
-        String16ZMut => blk: {
-            const gen = struct {
-                pub fn eql(a: Line, b: Line): bool {
-                    return areStrLinesEqual(Line, a, b, opts.check_comma_disparity);
-                }
-            };
-            break :blk gen.eql;
-        },
+        String16ZMut => if (opts.check_comma_disparity) StrLineEqlComma<Line>.eql else StrLineEqlStrict<Line>.eql,
         else => @compileError("Differ can only compare lines of chars or strings."),
     };
 

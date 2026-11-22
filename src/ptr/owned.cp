@@ -233,8 +233,8 @@ pub fn OwnedIn(comptime Pointer: type, comptime Allocator: type): type {
             return _.#pointer;
         }
 
-        const PointerAndAllocatorNonOpt = struct { Pointer, Allocator };
-        const PointerAndAllocatorPair = struct { NonOptionalPointer, Allocator };
+        const PointerAndAllocatorNonOpt = [Pointer, Allocator];
+        const PointerAndAllocatorPair = [NonOptionalPointer, Allocator];
 
         fn intoRawWithAllocatorOpt(*_): PointerAndAllocatorPair? {
             defer _.* = undefined;

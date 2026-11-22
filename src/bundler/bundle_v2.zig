@@ -89,6 +89,71 @@ pub const IndexStringMap = @import("./IndexStringMap.zig");
 pub const Graph = @import("./Graph.zig");
 pub const options = @import("./options.zig");
 pub const bun = @import("bun");
+pub const WrapKind = enum(u2) {
+    none,
+    cjs,
+    esm,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const EntryPointKind = enum {
+    none,
+    user_specified,
+    dynamic_import,
+    html,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub fn outputKind(self: EntryPointKind) jsc.API.BuildArtifact.OutputKind {
+            return (switch (self) {
+.user_specified => .@"entry-point",
+else => .chunk,
+});
+    }
+
+pub inline fn isEntryPoint(self: EntryPointKind) bool {
+            return (self != .none);
+    }
+
+pub inline fn isUserSpecifiedEntryPoint(self: EntryPointKind) bool {
+            return (self == .user_specified);
+    }
+
+pub inline fn isServerEntryPoint(self: EntryPointKind) bool {
+            return (self == .user_specified);
+    }
+};
+
+pub const ImportTrackerStatus = enum {
+    no_match,
+    found,
+    cjs,
+    dynamic_fallback,
+    dynamic_fallback_interop_default,
+    cjs_without_exports,
+    disabled,
+    external,
+    probably_typescript_type,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const CompileResultDeclKind = enum(u1) {
+    declared,
+    lexical,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub fn PathBufferGuard(comptime T: type) type {
     return struct {
         buf: ?T = null,
@@ -342,7 +407,14 @@ pub const BundleResult_ = union(enum) {
     value: BuildResult_,
 
 pub fn deinit(self: *BundleResult_) void {
-        _ = self;
+            switch (self.*) {
+.value => |*value| {
+_ = value.deinit();
+},
+else => {
+
+},
+}
     }
 };
 
@@ -2876,32 +2948,7 @@ pub const EntryPoint = struct {
     source_index: Index.Int = 0,
     output_path_was_auto_generated: bool = false,
     pub const List = MultiArrayList(EntryPoint);
-    pub const Kind = enum {
-            none,
-            user_specified,
-            dynamic_import,
-            html,
-    
-            pub fn outputKind(k: Kind) jsc.API.BuildArtifact.OutputKind {
-                return switch (k) {
-                    .user_specified => .@"entry-point",
-                    else => .chunk,
-                };
-            }
-    
-            pub inline fn isEntryPoint(k: Kind) bool {
-                return k != .none;
-            }
-    
-            pub inline fn isUserSpecifiedEntryPoint(k: Kind) bool {
-                return k == .user_specified;
-            }
-    
-            // TODO: delete
-            pub inline fn isServerEntryPoint(k: Kind) bool {
-                return k == .user_specified;
-            }
-        };
+    pub const Kind = EntryPointKind;
 };
 
 pub const AstSourceIDMapping = struct {
@@ -2928,36 +2975,7 @@ pub const ImportTracker = struct {
     source_index: Index = Index.invalid,
     name_loc: Logger.Loc = Logger.Loc.Empty,
     import_ref: Ref = Ref.None,
-    pub const Status = enum {
-            /// The imported file has no matching export
-            no_match,
-    
-            /// The imported file has a matching export
-            found,
-    
-            /// The imported file is CommonJS and has unknown exports
-            cjs,
-    
-            /// The import is missing but there is a dynamic fallback object
-            dynamic_fallback,
-    
-            /// The import is missing but there is a dynamic fallback object
-            /// and the file was originally CommonJS.
-            dynamic_fallback_interop_default,
-    
-            /// The import was treated as a CommonJS import but the file is known to have no exports
-            cjs_without_exports,
-    
-            /// The imported file was disabled by mapping it to false in the "browser"
-            /// field of package.json
-            disabled,
-    
-            /// The imported file is external and has unknown exports
-            external,
-    
-            /// This is a missing re-export in a TypeScript file, so it's probably a type
-            probably_typescript_type,
-        };
+    const Status = ImportTrackerStatus;
     pub const Iterator = ImportTrackerIterator_;
 };
 
@@ -3022,7 +3040,7 @@ pub fn sortedCrossChunkImports(list: *List, chunks: []Chunk, imports_from_other_
 pub const CompileResultDeclInfo = struct {
     name: []const u8,
     kind: Kind,
-    pub const Kind = enum(u1) { declared, lexical };
+    pub const Kind = CompileResultDeclKind;
 };
 
 pub const JavaScriptCompileResult = struct {
@@ -3185,11 +3203,6 @@ const RefVoidMap = std.ArrayHashMapUnmanaged(Ref, void, Ref.ArrayHashCtx, false)
 pub const RefImportData = std.ArrayHashMapUnmanaged(Ref, ImportData, Ref.ArrayHashCtx, false);
 pub const ResolvedExports = bun.StringArrayHashMapUnmanaged(ExportData);
 pub const TopLevelSymbolToParts = js_ast.Ast.TopLevelSymbolToParts;
-pub const WrapKind = enum(u2) {
-    none,
-    cjs,
-    esm,
-};
 pub const PathTemplate = options.PathTemplate;
 pub const Chunk = @import("./Chunk.zig").Chunk;
 pub const ChunkImport = @import("./Chunk.zig").ChunkImport;
@@ -3284,7 +3297,6 @@ pub fn genericPathWithPrettyInitialized(path: Fs.Path, target: options.Target, t
             var path_clone = path;
             _ = &path_clone;
             const NamespaceAlt = std.fmt.Alt(string, fmtEscapedNamespace);
-            _ = &NamespaceAlt;
             path_clone.pretty = (blk_catch_88: { break :blk_catch_88 ((std.fmt.bufPrint(buf, "{s}{f}:{s}", .{ (if ((target == .bake_server_components_ssr)) "ssr:" else ""), NamespaceAlt{ .data = path.namespace }, path.text })) catch |__ce_88| { _ = &__ce_88; break :blk_catch_88 buf[0..]; }); });
             return path_clone.dupeAllocFixPretty(allocator);
         }

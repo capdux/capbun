@@ -42,6 +42,10 @@ pub struct SelectorsDeinitGuard<T> {
     }
 }
 
+pub struct HTMLDoneCallback<T> {
+    static fn done(_unused: *T) {}
+}
+
 pub struct TagHandler {
     /// CSS selector to match elements
     selector: []const u8,
@@ -246,10 +250,6 @@ pub fn HTMLProcessor(
             const err_guard = LastErrorGuard<@TypeOf(target)>{ target: target };
             * = err_guard;
 
-            const DoneCallback = struct {
-                static fn done(_unused: *T) {}
-            };
-
             let rewriter = builder.build(
                 .UTF8,
                 memory_settings,
@@ -257,7 +257,7 @@ pub fn HTMLProcessor(
                 T,
                 target,
                 T.onWriteHTML,
-                DoneCallback.done,
+                HTMLDoneCallback<T>.done,
             )?;
             const rewriter_guard = PtrDeinitGuard<@TypeOf(rewriter)>{ ptr: rewriter };
             * = rewriter_guard;

@@ -65,6 +65,16 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 
 pub const builtin = @import("builtin");
 pub const bun = @import("bun");
+pub const BunCAStore = enum(u8) {
+    bundled,
+    openssl,
+    system,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub fn FreeGuard(comptime T: type) type {
     return struct {
         allocator: std.mem.Allocator,
@@ -124,7 +134,6 @@ pub const test_params = (((test_only_params ++ runtime_params_) ++ transpiler_pa
 pub export var Bun__Node__ZeroFillBuffers = false;
 pub export var Bun__Node__ProcessNoDeprecation = false;
 pub export var Bun__Node__ProcessThrowDeprecation = false;
-pub const BunCAStore = enum(u8) { bundled, openssl, system };
 pub export var Bun__Node__CAStore: BunCAStore = .bundled;
 pub export var Bun__Node__UseSystemCA = false;
 const Bunfig = bun.Bunfig;

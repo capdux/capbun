@@ -8,6 +8,8 @@ const CssColor = css.css_values.color.CssColor;
 const Length = css.css_values.length.LengthValue;
 const Percentage = css.css_values.percentage.Percentage;
 
+pub type TextShadowLengths = [Length, Length, Length, Length];
+
 /// A value for the [text-transform](https://www.w3.org/TR/2021/CRD-css-text-3-20210422/#text-transform-property) property.
 pub struct TextTransform {
     /// How case should be transformed.
@@ -148,13 +150,12 @@ pub struct TextShadow {
 
     static fn parse(input: *css.Parser): css.Result(@This()) {
         let color: CssColor? = null;
-        const Lengths = struct { Length, Length, Length, Length };
-        let lengths: Lengths? = null;
+        let lengths: TextShadowLengths? = null;
 
         while (true) {
             if (lengths == null) {
                 const value = input.tryParse(struct {
-                    static fn parseFn(i: *css.Parser): css.Result(Lengths) {
+                    static fn parseFn(i: *css.Parser): css.Result(TextShadowLengths) {
                         const horizontal = switch (Length.parse(i)) {
                             .result => |v| v,
                             .err => |e| return { err: e },

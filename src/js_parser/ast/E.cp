@@ -337,6 +337,11 @@ pub struct ImportIdentifier {
     was_originally_identifier: bool = false,
 }
 
+pub enum CommonJSExportIdentifierBase {
+    exports,
+    module_dot_exports,
+}
+
 /// This is a dot expression on exports, such as `exports.<ref>`. It is given
 /// it's own AST node to allow CommonJS unwrapping, in which this can just be
 /// the identifier in the Ref
@@ -350,10 +355,7 @@ pub struct CommonJSExportIdentifier {
     /// It must be known if `exports` or `module.exports` was written in source
     /// code, as the distinction will alter behavior. The fixup happens in the printer when
     /// printing this node.
-    pub const Base = enum {
-        exports,
-        module_dot_exports,
-    };
+    pub const Base = CommonJSExportIdentifierBase;
 }
 
 // This is similar to EIdentifier but it represents class-private fields and
@@ -361,6 +363,21 @@ pub struct CommonJSExportIdentifier {
 // EIndex and Property.
 pub struct PrivateIdentifier {
     ref: Ref,
+}
+
+pub enum JSXElementSpecialProp {
+    __self, // old react transform used this as a prop
+    __source,
+    key,
+    ref,
+    any,
+
+    pub const Map = ComptimeStringMap(JSXElementSpecialProp, .{
+        .{ "__self", .__self },
+        .{ "__source", .__source },
+        .{ "key", .key },
+        .{ "ref", .ref },
+    });
 }
 
 /// In development mode, the new JSX transform has a few special props
@@ -406,20 +423,7 @@ pub struct JSXElement {
 
     close_tag_loc: logger.Loc = logger.Loc.Empty,
 
-    pub const SpecialProp = enum {
-        __self, // old react transform used this as a prop
-        __source,
-        key,
-        ref,
-        any,
-
-        pub const Map = ComptimeStringMap(SpecialProp, .{
-            .{ "__self", .__self },
-            .{ "__source", .__source },
-            .{ "key", .key },
-            .{ "ref", .ref },
-        });
-    };
+    pub const SpecialProp = JSXElementSpecialProp;
 }
 
 pub struct Missing {
@@ -1234,14 +1238,16 @@ pub struct TemplatePart {
     tail: Template.Contents,
 }
 
-pub union(Tag) TemplateContents {
+enum TemplateContentsTag {
+    cooked,
+    raw,
+}
+
+pub union(TemplateContentsTag) TemplateContents {
     cooked: E.String,
     raw: string,
 
-    const Tag = enum {
-        cooked,
-        raw,
-    };
+    const Tag = TemplateContentsTag;
 
     fn isUTF8(): bool {
         return _ == .cooked && _.cooked.isUTF8();

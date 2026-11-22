@@ -96,6 +96,25 @@ pub const DependencyToEnqueue = union(enum) {
     failure: anyerror,
 };
 
+pub const EnqueueClosure = struct {
+    e: ?anyerror = null,
+    manager: *PackageManager,
+
+pub fn isDone(closure: *EnqueueClosure) bool {
+            const manager = closure.manager;
+            if ((manager.pendingTaskCount() > 0)) {
+                _ = (blk_catch_0: { break :blk_catch_0 ((manager.runTasks(void, undefined, .{ .onExtract = .{}, .onResolve = .{}, .onPackageManifestError = .{}, .onPackageDownloadError = .{} }, false, manager.options.log_level)) catch |e| { _ = &e; closure.e = e;
+                return true; }); });
+                if ((PackageManager.verbose_install and (manager.pendingTaskCount() > 0))) {
+                    if (PackageManager.hasEnoughTimePassedBetweenWaitingMessages()) {
+                        _ = Output.prettyErrorln("<d>[PackageManager]<r> waiting for {d} tasks\n", .{ closure.manager.pendingTaskCount() });
+                    }
+                }
+            }
+            return (manager.pendingTaskCount() == 0);
+    }
+};
+
 pub const ResolvedPackageTask = union(enum) {
     network_task: *NetworkTask,
     patch_task: *PatchTask,
@@ -107,6 +126,7 @@ pub const ResolvedPackageResult = struct {
     task: ?ResolvedPackageTask = null,
 };
 
+const NameAndNameHash = struct { String, PackageNameHash };
 const Environment = bun.Environment;
 const Output = bun.Output;
 const Path = bun.path;
@@ -146,7 +166,6 @@ const assignResolution = PackageManager.assignResolution;
 const assignRootResolution = PackageManager.assignRootResolution;
 const debug = PackageManager.debug;
 const failRootResolution = PackageManager.failRootResolution;
-const NameAndNameHash = struct { String, PackageNameHash };
 
 pub fn enqueueDependencyWithMain(mgr: *PackageManager, id: DependencyID, dependency: *const Dependency, resolution: PackageID, install_peer: bool) !void {
         _ = try mgr.enqueueDependencyWithMainAndSuccessFn(id, dependency, resolution, install_peer, assignResolution, null);
@@ -191,7 +210,7 @@ pub fn enqueueDependencyList(mgr: *PackageManager, dependencies_list: Lockfile.D
         while ((i < end)) : (i = (i + 1)) {
             const dependency = lockfile.buffers.dependencies.items[@as(usize, @intCast(i))];
             const resolution = lockfile.buffers.resolutions.items[@as(usize, @intCast(i))];
-            _ = (blk_catch_1: { break :blk_catch_1 ((mgr.enqueueDependencyWithMain(i, (&dependency), resolution, false)) catch |e| { _ = &e; const note_fmt: []const u8 = "error occurred while resolving {f}";
+            _ = (blk_catch_2: { break :blk_catch_2 ((mgr.enqueueDependencyWithMain(i, (&dependency), resolution, false)) catch |e| { _ = &e; const note_fmt: []const u8 = "error occurred while resolving {f}";
             const note_arg = bun.fmt.fmtPath(u8, lockfile.str((&dependency.realname())), .{ .path_sep = (if ((dependency.version.tag == .folder)) .@"auto" else .@"any") });
             if ((dependency.behavior.isOptional() or dependency.behavior.isPeer())) {
                 _ = ((mgr.log.addWarningWithNote(null, .{}, mgr.allocator, @errorName(e), note_fmt, .{ note_arg })) catch unreachable);
@@ -324,7 +343,7 @@ pub fn enqueueDependencyToRoot(mgr: *PackageManager, name: []const u8, version: 
         _ = &builder;
         const dummy = Dependency{ .name = String.init(name, name), .name_hash = String.Builder.stringHash(name), .version = version.*, .behavior = behavior };
         _ = dummy.countWithDifferentBuffers(name, version_buf, @TypeOf((&builder)), (&builder));
-        _ = (blk_catch_10: { break :blk_catch_10 ((builder.allocate()) catch |e| { _ = &e; return .{ .failure = e }; }); });
+        _ = (blk_catch_11: { break :blk_catch_11 ((builder.allocate()) catch |e| { _ = &e; return .{ .failure = e }; }); });
         const dep = ((dummy.cloneWithDifferentBuffers(mgr, name, version_buf, @TypeOf((&builder)), (&builder))) catch unreachable);
         _ = builder.clamp();
         const index = mgr.lockfile.buffers.dependencies.items.len;
@@ -337,41 +356,18 @@ pub fn enqueueDependencyToRoot(mgr: *PackageManager, name: []const u8, version: 
 }));
         if ((mgr.lockfile.buffers.resolutions.items[@as(usize, @intCast(dep_id))] == invalid_package_id)) {
             const dependency = mgr.lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))];
-            _ = (blk_catch_14: { break :blk_catch_14 ((mgr.enqueueDependencyWithMainAndSuccessFn(dep_id, (&dependency), invalid_package_id, false, assignRootResolution, failRootResolution)) catch |e| { _ = &e; return .{ .failure = e }; }); });
+            _ = (blk_catch_15: { break :blk_catch_15 ((mgr.enqueueDependencyWithMainAndSuccessFn(dep_id, (&dependency), invalid_package_id, false, assignRootResolution, failRootResolution)) catch |e| { _ = &e; return .{ .failure = e }; }); });
         }
         var resolution_id = mgr.lockfile.buffers.resolutions.items[@as(usize, @intCast(dep_id))];
         _ = &resolution_id;
         if ((resolution_id == invalid_package_id)) {
             _ = mgr.drainDependencyList();
-            const Closure = (struct {
-
-pub fn issue_19586_workaround() type {
-            return struct {
-    e: ?anyerror = null,
-    manager: *PackageManager,
-
-pub fn isDone(closure: *@This()) bool {
-            const manager = closure.manager;
-            if ((manager.pendingTaskCount() > 0)) {
-                _ = (blk_catch_0: { break :blk_catch_0 ((manager.runTasks(void, undefined, .{ .onExtract = .{}, .onResolve = .{}, .onPackageManifestError = .{}, .onPackageDownloadError = .{} }, false, manager.options.log_level)) catch |e| { _ = &e; closure.e = e;
-                return true; }); });
-                if ((PackageManager.verbose_install and (manager.pendingTaskCount() > 0))) {
-                    if (PackageManager.hasEnoughTimePassedBetweenWaitingMessages()) {
-                        _ = Output.prettyErrorln("<d>[PackageManager]<r> waiting for {d} tasks\n", .{ closure.manager.pendingTaskCount() });
-                    }
-                }
-            }
-            return (manager.pendingTaskCount() == 0);
-    }
-};
-    }
-}).issue_19586_workaround();
             if (mgr.options.log_level.showProgress()) {
                 _ = mgr.startProgressBarIfNone();
             }
-            var closure = Closure{ .manager = mgr };
+            var closure = EnqueueClosure{ .manager = mgr };
             _ = &closure;
-            _ = mgr.sleepUntil((&closure), (&Closure.isDone));
+            _ = mgr.sleepUntil((&closure), (&EnqueueClosure.isDone));
             if (mgr.options.log_level.showProgress()) {
                 _ = mgr.endProgressBar();
                 _ = Output.flush();
@@ -490,7 +486,7 @@ else => dependency.name_hash,
                 var resolve_result_ = getOrPutResolvedPackage(mgr, name_hash, name, dependency, version, dependency.behavior, id, resolution, install_peer, successFn);
                 _ = &resolve_result_;
                 retry_with_new_resolve_result: while (true) {
-                    const resolve_result = (blk_catch_15: { break :blk_catch_15 ((resolve_result_) catch |e| { _ = &e; if ((e == error.DistTagNotFound)) {
+                    const resolve_result = (blk_catch_16: { break :blk_catch_16 ((resolve_result_) catch |e| { _ = &e; if ((e == error.DistTagNotFound)) {
                         if (dependency.behavior.isRequired()) {
                             if (failFn) |fail| {
                                 _ = &fail;
@@ -615,11 +611,11 @@ if (((patch_task.callback == .calc_hash) and (mgr.getPreinstallState(result.pack
                                                         if (((!loaded_manifest.?.shouldExcludeFromAgeFilter(mgr.options.minimum_release_age_excludes)) and Npm.PackageManifest.isPackageVersionTooRecent(find_result.package, min_age_ms))) {
                                                             const package_name = mgr.lockfile.str((&name));
                                                             const min_age_seconds = (min_age_ms / std.time.ms_per_s);
-                                                            _ = (blk_catch_22: { break :blk_catch_22 ((mgr.log.addErrorFmt(null, logger.Loc.Empty, mgr.allocator, "Version \"{s}@{f}\" was published within minimum release age of {d} seconds", .{ package_name, find_result.version.fmt(mgr.lockfile.buffers.string_bytes.items), min_age_seconds })) catch |__ce_22| { _ = &__ce_22;  }); });
+                                                            _ = (blk_catch_23: { break :blk_catch_23 ((mgr.log.addErrorFmt(null, logger.Loc.Empty, mgr.allocator, "Version \"{s}@{f}\" was published within minimum release age of {d} seconds", .{ package_name, find_result.version.fmt(mgr.lockfile.buffers.string_bytes.items), min_age_seconds })) catch |__ce_23| { _ = &__ce_23;  }); });
                                                             return;
                                                         }
                                                     }
-                                                    if ((blk_catch_23: { break :blk_catch_23 ((getOrPutResolvedPackageWithFindResult(mgr, name_hash, name, dependency, version, id, dependency.behavior, (&loaded_manifest.?), find_result, install_peer, successFn)) catch |__ce_23| { _ = &__ce_23; break :blk_catch_23 @as(?ResolvedPackageResult, null); }); })) |new_resolve_result| {
+                                                    if ((blk_catch_24: { break :blk_catch_24 ((getOrPutResolvedPackageWithFindResult(mgr, name_hash, name, dependency, version, id, dependency.behavior, (&loaded_manifest.?), find_result, install_peer, successFn)) catch |__ce_24| { _ = &__ce_24; break :blk_catch_24 @as(?ResolvedPackageResult, null); }); })) |new_resolve_result| {
                                                         _ = &new_resolve_result;
                                                         resolve_result_ = new_resolve_result;
                                                         _ = mgr.network_dedupe_map.remove(task_id);
@@ -753,7 +749,7 @@ const dep = (&(if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version
         }
 },
 inline .symlink, .workspace => |dependency_tag| {
-const _result = (blk_catch_27: { break :blk_catch_27 ((getOrPutResolvedPackage(mgr, name_hash, name, dependency, version, dependency.behavior, id, resolution, install_peer, successFn)) catch |e| { _ = &e; break :blk_catch_27 @as(?ResolvedPackageResult, brk: {
+const _result = (blk_catch_28: { break :blk_catch_28 ((getOrPutResolvedPackage(mgr, name_hash, name, dependency, version, dependency.behavior, id, resolution, install_peer, successFn)) catch |e| { _ = &e; break :blk_catch_28 @as(?ResolvedPackageResult, brk: {
         if ((e == error.MissingPackageJSON)) {
             break :brk @as(?ResolvedPackageResult, null);
         }

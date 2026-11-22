@@ -27,13 +27,7 @@ pub fn createFromURLQuery(global: *JSGlobalObject, query: *ZigString) JSValue {
     }
 
 pub fn toQueryString(self: *DOMFormData, comptime Ctx: type, ctx: Ctx, comptime callback: anytype) void {
-            const Wrapper = struct {
-
-pub fn run(c: *anyopaque, str: *ZigString) callconv(.c) void {
-            _ = cb(@as(Ctx, @ptrCast(c)), str.*);
-    }
-    const cb = callback;
-};
+            const Wrapper = ToQueryStringWrapper(Ctx, callback);
             _ = WebCore__DOMFormData__toQueryString(self, ctx, (&Wrapper.run));
     }
 
@@ -54,15 +48,7 @@ pub fn count(self: *DOMFormData) usize {
     }
 
 pub fn forEach(self: *DOMFormData, comptime Context: type, ctx: *Context, comptime callback_wrapper: anytype) void {
-            const Wrap = struct {
-
-pub fn forEachWrapper(ctx_ptr: ?*anyopaque, name_: *ZigString, value_ptr: *anyopaque, filename: ?*ZigString, is_blob: u8) callconv(.c) void {
-            const ctx_ = bun.cast(*Context, ctx_ptr.?);
-            const value = (if ((is_blob == 0)) TopFormDataEntry{ .string = (bun.cast(*ZigString, value_ptr)).* } else TopFormDataEntry{ .file = .{ .blob = bun.cast(*jsc.WebCore.Blob, value_ptr), .filename = (if (filename) |f| f.* else ZigString.Empty) } });
-            _ = wrapper(ctx_, name_.*, value);
-    }
-    const wrapper = callback_wrapper;
-};
+            const Wrap = ForEachWrap(Context, callback_wrapper);
             _ = jsc.markBinding(@src());
             _ = DOMFormData__forEach(self, ctx, Wrap.forEachWrapper);
     }
@@ -92,3 +78,23 @@ extern "c" fn WebCore__DOMFormData__appendBlob(arg0: *DOMFormData, arg1: *JSGlob
 extern "c" fn WebCore__DOMFormData__count(arg0: *DOMFormData) callconv(.c) usize;
 
 extern "c" fn DOMFormData__forEach(arg0: *DOMFormData, arg1: ?*anyopaque, arg2: *const fn (?*anyopaque, *ZigString, *anyopaque, ?*ZigString, u8) callconv(.c) void) callconv(.c) void;
+
+pub fn ToQueryStringWrapper(comptime Ctx: type, comptime callback: anytype) type {
+        return struct {
+
+pub fn run(c: *anyopaque, str: *ZigString) callconv(.c) void {
+            _ = callback(@as(Ctx, @ptrCast(c)), str.*);
+    }
+};
+}
+
+pub fn ForEachWrap(comptime Context: type, comptime callback_wrapper: anytype) type {
+        return struct {
+
+pub fn forEachWrapper(ctx_ptr: ?*anyopaque, name_: *ZigString, value_ptr: *anyopaque, filename: ?*ZigString, is_blob: u8) callconv(.c) void {
+            const ctx_ = bun.cast(*Context, ctx_ptr.?);
+            const value = (if ((is_blob == 0)) TopFormDataEntry{ .string = (bun.cast(*ZigString, value_ptr)).* } else TopFormDataEntry{ .file = .{ .blob = bun.cast(*jsc.WebCore.Blob, value_ptr), .filename = (if (filename) |f| f.* else ZigString.Empty) } });
+            _ = callback_wrapper(ctx_, name_.*, value);
+    }
+};
+}

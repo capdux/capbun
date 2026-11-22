@@ -25,10 +25,7 @@ pub enum LinearFifoBufferType {
 
     static fn BufferType(comptime buffer_type: @This(), comptime T: type): type {
         switch (buffer_type) {
-            .Static n => {
-                const S = struct { b: [n]T };
-                return @FieldType(S, "b");
-            },
+            .Static n => return [n]T,
             .Slice => return @FieldType(struct { b: []T }, "b"),
             .Dynamic => return @FieldType(struct { b: []T }, "b"),
         }

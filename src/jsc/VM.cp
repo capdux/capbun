@@ -55,11 +55,13 @@ pub struct VMLock {
     }
 }
 
+pub enum VMHeapType: u8 {
+    SmallHeap = 0,
+    LargeHeap = 1,
+}
+
 @opaque pub struct VM {
-    pub const HeapType = enum(u8) {
-        SmallHeap = 0,
-        LargeHeap = 1,
-    };
+    pub const HeapType = VMHeapType;
 
     pub const Lock = VMLock;
 

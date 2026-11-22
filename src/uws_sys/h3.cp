@@ -151,13 +151,67 @@ export @opaque struct Request {
     }
 
     fn forEachHeader(*_, ctx: auto, comptime cb: auto) {
-        const Wrap = struct {
-            pub fn each(n: [*c]const u8, nl: usize, v: [*c]const u8, vl: usize, ud: *!?) callconv(.c) void {
-                unsafe { cb(@ptrCast(@alignCast(ud)), n[0..nl], v[0..vl]); }
-            }
-        };
-        unsafe { uws_h3_req_for_each_header(_, Wrap.each, @ptrCast(ctx)); }
+        unsafe { uws_h3_req_for_each_header(_, H3ForEachHeaderWrap(cb).each, @ptrCast(ctx)); }
     }
+}
+
+fn H3ForEachHeaderWrap(comptime cb: auto): type {
+    return struct {
+        static fn each(n: [*c]const u8, nl: usize, v: [*c]const u8, vl: usize, ud: *!?) callconv(.c) {
+            unsafe { cb(@ptrCast(@alignCast(ud)), n[0..nl], v[0..vl]); }
+        }
+    };
+}
+
+fn H3OnWritableWrap(comptime handler: auto): type {
+    return struct {
+        static fn cb(r: *Response, off: u64, p: *!?) callconv(.c): bool {
+            unsafe { return handler(@ptrCast(@alignCast(p)), off, r); }
+        }
+    };
+}
+
+fn H3ResponseCbWrap(comptime handler: auto): type {
+    return struct {
+        static fn cb(r: *Response, p: *!?) callconv(.c) {
+            unsafe { handler(@ptrCast(@alignCast(p)), r); }
+        }
+    };
+}
+
+fn H3OnDataWrap(comptime handler: auto): type {
+    return struct {
+        static fn cb(r: *Response, ptr: [*c]const u8, len: usize, last: bool, p: *!?) callconv(.c) {
+            unsafe {
+                const slice: string = if (len > 0) ptr[0..len] else "";
+                handler(@ptrCast(@alignCast(p)), r, slice, last);
+            }
+        }
+    };
+}
+
+fn H3CorkWrap(comptime handler: auto): type {
+    return struct {
+        static fn cb(p: *!?) callconv(.c) {
+            unsafe { handler(@ptrCast(@alignCast(p))); }
+        }
+    };
+}
+
+fn H3RouteWrap(comptime handler: auto): type {
+    return struct {
+        static fn cb(res: *Response, req: *Request, p: *!?) callconv(.c) {
+            unsafe { handler(@ptrCast(@alignCast(p)), req, res); }
+        }
+    };
+}
+
+fn H3ListenWrap(comptime handler: auto): type {
+    return struct {
+        static fn cb(ls: (*ListenSocket)?, p: *!?) callconv(.c) {
+            unsafe { handler(@ptrCast(@alignCast(p)), ls); }
+        }
+    };
 }
 
 export @opaque struct Response {
@@ -206,48 +260,25 @@ export @opaque struct Response {
     fn forceClose(*_) { uws_h3_res_force_close(_); }
 
     fn onWritable(*_, ud: auto, comptime handler: auto) {
-        const W = struct {
-            pub fn cb(r: *Response, off: u64, p: *!?) callconv(.c) bool {
-                unsafe { return handler(@ptrCast(@alignCast(p)), off, r); }
-            }
-        };
-        unsafe { uws_h3_res_on_writable(_, W.cb, @ptrCast(ud)); }
+        unsafe { uws_h3_res_on_writable(_, H3OnWritableWrap(handler).cb, @ptrCast(ud)); }
     }
 
     fn clearOnWritable(*_) { uws_h3_res_clear_on_writable(_); }
 
     fn onAborted(*_, ud: auto, comptime handler: auto) {
-        const W = struct {
-            pub fn cb(r: *Response, p: *!?) callconv(.c) void {
-                unsafe { handler(@ptrCast(@alignCast(p)), r); }
-            }
-        };
-        unsafe { uws_h3_res_on_aborted(_, W.cb, @ptrCast(ud)); }
+        unsafe { uws_h3_res_on_aborted(_, H3ResponseCbWrap(handler).cb, @ptrCast(ud)); }
     }
 
     fn clearAborted(*_) { uws_h3_res_on_aborted(_, null, null); }
 
     fn onTimeout(*_, ud: auto, comptime handler: auto) {
-        const W = struct {
-            pub fn cb(r: *Response, p: *!?) callconv(.c) void {
-                unsafe { handler(@ptrCast(@alignCast(p)), r); }
-            }
-        };
-        unsafe { uws_h3_res_on_timeout(_, W.cb, @ptrCast(ud)); }
+        unsafe { uws_h3_res_on_timeout(_, H3ResponseCbWrap(handler).cb, @ptrCast(ud)); }
     }
 
     fn clearTimeout(*_) { uws_h3_res_on_timeout(_, null, null); }
 
     fn onData(*_, ud: auto, comptime handler: auto) {
-        const W = struct {
-            pub fn cb(r: *Response, ptr: [*c]const u8, len: usize, last: bool, p: *!?) callconv(.c) void {
-                unsafe {
-                    const slice: string = if (len > 0) ptr[0..len] else "";
-                    handler(@ptrCast(@alignCast(p)), r, slice, last);
-                }
-            }
-        };
-        unsafe { uws_h3_res_on_data(_, W.cb, @ptrCast(ud)); }
+        unsafe { uws_h3_res_on_data(_, H3OnDataWrap(handler).cb, @ptrCast(ud)); }
     }
 
     fn clearOnData(*_) { uws_h3_res_on_data(_, null, null); }
@@ -258,12 +289,7 @@ export @opaque struct Response {
     }
 
     fn runCorkedWithType(*_, ud: auto, comptime handler: auto) {
-        const W = struct {
-            pub fn cb(p: *!?) callconv(.c) void {
-                unsafe { handler(@ptrCast(@alignCast(p))); }
-            }
-        };
-        unsafe { uws_h3_res_cork(_, @ptrCast(ud), W.cb); }
+        unsafe { uws_h3_res_cork(_, @ptrCast(ud), H3CorkWrap(handler).cb); }
     }
 }
 
@@ -281,12 +307,7 @@ export @opaque struct App {
     fn clearRoutes(*_) { uws_h3_app_clear_routes(_); }
 
     fn route(*_, comptime f: auto, pattern: string, ud: auto, comptime handler: auto) {
-        const W = struct {
-            pub fn cb(res: *Response, req: *Request, p: *!?) callconv(.c) void {
-                unsafe { handler(@ptrCast(@alignCast(p)), req, res); }
-            }
-        };
-        unsafe { f(_, pattern.ptr, pattern.len, W.cb, @ptrCast(ud)); }
+        unsafe { f(_, pattern.ptr, pattern.len, H3RouteWrap(handler).cb, @ptrCast(ud)); }
     }
 
     fn get(*_, p: string, ud: auto, comptime h: auto) { _.route(uws_h3_app_get, p, ud, h); }
@@ -314,11 +335,6 @@ export @opaque struct App {
     }
 
     fn listenWithConfig(*_, ud: auto, comptime handler: auto, config: ListenConfig) {
-        const W = struct {
-            pub fn cb(ls: (*ListenSocket)?, p: *!?) callconv(.c) void {
-                unsafe { handler(@ptrCast(@alignCast(p)), ls); }
-            }
-        };
-        unsafe { uws_h3_app_listen_with_config(_, config.host, config.port, config.options, W.cb, @ptrCast(ud)); }
+        unsafe { uws_h3_app_listen_with_config(_, config.host, config.port, config.options, H3ListenWrap(handler).cb, @ptrCast(ud)); }
     }
 }

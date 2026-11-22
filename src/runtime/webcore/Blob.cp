@@ -33,6 +33,54 @@ const write_permissions = 0o664;
 type WriteFilePromisePtr = *WriteFilePromise;
 type OpaquePtr = *!;
 
+struct ReadBytesAdapter<Handler> {
+    static fn run(c: *Handler!, r: read_file_mod.ReadFileResultType) {
+        const res = switch (r) {
+            .result b => BlobReadBytesResult{ ok: b.buf },
+            .err e => BlobReadBytesResult{ err: e },
+        };
+        Handler.onReadBytes(c, res);
+    }
+}
+
+struct S3ReadBytesTask<Handler> {
+    ctx: *Handler!,
+    blob: Blob,
+    poll: bun.Async.KeepAlive = .{},
+    vm: *jsc.VirtualMachine!,
+
+    static fn create(ctx: *Handler!, blob: Blob, vm: *jsc.VirtualMachine!): *@This() {
+        return bun.new(@This(), .{ .ctx = ctx, .blob = blob, .vm = vm });
+    }
+
+    static fn done(t: *@This(), r: BlobReadBytesResult) {
+        t.poll.unref(t.vm);
+        t.blob.deinit();
+        const c = t.ctx;
+        bun.destroy(t);
+        Handler.onReadBytes(c, r);
+    }
+
+    static fn cb(result: bun.S3.S3DownloadResult, opaque_self: *!): void!bun.JSTerminated {
+        const t: *@This() = unsafe { @ptrCast(@alignCast(opaque_self)) };
+        switch (result) {
+            .success response => t.done(BlobReadBytesResult{ ok: response.body.list.items }),
+            .not_found e => t.done(BlobReadBytesResult{ err: .{
+                .code = bun.String.cloneUTF8(e.code),
+                .message = bun.String.cloneUTF8(e.message),
+                .path = bun.String.cloneUTF8(t.blob.store.?.getPath() ?? ""),
+                .syscall = bun.String.static("fetch"),
+            } }),
+            .failure e => t.done(BlobReadBytesResult{ err: .{
+                .code = bun.String.cloneUTF8(e.code),
+                .message = bun.String.cloneUTF8(e.message),
+                .path = bun.String.cloneUTF8(t.blob.store.?.getPath() ?? ""),
+                .syscall = bun.String.static("fetch"),
+            } }),
+        }
+    }
+}
+
 struct DeinitGuard<T> {
     ptr: *T!;
     ~init() { unsafe { _.ptr.deinit(); } }
@@ -371,7 +419,7 @@ pub noinline fn mkdirIfNotExists(ctx: auto, e: bun.sys.Error, path_string: [:0]c
 
 fn writeFileWithEmptySourceToDestination(ctx: *JSGlobalObject, destination_blob: *Blob, options: WriteFileOptions): JSValue ! JSError {
     const destination_store = destination_blob.store.?;
-    const _guard_dest_blob = DetachGuard<Blob>{ ptr: &destination_blob };
+    const _guard_dest_blob = DetachGuard<Blob>{ ptr: destination_blob };
 
     switch (destination_store.data) {
         .file file => {
@@ -1833,56 +1881,15 @@ pub struct BlobExternalSharedDescriptor {
 
     fn readBytesToHandler(*_, comptime Handler: type, ctx: *Handler, global: *JSGlobalObject): bun.JSTerminated!void {
         if (_.needsToReadFile()) {
-            const Adapter = struct {
-                static fn run(c: *Handler, r: read_file_mod.ReadFileResultType) {
-                    const res = switch (r) {
-                        .result b => BlobReadBytesResult{ ok: b.buf },
-                        .err e => BlobReadBytesResult{ err: e },
-                    };
-                    Handler.onReadBytes(c, res);
-                }
-            };
             const HandlerPtr = @TypeOf(ctx);
-            _.doReadFileInternal(HandlerPtr, ctx, Adapter.run, global);
+            _.doReadFileInternal(HandlerPtr, ctx, ReadBytesAdapter<Handler>.run, global);
             return;
         }
         if (_.isS3()) {
-            const Task = struct {
-                ctx: *Handler,
-                blob: Blob,
-                poll: bun.Async.KeepAlive = .{},
-                vm: *jsc.VirtualMachine,
-
-                static fn done(t: *@This(), r: BlobReadBytesResult) {
-                    t.poll.unref(t.vm);
-                    t.blob.deinit();
-                    const c = t.ctx;
-                    bun.destroy(t);
-                    Handler.onReadBytes(c, r);
-                }
-
-                static fn cb(result: bun.S3.S3DownloadResult, opaque_self: *!): bun.JSTerminated!void {
-                    const t: *@This() = unsafe { @ptrCast(@alignCast(opaque_self)) };
-                    switch (result) {
-                        .success response => t.done(BlobReadBytesResult{ ok: response.body.list.items }),
-                        .not_found e => t.done(BlobReadBytesResult{ err: .{
-                            .code = bun.String.cloneUTF8(e.code),
-                            .message = bun.String.cloneUTF8(e.message),
-                            .path = bun.String.cloneUTF8(t.blob.store.?.getPath() ?? ""),
-                            .syscall = bun.String.static("fetch"),
-                        } }),
-                        .failure e => t.done(BlobReadBytesResult{ err: .{
-                            .code = bun.String.cloneUTF8(e.code),
-                            .message = bun.String.cloneUTF8(e.message),
-                            .path = bun.String.cloneUTF8(t.blob.store.?.getPath() ?? ""),
-                            .syscall = bun.String.static("fetch"),
-                        } }),
-                    }
-                }
-            };
-            let t = bun.new(Task, .{ .ctx = ctx, .blob = _.dupe(), .vm = global.bunVM() });
+            let t = S3ReadBytesTask<Handler>.create(ctx, _.dupe(), global.bunVM());
             t.poll.ref(t.vm);
-            let _guard_task = S3ReadTaskGuard<Task>{ ptr: t };
+            const TaskT = @TypeOf(t.*);
+            let _guard_task = S3ReadTaskGuard<TaskT>{ ptr: t };
             const env = t.vm.transpiler.env;
             const cred = t.blob.store.?.data.s3.getCredentials();
             const path = t.blob.store.?.data.s3.path();
@@ -1893,9 +1900,9 @@ pub struct BlobExternalSharedDescriptor {
             const payer = t.blob.store.?.data.s3.request_payer;
             if (_.offset > 0 || _.size != Blob.max_size) {
                 const len: usize? = if (_.size != Blob.max_size) @intCast(_.size) else null;
-                bun.S3.downloadSlice(cred, path, @intCast(_.offset), len, unsafe { @ptrCast(&Task.cb) }, t, proxy, payer)?;
+                bun.S3.downloadSlice(cred, path, @intCast(_.offset), len, unsafe { @ptrCast(&S3ReadBytesTask<Handler>.cb) }, t, proxy, payer)?;
             } else {
-                bun.S3.download(cred, path, unsafe { @ptrCast(&Task.cb) }, t, proxy, payer)?;
+                bun.S3.download(cred, path, unsafe { @ptrCast(&S3ReadBytesTask<Handler>.cb) }, t, proxy, payer)?;
             }
             _guard_task.disarm();
             return;
