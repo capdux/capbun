@@ -219,9 +219,9 @@ pub struct Run {
             // module and calls default.scheduled(controller)
             // Escape path for embedding in JS string literal (handle backslashes on Windows)
             const escaped_path = escapeForJSString(bun.default_allocator, entry_path)?;
-            defer bun.default_allocator.free(escaped_path);
+            const _escaped_path_guard = FreeGuard<[]const u8>{ allocator: bun.default_allocator, ptr: escaped_path };
             const escaped_period = escapeForJSString(bun.default_allocator, ctx.runtime_options.cron_period)?;
-            defer bun.default_allocator.free(escaped_period);
+            const _escaped_period_guard = FreeGuard<[]const u8>{ allocator: bun.default_allocator, ptr: escaped_period };
             const cron_script = try std.fmt.allocPrint(bun.default_allocator, "const mod = await import(\"{s}\");\nconst scheduled = (mod.default || mod).scheduled;\nif (typeof scheduled !== \"function\") throw new Error(\"Module does not export default.scheduled()\");\nconst controller = {{ cron: \"{s}\", type: \"scheduled\", scheduledTime: Date.now() }};\nawait scheduled(controller);\n", .{ escaped_path, escaped_period });
             // entry_path must end with /[eval] for the transpiler to use eval_source
             const trigger = bun.pathLiteral("/[eval]");
@@ -622,6 +622,15 @@ const OpaqueWrap = jsc.OpaqueWrap;
 const VirtualMachine = jsc.VirtualMachine;
 
 type string = []const u8;
+
+struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    ptr: T,
+
+    ~init() {
+        _.allocator.free(_.ptr);
+    }
+}
 
 /// Escape a string for safe embedding in a JS double-quoted string literal.
 /// Escapes backslashes, double quotes, newlines, etc.

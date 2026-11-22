@@ -141,6 +141,17 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const MutexGuard = struct {
+    mutex: *bun.Mutex,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *MutexGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = self.mutex.unlock();
+    }
+};
+
 var title_mutex = bun.Mutex{  };
 pub const getCwd = jsc.host_fn.wrap1(getCwd_);
 pub const setCwd = jsc.host_fn.wrap2(setCwd_);
@@ -160,9 +171,13 @@ const ZigString = jsc.ZigString;
 
 pub fn getTitle(_: *JSGlobalObject, title: *bun.String) callconv(.c) void {
         _ = title_mutex.lock();
-        defer {
-        _ = title_mutex.unlock();
-        }
+        var _title_guard = MutexGuard{ .mutex = (blk: {
+        break :blk (&title_mutex);
+
+}) };
+        _ = &_title_guard;
+        var ___title_guard_moved = false; _ = &___title_guard_moved;
+        defer if (!___title_guard_moved) { ___title_guard_moved = true; const __T = @TypeOf(_title_guard); if (@typeInfo(__T) == .optional) { if (_title_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _title_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _title_guard; _drop_val.__cp_deinit(); } };
         const str = bun.cli.Bun__Node__ProcessTitle;
         title.* = bun.String.cloneUTF8(((str) orelse ("bun")));
 }
@@ -176,9 +191,13 @@ pub fn setTitle(globalObject: *JSGlobalObject, newvalue: *bun.String) callconv(.
         var ___newvalue_guard_moved = false; _ = &___newvalue_guard_moved;
         defer if (!___newvalue_guard_moved) { ___newvalue_guard_moved = true; const __T = @TypeOf(_newvalue_guard); if (@typeInfo(__T) == .optional) { if (_newvalue_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _newvalue_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _newvalue_guard; _drop_val.__cp_deinit(); } };
         _ = title_mutex.lock();
-        defer {
-        _ = title_mutex.unlock();
-        }
+        var _title_guard = MutexGuard{ .mutex = (blk: {
+        break :blk (&title_mutex);
+
+}) };
+        _ = &_title_guard;
+        var ___title_guard_moved = false; _ = &___title_guard_moved;
+        defer if (!___title_guard_moved) { ___title_guard_moved = true; const __T = @TypeOf(_title_guard); if (@typeInfo(__T) == .optional) { if (_title_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _title_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _title_guard; _drop_val.__cp_deinit(); } };
         const new_title = (blk_catch_0: { break :blk_catch_0 ((newvalue.toOwnedSlice(bun.default_allocator)) catch |__ce_0| { _ = &__ce_0; const _e = globalObject.throwOutOfMemory();
         _ = (&_e);
         return; }); });

@@ -40,16 +40,11 @@ pub fn toIncludeRepeated(client: *Expect, globalThis: *JSGlobalObject, callFrame
     const not = client.flags.not;
     let pass = false;
 
-    const _expectStringAsStr = expect_string.toSliceOrNull(globalThis)?;
-    const _subStringAsStr = substring.toSliceOrNull(globalThis)?;
+    const _expectStringAsStr = DeinitGuard<jsc.ZigString.Slice>{ val: expect_string.toSliceOrNull(globalThis)? };
+    const _subStringAsStr = DeinitGuard<jsc.ZigString.Slice>{ val: substring.toSliceOrNull(globalThis)? };
 
-    defer {
-        _expectStringAsStr.deinit();
-        _subStringAsStr.deinit();
-    }
-
-    const expectStringAsStr = _expectStringAsStr.slice();
-    const subStringAsStr = _subStringAsStr.slice();
+    const expectStringAsStr = _expectStringAsStr.val.slice();
+    const subStringAsStr = _subStringAsStr.val.slice();
 
     if (subStringAsStr.len == 0) {
         return globalThis.throw("toIncludeRepeated() requires the first argument to be a non-empty string", .{});
@@ -61,11 +56,10 @@ pub fn toIncludeRepeated(client: *Expect, globalThis: *JSGlobalObject, callFrame
     if (not) pass = !pass;
     if (pass) return JSValue.js_undefined;
 
-    let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-    defer formatter.deinit();
-    const expect_string_fmt = expect_string.toFmt(&formatter);
-    const substring_fmt = substring.toFmt(&formatter);
-    const times_fmt = count.toFmt(&formatter);
+    let formatter_guard = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true } };
+    const expect_string_fmt = expect_string.toFmt(&formatter_guard.val);
+    const substring_fmt = substring.toFmt(&formatter_guard.val);
+    const times_fmt = count.toFmt(&formatter_guard.val);
 
     const received_line = "Received: <red>{f}<r>\n";
 
@@ -109,3 +103,10 @@ const JSValue = bun.jsc.JSValue;
 
 const Expect = bun.jsc.Expect.Expect;
 const getSignature = Expect.getSignature;
+
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}

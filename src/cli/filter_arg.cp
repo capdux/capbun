@@ -25,13 +25,36 @@ fn globIgnoreFn(val: []const u8): bool {
 
 const GlobWalker = glob.GlobWalker(globIgnoreFn, glob.walk.DirEntryAccessor, false);
 
-pub fn getCandidatePackagePatterns(allocator: std.mem.Allocator, log: *bun.logger.Log, out_patterns: *std.array_list.Managed([]u8), workdir_: []const u8, root_buf: *bun.PathBuffer): []const u8! {
-    bun.ast.Expr.Data.Store.create();
-    bun.ast.Stmt.Data.Store.create();
-    defer {
+struct AstDataStoreGuard {
+    ~init() {
         bun.ast.Expr.Data.Store.reset();
         bun.ast.Stmt.Data.Store.reset();
     }
+}
+
+struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: []const T,
+
+    ~init() {
+        _.allocator.free(_.slice);
+    }
+}
+
+struct DeinitGuard<T> {
+    ptr: *T!?,
+
+    ~init() {
+        if (p := _.ptr) {
+            p.deinit();
+        }
+    }
+}
+
+pub fn getCandidatePackagePatterns(allocator: std.mem.Allocator, log: *bun.logger.Log, out_patterns: *std.array_list.Managed([]u8), workdir_: []const u8, root_buf: *bun.PathBuffer): []const u8! {
+    bun.ast.Expr.Data.Store.create();
+    bun.ast.Stmt.Data.Store.create();
+    const _store_guard = AstDataStoreGuard{};
 
     let workdir = workdir_;
 
@@ -52,7 +75,10 @@ pub fn getCandidatePackagePatterns(allocator: std.mem.Allocator, log: *bun.logge
             },
             .result => |source| source,
         };
-        defer allocator.free(json_source.contents);
+        const _json_source_guard = FreeGuard<u8>{
+            allocator: allocator,
+            slice: json_source.contents,
+        };
 
         const json = JSON.parsePackageJSONUTF8(&json_source, log, allocator)?;
 
@@ -247,13 +273,16 @@ pub struct PackageFilterIterator {
     fn initWalker(*_)! {
         const pattern = _.patterns[_.pattern_idx];
         let arena_ = std.heap.ArenaAllocator.init(_.allocator);
-        errdefer arena_.deinit();
+        let arena_guard = DeinitGuard<std.heap.ArenaAllocator>{
+            ptr: unsafe { &arena_ },
+        };
         const cwd = arena_.allocator().dupe(u8, _.root_dir)?;
         let walker_res = _.walker.initWithCwd(&arena_, pattern, cwd, true, true, false, true, true)?;
         walker_res.unwrap()?;
         _.iter = GlobWalker.Iterator{ walker: &_.walker };
         let iter_res = _.iter.init()?;
         iter_res.unwrap()?;
+        arena_guard.ptr = null;
     }
 
     fn deinitWalker(*_) {

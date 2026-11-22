@@ -7,6 +7,36 @@ const JSValue = jsc.JSValue;
 const Queue = bun.LinearFifo(*JSMySQLQuery, .Dynamic);
 const debug = bun.Output.scoped(.MySQLRequestQueue, .visible);
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+pub struct DerefGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deref();
+    }
+}
+
+pub struct AdvanceCleanupGuard {
+    queue: *MySQLRequestQueue!,
+    ~init() {
+        while (_.queue.#requests.readableLength() > 0) {
+            const request = _.queue.#requests.peekItem(0);
+            if (request.isCompleted()) {
+                debug("isCompleted discard after advance", .{});
+                _.queue.#requests.discard(1);
+                request.deref();
+                continue;
+            }
+            break;
+        }
+    }
+}
+
 @root struct MySQLRequestQueue {
     #requests: Queue,
     #pipelined_requests: u32 = 0,
@@ -68,18 +98,7 @@ const debug = bun.Output.scoped(.MySQLRequestQueue, .visible);
 
     pub fn advance(*_, connection: *MySQLConnection) {
         let offset: usize = 0;
-        defer {
-            while (this.#requests.readableLength() > 0) {
-                const request = this.#requests.peekItem(0);
-                if (request.isCompleted()) {
-                    debug("isCompleted discard after advance", .{});
-                    this.#requests.discard(1);
-                    request.deref();
-                    continue;
-                }
-                break;
-            }
-        }
+        const _guard_advance = AdvanceCleanupGuard{ queue: unsafe { this as *MySQLRequestQueue! } };
 
         while (this.#requests.readableLength() > offset && connection.isAbleToWrite()) {
             let request: *JSMySQLQuery = this.#requests.peekItem(offset);
@@ -188,10 +207,10 @@ const debug = bun.Output.scoped(.MySQLRequestQueue, .visible);
         this.#pipelined_requests = 0;
         this.#nonpipelinable_requests = 0;
         this.#waiting_to_prepare = false;
-        defer requests.deinit();
+        const _guard_requests = DeinitGuard<Queue>{ ptr: &requests };
 
         while (request := requests.readItem()) {
-            defer request.deref();
+            const _guard_req = DerefGuard<*JSMySQLQuery>{ val: request };
             if (request.isCompleted()) {
                 continue;
             }

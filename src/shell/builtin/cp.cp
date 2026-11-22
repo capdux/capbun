@@ -35,6 +35,20 @@ pub type FilepathArgs = ([]const [*:0]const u8)?;
 pub type OptionalPathZ = ([:0]const u8)?;
 pub type OptionalShellErr = (bun.shell.ShellErr)?;
 
+struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
+struct UnlockGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.unlock(); }
+    }
+}
+
 pub const EbusyState = struct {
     tasks: std.ArrayListUnmanaged(*ShellCpTask) = .{},
     absolute_targets: bun.StringArrayHashMapUnmanaged(void) = .{},
@@ -409,8 +423,9 @@ pub struct ShellCpTask {
 
     fn onCopyImpl(*_, src: [:0]const u8, dest: [:0]const u8) {
         _.verbose_output_lock.lock();
+        const _lock_guard = UnlockGuard<bun.Mutex>{ ptr: unsafe { &_.verbose_output_lock } };
+        * = _lock_guard;
         log("onCopy: {s} -> {s}\n", .{ src, dest });
-        defer _.verbose_output_lock.unlock();
         let writer = _.verbose_output.writer();
         bun.handleOom(writer.print("{s} -> {s}\n", .{ src, dest }));
     }
@@ -484,7 +499,7 @@ pub const ShellCpOutputTask = OutputTask(Cp, .{
     state: State = .idle,
 
     pub fn format(writer: auto)! {
-        (writer.print("Cp(0x{x})", .{ @intFromPtr(_) }))?;
+        (writer.print("Cp(0x{x})", .{ unsafe { @intFromPtr(_) } }))?;
     }
 
     pub fn start(*_): Yield {
@@ -626,13 +641,13 @@ pub const ShellCpOutputTask = OutputTask(Cp, .{
     }
 
     pub inline fn bltn(*_): *Builtin {
-        const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("cp", _));
+        const impl_: *Builtin.Impl = unsafe { @alignCast(@fieldParentPtr("cp", _)) };
         return @fieldParentPtr("impl", impl_);
     }
 
     pub fn onShellCpTaskDone(*_, task: *ShellCpTask) {
         assert(_.state == .exec);
-        log("task done: 0x{x} {d}", .{ @intFromPtr(task), _.state.exec.tasks_count });
+        log("task done: 0x{x} {d}", .{ unsafe { @intFromPtr(task) }, _.state.exec.tasks_count });
         _.state.exec.tasks_count -= 1;
 
         if (comptime bun.Environment.isWindows) {
@@ -664,7 +679,8 @@ pub const ShellCpOutputTask = OutputTask(Cp, .{
     }
 
     pub fn printShellCpTask(*_, task: *ShellCpTask): Yield {
-        defer task.deinit();
+        const _task_guard = DeinitGuard<*ShellCpTask>{ val: task };
+        * = _task_guard;
 
         let output = task.takeOutput();
 

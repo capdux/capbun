@@ -62,7 +62,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 pub const PackedState = packed struct(u32) {
@@ -207,17 +207,17 @@ pub fn utf16(input: []const u16, ambiguousAsWide: bool) usize {
 
 pub const visible = struct {
 
-pub fn printableMaskLatin1(chunk: @Vector(16,u8)) u16 {
-            const lo: @Vector(16,u8) = @splat(32);
-            const c1_lo: @Vector(16,u8) = @splat(127);
-            const c1_hi: @Vector(16,u8) = @splat(159);
-            const ad: @Vector(16,u8) = @splat(173);
+pub fn printableMaskLatin1(chunk: @Vector(16, u8)) u16 {
+            const lo: @Vector(16, u8) = @splat(32);
+            const c1_lo: @Vector(16, u8) = @splat(127);
+            const c1_hi: @Vector(16, u8) = @splat(159);
+            const ad: @Vector(16, u8) = @splat(173);
             const ge_20 = (chunk >= lo);
             const not_c1 = ((chunk < c1_lo) | (chunk > c1_hi));
             const not_ad = (chunk != ad);
-            const false_vec: @Vector(16,bool) = @splat(false);
+            const false_vec: @Vector(16, bool) = @splat(false);
             const printable = (@select(bool, ge_20, not_c1, false_vec) & not_ad);
-            return @bitCast(@as(@Vector(16,u1), @bitCast(printable)));
+            return @bitCast(@as(@Vector(16, u1), @bitCast(printable)));
     }
 
 pub fn visibleLatin1Width(input_: []const u8) usize {
@@ -228,14 +228,14 @@ pub fn visibleLatin1Width(input_: []const u8) usize {
                 _ = &input_ptr;
                 const input_end = (input_.ptr + input_.len);
                 while (((@intFromPtr(input_end) - @intFromPtr(input_ptr)) >= 64)) : (input_ptr = (input_ptr + 64)) {
-                    const c0: @Vector(16,u8) = (input_ptr[0..16]).*;
-                    const c1: @Vector(16,u8) = (input_ptr[16..32]).*;
-                    const c2: @Vector(16,u8) = (input_ptr[32..48]).*;
-                    const c3: @Vector(16,u8) = (input_ptr[48..64]).*;
+                    const c0: @Vector(16, u8) = (input_ptr[0..16]).*;
+                    const c1: @Vector(16, u8) = (input_ptr[16..32]).*;
+                    const c2: @Vector(16, u8) = (input_ptr[32..48]).*;
+                    const c3: @Vector(16, u8) = (input_ptr[48..64]).*;
                     length = (length + ((((if (comptime @typeInfo(@TypeOf(@popCount(printableMaskLatin1(c0)))) == .@"enum") cp_cast_int(usize, @intFromEnum(@popCount(printableMaskLatin1(c0)))) else cp_cast_int(usize, @popCount(printableMaskLatin1(c0)))) + (if (comptime @typeInfo(@TypeOf(@popCount(printableMaskLatin1(c1)))) == .@"enum") cp_cast_int(usize, @intFromEnum(@popCount(printableMaskLatin1(c1)))) else cp_cast_int(usize, @popCount(printableMaskLatin1(c1))))) + (if (comptime @typeInfo(@TypeOf(@popCount(printableMaskLatin1(c2)))) == .@"enum") cp_cast_int(usize, @intFromEnum(@popCount(printableMaskLatin1(c2)))) else cp_cast_int(usize, @popCount(printableMaskLatin1(c2))))) + (if (comptime @typeInfo(@TypeOf(@popCount(printableMaskLatin1(c3)))) == .@"enum") cp_cast_int(usize, @intFromEnum(@popCount(printableMaskLatin1(c3)))) else cp_cast_int(usize, @popCount(printableMaskLatin1(c3))))));
                 }
                 while (((@intFromPtr(input_end) - @intFromPtr(input_ptr)) >= 16)) : (input_ptr = (input_ptr + 16)) {
-                    const chunk: @Vector(16,u8) = (input_ptr[0..16]).*;
+                    const chunk: @Vector(16, u8) = (input_ptr[0..16]).*;
                     length = (length + @popCount(printableMaskLatin1(chunk)));
                 }
                 while ((input_ptr != input_end)) : (input_ptr = (input_ptr + 1)) {
@@ -256,16 +256,16 @@ pub fn scanLaneInRange(comptime T: type, comptime Lo: T, comptime Hi: T, slice: 
             _ = &MaskInt;
             var i: usize = 0;
             _ = &i;
-            const lo: @Vector(stride,T) = @splat(Lo);
-            const range: @Vector(stride,T) = @splat((Hi - Lo));
+            const lo: @Vector(stride, T) = @splat(Lo);
+            const range: @Vector(stride, T) = @splat((Hi - Lo));
             while (((slice.len - i) >= stride)) : (i = (i + stride)) {
-                const chunk: @Vector(stride,T) = (blk: {
+                const chunk: @Vector(stride, T) = (blk: {
                 break :blk (slice[i..][0..stride]).*;
 
 });
                 const shifted = (chunk -% lo);
                 const in_range = (shifted <= range);
-                const mask: MaskInt = @bitCast(@as(@Vector(stride,u1), @bitCast(in_range)));
+                const mask: MaskInt = @bitCast(@as(@Vector(stride, u1), @bitCast(in_range)));
                 if ((mask != 0)) {
                     return (i + @ctz(mask));
                 }
@@ -287,18 +287,18 @@ pub fn scanLaneAnyOf(comptime T: type, comptime targets: []const T, slice: []con
             var i: usize = 0;
             _ = &i;
             while (((slice.len - i) >= stride)) : (i = (i + stride)) {
-                const chunk: @Vector(stride,T) = (blk: {
+                const chunk: @Vector(stride, T) = (blk: {
                 break :blk (slice[i..][0..stride]).*;
 
 });
-                const splat0: @Vector(stride,T) = @splat(targets[0]);
+                const splat0: @Vector(stride, T) = @splat(targets[0]);
                 var hit = (chunk == splat0);
                 _ = &hit;
                 inline for (targets[1..]) |t| {
-                    const splat_t: @Vector(stride,T) = @splat(t);
+                    const splat_t: @Vector(stride, T) = @splat(t);
                     hit = (hit | (chunk == splat_t));
                 }
-                const mask: MaskInt = @bitCast(@as(@Vector(stride,u1), @bitCast(hit)));
+                const mask: MaskInt = @bitCast(@as(@Vector(stride, u1), @bitCast(hit)));
                 if ((mask != 0)) {
                     return (i + @ctz(mask));
                 }
@@ -388,12 +388,12 @@ pub fn visibleUTF8WidthFn(input: []const u8, comptime asciiFn: anytype) usize {
             return len;
     }
 
-pub inline fn printableMask16(chunk: @Vector(8,u16), l: @Vector(8,u16), h: @Vector(8,u16)) u8 {
+pub inline fn printableMask16(chunk: @Vector(8, u16), l: @Vector(8, u16), h: @Vector(8, u16)) u8 {
             const ge_low = (chunk >= l);
             const lt_high = (chunk < h);
-            const false_vec: @Vector(8,bool) = @splat(false);
+            const false_vec: @Vector(8, bool) = @splat(false);
             const printable = @select(bool, ge_low, lt_high, false_vec);
-            return @bitCast(@as(@Vector(8,u1), @bitCast(printable)));
+            return @bitCast(@as(@Vector(8, u1), @bitCast(printable)));
     }
 
 pub fn countPrintableAscii16(input: []const u16) usize {
@@ -403,18 +403,18 @@ pub fn countPrintableAscii16(input: []const u16) usize {
                 var remaining = input;
                 _ = &remaining;
                 const vec_len: i32 = 8;
-                const low: @Vector(vec_len,u16) = @splat(32);
-                const high: @Vector(vec_len,u16) = @splat(127);
+                const low: @Vector(vec_len, u16) = @splat(32);
+                const high: @Vector(vec_len, u16) = @splat(127);
                 while ((remaining.len >= (4 * vec_len))) {
-                    const c0: @Vector(vec_len,u16) = (remaining[0..vec_len]).*;
-                    const c1: @Vector(vec_len,u16) = (remaining[vec_len..][0..vec_len]).*;
-                    const c2: @Vector(vec_len,u16) = (remaining[(2 * vec_len)..][0..vec_len]).*;
-                    const c3: @Vector(vec_len,u16) = (remaining[(3 * vec_len)..][0..vec_len]).*;
+                    const c0: @Vector(vec_len, u16) = (remaining[0..vec_len]).*;
+                    const c1: @Vector(vec_len, u16) = (remaining[vec_len..][0..vec_len]).*;
+                    const c2: @Vector(vec_len, u16) = (remaining[(2 * vec_len)..][0..vec_len]).*;
+                    const c3: @Vector(vec_len, u16) = (remaining[(3 * vec_len)..][0..vec_len]).*;
                     total = (total + ((((if (comptime @typeInfo(@TypeOf(@popCount(printableMask16(c0, low, high)))) == .@"enum") cp_cast_int(usize, @intFromEnum(@popCount(printableMask16(c0, low, high)))) else cp_cast_int(usize, @popCount(printableMask16(c0, low, high)))) + (if (comptime @typeInfo(@TypeOf(@popCount(printableMask16(c1, low, high)))) == .@"enum") cp_cast_int(usize, @intFromEnum(@popCount(printableMask16(c1, low, high)))) else cp_cast_int(usize, @popCount(printableMask16(c1, low, high))))) + (if (comptime @typeInfo(@TypeOf(@popCount(printableMask16(c2, low, high)))) == .@"enum") cp_cast_int(usize, @intFromEnum(@popCount(printableMask16(c2, low, high)))) else cp_cast_int(usize, @popCount(printableMask16(c2, low, high))))) + (if (comptime @typeInfo(@TypeOf(@popCount(printableMask16(c3, low, high)))) == .@"enum") cp_cast_int(usize, @intFromEnum(@popCount(printableMask16(c3, low, high)))) else cp_cast_int(usize, @popCount(printableMask16(c3, low, high))))));
                     remaining = remaining[(4 * vec_len)..];
                 }
                 while ((remaining.len >= vec_len)) {
-                    const chunk: @Vector(vec_len,u16) = (remaining[0..vec_len]).*;
+                    const chunk: @Vector(vec_len, u16) = (remaining[0..vec_len]).*;
                     total = (total + @popCount(printableMask16(chunk, low, high)));
                     remaining = remaining[vec_len..];
                 }
@@ -632,7 +632,10 @@ pub fn utf8IndexAtWidthExcludeANSI(input_: []const u8, max_width: usize) usize {
             var w: usize = 0;
             _ = &w;
             while (strings.indexOfCharUsize(input, 27)) |esc| {
-                const run_start = (@intFromPtr(input.ptr) - @intFromPtr(input_.ptr));
+                const run_start = (blk: {
+                break :blk (@intFromPtr(input.ptr) - @intFromPtr(input_.ptr));
+
+});
                 if (utf8WalkRun(input_, run_start, esc, max_width, (&w))) |stop| {
                     _ = &stop;
                     return stop;
@@ -678,7 +681,10 @@ pub fn utf8IndexAtWidthExcludeANSI(input_: []const u8, max_width: usize) usize {
                     }
                 }
             }
-            const run_start = (@intFromPtr(input.ptr) - @intFromPtr(input_.ptr));
+            const run_start = (blk: {
+            break :blk (@intFromPtr(input.ptr) - @intFromPtr(input_.ptr));
+
+});
             if (utf8WalkRun(input_, run_start, input.len, max_width, (&w))) |stop| {
                 _ = &stop;
                 return stop;

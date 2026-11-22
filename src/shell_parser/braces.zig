@@ -67,7 +67,7 @@ fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const
 fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const string_pkg = @import("../string/string.zig");
 pub const shell = @import("../shell/shell.zig");
@@ -81,6 +81,20 @@ pub const ExpandError = error{
     OutOfMemory,
     UnexpectedToken,
 };
+
+pub fn DeinitWithAllocGuard(comptime T: type) type {
+    return struct {
+        val: T,
+        alloc: Allocator,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.val.deinit(self.alloc);
+        }
+    };
+}
 
 const log = bun.Output.scoped(.BRACES, .visible);
 const ExpansionVariant = packed struct(u32) {
@@ -116,10 +130,10 @@ pub const AST = struct {
         expansion: Expansion,
     };
     pub const Group = struct {
-            bubble_up: ?*Group = null,
-            bubble_up_next: ?u16 = null,
-            atoms: union(enum) { single: Atom, many: []Atom },
-        };
+        bubble_up: ?*Group = null,
+        bubble_up_next: ?u16 = null,
+        atoms: union(enum) { single: Atom, many: []Atom },
+    };
     pub const Expansion = struct {
         variants: []AST.Group,
     };
@@ -342,11 +356,10 @@ pub fn buildExpansionTable(tokens: []Token, table: *std.array_list.Managed(Expan
 };
         const BraceStack = bun.SmallList(BraceState, MAX_NESTED_BRACES);
         _ = &BraceStack;
-        var brace_stack = BraceStack{  };
+        var brace_stack = DeinitWithAllocGuard(BraceStack){ .val = BraceStack{  }, .alloc = bun.default_allocator };
         _ = &brace_stack;
-        defer {
-        _ = brace_stack.deinit(bun.default_allocator);
-        }
+        var __brace_stack_moved = false; _ = &__brace_stack_moved;
+        defer if (!__brace_stack_moved) { __brace_stack_moved = true; const __T = @TypeOf(brace_stack); if (@typeInfo(__T) == .optional) { if (brace_stack) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { brace_stack.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = brace_stack; _drop_val.__cp_deinit(); } };
         var i: u16 = 0;
         _ = &i;
         var prev_close = false;
@@ -356,10 +369,10 @@ pub fn buildExpansionTable(tokens: []Token, table: *std.array_list.Managed(Expan
 .open => {
 const table_idx: u16 = @intCast(table.items.len);
             tokens[@as(usize, @intCast(i))].open.idx = table_idx;
-            _ = brace_stack.append(bun.default_allocator, .{ .tok_idx = i, .variants = 0, .prev_tok_end = i });
+            _ = brace_stack.val.append(bun.default_allocator, .{ .tok_idx = i, .variants = 0, .prev_tok_end = i });
 },
 .close => {
-var top = (brace_stack.pop()).?;
+var top = (brace_stack.val.pop()).?;
             _ = &top;
             _ = try table.append(.{ .end = i, .start = (top.prev_tok_end + 1) });
             top.prev_tok_end = i;
@@ -368,7 +381,7 @@ var top = (brace_stack.pop()).?;
             prev_close = true;
 },
 .comma => {
-var top = (brace_stack.lastMut()).?;
+var top = (brace_stack.val.lastMut()).?;
             _ = &top;
             _ = try table.append(.{ .end = i, .start = (top.prev_tok_end + 1) });
             prev_close = false;
@@ -553,30 +566,29 @@ pub fn calculateExpandedAmount(tokens: []const Token) u32 {
 };
         const NestedBraceStack = bun.SmallList(StackEntry, MAX_NESTED_BRACES);
         _ = &NestedBraceStack;
-        var nested_brace_stack = NestedBraceStack{  };
+        var nested_brace_stack = DeinitWithAllocGuard(NestedBraceStack){ .val = NestedBraceStack{  }, .alloc = bun.default_allocator };
         _ = &nested_brace_stack;
-        defer {
-        _ = nested_brace_stack.deinit(bun.default_allocator);
-        }
+        var __nested_brace_stack_moved = false; _ = &__nested_brace_stack_moved;
+        defer if (!__nested_brace_stack_moved) { __nested_brace_stack_moved = true; const __T = @TypeOf(nested_brace_stack); if (@typeInfo(__T) == .optional) { if (nested_brace_stack) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { nested_brace_stack.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = nested_brace_stack; _drop_val.__cp_deinit(); } };
         var variant_count: u32 = 0;
         _ = &variant_count;
         for (cp_iter_slice(tokens)) |tok| {
             _ = &tok;
             switch (tok) {
 .open => {
-_ = nested_brace_stack.append(bun.default_allocator, .{});
+_ = nested_brace_stack.val.append(bun.default_allocator, .{});
 },
 .comma => {
-var top = (nested_brace_stack.lastMut()).?;
+var top = (nested_brace_stack.val.lastMut()).?;
             _ = &top;
             top.accumulator = (top.accumulator +| top.segment_product);
             top.segment_product = 1;
 },
 .close => {
-const entry = (nested_brace_stack.pop()).?;
+const entry = (nested_brace_stack.val.pop()).?;
             const total = (entry.accumulator +| entry.segment_product);
-            if ((nested_brace_stack.len() > 0)) {
-                var parent = (nested_brace_stack.lastMut()).?;
+            if ((nested_brace_stack.val.len() > 0)) {
+                var parent = (nested_brace_stack.val.lastMut()).?;
                 _ = &parent;
                 parent.segment_product = (blk_catch_0: { break :blk_catch_0 ((std.math.mul(u32, parent.segment_product, total)) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 std.math.maxInt(u32); }); });
             } else {
@@ -613,11 +625,10 @@ pub fn tokenize(alloc: Allocator, src: []const u8) BraceLexerError!Output {
 pub fn tokenize_impl(self: *@This()) BraceLexerError!bool {
             const BraceStack = bun.SmallList(u32, MAX_NESTED_BRACES);
             _ = &BraceStack;
-            var brace_stack = BraceStack{  };
+            var brace_stack = DeinitWithAllocGuard(BraceStack){ .val = BraceStack{  }, .alloc = bun.default_allocator };
             _ = &brace_stack;
-            defer {
-            _ = brace_stack.deinit(bun.default_allocator);
-            }
+            var __brace_stack_moved = false; _ = &__brace_stack_moved;
+            defer if (!__brace_stack_moved) { __brace_stack_moved = true; const __T = @TypeOf(brace_stack); if (@typeInfo(__T) == .optional) { if (brace_stack) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { brace_stack.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = brace_stack; _drop_val.__cp_deinit(); } };
             while (true) {
                 var input_opt = self.eat();
                 _ = &input_opt;
@@ -630,19 +641,19 @@ pub fn tokenize_impl(self: *@This()) BraceLexerError!bool {
                 if ((!escaped)) {
                     switch (char) {
 '{' => {
-_ = brace_stack.append(bun.default_allocator, @intCast(self.tokens.items.len));
+_ = brace_stack.val.append(bun.default_allocator, @intCast(self.tokens.items.len));
                     _ = try self.tokens.append(.{ .open = .{} });
                     continue;
 },
 '}' => {
-if ((brace_stack.len() > 0)) {
-                        _ = brace_stack.pop();
+if ((brace_stack.val.len() > 0)) {
+                        _ = brace_stack.val.pop();
                         _ = try self.tokens.append(.close);
                         continue;
                     }
 },
 ',' => {
-if ((brace_stack.len() > 0)) {
+if ((brace_stack.val.len() > 0)) {
                         _ = try self.tokens.append(.comma);
                         continue;
                     }
@@ -654,8 +665,8 @@ else => {
                 }
                 _ = try self.appendChar(char);
             }
-            while ((brace_stack.len() > 0)) {
-                const top_idx = (brace_stack.pop()).?;
+            while ((brace_stack.val.len() > 0)) {
+                const top_idx = (brace_stack.val.pop()).?;
                 _ = self.rollbackBraces(top_idx);
             }
             _ = try self.flattenTokens();

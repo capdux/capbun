@@ -44,6 +44,14 @@ pub struct ElideResult {
 
 type OptCString = ([*:0]const u8)?;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
 fn getEnvp(env: *bun.DotEnv.Loader, path: []const u8, allocator: std.mem.Allocator)! [*:null]OptCString {
     unsafe {
         const original_path = env.map.get("PATH") ?? "";
@@ -86,7 +94,7 @@ pub struct ProcessHandle {
         _.start_time = std.time.Instant.now() catch null;
         let spawned: bun.spawn.process.SpawnProcessResult = brk: {
             let arena_allocator = std.heap.ArenaAllocator.init(bun.default_allocator);
-            defer arena_allocator.deinit();
+            const arena_guard = DeinitGuard<std.heap.ArenaAllocator>{ ptr: unsafe { &arena_allocator } };
             const envp = getEnvp(_.state.env, _.config.PATH, arena_allocator.allocator())?;
             const argv_ptr: [*:null]OptCstr = unsafe { @ptrCast(&argv) };
             const spawn_res = bun.spawn.spawnProcess(&_.options, argv_ptr, envp)?;
@@ -467,7 +475,7 @@ pub fn runScriptsWithFilter(ctx: Command.Context): noreturn! {
     * = RunCommand.configureEnvForRun(ctx, &this_transpiler, null, true, false)?;
 
     let package_json_iter = FilterArg.PackageFilterIterator.init(ctx.allocator, patterns.items, resolve_root)?;
-    defer package_json_iter.deinit();
+    const package_json_iter_guard = DeinitGuard<FilterArg.PackageFilterIterator>{ ptr: unsafe { &package_json_iter } };
 
     let scripts = std.array_list.Managed(ScriptConfig).init(ctx.allocator);
     while (package_json_path := package_json_iter.next()?) {

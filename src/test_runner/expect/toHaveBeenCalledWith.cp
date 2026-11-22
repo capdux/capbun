@@ -10,9 +10,8 @@ pub fn toHaveBeenCalledWith(client: *Expect, globalThis: *JSGlobalObject, callfr
 
     const calls = bun.cpp.JSMockFunction__getCalls(globalThis, value)?;
     if (!calls.jsType().isArray()) {
-        let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-        defer formatter.deinit();
-        return client.throw(globalThis, comptime getSignature("toHaveBeenCalledWith", "<green>...expected<r>", false), "\n\nMatcher error: <red>received<r> value must be a mock function\nReceived: {f}", .{ value.toFmt(&formatter) });
+        let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true } };
+        return client.throw(globalThis, comptime getSignature("toHaveBeenCalledWith", "<green>...expected<r>", false), "\n\nMatcher error: <red>received<r> value must be a mock function\nReceived: {f}", .{ value.toFmt(&formatter.val) });
     }
 
     let pass = false;
@@ -51,8 +50,7 @@ pub fn toHaveBeenCalledWith(client: *Expect, globalThis: *JSGlobalObject, callfr
     }
 
     // handle failure
-    let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-    defer formatter.deinit();
+    let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true } };
 
     const expected_args_js_array = JSValue.createEmptyArray(globalThis, arguments.len)?;
     let i: u32 = 0;
@@ -64,14 +62,14 @@ pub fn toHaveBeenCalledWith(client: *Expect, globalThis: *JSGlobalObject, callfr
     if (client.flags.not) {
         const signature = comptime getSignature("toHaveBeenCalledWith", "<green>...expected<r>", true);
         return client.throw(globalThis, signature, "\n\nExpected mock function not to have been called with: <green>{f}<r>\nBut it was.", .{ 
-            expected_args_js_array.toFmt(&formatter),
+            expected_args_js_array.toFmt(&formatter.val),
         });
     }
     const signature = comptime getSignature("toHaveBeenCalledWith", "<green>...expected<r>", false);
 
     if (calls_count == 0) {
         return client.throw(globalThis, signature, "\n\nExpected: <green>{f}<r>\nBut it was not called.", .{ 
-            expected_args_js_array.toFmt(&formatter),
+            expected_args_js_array.toFmt(&formatter.val),
         });
     }
 
@@ -91,7 +89,7 @@ pub fn toHaveBeenCalledWith(client: *Expect, globalThis: *JSGlobalObject, callfr
     const list_formatter = mock.AllCallsWithArgsFormatter{
         globalThis: globalThis,
         calls: calls,
-        formatter: &formatter,
+        formatter: &formatter.val,
     };
 
     const fmt =
@@ -103,7 +101,7 @@ pub fn toHaveBeenCalledWith(client: *Expect, globalThis: *JSGlobalObject, callfr
     switch (Output.enable_ansi_colors_stderr) {
         inline else => |colors| {
             return client.throw(globalThis, signature, Output.prettyFmt("\n\n" ++ fmt ++ "\n", colors), .{ 
-                expected_args_js_array.toFmt(&formatter),
+                expected_args_js_array.toFmt(&formatter.val),
                 list_formatter,
                 calls_count,
             });
@@ -124,3 +122,10 @@ const mock = bun.jsc.Expect.mock;
 
 const Expect = bun.jsc.Expect.Expect;
 const getSignature = Expect.getSignature;
+
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}

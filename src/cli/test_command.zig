@@ -61,7 +61,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .array and @typeInfo(@typeInfo(__T).pointer.child).array.child == u8)) { return val[0..]; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const ChangedFilesFilter = @import("./test/ChangedFilesFilter.zig");
 pub const DotEnv = @import("../dotenv/env_loader.zig");
@@ -156,6 +156,43 @@ pub fn __cp_deinit(self: *@This()) void {
                 {
                     _ = self.ptr.end();
                 }
+        }
+    };
+}
+
+pub fn ExitFileGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.exitFile();
+                }
+        }
+    };
+}
+
+pub fn RunScopeGuard(comptime T: type) type {
+    return struct {
+        vm: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = js_ast.Expr.Data.Store.reset();
+                _ = js_ast.Stmt.Data.Store.reset();
+                {
+                    if ((self.vm.log.errors > 0)) {
+                        _ = (blk_catch_0: { break :blk_catch_0 ((self.vm.log.print(Output.errorWriter())) catch |__ce_0| { _ = &__ce_0;  }); });
+                        _ = self.vm.log.msgs.clearRetainingCapacity();
+                        self.vm.log.errors = 0;
+                    }
+                }
+                _ = Output.flush();
         }
     };
 }
@@ -273,7 +310,7 @@ pub fn begin(self: *RunAllTestsContext) void {
                     const __end_2 = (files.len - 1);
                     while (i < __end_2) : (i += 1) {
                         const file_name = files[@as(usize, @intCast(i))];
-                        _ = (blk_catch_0: { break :blk_catch_0 ((TestCommand.run(reporter, vm, file_name.slice(), .{ .first = (isolate or (i == 0)), .last = isolate })) catch |e| { _ = &e; break :blk_catch_0 @as(void, handleTopLevelTestErrorBeforeJavaScriptStart(e)); }); });
+                        _ = (blk_catch_1: { break :blk_catch_1 ((TestCommand.run(reporter, vm, file_name.slice(), .{ .first = (isolate or (i == 0)), .last = isolate })) catch |e| { _ = &e; break :blk_catch_1 @as(void, handleTopLevelTestErrorBeforeJavaScriptStart(e)); }); });
                         reporter.jest.default_timeout_override = std.math.maxInt(u32);
                         _ = Global.mimalloc_cleanup(false);
                         if (isolate) {
@@ -283,7 +320,7 @@ pub fn begin(self: *RunAllTestsContext) void {
                     }
                 }
             }
-            _ = (blk_catch_1: { break :blk_catch_1 ((TestCommand.run(reporter, vm, files[@as(usize, @intCast((files.len - 1)))].slice(), .{ .first = (isolate or (files.len == 1)), .last = true })) catch |e| { _ = &e; break :blk_catch_1 @as(void, handleTopLevelTestErrorBeforeJavaScriptStart(e)); }); });
+            _ = (blk_catch_2: { break :blk_catch_2 ((TestCommand.run(reporter, vm, files[@as(usize, @intCast((files.len - 1)))].slice(), .{ .first = (isolate or (files.len == 1)), .last = true })) catch |e| { _ = &e; break :blk_catch_2 @as(void, handleTopLevelTestErrorBeforeJavaScriptStart(e)); }); });
     }
 };
 
@@ -308,11 +345,11 @@ pub fn getHostname(self: *JunitReporter) ?[]const u8 {
                 _ = &host_max;
                 var name_buffer: [host_max]u8 = undefined;
                 _ = &name_buffer;
-                const hostname = (blk_catch_2: { break :blk_catch_2 ((std.posix.gethostname((&name_buffer))) catch |__ce_2| { _ = &__ce_2; self.hostname_value = "";
+                const hostname = (blk_catch_3: { break :blk_catch_3 ((std.posix.gethostname((&name_buffer))) catch |__ce_3| { _ = &__ce_3; self.hostname_value = "";
                 return null; }); });
                 var arraylist_writer = std.array_list.Managed(u8).init(bun.default_allocator);
                 _ = &arraylist_writer;
-                _ = (blk_catch_3: { break :blk_catch_3 ((escapeXml(hostname, arraylist_writer.writer())) catch |__ce_3| { _ = &__ce_3; self.hostname_value = "";
+                _ = (blk_catch_4: { break :blk_catch_4 ((escapeXml(hostname, arraylist_writer.writer())) catch |__ce_4| { _ = &__ce_4; self.hostname_value = "";
                 return null; }); });
                 self.hostname_value = arraylist_writer.items;
             }
@@ -745,7 +782,7 @@ pub fn printTestLine(comptime status: bun_test.Execution.Result, sequence: *bun_
             var parent_: ?*bun_test.DescribeScope = test_entry.base.parent;
             _ = &parent_;
             while (parent_) |scope| {
-                _ = (blk_catch_5: { break :blk_catch_5 ((scopes_stack.append(scope)) catch |__ce_5| { _ = &__ce_5; break; }); });
+                _ = (blk_catch_6: { break :blk_catch_6 ((scopes_stack.append(scope)) catch |__ce_6| { _ = &__ce_6; break; }); });
                 parent_ = scope.base.parent;
             }
             const scopes: []*bun_test.DescribeScope = scopes_stack.slice();
@@ -839,25 +876,25 @@ switch (status) {
 
 },
 .fail_because_failing_test_passed => {
-_ = (blk_catch_20: { break :blk_catch_20 ((writer.writeAll((comptime Output.prettyFmt("  <d>^<r> <red>this test is marked as failing but it passed.<r> <d>Remove `.failing` if tested behavior now works<r>\n", colors)))) catch |__ce_20| { _ = &__ce_20;  }); });
+_ = (blk_catch_21: { break :blk_catch_21 ((writer.writeAll((comptime Output.prettyFmt("  <d>^<r> <red>this test is marked as failing but it passed.<r> <d>Remove `.failing` if tested behavior now works<r>\n", colors)))) catch |__ce_21| { _ = &__ce_21;  }); });
 },
 .fail_because_todo_passed => {
-_ = (blk_catch_21: { break :blk_catch_21 ((writer.writeAll((comptime Output.prettyFmt("  <d>^<r> <red>this test is marked as todo but passes.<r> <d>Remove `.todo` if tested behavior now works<r>\n", colors)))) catch |__ce_21| { _ = &__ce_21;  }); });
+_ = (blk_catch_22: { break :blk_catch_22 ((writer.writeAll((comptime Output.prettyFmt("  <d>^<r> <red>this test is marked as todo but passes.<r> <d>Remove `.todo` if tested behavior now works<r>\n", colors)))) catch |__ce_22| { _ = &__ce_22;  }); });
 },
 .fail_because_expected_assertion_count, .fail_because_expected_has_assertions => {
 
 },
 .fail_because_timeout => {
-_ = (blk_catch_22: { break :blk_catch_22 ((writer.print((comptime Output.prettyFmt("  <d>^<r> <red>this test timed out after {d}ms.<r>\n", colors)), .{ test_entry.timeout })) catch |__ce_22| { _ = &__ce_22;  }); });
+_ = (blk_catch_23: { break :blk_catch_23 ((writer.print((comptime Output.prettyFmt("  <d>^<r> <red>this test timed out after {d}ms.<r>\n", colors)), .{ test_entry.timeout })) catch |__ce_23| { _ = &__ce_23;  }); });
 },
 .fail_because_hook_timeout => {
-_ = (blk_catch_23: { break :blk_catch_23 ((writer.writeAll((comptime Output.prettyFmt("  <d>^<r> <red>a beforeEach/afterEach hook timed out for this test.<r>\n", colors)))) catch |__ce_23| { _ = &__ce_23;  }); });
+_ = (blk_catch_24: { break :blk_catch_24 ((writer.writeAll((comptime Output.prettyFmt("  <d>^<r> <red>a beforeEach/afterEach hook timed out for this test.<r>\n", colors)))) catch |__ce_24| { _ = &__ce_24;  }); });
 },
 .fail_because_timeout_with_done_callback => {
-_ = (blk_catch_24: { break :blk_catch_24 ((writer.print((comptime Output.prettyFmt("  <d>^<r> <red>this test timed out after {d}ms, before its done callback was called.<r> <d>If a done callback was not intended, remove the last parameter from the test callback function<r>\n", colors)), .{ test_entry.timeout })) catch |__ce_24| { _ = &__ce_24;  }); });
+_ = (blk_catch_25: { break :blk_catch_25 ((writer.print((comptime Output.prettyFmt("  <d>^<r> <red>this test timed out after {d}ms, before its done callback was called.<r> <d>If a done callback was not intended, remove the last parameter from the test callback function<r>\n", colors)), .{ test_entry.timeout })) catch |__ce_25| { _ = &__ce_25;  }); });
 },
 .fail_because_hook_timeout_with_done_callback => {
-_ = (blk_catch_25: { break :blk_catch_25 ((writer.writeAll((comptime Output.prettyFmt("  <d>^<r> <red>a beforeEach/afterEach hook timed out before its done callback was called.<r> <d>If a done callback was not intended, remove the last parameter from the hook callback function<r>\n", colors)))) catch |__ce_25| { _ = &__ce_25;  }); });
+_ = (blk_catch_26: { break :blk_catch_26 ((writer.writeAll((comptime Output.prettyFmt("  <d>^<r> <red>a beforeEach/afterEach hook timed out before its done callback was called.<r> <d>If a done callback was not intended, remove the last parameter from the hook callback function<r>\n", colors)))) catch |__ce_26| { _ = &__ce_26;  }); });
 },
 }
 },
@@ -883,7 +920,7 @@ pub fn maybePrintJunitLine(comptime status: bun_test.Execution.Result, buntest: 
                         file = runner.files.get(buntest.file_id).source.path.text;
                     }
                     while (parent_) |scope| {
-                        _ = (blk_catch_27: { break :blk_catch_27 ((scopes_stack.append(scope)) catch |__ce_27| { _ = &__ce_27; break; }); });
+                        _ = (blk_catch_28: { break :blk_catch_28 ((scopes_stack.append(scope)) catch |__ce_28| { _ = &__ce_28; break; }); });
                         parent_ = scope.base.parent;
                     }
                     const scopes: []*bun_test.DescribeScope = scopes_stack.slice();
@@ -1046,19 +1083,19 @@ if ((result != .skipped_because_label)) {
 inline else => |enable_ansi_colors_stderr| {
 switch ((comptime result.basicResult())) {
 .pass => {
-_ = (blk_catch_28: { break :blk_catch_28 ((writer.print((comptime Output.prettyFmt("<r><green>.<r>", enable_ansi_colors_stderr)), .{})) catch |__ce_28| { _ = &__ce_28;  }); });
+_ = (blk_catch_29: { break :blk_catch_29 ((writer.print((comptime Output.prettyFmt("<r><green>.<r>", enable_ansi_colors_stderr)), .{})) catch |__ce_29| { _ = &__ce_29;  }); });
 },
 .skip => {
-_ = (blk_catch_29: { break :blk_catch_29 ((writer.print((comptime Output.prettyFmt("<r><yellow>.<d>", enable_ansi_colors_stderr)), .{})) catch |__ce_29| { _ = &__ce_29;  }); });
+_ = (blk_catch_30: { break :blk_catch_30 ((writer.print((comptime Output.prettyFmt("<r><yellow>.<d>", enable_ansi_colors_stderr)), .{})) catch |__ce_30| { _ = &__ce_30;  }); });
 },
 .todo => {
-_ = (blk_catch_30: { break :blk_catch_30 ((writer.print((comptime Output.prettyFmt("<r><magenta>.<r>", enable_ansi_colors_stderr)), .{})) catch |__ce_30| { _ = &__ce_30;  }); });
+_ = (blk_catch_31: { break :blk_catch_31 ((writer.print((comptime Output.prettyFmt("<r><magenta>.<r>", enable_ansi_colors_stderr)), .{})) catch |__ce_31| { _ = &__ce_31;  }); });
 },
 .pending => {
-_ = (blk_catch_31: { break :blk_catch_31 ((writer.print((comptime Output.prettyFmt("<r><d>.<r>", enable_ansi_colors_stderr)), .{})) catch |__ce_31| { _ = &__ce_31;  }); });
+_ = (blk_catch_32: { break :blk_catch_32 ((writer.print((comptime Output.prettyFmt("<r><d>.<r>", enable_ansi_colors_stderr)), .{})) catch |__ce_32| { _ = &__ce_32;  }); });
 },
 .fail => {
-_ = (blk_catch_32: { break :blk_catch_32 ((writer.print((comptime Output.prettyFmt("<r><red>.<r>", enable_ansi_colors_stderr)), .{})) catch |__ce_32| { _ = &__ce_32;  }); });
+_ = (blk_catch_33: { break :blk_catch_33 ((writer.print((comptime Output.prettyFmt("<r><red>.<r>", enable_ansi_colors_stderr)), .{})) catch |__ce_33| { _ = &__ce_33;  }); });
 },
 }
 },
@@ -1095,7 +1132,7 @@ _ = (blk_catch_32: { break :blk_catch_32 ((writer.print((comptime Output.prettyF
             if (((buntest.reporter != null) and (buntest.reporter.?.worker_ipc_file_idx != null))) {
                 _ = ParallelRunner.workerEmitTestDone(buntest.reporter.?.worker_ipc_file_idx.?, formatted_line);
             } else {
-                _ = (blk_catch_33: { break :blk_catch_33 ((Output.errorWriter().writeAll(formatted_line)) catch |__ce_33| { _ = &__ce_33;  }); });
+                _ = (blk_catch_34: { break :blk_catch_34 ((Output.errorWriter().writeAll(formatted_line)) catch |__ce_34| { _ = &__ce_34;  }); });
             }
             if ((buntest.reporter == null)) {
                 return;
@@ -1162,9 +1199,9 @@ pub fn writeJUnitReportIfNeeded(self: *CommandLineReporter) void {
                 if (self.jest.test_options.reporter_outfile) |outfile| {
                     _ = &outfile;
                     if ((junit.current_file.len > 0)) {
-                        _ = (blk_catch_34: { break :blk_catch_34 ((junit.endTestSuite()) catch |__ce_34| { _ = &__ce_34;  }); });
+                        _ = (blk_catch_35: { break :blk_catch_35 ((junit.endTestSuite()) catch |__ce_35| { _ = &__ce_35;  }); });
                     }
-                    _ = (blk_catch_35: { break :blk_catch_35 ((junit.writeToFile(outfile)) catch |__ce_35| { _ = &__ce_35;  }); });
+                    _ = (blk_catch_36: { break :blk_catch_36 ((junit.writeToFile(outfile)) catch |__ce_36| { _ = &__ce_36;  }); });
                 }
             }
     }
@@ -1264,7 +1301,7 @@ pub fn writeLcovOnly(self: *CommandLineReporter, vm: *jsc.VirtualMachine, opts: 
                 _ = &_guard_report;
                 var ___guard_report_moved = false; _ = &___guard_report_moved;
                 defer if (!___guard_report_moved) { ___guard_report_moved = true; const __T = @TypeOf(_guard_report); if (@typeInfo(__T) == .optional) { if (_guard_report) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_report.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_report; _drop_val.__cp_deinit(); } };
-                _ = (blk_catch_36: { break :blk_catch_36 ((CodeCoverageReport.Lcov.writeFormat((&report), relative_dir, writer)) catch |__ce_36| { _ = &__ce_36; continue; }); });
+                _ = (blk_catch_37: { break :blk_catch_37 ((CodeCoverageReport.Lcov.writeFormat((&report), relative_dir, writer)) catch |__ce_37| { _ = &__ce_37; continue; }); });
             }
             _ = try writer.flush();
     }
@@ -1313,15 +1350,15 @@ pub fn printCodeCoverage(_: *CommandLineReporter, vm: *jsc.VirtualMachine, opts:
             var failing = false;
             _ = &failing;
             if (comptime reporters.text) {
-                _ = (blk_catch_37: { break :blk_catch_37 ((console.writeAll(Output.prettyFmt("<r><d>", enable_ansi_colors))) catch |__ce_37| { _ = &__ce_37; return; }); });
-                _ = (blk_catch_38: { break :blk_catch_38 ((console.splatByteAll(45, (max_filepath_length + 2))) catch |__ce_38| { _ = &__ce_38; return; }); });
-                _ = (blk_catch_39: { break :blk_catch_39 ((console.writeAll(Output.prettyFmt("|---------|---------|-------------------<r>\n", enable_ansi_colors))) catch |__ce_39| { _ = &__ce_39; return; }); });
-                _ = (blk_catch_40: { break :blk_catch_40 ((console.writeAll("File")) catch |__ce_40| { _ = &__ce_40; return; }); });
-                _ = (blk_catch_41: { break :blk_catch_41 ((console.splatByteAll(32, ((max_filepath_length - "File".len) + 1))) catch |__ce_41| { _ = &__ce_41; return; }); });
-                _ = (blk_catch_42: { break :blk_catch_42 ((console.writeAll(Output.prettyFmt(" <d>|<r> % Funcs <d>|<r> % Lines <d>|<r> Uncovered Line #s\n", enable_ansi_colors))) catch |__ce_42| { _ = &__ce_42; return; }); });
-                _ = (blk_catch_43: { break :blk_catch_43 ((console.writeAll(Output.prettyFmt("<d>", enable_ansi_colors))) catch |__ce_43| { _ = &__ce_43; return; }); });
-                _ = (blk_catch_44: { break :blk_catch_44 ((console.splatByteAll(45, (max_filepath_length + 2))) catch |__ce_44| { _ = &__ce_44; return; }); });
-                _ = (blk_catch_45: { break :blk_catch_45 ((console.writeAll(Output.prettyFmt("|---------|---------|-------------------<r>\n", enable_ansi_colors))) catch |__ce_45| { _ = &__ce_45; return; }); });
+                _ = (blk_catch_38: { break :blk_catch_38 ((console.writeAll(Output.prettyFmt("<r><d>", enable_ansi_colors))) catch |__ce_38| { _ = &__ce_38; return; }); });
+                _ = (blk_catch_39: { break :blk_catch_39 ((console.splatByteAll(45, (max_filepath_length + 2))) catch |__ce_39| { _ = &__ce_39; return; }); });
+                _ = (blk_catch_40: { break :blk_catch_40 ((console.writeAll(Output.prettyFmt("|---------|---------|-------------------<r>\n", enable_ansi_colors))) catch |__ce_40| { _ = &__ce_40; return; }); });
+                _ = (blk_catch_41: { break :blk_catch_41 ((console.writeAll("File")) catch |__ce_41| { _ = &__ce_41; return; }); });
+                _ = (blk_catch_42: { break :blk_catch_42 ((console.splatByteAll(32, ((max_filepath_length - "File".len) + 1))) catch |__ce_42| { _ = &__ce_42; return; }); });
+                _ = (blk_catch_43: { break :blk_catch_43 ((console.writeAll(Output.prettyFmt(" <d>|<r> % Funcs <d>|<r> % Lines <d>|<r> Uncovered Line #s\n", enable_ansi_colors))) catch |__ce_43| { _ = &__ce_43; return; }); });
+                _ = (blk_catch_44: { break :blk_catch_44 ((console.writeAll(Output.prettyFmt("<d>", enable_ansi_colors))) catch |__ce_44| { _ = &__ce_44; return; }); });
+                _ = (blk_catch_45: { break :blk_catch_45 ((console.splatByteAll(45, (max_filepath_length + 2))) catch |__ce_45| { _ = &__ce_45; return; }); });
+                _ = (blk_catch_46: { break :blk_catch_46 ((console.writeAll(Output.prettyFmt("|---------|---------|-------------------<r>\n", enable_ansi_colors))) catch |__ce_46| { _ = &__ce_46; return; }); });
             }
             var console_buffer = std.Io.Writer.Allocating.init(bun.default_allocator);
             _ = &console_buffer;
@@ -1403,7 +1440,7 @@ pub fn printCodeCoverage(_: *CommandLineReporter, vm: *jsc.VirtualMachine, opts:
                 if (comptime reporters.text) {
                     var fraction = base_fraction;
                     _ = &fraction;
-                    _ = (blk_catch_47: { break :blk_catch_47 ((CodeCoverageReport.Text.writeFormat((&report), max_filepath_length, (&fraction), relative_dir, console_writer, enable_ansi_colors)) catch |__ce_47| { _ = &__ce_47; continue; }); });
+                    _ = (blk_catch_48: { break :blk_catch_48 ((CodeCoverageReport.Text.writeFormat((&report), max_filepath_length, (&fraction), relative_dir, console_writer, enable_ansi_colors)) catch |__ce_48| { _ = &__ce_48; continue; }); });
                     avg.functions = (avg.functions + fraction.functions);
                     avg.lines = (avg.lines + fraction.lines);
                     avg.stmts = (avg.stmts + fraction.stmts);
@@ -1411,10 +1448,10 @@ pub fn printCodeCoverage(_: *CommandLineReporter, vm: *jsc.VirtualMachine, opts:
                     if (fraction.failing) {
                         failing = true;
                     }
-                    _ = (blk_catch_48: { break :blk_catch_48 ((console_writer.writeAll("\n")) catch |__ce_48| { _ = &__ce_48; continue; }); });
+                    _ = (blk_catch_49: { break :blk_catch_49 ((console_writer.writeAll("\n")) catch |__ce_49| { _ = &__ce_49; continue; }); });
                 }
                 if (comptime reporters.lcov) {
-                    _ = (blk_catch_49: { break :blk_catch_49 ((CodeCoverageReport.Lcov.writeFormat((&report), relative_dir, lcov_writer)) catch |__ce_49| { _ = &__ce_49; continue; }); });
+                    _ = (blk_catch_50: { break :blk_catch_50 ((CodeCoverageReport.Lcov.writeFormat((&report), relative_dir, lcov_writer)) catch |__ce_50| { _ = &__ce_50; continue; }); });
                 }
             }
             if (comptime reporters.text) {
@@ -1432,11 +1469,11 @@ pub fn printCodeCoverage(_: *CommandLineReporter, vm: *jsc.VirtualMachine, opts:
                     _ = try CodeCoverageReport.Text.writeFormatWithValues("All files", max_filepath_length, avg, failed, failing, console, false, enable_ansi_colors);
                     _ = try console.writeAll(Output.prettyFmt("<r><d> |<r>\n", enable_ansi_colors));
                 }
-                _ = (blk_catch_50: { break :blk_catch_50 ((console_writer.flush()) catch |__ce_50| { _ = &__ce_50; return; }); });
+                _ = (blk_catch_51: { break :blk_catch_51 ((console_writer.flush()) catch |__ce_51| { _ = &__ce_51; return; }); });
                 _ = try console.writeAll(console_buffer.written());
                 _ = try console.writeAll(Output.prettyFmt("<r><d>", enable_ansi_colors));
-                _ = (blk_catch_51: { break :blk_catch_51 ((console.splatByteAll(45, (max_filepath_length + 2))) catch |__ce_51| { _ = &__ce_51; return; }); });
-                _ = (blk_catch_52: { break :blk_catch_52 ((console.writeAll(Output.prettyFmt("|---------|---------|-------------------<r>\n", enable_ansi_colors))) catch |__ce_52| { _ = &__ce_52; return; }); });
+                _ = (blk_catch_52: { break :blk_catch_52 ((console.splatByteAll(45, (max_filepath_length + 2))) catch |__ce_52| { _ = &__ce_52; return; }); });
+                _ = (blk_catch_53: { break :blk_catch_53 ((console.writeAll(Output.prettyFmt("|---------|---------|-------------------<r>\n", enable_ansi_colors))) catch |__ce_53| { _ = &__ce_53; return; }); });
                 opts.fractions.failing = failing;
                 _ = Output.flush();
             }
@@ -1445,8 +1482,8 @@ pub fn printCodeCoverage(_: *CommandLineReporter, vm: *jsc.VirtualMachine, opts:
                 _guard_lcov.armed = false;
                 _ = lcov_file.close();
                 const cwd = bun.FD.cwd();
-                _ = (blk_catch_53: { break :blk_catch_53 ((bun.sys.moveFileZ(cwd, lcov_name, cwd, bun.path.joinAbsStringZ(relative_dir, (&.{ opts.reports_directory, "lcov.info" }), .auto))) catch |e| { _ = &e; _ = Output.err(e, "Failed to save lcov.info file", .{});
-                break :blk_catch_53 Global.exit(1); }); });
+                _ = (blk_catch_54: { break :blk_catch_54 ((bun.sys.moveFileZ(cwd, lcov_name, cwd, bun.path.joinAbsStringZ(relative_dir, (&.{ opts.reports_directory, "lcov.info" }), .auto))) catch |e| { _ = &e; _ = Output.err(e, "Failed to save lcov.info file", .{});
+                break :blk_catch_54 Global.exit(1); }); });
             }
     }
     const DotColorMap = std.EnumMap(TestRunner.Test.Status, string);
@@ -1467,15 +1504,15 @@ pub fn exec(ctx: Command.Context) !void {
             if ((!ctx.test_options.test_worker)) {
                 const w = Output.writer();
                 const colors = Output.enable_ansi_colors_stdout;
-                _ = (blk_catch_54: { break :blk_catch_54 ((w.writeAll((if (colors) Output.prettyFmt((("<r><b>bun test <r><d>v" ++ Global.package_json_version_with_sha) ++ "<r>"), true) else Output.prettyFmt((("<r><b>bun test <r><d>v" ++ Global.package_json_version_with_sha) ++ "<r>"), false)))) catch |__ce_54| { _ = &__ce_54;  }); });
+                _ = (blk_catch_55: { break :blk_catch_55 ((w.writeAll((if (colors) Output.prettyFmt((("<r><b>bun test <r><d>v" ++ Global.package_json_version_with_sha) ++ "<r>"), true) else Output.prettyFmt((("<r><b>bun test <r><d>v" ++ Global.package_json_version_with_sha) ++ "<r>"), false)))) catch |__ce_55| { _ = &__ce_55;  }); });
                 if ((ctx.test_options.parallel > 0)) {
                     if (colors) {
-                        _ = (blk_catch_55: { break :blk_catch_55 ((w.print(" \x1b[1;2m{d}\u{00d7} PARALLEL\x1b[0m", .{ ctx.test_options.parallel })) catch |__ce_55| { _ = &__ce_55;  }); });
+                        _ = (blk_catch_56: { break :blk_catch_56 ((w.print(" \x1b[1;2m{d}\u{00d7} PARALLEL\x1b[0m", .{ ctx.test_options.parallel })) catch |__ce_56| { _ = &__ce_56;  }); });
                     } else {
-                        _ = (blk_catch_56: { break :blk_catch_56 ((w.print(" {d}x PARALLEL", .{ ctx.test_options.parallel })) catch |__ce_56| { _ = &__ce_56;  }); });
+                        _ = (blk_catch_57: { break :blk_catch_57 ((w.print(" {d}x PARALLEL", .{ ctx.test_options.parallel })) catch |__ce_57| { _ = &__ce_57;  }); });
                     }
                 }
-                _ = (blk_catch_57: { break :blk_catch_57 ((w.writeAll("\n")) catch |__ce_57| { _ = &__ce_57;  }); });
+                _ = (blk_catch_58: { break :blk_catch_58 ((w.writeAll("\n")) catch |__ce_58| { _ = &__ce_58;  }); });
                 _ = Output.flush();
             }
             var env_loader = brk: {
@@ -1597,7 +1634,7 @@ pub fn exec(ctx: Command.Context) !void {
                 const file_or_dirnames = ctx.positionals[1..];
                 for (cp_iter_slice(file_or_dirnames)) |arg| {
                     _ = &arg;
-                    _ = (blk_catch_58: { break :blk_catch_58 ((scanner.scan(arg)) catch |e| { _ = &e; break :blk_catch_58 (__sw_blk_14: { const __disc_14 = e; _ = &__disc_14; if ((!cp_has_ok_val(__disc_14) and !cp_is_null_val(__disc_14))) { const __err_v_14 = cp_unwrap_err_val(__disc_14); _ = &__err_v_14; if (cp_match_tag(__err_v_14, .OutOfMemory)) {  break :__sw_blk_14 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_14) and !cp_is_null_val(__disc_14))) { const __err_v_14 = cp_unwrap_err_val(__disc_14); _ = &__err_v_14; if (cp_match_tag(__err_v_14, .DoesNotExist)) {  break :__sw_blk_14 cp_val((if ((file_or_dirnames.len == 1)) blk: {
+                    _ = (blk_catch_59: { break :blk_catch_59 ((scanner.scan(arg)) catch |e| { _ = &e; break :blk_catch_59 (__sw_blk_14: { const __disc_14 = e; _ = &__disc_14; if ((!cp_has_ok_val(__disc_14) and !cp_is_null_val(__disc_14))) { const __err_v_14 = cp_unwrap_err_val(__disc_14); _ = &__err_v_14; if (cp_match_tag(__err_v_14, .OutOfMemory)) {  break :__sw_blk_14 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_14) and !cp_is_null_val(__disc_14))) { const __err_v_14 = cp_unwrap_err_val(__disc_14); _ = &__err_v_14; if (cp_match_tag(__err_v_14, .DoesNotExist)) {  break :__sw_blk_14 cp_val((if ((file_or_dirnames.len == 1)) blk: {
                     if (Output.isAIAgent()) {
                         _ = Output.prettyErrorln("Test filter <b>{f}<r> had no matches in --cwd={f}", .{ bun.fmt.quote(arg), bun.fmt.quote(bun.fs.FileSystem.instance.top_level_dir) });
                     } else {
@@ -1638,7 +1675,7 @@ pub fn exec(ctx: Command.Context) !void {
                 }
                 break :brk scanner.fs.top_level_dir;
 };
-                _ = (blk_catch_59: { break :blk_catch_59 ((scanner.scan(dir_to_scan)) catch |e| { _ = &e; break :blk_catch_59 (__sw_blk_16: { const __disc_16 = e; _ = &__disc_16; if ((!cp_has_ok_val(__disc_16) and !cp_is_null_val(__disc_16))) { const __err_v_16 = cp_unwrap_err_val(__disc_16); _ = &__err_v_16; if (cp_match_tag(__err_v_16, .OutOfMemory)) {  break :__sw_blk_16 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_16) and !cp_is_null_val(__disc_16))) { const __err_v_16 = cp_unwrap_err_val(__disc_16); _ = &__err_v_16; if (cp_match_tag(__err_v_16, .DoesNotExist)) {  if (Output.isAIAgent()) {
+                _ = (blk_catch_60: { break :blk_catch_60 ((scanner.scan(dir_to_scan)) catch |e| { _ = &e; break :blk_catch_60 (__sw_blk_16: { const __disc_16 = e; _ = &__disc_16; if ((!cp_has_ok_val(__disc_16) and !cp_is_null_val(__disc_16))) { const __err_v_16 = cp_unwrap_err_val(__disc_16); _ = &__err_v_16; if (cp_match_tag(__err_v_16, .OutOfMemory)) {  break :__sw_blk_16 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_16) and !cp_is_null_val(__disc_16))) { const __err_v_16 = cp_unwrap_err_val(__disc_16); _ = &__err_v_16; if (cp_match_tag(__err_v_16, .DoesNotExist)) {  if (Output.isAIAgent()) {
                     _ = Output.prettyErrorln("<red>Failed to scan non-existent root directory for tests:<r> {f} in --cwd={f}", .{ bun.fmt.quote(dir_to_scan), bun.fmt.quote(bun.fs.FileSystem.instance.top_level_dir) });
                 } else {
                     _ = Output.prettyErrorln("<red>Failed to scan non-existent root directory for tests:<r> {f}", .{ bun.fmt.quote(dir_to_scan) });
@@ -1666,8 +1703,8 @@ pub fn exec(ctx: Command.Context) !void {
             if (ctx.test_options.changed) |changed_since| {
                 _ = &changed_since;
                 if ((all_test_files.len > 0)) {
-                    const result = (blk_catch_60: { break :blk_catch_60 ((ChangedFilesFilter.filter(ctx, vm, all_test_files, changed_since)) catch |e| { _ = &e; _ = Output.err(e, "--changed: unable to determine affected tests", .{});
-                    break :blk_catch_60 Global.exit(1); }); });
+                    const result = (blk_catch_61: { break :blk_catch_61 ((ChangedFilesFilter.filter(ctx, vm, all_test_files, changed_since)) catch |e| { _ = &e; _ = Output.err(e, "--changed: unable to determine affected tests", .{});
+                    break :blk_catch_61 Global.exit(1); }); });
                     changed_module_graph_files = result.module_graph_files;
                     _guard_changed.slice = changed_module_graph_files;
                     if (((result.test_files.len == 0) and (result.changed_count == 0))) {
@@ -1755,7 +1792,7 @@ else => {
                     _ = Output.flush();
                     var error_writer = Output.errorWriter();
                     _ = &error_writer;
-                    _ = (blk_catch_61: { break :blk_catch_61 ((error_writer.writeAll(reporter.skips_to_repeat_buf.items)) catch |__ce_61| { _ = &__ce_61;  }); });
+                    _ = (blk_catch_62: { break :blk_catch_62 ((error_writer.writeAll(reporter.skips_to_repeat_buf.items)) catch |__ce_62| { _ = &__ce_62;  }); });
                 }
                 if ((reporter.summary().todo > 0)) {
                     if ((reporter.summary().skip > 0)) {
@@ -1765,7 +1802,7 @@ else => {
                     _ = Output.flush();
                     var error_writer = Output.errorWriter();
                     _ = &error_writer;
-                    _ = (blk_catch_62: { break :blk_catch_62 ((error_writer.writeAll(reporter.todos_to_repeat_buf.items)) catch |__ce_62| { _ = &__ce_62;  }); });
+                    _ = (blk_catch_63: { break :blk_catch_63 ((error_writer.writeAll(reporter.todos_to_repeat_buf.items)) catch |__ce_63| { _ = &__ce_63;  }); });
                 }
                 if ((reporter.summary().fail > 0)) {
                     if (((reporter.summary().skip > 0) or (reporter.summary().todo > 0))) {
@@ -1775,7 +1812,7 @@ else => {
                     _ = Output.flush();
                     var error_writer = Output.errorWriter();
                     _ = &error_writer;
-                    _ = (blk_catch_63: { break :blk_catch_63 ((error_writer.writeAll(reporter.failures_to_repeat_buf.items)) catch |__ce_63| { _ = &__ce_63;  }); });
+                    _ = (blk_catch_64: { break :blk_catch_64 ((error_writer.writeAll(reporter.failures_to_repeat_buf.items)) catch |__ce_64| { _ = &__ce_64;  }); });
                 }
             }
             _ = Output.flush();
@@ -1972,18 +2009,10 @@ pub fn timerNoop(self: *TestCommand, _: *uws.Timer) callconv(.c) void {
     }
 
 pub fn run(reporter: *CommandLineReporter, vm: *jsc.VirtualMachine, file_name: []const u8, first_last: bun_test.BunTestRoot.FirstLast) !void {
-            defer {
-            {
-                _ = js_ast.Expr.Data.Store.reset();
-                _ = js_ast.Stmt.Data.Store.reset();
-                if ((vm.log.errors > 0)) {
-                    _ = (blk_catch_64: { break :blk_catch_64 ((vm.log.print(Output.errorWriter())) catch |__ce_64| { _ = &__ce_64;  }); });
-                    _ = vm.log.msgs.clearRetainingCapacity();
-                    vm.log.errors = 0;
-                }
-                _ = Output.flush();
-            }
-            }
+            var _guard_run = RunScopeGuard(jsc.VirtualMachine){ .vm = vm };
+            _ = &_guard_run;
+            var ___guard_run_moved = false; _ = &___guard_run_moved;
+            defer if (!___guard_run_moved) { ___guard_run_moved = true; const __T = @TypeOf(_guard_run); if (@typeInfo(__T) == .optional) { if (_guard_run) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_run.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_run; _drop_val.__cp_deinit(); } };
             const prev_only = reporter.jest.only;
             defer {
             reporter.jest.only = prev_only;
@@ -2011,9 +2040,10 @@ pub fn run(reporter: *CommandLineReporter, vm: *jsc.VirtualMachine, file_name: [
                 _ = &bun_test_root;
                 const should_run_concurrent = reporter.jest.shouldFileRunConcurrently(file_id);
                 _ = bun_test_root.enterFile(file_id, reporter, should_run_concurrent, first_last);
-                defer {
-                _ = bun_test_root.exitFile();
-                }
+                var _guard_exit_file = ExitFileGuard(bun_test.BunTestRoot){ .ptr = bun_test_root };
+                _ = &_guard_exit_file;
+                var ___guard_exit_file_moved = false; _ = &___guard_exit_file_moved;
+                defer if (!___guard_exit_file_moved) { ___guard_exit_file_moved = true; const __T = @TypeOf(_guard_exit_file); if (@typeInfo(__T) == .optional) { if (_guard_exit_file) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_exit_file.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_exit_file; _drop_val.__cp_deinit(); } };
                 _ = reporter.jest.current_file.set(file_title, file_prefix, repeat_count, repeat_index, reporter);
                 _ = bun.jsc.Jest.bun_test.debug.group.log("loadEntryPointForTestRunner(\"{f}\")", .{ std.zig.fmtString(file_path) });
                 _ = vm.wakeup();

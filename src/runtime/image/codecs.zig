@@ -58,7 +58,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const jpeg = @import("./codec_jpeg.zig");
 pub const png = @import("./codec_png.zig");
@@ -200,6 +200,35 @@ pub const ProbeResult = struct {
     height: u32,
 };
 
+pub fn Tj3Guard(comptime T: type) type {
+    return struct {
+        handle: T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = jpeg.tj3Destroy(self.handle);
+        }
+    };
+}
+
+pub fn DefaultAllocSliceGuard(comptime T: type) type {
+    return struct {
+        slice: ?[]T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.slice) |s| {
+                    _ = &s;
+                    _ = bun.default_allocator.free(s);
+                }
+        }
+    };
+}
+
 pub const EncodeOptions = struct {
     format: Format,
     quality: u8 = 80,
@@ -337,15 +366,15 @@ const handle_opt = jpeg.tj3Init(1);
         if ((handle_opt == null)) {
             return error.OutOfMemory;
         }
-        const handle = handle_opt.?;
-        defer {
-        _ = jpeg.tj3Destroy(handle);
-        }
-        if ((jpeg.tj3DecompressHeader(handle, bytes.ptr, bytes.len) != 0)) {
+        var handle_guard = Tj3Guard(@TypeOf(handle_opt.?)){ .handle = handle_opt.? };
+        _ = &handle_guard;
+        var __handle_guard_moved = false; _ = &__handle_guard_moved;
+        defer if (!__handle_guard_moved) { __handle_guard_moved = true; const __T = @TypeOf(handle_guard); if (@typeInfo(__T) == .optional) { if (handle_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { handle_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = handle_guard; _drop_val.__cp_deinit(); } };
+        if ((jpeg.tj3DecompressHeader(handle_guard.handle, bytes.ptr, bytes.len) != 0)) {
             return error.DecodeFailed;
         }
-        const rw = jpeg.tj3Get(handle, jpeg.TJPARAM_JPEGWIDTH);
-        const rh = jpeg.tj3Get(handle, jpeg.TJPARAM_JPEGHEIGHT);
+        const rw = jpeg.tj3Get(handle_guard.handle, jpeg.TJPARAM_JPEGWIDTH);
+        const rh = jpeg.tj3Get(handle_guard.handle, jpeg.TJPARAM_JPEGHEIGHT);
         if (((rw <= 0) or (rh <= 0))) {
             return error.DecodeFailed;
         }
@@ -440,12 +469,17 @@ pub fn resize(src: []const u8, sw: u32, sh: u32, dw: u32, dh: u32, f: Filter) Er
         const out_sz: usize = (((if (comptime @typeInfo(@TypeOf(dw)) == .@"enum") cp_cast_int(usize, @intFromEnum(dw)) else cp_cast_int(usize, dw)) * dh) * 4);
         const scratch_sz = bun_image_resize_scratch_size(@intCast(sw), @intCast(sh), @intCast(dw), @intCast(dh), @intFromEnum(f));
         const block = try bun.default_allocator.alloc(u8, (out_sz + scratch_sz));
-        errdefer {
-        _ = bun.default_allocator.free(block);
-        }
-        if ((bun_image_resize_rgba8(src.ptr, @intCast(sw), @intCast(sh), block.ptr, @intCast(dw), @intCast(dh), @intFromEnum(f), (block.ptr + out_sz)) != 0)) {
+        var block_guard = DefaultAllocSliceGuard(u8){ .slice = block };
+        _ = &block_guard;
+        var __block_guard_moved = false; _ = &__block_guard_moved;
+        defer if (!__block_guard_moved) { __block_guard_moved = true; const __T = @TypeOf(block_guard); if (@typeInfo(__T) == .optional) { if (block_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { block_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = block_guard; _drop_val.__cp_deinit(); } };
+        if ((bun_image_resize_rgba8(src.ptr, @intCast(sw), @intCast(sh), block.ptr, @intCast(dw), @intCast(dh), @intFromEnum(f), (blk: {
+        break :blk (block.ptr + out_sz);
+
+})) != 0)) {
             return error.OutOfMemory;
         }
+        block_guard.slice = null;
         return bun.handleOom(bun.default_allocator.realloc(block, out_sz));
 }
 

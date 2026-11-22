@@ -3,6 +3,14 @@
 const weak_ref_expiry_seconds = 10;
 const weak_ref_entry_max = 16;
 
+pub struct PathBufferPoolGuard<T> {
+    buf: T,
+
+    ~init() {
+        bun.path_buffer_pool.put(_.buf);
+    }
+}
+
 pub enum UnusedZero: u31 { zero = 0 }
 
 @packed(u63) pub struct InitialResponseBits {
@@ -60,7 +68,8 @@ pub struct StoreEntry {
             j.pushStatic(",");
 
             let relative_path_buf = bun.path_buffer_pool.get();
-            defer bun.path_buffer_pool.put(relative_path_buf);
+            const _rel_path_guard = PathBufferPoolGuard<@TypeOf(relative_path_buf)>{ buf: relative_path_buf };
+            * = _rel_path_guard;
             const rel_path = dev.relativePath(relative_path_buf, native_file_path);
 
             if (side == .client) {
@@ -296,7 +305,7 @@ pub struct StoreGetResult {
     }
 
     fn dev_allocator(store: *const Self): DevAllocator {
-        const dev_server: *const DevServer = @constCast(store).owner();
+        const dev_server: *const DevServer = unsafe { @constCast(store).owner() };
         return dev_server.dev_allocator();
     }
 

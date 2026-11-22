@@ -21,6 +21,37 @@ const streams = webcore.streams;
 const BufferAction = streams.BufferAction;
 const log = Output.scoped(.ByteStream, .visible);
 
+struct ByteStreamErrGuard {
+    stream: (*ByteStream!)? = null,
+    ~init() {
+        if (s := _.stream) {
+            s.buffer.clearAndFree();
+            s.pending.result.deinit();
+            s.pending.result = .done;
+            s.buffer_action = null;
+        }
+    }
+}
+
+struct BufferActionResetGuard {
+    stream: (*ByteStream!)? = null,
+    ~init() {
+        if (s := _.stream) {
+            s.buffer_action = null;
+        }
+    }
+}
+
+struct FreeSliceGuard {
+    allocator: std.mem.Allocator,
+    slice: ([]const u8)? = null,
+    ~init() {
+        if (s := _.slice) {
+            _.allocator.free(s);
+        }
+    }
+}
+
 @root struct ByteStream {
     buffer: std.array_list.Managed(u8) = .{
         .allocator = default_allocator,
@@ -121,21 +152,14 @@ const log = Output.scoped(.ByteStream, .visible);
 
         if (*action := _.buffer_action) {
             if (stream == .err) {
-                defer {
-                    _.buffer.clearAndFree();
-                    _.pending.result.deinit();
-                    _.pending.result = .done;
-                    _.buffer_action = null;
-                }
+                const _err_guard = ByteStreamErrGuard{ stream: _ };
 
                 log("ByteStream.onData err action.reject()", .{});
                 return action.reject(_.parent().globalThis, stream.err);
             }
 
             if (_.has_received_last_chunk) {
-                defer {
-                    _.buffer_action = null;
-                }
+                const _action_reset_guard = BufferActionResetGuard{ stream: _ };
 
                 if (_.buffer.capacity == 0 && stream == .done) {
                     log("ByteStream.onData done and action.fulfill()", .{});
@@ -145,16 +169,15 @@ const log = Output.scoped(.ByteStream, .visible);
                 }
                 if (_.buffer.capacity == 0 && stream == .owned_and_done) {
                     log("ByteStream.onData owned_and_done and action.fulfill()", .{});
-                    _.buffer = std.array_list.Managed(u8).fromOwnedSlice(default_allocator, @constCast(chunk));
+                    _.buffer = std.array_list.Managed(u8).fromOwnedSlice(default_allocator, unsafe { @constCast(chunk) });
                     let blob = _.toAnyBlob().?;
                     action.fulfill(_.parent().globalThis, &blob)?;
                     return;
                 }
-                defer {
-                    if (stream == .owned_and_done || stream == .owned) {
-                        allocator.free(stream.slice());
-                    }
-                }
+                const _free_guard = FreeSliceGuard{
+                    allocator: allocator,
+                    slice: if (stream == .owned_and_done || stream == .owned) stream.slice() else null,
+                };
                 log("ByteStream.onData appendSlice and action.fulfill()", .{});
 
                 handleOom(_.buffer.appendSlice(chunk));
@@ -258,7 +281,7 @@ const log = Output.scoped(.ByteStream, .visible);
             },
             .owned_and_done, .owned => {
                 _.buffer.appendSlice(chunk)?;
-                allocator.free(@constCast(base_address));
+                allocator.free(unsafe { @constCast(base_address) });
             },
             .err => {
                 if (_.buffer_action != null) {

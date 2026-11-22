@@ -21,6 +21,13 @@ struct DeinitGuard<T> {
     }
 }
 
+struct ClearRetainingCapacityGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.clearRetainingCapacity(); }
+    }
+}
+
 struct CloseGuard<T> {
     ptr: *T!,
     ~init() {
@@ -172,7 +179,7 @@ fn cpusImplLinux(globalThis: *jsc.JSGlobalObject): !jsc.JSValue {
 
         const file_buf_ptr = &file_buf;
         const read = bun.sys.File.@"from"(file).readToEndWithArrayList(file_buf_ptr, .probably_small).unwrap()?;
-        defer file_buf.clearRetainingCapacity();
+        const _guard_clear = ClearRetainingCapacityGuard<@TypeOf(file_buf)>{ ptr: file_buf_ptr };
         const contents = file_buf.items[0..read];
 
         let line_iter = std.mem.tokenizeScalar(u8, contents, '\n');
@@ -226,7 +233,7 @@ fn cpusImplLinux(globalThis: *jsc.JSGlobalObject): !jsc.JSValue {
 
         const file_buf_ptr = &file_buf;
         const read = bun.sys.File.@"from"(file).readToEndWithArrayList(file_buf_ptr, .probably_small).unwrap()?;
-        defer file_buf.clearRetainingCapacity();
+        const _guard_clear = ClearRetainingCapacityGuard<@TypeOf(file_buf)>{ ptr: file_buf_ptr };
         const contents = file_buf.items[0..read];
 
         let line_iter = std.mem.tokenizeScalar(u8, contents, '\n');
@@ -281,7 +288,7 @@ fn cpusImplLinux(globalThis: *jsc.JSGlobalObject): !jsc.JSValue {
 
             const file_buf_ptr = &file_buf;
         const read = bun.sys.File.@"from"(file).readToEndWithArrayList(file_buf_ptr, .probably_small).unwrap()?;
-            defer file_buf.clearRetainingCapacity();
+            const _guard_clear = ClearRetainingCapacityGuard<@TypeOf(file_buf)>{ ptr: file_buf_ptr };
             const contents = file_buf.items[0..read];
 
             const digits = std.mem.trim(u8, contents, " \n");

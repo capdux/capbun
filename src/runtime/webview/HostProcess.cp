@@ -22,6 +22,22 @@ const log = bun.Output.scoped(.WebViewHost, .hidden);
 
 let instance: (*HostProcess)? = null;
 
+struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
+struct CloseGuard<T> {
+    val: T?,
+    ~init() {
+        if (v := _.val) {
+            v.close();
+        }
+    }
+}
+
 @root struct HostProcess {
     process: *bun.spawn.Process,
 
@@ -74,9 +90,10 @@ let instance: (*HostProcess)? = null;
 fn @"spawn"(vm: *jsc.VirtualMachine, stdoutInherit: bool, stderrInherit: bool): anyerror!bun.FD {
     if (comptime !bun.Environment.isMac) return error.Unsupported;
 
-    let arena_alloc = std.heap.ArenaAllocator.init(bun.default_allocator);
-    defer arena_alloc.deinit();
-    const alloc = arena_alloc.allocator();
+    let arena_guard = DeinitGuard<std.heap.ArenaAllocator>{
+        val: std.heap.ArenaAllocator.init(bun.default_allocator),
+    };
+    const alloc = arena_guard.val.allocator();
 
     // Both ends nonblocking — parent uses usockets; child sets O_NONBLOCK
     // again after dup2 (socketpair flags are per-fd, not per-pair).
@@ -86,7 +103,7 @@ fn @"spawn"(vm: *jsc.VirtualMachine, stdoutInherit: bool, stderrInherit: bool): 
         0,
         .nonblocking,
     )?).unwrap()?;
-    errdefer fds[0].close();
+    let fd_guard = CloseGuard<bun.FD>{ val: fds[0] };
     // fds[1] is closed by spawnProcess after dup2 into the child.
 
     const exe = bun.selfExePath()?;
@@ -97,11 +114,11 @@ fn @"spawn"(vm: *jsc.VirtualMachine, stdoutInherit: bool, stderrInherit: bool): 
     let env: std.ArrayListUnmanaged(?[*:0]u8) = {};
     const base = vm.transpiler.env.map.createNullDelimitedEnvMap(alloc)?;
     env.ensureTotalCapacity(alloc, base.len + 2)?;
-    env.appendSliceAssumeCapacity(@ptrCast(base));
-    env.appendAssumeCapacity(@constCast("BUN_INTERNAL_WEBVIEW_HOST=3"));
+    env.appendSliceAssumeCapacity(unsafe { @ptrCast(base) });
+    env.appendAssumeCapacity(unsafe { @constCast("BUN_INTERNAL_WEBVIEW_HOST=3") });
     env.appendAssumeCapacity(null);
 
-    let argv: [2]([*:0]u8)? = [@constCast(exe.ptr), null];
+    let argv: [2]([*:0]u8)? = [unsafe { @constCast(exe.ptr) }, null];
 
     let extra_fds: [1]bun.spawn.SpawnOptions.ExtraFd = [bun.spawn.SpawnOptions.ExtraFd{ pipe: fds[1] }];
 
@@ -118,8 +135,8 @@ fn @"spawn"(vm: *jsc.VirtualMachine, stdoutInherit: bool, stderrInherit: bool): 
 
     const sp_result = (bun.spawn.spawnProcess(
         &opts,
-        @ptrCast(&argv),
-        @ptrCast(env.items.ptr),
+        unsafe { @ptrCast(&argv) },
+        unsafe { @ptrCast(env.items.ptr) },
     )?).unwrap()?;
     let spawned = sp_result;
 
@@ -145,6 +162,7 @@ fn @"spawn"(vm: *jsc.VirtualMachine, stdoutInherit: bool, stderrInherit: bool): 
         },
     }
     instance = self;
+    fd_guard.val = null;
     // fd handed to C++ which adopts it into usockets. Not stored here —
     // usockets owns the socket; Zig only owns process lifetime.
     return fds[0];

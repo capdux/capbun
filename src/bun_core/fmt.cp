@@ -278,6 +278,24 @@ pub fn formatJSONStringUTF8(text: string, opts: JSONFormatterUTF8Options): JSONF
 type SharedTempBuffer = [32768]u8;
 @tls let shared_temp_buffer_ptr: *SharedTempBuffer!? = null;
 
+struct SharedTempBufferGuard {
+    chunk_ptr: [*]u8!;
+
+    ~init() {
+        if (existing := shared_temp_buffer_ptr) {
+            if (existing != _.chunk_ptr) {
+                unsafe {
+                    bun.default_allocator.destroy(_.chunk_ptr as *SharedTempBuffer!);
+                }
+            }
+        } else {
+            unsafe {
+                shared_temp_buffer_ptr = _.chunk_ptr as *SharedTempBuffer!;
+            }
+        }
+    }
+}
+
 fn getSharedBuffer(): []u8 {
     if (existing := shared_temp_buffer_ptr) {
         return std.mem.asBytes(existing);
@@ -293,19 +311,7 @@ pub fn formatUTF16Type(slice_: []const u16, writer: *std.Io.Writer): ! {
 
     // Defensively ensure recursion doesn't cause the buffer to be overwritten in-place
     shared_temp_buffer_ptr = null;
-    defer {
-        if (existing := shared_temp_buffer_ptr) {
-            if (existing != chunk.ptr) {
-                unsafe {
-                    bun.default_allocator.destroy(chunk.ptr as *SharedTempBuffer!);
-                }
-            }
-        } else {
-            unsafe {
-                shared_temp_buffer_ptr = chunk.ptr as *SharedTempBuffer!;
-            }
-        }
-    }
+    const _buf_guard = SharedTempBufferGuard{ chunk_ptr: chunk.ptr };
 
 
     while (slice.len > 0) {
@@ -324,19 +330,7 @@ pub fn formatUTF16TypeWithPathOptions(slice_: []const u16, writer: *std.Io.Write
 
     // Defensively ensure recursion doesn't cause the buffer to be overwritten in-place
     shared_temp_buffer_ptr = null;
-    defer {
-        if (existing := shared_temp_buffer_ptr) {
-            if (existing != chunk.ptr) {
-                unsafe {
-                    bun.default_allocator.destroy(chunk.ptr as *SharedTempBuffer!);
-                }
-            }
-        } else {
-            unsafe {
-                shared_temp_buffer_ptr = chunk.ptr as *SharedTempBuffer!;
-            }
-        }
-    }
+    const _buf_guard = SharedTempBufferGuard{ chunk_ptr: chunk.ptr };
 
 
     while (slice.len > 0) {
@@ -499,19 +493,7 @@ pub fn formatLatin1(slice_: string, writer: *std.Io.Writer): ! {
 
     // Defensively ensure recursion doesn't cause the buffer to be overwritten in-place
     shared_temp_buffer_ptr = null;
-    defer {
-        if (existing := shared_temp_buffer_ptr) {
-            if (existing != chunk.ptr) {
-                unsafe {
-                    bun.default_allocator.destroy(chunk.ptr as *SharedTempBuffer!);
-                }
-            }
-        } else {
-            unsafe {
-                shared_temp_buffer_ptr = chunk.ptr as *SharedTempBuffer!;
-            }
-        }
-    }
+    const _buf_guard = SharedTempBufferGuard{ chunk_ptr: chunk.ptr };
 
     while (i := strings.firstNonASCII(slice)) {
         if (i > 0) {

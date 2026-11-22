@@ -6,6 +6,13 @@ import int_types from "../types/int_types.zig";
 const PostgresInt32 = int_types.PostgresInt32;
 const PostgresShort = int_types.PostgresShort;
 
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
 pub fn NewReaderWrap(
     comptime Context: type,
     comptime markMessageStartFn_: anytype,
@@ -39,9 +46,8 @@ pub fn NewReaderWrap(
         pub inline fn eatMessage(this, comptime msg_: anytype): AnyPostgresError!void {
             const msg = msg_[1..];
             this.ensureCapacity(msg.len)?;
-            let input = this.read(msg.len)?;
-            defer input.deinit();
-            if (bun.strings.eqlComptime(input.slice(), msg)) return;
+            let input = DeinitGuard<Data>{ val: this.read(msg.len)? };
+            if (bun.strings.eqlComptime(input.val.slice(), msg)) return;
             return err.InvalidMessage;
         }
 
@@ -67,9 +73,8 @@ pub fn NewReaderWrap(
         }
 
         pub fn int(this, comptime Int: type): Int! {
-            let data = this.read(@sizeOf(Int))?;
-            defer data.deinit();
-            const slice = data.slice();
+            let data = DeinitGuard<Data>{ val: this.read(@sizeOf(Int))? };
+            const slice = data.val.slice();
             if (slice.len < @sizeOf(Int)) {
                 return err.ShortRead;
             }
@@ -112,9 +117,8 @@ pub fn NewReaderWrap(
         pub const bytes = read;
 
         pub fn String(this): bun.String! {
-            let result = this.readZ()?;
-            defer result.deinit();
-            return bun.String.borrowUTF8(result.slice());
+            let result = DeinitGuard<Data>{ val: this.readZ()? };
+            return bun.String.borrowUTF8(result.val.slice());
         }
     };
 }

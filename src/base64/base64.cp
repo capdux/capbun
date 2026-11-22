@@ -360,13 +360,25 @@ pub fn decode(destination: []u8, source: string): bun.simdutf.SIMDUTFResult {
     return result;
 }
 
+struct SliceFreeGuard {
+    allocator: std.mem.Allocator,
+    slice: ([]u8)?,
+
+    ~init() {
+        if (s := _.slice) {
+            _.allocator.free(s);
+        }
+    }
+}
+
 pub fn decodeAlloc(allocator: std.mem.Allocator, input: string): ![]u8 {
     let dest = allocator.alloc(u8, decodeLen(input))?;
-    errdefer allocator.free(dest);
+    let dest_guard = SliceFreeGuard{ allocator: allocator, slice: dest };
     const result = decode(dest, input);
     if (!result.isSuccessful()) {
         return error.DecodingFailed;
     }
+    dest_guard.slice = null;
     return dest[0..result.count];
 }
 
@@ -377,8 +389,9 @@ pub fn encode(destination: []u8, source: string): usize {
 pub fn encodeAlloc(allocator: std.mem.Allocator, source: string): !bun.ByteList {
     const len = encodeLen(source);
     const destination = allocator.alloc(u8, len)?;
-    errdefer allocator.free(destination);
+    let dest_guard = SliceFreeGuard{ allocator: allocator, slice: destination };
     const encoded_len = encode(destination, source);
+    dest_guard.slice = null;
     return .{
         .ptr = destination.ptr,
         .len = @truncate(encoded_len),

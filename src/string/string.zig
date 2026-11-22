@@ -44,7 +44,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -65,7 +65,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 pub const string_jsc = @import("../jsc/bun_string_jsc.zig");
@@ -104,6 +104,36 @@ pub fn Byte(self: StringWTFEncoding) type {
 });
     }
 };
+
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        target: T,
+        active: bool = true,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.active) {
+                    _ = self.target.deinit();
+                }
+        }
+    };
+}
+
+pub fn FreeGuard(comptime T: type) type {
+    return struct {
+        alloc: std.mem.Allocator,
+        slice: []T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.alloc.free(self.slice);
+        }
+    };
+}
 
 pub const String = extern struct {
     tag: Tag,
@@ -155,18 +185,23 @@ return .{ try self.value.ZigString.toOwnedSlice(allocator), .unknown };
 },
 .WTFStringImpl => {
 const utf8_slice = self.value.WTFStringImpl.toUTF8WithoutRef(allocator);
-            errdefer {
-            _ = utf8_slice.deinit();
-            }
+            var _utf8_guard = DeinitGuard(ZigString.Slice){ .target = utf8_slice };
+            _ = &_utf8_guard;
+            var ___utf8_guard_moved = false; _ = &___utf8_guard_moved;
+            defer if (!___utf8_guard_moved) { ___utf8_guard_moved = true; const __T = @TypeOf(_utf8_guard); if (@typeInfo(__T) == .optional) { if (_utf8_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _utf8_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _utf8_guard; _drop_val.__cp_deinit(); } };
             const ascii_status: AsciiStatus = (if (utf8_slice.allocator.isNull()) .all_ascii else (if (self.value.WTFStringImpl.is8Bit()) .non_ascii else .unknown));
             const owned_slice = try utf8_slice.cloneIfBorrowed(allocator);
+            _utf8_guard.active = false;
             return .{ owned_slice.mut(), ascii_status };
 },
 .StaticZigString => {
 return .{ try self.value.StaticZigString.toOwnedSlice(allocator), .unknown };
 },
 else => {
-return .{ @constCast(""), .all_ascii };
+return .{ (blk: {
+            break :blk @constCast("");
+
+}), .all_ascii };
 },
 }
     }
@@ -184,7 +219,10 @@ pub fn createUninitializedLatin1(len: usize) struct { String, []u8 } {
             _ = bun.assert((len > 0));
             const str = bun.cpp.BunString__fromLatin1Unitialized(len);
             if ((str.tag == .Dead)) {
-                return .{ str, @constCast("") };
+                return .{ str, (blk: {
+                break :blk @constCast("");
+
+}) };
             }
             _ = String.validateRefCount(str);
             const wtf_impl = (if (@typeInfo(@TypeOf(str)) == .@"enum") @intFromEnum(str) else str.value).WTFStringImpl;
@@ -198,7 +236,10 @@ pub fn createUninitializedUTF16(len: usize) struct { String, []u16 } {
             _ = bun.assert((len > 0));
             const str = bun.cpp.BunString__fromUTF16Unitialized(len);
             if ((str.tag == .Dead)) {
-                return .{ str, @constCast((&empty_u16_buf)) };
+                return .{ str, (blk: {
+                break :blk @constCast((&empty_u16_buf));
+
+}) };
             }
             _ = String.validateRefCount(str);
             const wtf_impl = (if (@typeInfo(@TypeOf(str)) == .@"enum") @intFromEnum(str) else str.value).WTFStringImpl;
@@ -256,9 +297,10 @@ pub fn createFormat(comptime fmt: [:0]const u8, args: anytype) OOM!String {
             _ = &sba;
             const alloc = sba.get();
             const buf = try std.fmt.allocPrint(alloc, fmt, args);
-            defer {
-            _ = alloc.free(buf);
-            }
+            var _buf_guard = FreeGuard(u8){ .alloc = alloc, .slice = buf };
+            _ = &_buf_guard;
+            var ___buf_guard_moved = false; _ = &___buf_guard_moved;
+            defer if (!___buf_guard_moved) { ___buf_guard_moved = true; const __T = @TypeOf(_buf_guard); if (@typeInfo(__T) == .optional) { if (_buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _buf_guard; _drop_val.__cp_deinit(); } };
             return String.cloneUTF8(buf);
     }
 
@@ -477,7 +519,7 @@ pub inline fn length(self: String) usize {
             return (if ((self.tag == .WTFStringImpl)) self.value.WTFStringImpl.length() else self.toZigString().length());
     }
 
-pub inline fn utf16(self: String) []const u16 {
+pub inline fn utf16(self: *const String) []const u16 {
             if ((self.tag == .Empty)) {
                 return (&empty_u16_buf);
             }
@@ -487,7 +529,7 @@ pub inline fn utf16(self: String) []const u16 {
             return self.toZigString().utf16SliceAligned();
     }
 
-pub inline fn latin1(self: String) []const u8 {
+pub inline fn latin1(self: *const String) []const u8 {
             if ((self.tag == .Empty)) {
                 return "";
             }
@@ -504,7 +546,7 @@ pub fn isUTF8(self: String) bool {
             return self.value.ZigString.isUTF8();
     }
 
-pub inline fn asUTF8(self: String) ?[]const u8 {
+pub inline fn asUTF8(self: *const String) ?[]const u8 {
             if ((self.tag == .WTFStringImpl)) {
                 if ((self.value.WTFStringImpl.is8Bit() and bun.strings.isAllASCII(self.value.WTFStringImpl.latin1Slice()))) {
                     return self.value.WTFStringImpl.latin1Slice();
@@ -537,7 +579,7 @@ pub fn githubAction(self: String) ZigString.GithubActionFormatter {
             return self.toZigString().githubAction();
     }
 
-pub fn byteSlice(self: String) []const u8 {
+pub fn byteSlice(self: *const String) []const u8 {
             return (switch (self.tag) {
 .ZigString, .StaticZigString => self.value.ZigString.byteSlice(),
 .WTFStringImpl => self.value.WTFStringImpl.byteSlice(),
@@ -565,11 +607,11 @@ pub fn encodeInto(self: String, out: []u8, comptime enc: jsc.Node.Encoding) !usi
             return jsc.WebCore.encoding.encodeIntoFrom8(self.latin1(), out, enc);
     }
 
-pub fn encode(self: String, enc: jsc.Node.Encoding) []u8 {
+pub fn encode(self: *const String, enc: jsc.Node.Encoding) []u8 {
             return self.toZigString().encodeWithAllocator(bun.default_allocator, enc);
     }
 
-pub inline fn utf8(self: String) []const u8 {
+pub inline fn utf8(self: *const String) []const u8 {
             if (comptime bun.Environment.allow_assert) {
                 _ = bun.assert(((self.tag == .ZigString) or (self.tag == .StaticZigString)));
                 _ = bun.assert(self.canBeUTF8());
@@ -643,7 +685,7 @@ pub fn toUTF8Owned(self: String, allocator: std.mem.Allocator) ZigString.Slice {
             return bun.handleOom(self.toUTF8WithoutRef(allocator).cloneIfBorrowed(allocator));
     }
 
-pub fn toUTF8Bytes(self: String, allocator: std.mem.Allocator) []u8 {
+pub fn toUTF8Bytes(self: *const String, allocator: std.mem.Allocator) []u8 {
             return self.toUTF8Owned(allocator).mut();
     }
 
@@ -1007,7 +1049,7 @@ pub fn deinit(self: SliceWithUnderlyingString) void {
             _ = self.underlying.deref();
     }
 
-pub fn slice(self: SliceWithUnderlyingString) []const u8 {
+pub fn slice(self: *const SliceWithUnderlyingString) []const u8 {
             return self.utf8.slice();
     }
 

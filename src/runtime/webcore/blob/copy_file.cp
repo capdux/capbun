@@ -27,6 +27,34 @@ pub const IOWhich = enum {
     both,
 };
 
+struct CopyFileReadLenGuard {
+    copy_file: *CopyFile!,
+    total_written: usize = 0,
+
+    ~init() {
+        unsafe {
+            _.copy_file.read_len = @as(SizeType, @truncate(_.total_written));
+        }
+    }
+}
+
+struct EventLoopEnterGuard {
+    event_loop: *EventLoop!,
+
+    static fn enter(el: *EventLoop!): EventLoopEnterGuard {
+        unsafe {
+            el.enter();
+        }
+        return EventLoopEnterGuard{ event_loop: el };
+    }
+
+    ~init() {
+        unsafe {
+            _.event_loop.exit();
+        }
+    }
+}
+
 export class CopyFile {
     destination_file_store: Store.File;
     source_file_store: Store.File;
@@ -84,7 +112,7 @@ export class CopyFile {
             switch (this.source_file_store.pathlike.path) {
                 .string => {
                     if (this.system_error == null) {
-                        default_allocator.free(@constCast(this.source_file_store.pathlike.path.slice()));
+                        default_allocator.free(unsafe { @constCast(this.source_file_store.pathlike.path.slice()) });
                     }
                 },
                 else => {},
@@ -254,23 +282,19 @@ export class CopyFile {
             remain = 4096;
         }
 
-        let total_written: usize = 0;
+        let len_guard = CopyFileReadLenGuard{ copy_file: this };
         let src_fd = this.source_fd;
         let dest_fd = this.destination_fd;
 
-        defer {
-            this.read_len = @as(SizeType, @truncate(total_written));
-        }
-
         let has_unset_append = false;
         if (!canUseCopyFileRangeSyscall()) {
-            switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", src_fd, dest_fd, if (unknown_size) 0 else remain, &total_written)) {
+            switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", src_fd, dest_fd, if (unknown_size) 0 else remain, &len_guard.total_written)) {
                 .err => |err| {
                     this.system_error = err.toSystemError();
                     return errnoToZigErr(err.errno);
                 },
                 .result => {
-                    * = std.os.linux.ftruncate(dest_fd.cast(), @as(posix.off_t, @intCast(total_written)));
+                    * = std.os.linux.ftruncate(dest_fd.cast(), @as(posix.off_t, @intCast(len_guard.total_written)));
                     return;
                 },
             }
@@ -286,13 +310,13 @@ export class CopyFile {
             switch (sys.getErrno(written)) {
                 .SUCCESS => {},
                 .NOSYS, .XDEV, .OPNOTSUPP => {
-                    switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", src_fd, dest_fd, if (unknown_size) 0 else remain, &total_written)) {
+                    switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", src_fd, dest_fd, if (unknown_size) 0 else remain, &len_guard.total_written)) {
                         .err => |err| {
                             this.system_error = err.toSystemError();
                             return errnoToZigErr(err.errno);
                         },
                         .result => {
-                            * = std.os.linux.ftruncate(dest_fd.cast(), @as(posix.off_t, @intCast(total_written)));
+                            * = std.os.linux.ftruncate(dest_fd.cast(), @as(posix.off_t, @intCast(len_guard.total_written)));
                             return;
                         },
                     }
@@ -308,14 +332,14 @@ export class CopyFile {
                             }
                         }
                     }
-                    if (total_written == 0) {
-                        switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", src_fd, dest_fd, if (unknown_size) 0 else remain, &total_written)) {
+                    if (len_guard.total_written == 0) {
+                        switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", src_fd, dest_fd, if (unknown_size) 0 else remain, &len_guard.total_written)) {
                             .err => |err| {
                                 this.system_error = err.toSystemError();
                                 return errnoToZigErr(err.errno);
                             },
                             .result => {
-                                * = std.os.linux.ftruncate(dest_fd.cast(), @as(posix.off_t, @intCast(total_written)));
+                                * = std.os.linux.ftruncate(dest_fd.cast(), @as(posix.off_t, @intCast(len_guard.total_written)));
                                 return;
                             },
                         }
@@ -329,7 +353,7 @@ export class CopyFile {
 
             let written_usize: usize = @intCast(written);
             remain = if (remain > written_usize) remain - written_usize else 0;
-            total_written += written_usize;
+            len_guard.total_written += written_usize;
             if (written == 0 or remain == 0) break;
         }
     }
@@ -564,13 +588,13 @@ export class CopyFileWindowsReadWriteLoop {
         this.read_buf.items.len = 0;
         this.uv_buf = libuv.uv_buf_t.init(this.read_buf.allocatedSlice());
         let loop = parent.event_loop.virtual_machine.event_loop_handle.?;
-        parent.io_request.data = @ptrCast(parent);
+        parent.io_request.data = unsafe { @ptrCast(parent) };
 
         let rc = libuv.uv_fs_read(
             loop,
             &parent.io_request,
             this.source_fd.uv(),
-            @ptrCast(&this.uv_buf),
+            unsafe { @ptrCast(&this.uv_buf) },
             1,
             -1,
             &onRead,
@@ -584,7 +608,7 @@ export class CopyFileWindowsReadWriteLoop {
 
     @c static fn onRead(req: *libuv.fs_t) {
         let parent: *CopyFileWindows = @fieldParentPtr("io_request", req);
-        assert(req.data == @as(*!?, @ptrCast(parent)));
+        assert(req.data == unsafe { @as(*!?, @ptrCast(parent)) });
         let rc = req.result;
 
         if (err := rc.toError(.read)) {
@@ -606,12 +630,12 @@ export class CopyFileWindowsReadWriteLoop {
             parent.event_loop.virtual_machine.event_loop_handle.?,
             &parent.io_request,
             parent.read_write_loop.destination_fd.uv(),
-            @ptrCast(&parent.read_write_loop.uv_buf),
+            unsafe { @ptrCast(&parent.read_write_loop.uv_buf) },
             1,
             -1,
             &onWrite,
         );
-        req.data = @ptrCast(parent);
+        req.data = unsafe { @ptrCast(parent) };
 
         if (err := rc2.toError(.write)) {
             parent.err = err;
@@ -622,7 +646,7 @@ export class CopyFileWindowsReadWriteLoop {
 
     @c static fn onWrite(req: *libuv.fs_t) {
         let parent: *CopyFileWindows = @fieldParentPtr("io_request", req);
-        assert(req.data == @as(*!?, @ptrCast(parent)));
+        assert(req.data == unsafe { @as(*!?, @ptrCast(parent)) });
         let rc = req.result;
 
         if (err := rc.toError(.write)) {
@@ -640,13 +664,13 @@ export class CopyFileWindowsReadWriteLoop {
                 return;
             }
             req.deinit();
-            req.data = @ptrCast(parent);
+            req.data = unsafe { @ptrCast(parent) };
             parent.read_write_loop.uv_buf = libuv.uv_buf_t.init(parent.read_write_loop.uv_buf.slice()[wrote..]);
             let rc2 = libuv.uv_fs_write(
                 parent.event_loop.virtual_machine.event_loop_handle.?,
                 &parent.io_request,
                 parent.read_write_loop.destination_fd.uv(),
-                @ptrCast(&parent.read_write_loop.uv_buf),
+                unsafe { @ptrCast(&parent.read_write_loop.uv_buf) },
                 1,
                 -1,
                 &onWrite,
@@ -722,9 +746,7 @@ export class CopyFileWindows {
         let promise = this.promise.swap();
         let err_instance = err.toJSWithAsyncStack(globalThis, promise);
 
-        let event_loop = this.event_loop;
-        event_loop.enter();
-        defer event_loop.exit();
+        let _el_guard = EventLoopEnterGuard.enter(this.event_loop);
         this.deinit();
         promise.reject(globalThis, err_instance) catch {};
     }
@@ -744,7 +766,7 @@ export class CopyFileWindows {
                 let loop = this.event_loop.virtual_machine.event_loop_handle.?;
                 this.io_request.deinit();
                 this.io_request = std.mem.zeroes(libuv.fs_t);
-                this.io_request.data = @ptrCast(this);
+                this.io_request.data = unsafe { @ptrCast(this) };
 
                 let rc = libuv.uv_fs_chmod(
                     loop,
@@ -771,7 +793,7 @@ export class CopyFileWindows {
 
     @c static fn onChmod(req: *libuv.fs_t) {
         let parent: *CopyFileWindows = @fieldParentPtr("io_request", req);
-        assert(req.data == @as(*!?, @ptrCast(parent)));
+        assert(req.data == unsafe { @as(*!?, @ptrCast(parent)) });
         parent.event_loop.unrefConcurrently();
         let rc = req.result;
         if (errno := rc.errEnum()) {
@@ -788,9 +810,7 @@ export class CopyFileWindows {
     fn resolvePromise(*_, written: usize) {
         let globalThis = this.event_loop.global;
         let promise = this.promise.swap();
-        let event_loop = this.event_loop;
-        event_loop.enter();
-        defer event_loop.exit();
+        let _el_guard = EventLoopEnterGuard.enter(this.event_loop);
         this.deinit();
         promise.resolve(globalThis, jsc.JSValue.jsNumberFromUint64(written)) catch {};
     }

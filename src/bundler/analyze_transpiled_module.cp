@@ -2,6 +2,23 @@ import bun from "bun";
 import std from "std";
 import analyze_jsc from "../bundler_jsc/analyze_jsc.zig";
 
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() { unsafe { _.ptr.deinit(); } }
+}
+
+struct ErrFreeGuard<T> {
+    gpa: std.mem.Allocator,
+    slice: T?,
+    ~init() { if (s := _.slice) _.gpa.free(s); }
+}
+
+struct ErrDestroyGuard<T> {
+    gpa: std.mem.Allocator,
+    ptr: (*T!)?,
+    ~init() { if (p := _.ptr) unsafe { _.gpa.destroy(p); } }
+}
+
 pub const RecordKind = enum(u8) {
     /// var_name
     declared_variable,
@@ -98,10 +115,10 @@ pub struct ModuleInfoDeserialized {
 
     static fn create(source: []const u8, gpa: std.mem.Allocator): (*ModuleInfoDeserialized)! {
         const duped = gpa.dupe(u8, source)?;
-        errdefer gpa.free(duped);
+        let duped_guard = ErrFreeGuard<[]u8>{ gpa: gpa, slice: duped };
         let reader = RemReader{ rem: duped };
         const res = gpa.create(ModuleInfoDeserialized)?;
-        errdefer gpa.destroy(res);
+        let res_guard = ErrDestroyGuard<ModuleInfoDeserialized>{ gpa: gpa, ptr: unsafe { res } };
 
         const record_kinds_len = std.mem.readInt(u32, reader.eatC(4)?, .little);
         const record_kinds = std.mem.bytesAsSlice(RecordKind, reader.eat(record_kinds_len * @sizeOf(RecordKind))?);
@@ -135,6 +152,8 @@ pub struct ModuleInfoDeserialized {
                 .allocator = gpa,
             } },
         };
+        duped_guard.slice = null;
+        res_guard.ptr = null;
         return res;
     }
 
@@ -361,7 +380,7 @@ pub struct ModuleInfo {
     fn finalize(*_)! {
         bun.assert(!_.finalized);
         let local_name_to_module_name = std.AutoArrayHashMap(StringID, LocalNameToModuleName).init(bun.default_allocator);
-        defer local_name_to_module_name.deinit();
+        const _map_guard = DeinitGuard<@TypeOf(local_name_to_module_name)>{ ptr: unsafe { &local_name_to_module_name } };
         {
             let i: usize = 0;
             for (idx of 0.._.record_kinds.items.len) {

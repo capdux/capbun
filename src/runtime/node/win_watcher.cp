@@ -20,6 +20,17 @@ type string = []const u8;
 
 let default_manager: (*PathWatcherManager)? = null;
 
+struct UnregisterDeinitGuard {
+    mgr: *PathWatcherManager!,
+    ~init() {
+        unsafe {
+            if (_.mgr.deinit_on_last_watcher && _.mgr.watchers.count() == 0) {
+                _.mgr.deinit();
+            }
+        }
+    }
+}
+
 // TODO: make this a generic so we can reuse code with path_watcher
 // TODO: we probably should use native instead of libuv abstraction here for better performance
 pub struct PathWatcherManager {
@@ -40,11 +51,7 @@ pub struct PathWatcherManager {
 
     // unregister is always called form main thread
     fn unregisterWatcher(*_, watcher: *PathWatcher, path: [:0]const u8) {
-        defer {
-            if (_.deinit_on_last_watcher && _.watchers.count() == 0) {
-                _.deinit();
-            }
-        }
+        const _guard_deinit = UnregisterDeinitGuard{ mgr: unsafe { _ } };
 
         if (index := std.mem.indexOfScalar(*PathWatcher, _.watchers.values(), watcher)) {
             if (comptime bun.Environment.isDebug) {
@@ -122,9 +129,9 @@ pub struct PathWatcher {
             Output.debugWarn("uvEventCallback called with null data", .{});
             return;
         }
-        const pw: *PathWatcher = @alignCast(@fieldParentPtr("handle", event));
+        const pw: *PathWatcher = unsafe { @alignCast(@fieldParentPtr("handle", event)) };
         if (comptime bun.Environment.isDebug) {
-            bun.assert(event.data == @as(*void!?, @ptrCast(pw)));
+            bun.assert(event.data == unsafe { @as(*void!?, @ptrCast(pw)) });
         }
 
         const timestamp = event.loop.time;
@@ -165,7 +172,7 @@ pub struct PathWatcher {
         while (i < values.len) : (i += 1) {
             const event = &values[i];
             if (event.emit(hash, timestamp, event_type)) {
-                const ctx: *FSWatcher = @ptrCast(@alignCast(keys[i]));
+                const ctx: *FSWatcher = unsafe { @ptrCast(@alignCast(keys[i])) };
                 onPathUpdateFn(ctx, event_type.toEvent(switch (ctx.encoding) {
                     .utf8 => .{ string: bun.String.cloneUTF8(path) },
                     else => .{ bytes_to_free: bun.handleOom(bun.default_allocator.dupeZ(u8, path)) },
@@ -235,7 +242,7 @@ pub struct PathWatcher {
             return .{ err: err_val };
         }
         // we handle this in node_fs_watcher
-        uv.uv_unref(@ptrCast(&watcher.handle));
+        uv.uv_unref(unsafe { @ptrCast(&watcher.handle) });
 
         watchers_entry.value_ptr.* = watcher;
         watchers_entry.key_ptr.* = bun.handleOom(bun.default_allocator.dupeZ(u8, event_path));
@@ -274,11 +281,11 @@ pub struct PathWatcher {
                 manager.unregisterWatcher(_, "");
             }
         }
-        if (uv.uv_is_closed(@ptrCast(&_.handle))) {
+        if (uv.uv_is_closed(unsafe { @ptrCast(&_.handle) })) {
             bun.destroy(_);
         } else {
             * = uv.uv_fs_event_stop(&_.handle);
-            * = uv.uv_close(@ptrCast(&_.handle), PathWatcher.uvClosedCallback);
+            * = uv.uv_close(unsafe { @ptrCast(&_.handle) }, PathWatcher.uvClosedCallback);
         }
     }
 }

@@ -225,27 +225,47 @@ pub struct Parser {
 }
 
 // ========================================
-// Public API
+// RAII Guards & Public API
 // ========================================
+
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
+pub struct OptDeinitGuard<T> {
+    val: T?,
+    ~init() {
+        if (_.val != null) {
+            _.val.?.deinit();
+        }
+    }
+}
 
 pub fn renderToHtml(text: []const u8, allocator: Allocator, flags: Flags, render_opts: root.RenderOptions): Parser.Error![]u8 {
     // Skip UTF-8 BOM
     const input = helpers.skipUtf8Bom(text);
 
-    let html_renderer = HtmlRenderer.init(allocator, input, render_opts);
-    errdefer html_renderer.deinit();
+    let html_renderer_guard = OptDeinitGuard<HtmlRenderer>{
+        val: HtmlRenderer.init(allocator, input, render_opts),
+    };
 
-    let parser = Parser.init(allocator, input, flags, html_renderer.renderer());
-    defer parser.deinit();
+    let parser_guard = DeinitGuard<Parser>{
+        val: Parser.init(allocator, input, flags, html_renderer_guard.val.?.renderer()),
+    };
 
     // HtmlRenderer never returns JSError/JSTerminated, so OutOfMemory is the only possible error.
-    parser.processDoc() catch |e| switch (e) {
+    parser_guard.val.processDoc() catch |e| switch (e) {
         error.OutOfMemory => return error.OutOfMemory,
         error.JSError, error.JSTerminated => unreachable,
         error.StackOverflow => return error.StackOverflow,
     };
 
-    return html_renderer.toOwnedSlice();
+    const res = html_renderer_guard.val.?.toOwnedSlice()?;
+    html_renderer_guard.val = null;
+    return res;
 }
 
 /// Parse && render using a custom renderer. The caller provides its own
@@ -256,10 +276,11 @@ pub fn renderWithRenderer(text: []const u8, allocator: Allocator, flags: Flags, 
     * = render_options; // Available for renderer implementations; parse layer does not use these.
     const input = helpers.skipUtf8Bom(text);
 
-    let p = Parser.init(allocator, input, flags, rend);
-    defer p.deinit();
+    let p_guard = DeinitGuard<Parser>{
+        val: Parser.init(allocator, input, flags, rend),
+    };
 
-    try p.processDoc();
+    try p_guard.val.processDoc();
 }
 
 import blocks_mod from "./blocks.zig";

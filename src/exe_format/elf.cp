@@ -9,6 +9,43 @@ const Elf64_Shdr = elf.Elf64_Shdr;
 
 const log = bun.Output.scoped(.elf, .visible);
 
+struct DeinitGuard<T> {
+    ptr: (*T!)? = null,
+
+    fn disarm(*_) {
+        _.ptr = null;
+    }
+
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deinit(); }
+        }
+    }
+}
+
+struct DestroyGuard<T> {
+    allocator: Allocator,
+    ptr: (*T!)? = null,
+
+    fn disarm(*_) {
+        _.ptr = null;
+    }
+
+    ~init() {
+        if (p := _.ptr) {
+            _.allocator.destroy(p);
+        }
+    }
+}
+
+struct CloseGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.close();
+    }
+}
+
 pub struct BunSectionInfo {
     file_offset: u64,
     section_index: u16,
@@ -28,11 +65,11 @@ pub struct ElfFile {
         if (ehdr.e_ident[elf.EI_DATA] != elf.ELFDATA2LSB) return err.NotLittleEndian;
 
         let data = std.array_list.Managed(u8).initCapacity(allocator, elf_data.len)?;
-        errdefer data.deinit();
+        let data_guard = DeinitGuard<std.array_list.Managed(u8)>{ ptr: unsafe { &data } };
         data.appendSlice(elf_data)?;
 
         let res = allocator.create(ElfFile)?;
-        errdefer allocator.destroy(res);
+        let res_guard = DestroyGuard<ElfFile>{ allocator: allocator, ptr: res };
 
         unsafe {
             res.* = ElfFile{
@@ -41,6 +78,8 @@ pub struct ElfFile {
             };
         }
 
+        res_guard.disarm();
+        data_guard.disarm();
         return res;
     }
 
@@ -330,7 +369,7 @@ fn selfInterpIsNixStore(): bool {
         .result fd_val => fd_val,
         .err => return false,
     };
-    defer fd.close();
+    const fd_guard = CloseGuard<@TypeOf(fd)>{ val: fd };
     const n = switch (bun.sys.read(fd, &buf)) {
         .result n_val => n_val,
         .err => return false,

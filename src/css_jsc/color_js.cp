@@ -9,6 +9,16 @@ const SRGB = color.SRGB;
 const css = bun.css;
 const jsc = bun.jsc;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+
+    ~init() {
+        unsafe {
+            _.ptr.deinit();
+        }
+    }
+}
+
 enum OutputColorFormat {
     ansi,
     ansi_16,
@@ -153,12 +163,14 @@ pub fn jsFunctionColor(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFram
     }
 
     let arena_alloc: std.heap.ArenaAllocator = std.heap.ArenaAllocator.init(bun.default_allocator);
-    defer arena_alloc.deinit();
+    const _arena_guard = DeinitGuard<std.heap.ArenaAllocator>{ ptr: unsafe { &arena_alloc } };
+    * = &_arena_guard;
     let stack_fallback = std.heap.stackFallback(4096, arena_alloc.allocator());
     const allocator = stack_fallback.get();
 
     let log: bun.logger.Log = bun.logger.Log.init(allocator);
-    defer log.deinit();
+    const _log_guard = DeinitGuard<bun.logger.Log>{ ptr: unsafe { &log } };
+    * = &_log_guard;
 
     const unresolved_format: OutputColorFormat = brk: {
         if (!args[1].isEmptyOrUndefinedOrNull()) {
@@ -172,7 +184,8 @@ pub fn jsFunctionColor(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFram
         break :brk OutputColorFormat.css;
     };
     let input: jsc.ZigString.Slice = jsc.ZigString.Slice.empty;
-    defer input.deinit();
+    const _input_guard = DeinitGuard<jsc.ZigString.Slice>{ ptr: unsafe { &input } };
+    * = &_input_guard;
 
     let parsed_color: css.CssColor.ParseResult = brk: {
         if (args[0].isNumber()) {

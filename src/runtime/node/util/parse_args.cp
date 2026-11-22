@@ -17,6 +17,9 @@ const ZigString = jsc.ZigString;
 
 const log = bun.Output.scoped(.parseArgs, .hidden);
 
+pub struct DeinitGuard<T> { val: T, ~init() { _.val.deinit(); } }
+pub struct DerefGuard<T> { val: T, ~init() { _.val.deref(); } }
+
 /// Represents a slice of a JSValue array
 pub struct ArgsSlice {
     array: JSValue,
@@ -172,9 +175,8 @@ fn getDefaultArgs(globalThis: *JSGlobalObject): ArgsSlice! {
         let iter = try exec_argv.arrayIterator(globalThis);
         while (item := try iter.next()) {
             if (item.isString()) {
-                const str = try item.toBunString(globalThis);
-                defer str.deref();
-                if (str.eqlComptime("-e") || str.eqlComptime("--eval") || str.eqlComptime("-p") || str.eqlComptime("--print")) {
+                let str = DerefGuard<String>{ val: try item.toBunString(globalThis) };
+                if (str.val.eqlComptime("-e") || str.val.eqlComptime("--eval") || str.val.eqlComptime("-p") || str.val.eqlComptime("--print")) {
                     return ArgsSlice{
                         array: argv,
                         start: 1,
@@ -315,19 +317,21 @@ fn storeOption(globalThis: *JSGlobalObject, option_name: ValueRef, option_value:
 fn parseOptionDefinitions(globalThis: *JSGlobalObject, options_obj: JSValue, option_definitions: *std.array_list.Managed(OptionDefinition)): bun.JSError!void {
     try validators.validateObject(globalThis, options_obj, "options", .{}, .{});
 
-    let iter = try jsc.JSPropertyIterator(.{ .skip_empty_name = false, .include_value = true }).init(
-        globalThis,
-        // SAFETY: validateObject ensures it's an object
-        (options_obj.getObject()) ?? unreachable,
-    );
-    defer iter.deinit();
+    const IterType = jsc.JSPropertyIterator(.{ .skip_empty_name = false, .include_value = true });
+    let iter = DeinitGuard<IterType>{
+        val: try IterType.init(
+            globalThis,
+            // SAFETY: validateObject ensures it's an object
+            (options_obj.getObject()) ?? unreachable,
+        ),
+    };
 
-    while (long_option := try iter.next()) {
+    while (long_option := try iter.val.next()) {
         let option = OptionDefinition{
             long_name: String.init(long_option),
         };
 
-        const obj: JSValue = iter.value;
+        const obj: JSValue = iter.val.value;
         try validators.validateObject(globalThis, obj, "options.{f}", .{option.long_name}, .{});
 
         // type field is required
@@ -786,11 +790,12 @@ pub fn parseArgs(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JS
     // Phase 0.C: Parse the options definitions
 
     let options_defs_allocator = std.heap.stackFallback(2048, globalThis.allocator());
-    let option_defs = std.array_list.Managed(OptionDefinition).init(options_defs_allocator.get());
-    defer option_defs.deinit();
+    let option_defs = DeinitGuard<std.array_list.Managed(OptionDefinition)>{
+        val: std.array_list.Managed(OptionDefinition).init(options_defs_allocator.get()),
+    };
 
     if (!config_options.isUndefinedOrNull()) {
-        try parseOptionDefinitions(globalThis, config_options, unsafe { &option_defs });
+        try parseOptionDefinitions(globalThis, config_options, unsafe { &option_defs.val });
     }
 
     //
@@ -811,7 +816,7 @@ pub fn parseArgs(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JS
     let state = ParseArgsState{
         globalThis: globalThis,
 
-        option_defs: option_defs.items,
+        option_defs: option_defs.val.items,
         allow_positionals: allow_positionals,
         strict: strict,
         allow_negative: allow_negative,
@@ -821,14 +826,14 @@ pub fn parseArgs(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JS
         tokens: tokens,
     };
 
-    try tokenizeArgs(&state, globalThis, args, option_defs.items);
+    try tokenizeArgs(&state, globalThis, args, option_defs.val.items);
 
     //
     // Phase 3: fill in default values for missing args
     //
     log("Phase 3: fill defaults", .{});
 
-    for (option of option_defs.items) {
+    for (option of option_defs.val.items) {
         if (default_value := option.default_value) {
             if (!option.long_name.eqlComptime("__proto__")) {
                 if (try state.values.getOwn(globalThis, option.long_name) == null) {

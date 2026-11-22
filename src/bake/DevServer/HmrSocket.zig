@@ -82,9 +82,22 @@ fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
     }
     return val >> shift;
 }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub fn DerefGuard(comptime T: type) type {
+    return struct {
+        val: T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.val.deref();
+        }
+    };
+}
+
 pub const HmrSocket = @This();
 
 dev: *DevServer,
@@ -92,7 +105,7 @@ underlying: ?AnyWebSocket = null,
 subscriptions: HmrTopic.Bits,
 is_from_localhost: bool,
 active_route: RouteBundle.Index.Optional,
-referenced_source_maps: std.AutoHashMapUnmanaged(SourceMapStore.Key,void),
+referenced_source_maps: std.AutoHashMapUnmanaged(SourceMapStore.Key, void),
 inspector_connection_id: i32 = -1,
 
 pub fn new(dev: *DevServer, res: anytype) *HmrSocket {
@@ -197,12 +210,11 @@ const pattern = msg[1..];
         if (s.dev.inspector()) |agent| {
             _ = &agent;
             if ((s.inspector_connection_id > -1)) {
-                var pattern_str = bun.String.init(pattern);
+                var pattern_str = DerefGuard(bun.String){ .val = bun.String.init(pattern) };
                 _ = &pattern_str;
-                defer {
-                _ = pattern_str.deref();
-                }
-                _ = agent.notifyClientNavigated(s.dev.inspector_server_id, s.inspector_connection_id, (&pattern_str), maybe_rbi);
+                var __pattern_str_moved = false; _ = &__pattern_str_moved;
+                defer if (!__pattern_str_moved) { __pattern_str_moved = true; const __T = @TypeOf(pattern_str); if (@typeInfo(__T) == .optional) { if (pattern_str) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { pattern_str.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = pattern_str; _drop_val.__cp_deinit(); } };
+                _ = agent.notifyClientNavigated(s.dev.inspector_server_id, s.inspector_connection_id, (&pattern_str.val), maybe_rbi);
             }
         }
         const rbi = ((maybe_rbi) orelse { return; });
@@ -268,12 +280,11 @@ else => {
         const data = msg[2..];
         if (s.dev.inspector()) |agent| {
             _ = &agent;
-            var log_str = bun.String.init(data);
+            var log_str = DerefGuard(bun.String){ .val = bun.String.init(data) };
             _ = &log_str;
-            defer {
-            _ = log_str.deref();
-            }
-            _ = agent.notifyConsoleLog(s.dev.inspector_server_id, kind, (&log_str));
+            var __log_str_moved = false; _ = &__log_str_moved;
+            defer if (!__log_str_moved) { __log_str_moved = true; const __T = @TypeOf(log_str); if (@typeInfo(__T) == .optional) { if (log_str) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { log_str.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = log_str; _drop_val.__cp_deinit(); } };
+            _ = agent.notifyConsoleLog(s.dev.inspector_server_id, kind, (&log_str.val));
         }
         if (s.dev.broadcast_console_log_from_browser_to_server) {
             switch (kind) {
@@ -349,12 +360,11 @@ pub fn notifyInspectorClientNavigation(s: *const HmrSocket, pattern: []const u8,
         if ((s.inspector_connection_id > -1)) {
             if (s.dev.inspector()) |agent| {
                 _ = &agent;
-                var pattern_str = bun.String.init(pattern);
+                var pattern_str = DerefGuard(bun.String){ .val = bun.String.init(pattern) };
                 _ = &pattern_str;
-                defer {
-                _ = pattern_str.deref();
-                }
-                _ = agent.notifyClientNavigated(s.dev.inspector_server_id, s.inspector_connection_id, (&pattern_str), rbi.unwrap());
+                var __pattern_str_moved = false; _ = &__pattern_str_moved;
+                defer if (!__pattern_str_moved) { __pattern_str_moved = true; const __T = @TypeOf(pattern_str); if (@typeInfo(__T) == .optional) { if (pattern_str) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { pattern_str.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = pattern_str; _drop_val.__cp_deinit(); } };
+                _ = agent.notifyClientNavigated(s.dev.inspector_server_id, s.inspector_connection_id, (&pattern_str.val), rbi.unwrap());
             }
         }
 }

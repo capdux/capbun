@@ -48,6 +48,20 @@ pub struct PathBufferGuard<T> {
     }
 }
 
+pub struct UnlockGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.unlock(); }
+    }
+}
+
+pub struct UnrefTaskGuard {
+    ptr: *FSWatcher!,
+    ~init() {
+        unsafe { _.ptr.unrefTask(); }
+    }
+}
+
 pub enum _EventType: u8 {
     rename = 0,
     change = 1,
@@ -407,7 +421,7 @@ pub struct FSWatcher {
     ctx: *VirtualMachine,
     verbose: bool = false,
 
-    mutex: Mutex,
+    mutex: bun.Mutex,
     signal: (*webcore.AbortSignal)?,
     persistent: bool,
     path_watcher: (*PathWatcher.PathWatcher)?,
@@ -554,7 +568,7 @@ pub struct FSWatcher {
         if (_.closed) return;
         * = _.pending_activity_count.fetchAdd(1, .monotonic);
         const close_guard = CloseGuard<FSWatcher>{ ptr: _ };
-        defer _.unrefTask();
+        const unref_guard = UnrefTaskGuard{ ptr: _ };
 
         e.ensureStillAlive();
         if (_.js_this != .zero) {
@@ -665,7 +679,7 @@ pub struct FSWatcher {
     // this can be called from Watcher Thread or JS Context Thread
     fn refTask(*_): bool {
         _.mutex.lock();
-        defer _.mutex.unlock();
+        const _unlock_guard = UnlockGuard<bun.Mutex>{ ptr: &_.mutex };
         if (_.closed) return false;
         * = _.pending_activity_count.fetchAdd(1, .monotonic);
 
@@ -678,7 +692,7 @@ pub struct FSWatcher {
 
     fn unrefTask(*_) {
         _.mutex.lock();
-        defer _.mutex.unlock();
+        const _unlock_guard = UnlockGuard<bun.Mutex>{ ptr: &_.mutex };
         // JSC eventually will free it
         const prev = _.pending_activity_count.fetchSub(1, .monotonic);
         bun.debugAssert(prev > 0);

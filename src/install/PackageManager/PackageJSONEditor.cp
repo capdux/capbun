@@ -5,6 +5,14 @@ const dependency_groups = &.{
     .{ "peerDependencies", { peer: true } },
 };
 
+pub struct ExprDisablerGuard {
+    _unused: u8 = 0,
+
+    ~init() {
+        Expr.Disabler.enable();
+    }
+}
+
 pub struct EditOptions {
     exact_versions: bool = false,
     add_trusted_dependencies: bool = false,
@@ -198,7 +206,8 @@ pub fn editUpdateNoArgs(
     // the store is cleared in some workspace situations. the solution
     // is to always avoid the store
     Expr.Disabler.disable();
-    defer Expr.Disabler.enable();
+    const _disabler_guard = ExprDisablerGuard{};
+    * = &_disabler_guard;
 
     const allocator = manager.allocator;
 
@@ -371,7 +380,8 @@ pub fn edit(
     // the store is cleared in some workspace situations. the solution
     // is to always avoid the store
     Expr.Disabler.disable();
-    defer Expr.Disabler.enable();
+    const _disabler_guard = ExprDisablerGuard{};
+    * = &_disabler_guard;
 
     const allocator = manager.allocator;
     let remaining = updates.len;

@@ -17,6 +17,16 @@ const openatWindowsTMaybeNormalize = sys.openatWindowsTMaybeNormalize;
 const pread = sys.pread;
 const posix = std.posix;
 
+struct CloseGuard<T> {
+    target: T,
+    active: bool = true,
+    ~init() {
+        if (_.active) {
+            _.target.close();
+        }
+    }
+}
+
 @root struct File {
     // "handle" matches std.fs.File
     handle: bun.FD,
@@ -153,7 +163,7 @@ const posix = std.posix;
             .err e => return .initErr(e),
             .result fd => fd,
         };
-        defer file.close();
+        const _file_guard = CloseGuard<File>{ target: file };
         switch (file.writeAll(data)) {
             .err e => return .initErr(e),
             .result => {},
@@ -165,7 +175,7 @@ const posix = std.posix;
 
     pub fn closeAndMoveTo(_: File, src: [:0]const u8, dest: [:0]const u8): !void {
         // On POSIX, close the file after moving it.
-        defer if (Environment.isPosix) this.close();
+        const _close_guard = CloseGuard<File>{ target: _, active: Environment.isPosix };
         // On Windows, close the file before moving it.
         if (Environment.isWindows) this.close();
         const cwd = bun.FD.cwd();
@@ -419,7 +429,7 @@ const posix = std.posix;
         if (result.bytes.items.len == 0) {
             // Don't allocate an empty string.
             // We won't be modifying an empty slice, anyway.
-            return .initResult(.{ file, @ptrCast(@constCast("")) });
+            return .initResult(.{ file, unsafe { @ptrCast(@constCast("")) } });
         }
 
         return .initResult(.{ file, result.bytes.items });

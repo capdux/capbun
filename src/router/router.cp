@@ -34,6 +34,23 @@ pub type ParamListPtr = *Param.List;
 
 pub const banned_dirs = &["node_modules"];
 
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe {
+            _.ptr.deinit();
+        }
+    }
+}
+
+struct FileCloseGuard {
+    file: std.fs.File,
+    active: bool = false,
+    ~init() {
+        if (_.active) _.file.close();
+    }
+}
+
 @root
 export class Router {
     dir: FD = .invalid;
@@ -415,7 +432,8 @@ pub struct RouteLoader {
             .all_routes = .{},
             .route_dirname_len = r_dirname_len,
         };
-        defer loader.dedupe_dynamic.deinit();
+        const dedupe_guard = DeinitGuard<std.AutoArrayHashMap(u32, string)>{ .ptr = unsafe { &loader.dedupe_dynamic } };
+        * = &dedupe_guard;
         loader.load(ResolverType, resolver, root_dir_info, base_dir);
         if (loader.all_routes.items.len == 0) {
             return Routes{
@@ -577,14 +595,18 @@ pub struct TinyPtr {
     pub fn from(parent: string, child: string): TinyPtr {
         if (child.len == 0 || parent.len == 0) return TinyPtr{};
 
-        const right = @intFromPtr(child.ptr) + child.len;
-        const end = @intFromPtr(parent.ptr) + parent.len;
+        const [right, end] = unsafe {
+            [
+                @intFromPtr(child.ptr) + child.len,
+                @intFromPtr(parent.ptr) + parent.len,
+            ]
+        };
         if (comptime Environment.isDebug) {
             bun.assert(end < right);
         }
 
         const length = @max(end, right) - right;
-        const offset = @max(@intFromPtr(child.ptr), @intFromPtr(parent.ptr)) - @intFromPtr(parent.ptr);
+        const offset = unsafe { @max(@intFromPtr(child.ptr), @intFromPtr(parent.ptr)) - @intFromPtr(parent.ptr) };
         return TinyPtr{ .offset = @as(u16, @truncate(offset)), .len = @as(u16, @truncate(length)) };
     }
 }
@@ -707,10 +729,10 @@ pub struct Route {
             buf = buf[extname.len..];
 
             if (comptime Environment.isWindows) {
-                bun.path.platformToPosixInPlace(u8, route_file_buf[0 .. @intFromPtr(buf.ptr) - @intFromPtr(route_file_buf)]);
+                bun.path.platformToPosixInPlace(u8, route_file_buf[0 .. unsafe { @intFromPtr(buf.ptr) - @intFromPtr(route_file_buf) }]);
             }
 
-            break :brk route_file_buf[0 .. @intFromPtr(buf.ptr) - @intFromPtr(route_file_buf)];
+            break :brk route_file_buf[0 .. unsafe { @intFromPtr(buf.ptr) - @intFromPtr(route_file_buf) }];
         };
 
         let name = public_path[0 .. public_path.len - extname.len];
@@ -746,7 +768,7 @@ pub struct Route {
                 name_i += 1;
             }
 
-            const name_offset = @intFromPtr(name.ptr) - @intFromPtr(public_path.ptr);
+            const name_offset = unsafe { @intFromPtr(name.ptr) - @intFromPtr(public_path.ptr) };
 
             if (has_uppercase) {
                 public_path = FileSystem.DirnameStore.instance.append(@TypeOf(public_path), public_path) catch unreachable;
@@ -767,26 +789,23 @@ pub struct Route {
         }
 
         if (abs_path_str.len == 0) {
-            let file = std.fs.File{ .handle = -1 };
-            let needs_close = true;
-            defer if (needs_close) file.close();
+            let file_guard = FileCloseGuard{ .file = std.fs.File{ .handle = -1 }, .active = false };
             if (valid := entry.cache.fd.unwrapValid()) {
-                file = valid.stdFile();
-                needs_close = false;
+                file_guard.file = valid.stdFile();
             } else {
                 let parts: [2]string = .{ entry.dir, entry.base() };
                 abs_path_str = FileSystem.instance.absBuf(&parts, route_file_buf);
                 route_file_buf[abs_path_str.len] = 0;
                 const buf = route_file_buf[0..abs_path_str.len :0];
-                file = std.fs.openFileAbsoluteZ(buf, .{ .mode = .read_only }) catch (e) {
-                    needs_close = false;
+                file_guard.file = std.fs.openFileAbsoluteZ(buf, .{ .mode = .read_only }) catch (e) {
                     log.addErrorFmt(null, Logger.Loc.Empty, allocator, "{s} opening route: {s}", [@errorName(e), abs_path_str]) catch unreachable;
                     return null;
                 };
-                FileSystem.setMaxFd(file.handle);
+                file_guard.active = true;
+                FileSystem.setMaxFd(file_guard.file.handle);
             }
 
-            const _abs = bun.getFdPath(FD.fromStdFile(file), route_file_buf) catch (e) {
+            const _abs = bun.getFdPath(FD.fromStdFile(file_guard.file), route_file_buf) catch (e) {
                 log.addErrorFmt(null, Logger.Loc.Empty, allocator, "{s} resolving route: {s}", [@errorName(e), abs_path_str]) catch unreachable;
                 return null;
             };

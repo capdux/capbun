@@ -61,10 +61,25 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 pub const path_watcher = @import("./path_watcher.zig");
+pub const UnregisterDeinitGuard = struct {
+    mgr: *PathWatcherManager,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *UnregisterDeinitGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            {
+                if ((self.mgr.deinit_on_last_watcher and (self.mgr.watchers.count() == 0))) {
+                    _ = self.mgr.deinit();
+                }
+            }
+    }
+};
+
 pub const PathWatcherManager = struct {
     watchers: bun.StringArrayHashMapUnmanaged(*PathWatcher) = .{},
     vm: *jsc.VirtualMachine,
@@ -75,13 +90,13 @@ pub fn init(vm: *jsc.VirtualMachine) *PathWatcherManager {
     }
 
 pub fn unregisterWatcher(self: *PathWatcherManager, watcher: *PathWatcher, path: [:0]const u8) void {
-            defer {
-            {
-                if ((self.deinit_on_last_watcher and (self.watchers.count() == 0))) {
-                    _ = self.deinit();
-                }
-            }
-            }
+            var _guard_deinit = UnregisterDeinitGuard{ .mgr = (blk: {
+            break :blk self;
+
+}) };
+            _ = &_guard_deinit;
+            var ___guard_deinit_moved = false; _ = &___guard_deinit_moved;
+            defer if (!___guard_deinit_moved) { ___guard_deinit_moved = true; const __T = @TypeOf(_guard_deinit); if (@typeInfo(__T) == .optional) { if (_guard_deinit) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_deinit.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_deinit; _drop_val.__cp_deinit(); } };
             if (std.mem.indexOfScalar(*PathWatcher, self.watchers.values(), watcher)) |index| {
                 _ = &index;
                 if (comptime bun.Environment.isDebug) {
@@ -139,16 +154,22 @@ pub const PathWatcher = struct {
     handle: uv.uv_fs_event_t,
     manager: ?*PathWatcherManager,
     emit_in_progress: bool = false,
-    handlers: std.AutoArrayHashMapUnmanaged(*void,ChangeEvent) = .{},
+    handlers: std.AutoArrayHashMapUnmanaged(*void, ChangeEvent) = .{},
 
 pub fn uvEventCallback(event: *uv.uv_fs_event_t, filename: ?[*:0]const u8, events: c_int, status: uv.ReturnCode) callconv(.c) void {
             if ((event.data == null)) {
                 _ = Output.debugWarn("uvEventCallback called with null data", .{});
                 return;
             }
-            const pw: *PathWatcher = @alignCast(@fieldParentPtr("handle", event));
+            const pw: *PathWatcher = (blk: {
+            break :blk @alignCast(@fieldParentPtr("handle", event));
+
+});
             if (comptime bun.Environment.isDebug) {
-                _ = bun.assert((event.data == @as(?*anyopaque, @ptrCast(pw))));
+                _ = bun.assert((event.data == (blk: {
+                break :blk @as(?*anyopaque, @ptrCast(pw));
+
+})));
             }
             const timestamp = event.loop.time;
             if (status.toError(.watch)) |e| {
@@ -185,7 +206,10 @@ pub fn emit(self: *PathWatcher, path: []const u8, hash: Watcher.HashType, timest
             while ((i < values.len)) : (i = (i + 1)) {
                 const event = (&values[@as(usize, @intCast(i))]);
                 if (event.emit(hash, timestamp, event_type)) {
-                    const ctx: *FSWatcher = @ptrCast(@alignCast(keys[@as(usize, @intCast(i))]));
+                    const ctx: *FSWatcher = (blk: {
+                    break :blk @ptrCast(@alignCast(keys[@as(usize, @intCast(i))]));
+
+});
                     _ = onPathUpdateFn(ctx, event_type.toEvent((switch (ctx.encoding) {
 .utf8 => .{ .string = bun.String.cloneUTF8(path) },
 else => .{ .bytes_to_free = bun.handleOom(bun.default_allocator.dupeZ(u8, path)) },
@@ -230,7 +254,10 @@ pub fn init(manager: *PathWatcherManager, path: [:0]const u8, recursive: bool) b
                 _ = watcher.deinit();
                 return .{ .err = err_val };
             }
-            _ = uv.uv_unref(@ptrCast((&watcher.handle)));
+            _ = uv.uv_unref((blk: {
+            break :blk @ptrCast((&watcher.handle));
+
+}));
             watchers_entry.value_ptr.* = watcher;
             watchers_entry.key_ptr.* = bun.handleOom(bun.default_allocator.dupeZ(u8, event_path));
             return .{ .result = watcher };
@@ -268,11 +295,17 @@ pub fn deinit(self: *PathWatcher) void {
                     _ = manager.unregisterWatcher(self, "");
                 }
             }
-            if (uv.uv_is_closed(@ptrCast((&self.handle)))) {
+            if (uv.uv_is_closed((blk: {
+            break :blk @ptrCast((&self.handle));
+
+}))) {
                 _ = bun.destroy(self);
             } else {
                 _ = uv.uv_fs_event_stop((&self.handle));
-                _ = uv.uv_close(@ptrCast((&self.handle)), PathWatcher.uvClosedCallback);
+                _ = uv.uv_close((blk: {
+                break :blk @ptrCast((&self.handle));
+
+}), PathWatcher.uvClosedCallback);
             }
     }
     pub const new = bun.TrivialNew(PathWatcher);

@@ -9,9 +9,8 @@
 /// ```
 pub fn myersDiff(global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     let stack_fallback = std.heap.stackFallback(1024 * 2, bun.default_allocator);
-    let arena_ = std.heap.ArenaAllocator.init(stack_fallback.get());
-    defer arena_.deinit();
-    const allocator = arena_.allocator();
+    let arena_ = DeinitGuard<std.heap.ArenaAllocator>{ val: std.heap.ArenaAllocator.init(stack_fallback.get()) };
+    const allocator = arena_.val.allocator();
 
     const nargs = callframe.argumentsCount();
     if (nargs < 2) {
@@ -37,19 +36,17 @@ pub fn myersDiff(global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JS
     if (!actual_arg.isString()) return global.throwInvalidArgumentTypeValue("actual", "string", actual_arg);
     if (!expected_arg.isString()) return global.throwInvalidArgumentTypeValue("expected", "string", expected_arg);
 
-    const actual_str = actual_arg.toBunString(global)?;
-    defer actual_str.deref();
-    const expected_str = expected_arg.toBunString(global)?;
-    defer expected_str.deref();
+    let actual_str = DerefGuard<bun.String>{ val: actual_arg.toBunString(global)? };
+    let expected_str = DerefGuard<bun.String>{ val: expected_arg.toBunString(global)? };
 
-    bun.assertWithLocation(actual_str.tag != .Dead, @src());
-    bun.assertWithLocation(expected_str.tag != .Dead, @src());
+    bun.assertWithLocation(actual_str.val.tag != .Dead, @src());
+    bun.assertWithLocation(expected_str.val.tag != .Dead, @src());
 
     return assert.myersDiff(
         allocator,
         global,
-        unsafe { &actual_str },
-        unsafe { &expected_str },
+        unsafe { &actual_str.val },
+        unsafe { &expected_str.val },
         check_comma_disparity,
         lines,
     );
@@ -93,3 +90,6 @@ const DiffList = MyersDiff.DiffList;
 
 const jsc = bun.jsc;
 const JSValue = jsc.JSValue;
+
+pub struct DeinitGuard<T> { val: T, ~init() { _.val.deinit(); } }
+pub struct DerefGuard<T> { val: T, ~init() { _.val.deref(); } }

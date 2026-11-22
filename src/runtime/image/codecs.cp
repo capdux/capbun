@@ -244,6 +244,20 @@ pub struct ProbeResult {
     height: u32,
 }
 
+struct Tj3Guard<T> {
+    handle: T,
+    ~init() {
+        jpeg.tj3Destroy(_.handle);
+    }
+}
+
+struct DefaultAllocSliceGuard<T> {
+    slice: ([]T)?,
+    ~init() {
+        if (s := _.slice) bun.default_allocator.free(s);
+    }
+}
+
 /// Header-only dimensions probe for `.metadata()`. Decoding the full RGBA for
 /// a 1920×1080 PNG just to read the IHDR is ~70× slower than Sharp; this reads
 /// the few bytes each format needs and stops. Still subject to `max_pixels` so
@@ -265,11 +279,10 @@ pub fn probe(bytes: []const u8, max_pixels: u64): Error!ProbeResult {
             // turbojpeg's header decode is already cheap (no scan data read).
             const handle_opt = jpeg.tj3Init(1);
             if (handle_opt == null) return error.OutOfMemory;
-            const handle = handle_opt.?;
-            defer jpeg.tj3Destroy(handle);
-            if (jpeg.tj3DecompressHeader(handle, bytes.ptr, bytes.len) != 0) return error.DecodeFailed;
-            const rw = jpeg.tj3Get(handle, jpeg.TJPARAM_JPEGWIDTH);
-            const rh = jpeg.tj3Get(handle, jpeg.TJPARAM_JPEGHEIGHT);
+            const handle_guard = Tj3Guard<@TypeOf(handle_opt.?)>{ handle: handle_opt.? };
+            if (jpeg.tj3DecompressHeader(handle_guard.handle, bytes.ptr, bytes.len) != 0) return error.DecodeFailed;
+            const rw = jpeg.tj3Get(handle_guard.handle, jpeg.TJPARAM_JPEGWIDTH);
+            const rh = jpeg.tj3Get(handle_guard.handle, jpeg.TJPARAM_JPEGHEIGHT);
             if (rw <= 0 || rh <= 0) return error.DecodeFailed;
             w = @intCast(rw);
             h = @intCast(rh);
@@ -473,11 +486,12 @@ pub fn resize(src: []const u8, sw: u32, sh: u32, dw: u32, dh: u32, f: Filter): E
     const out_sz: usize = @as(usize, dw) * dh * 4;
     const scratch_sz = bun_image_resize_scratch_size(@intCast(sw), @intCast(sh), @intCast(dw), @intCast(dh), @intFromEnum(f));
     const block = bun.default_allocator.alloc(u8, out_sz + scratch_sz)?;
-    errdefer bun.default_allocator.free(block);
-    if (bun_image_resize_rgba8(src.ptr, @intCast(sw), @intCast(sh), block.ptr, @intCast(dw), @intCast(dh), @intFromEnum(f), block.ptr + out_sz) != 0)
+    let block_guard = DefaultAllocSliceGuard<u8>{ slice: block };
+    if (bun_image_resize_rgba8(src.ptr, @intCast(sw), @intCast(sh), block.ptr, @intCast(dw), @intCast(dh), @intFromEnum(f), unsafe { block.ptr + out_sz }) != 0)
         return error.OutOfMemory;
     // Drop the scratch tail; mimalloc's shrink is in-place when the new size
     // fits the same block, so this is free.
+    block_guard.slice = null;
     return bun.handleOom(bun.default_allocator.realloc(block, out_sz));
 }
 

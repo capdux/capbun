@@ -19,6 +19,48 @@ const ThreadLocalArena = bun.allocators.MimallocArena;
 const bundler = bun.bundle_v2;
 const BundleV2 = bundler.BundleV2;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!;
+
+    ~init() {
+        unsafe {
+            _.ptr.deinit();
+        }
+    }
+}
+
+struct BundleCleanupGuard {
+    ast_memory_allocator: *js_ast.ASTMemoryAllocator!;
+    bundle: *BundleV2!;
+
+    ~init() {
+        unsafe {
+            _.ast_memory_allocator.pop();
+            _.bundle.deinitWithoutFreeingArena();
+        }
+    }
+}
+
+pub struct BundleErrGuard<CompletionStruct> {
+    bundle: *BundleV2!;
+    completion: *CompletionStruct!;
+    armed: bool = true;
+
+    ~init() {
+        if (_.armed) {
+            unsafe {
+                // Wait for wait groups to finish. There still may be ongoing work.
+                _.bundle.linker.source_maps.line_offset_wait_group.wait();
+                _.bundle.linker.source_maps.quoted_contents_wait_group.wait();
+
+                let out_log = Logger.Log.init(bun.default_allocator);
+                bun.handleOom(_.bundle.transpiler.log.appendToWithRecycled(&out_log, true));
+                _.completion.log = out_log;
+            }
+        }
+    }
+}
+
 /// Used to keep the bundle thread from spinning on Windows
 @callconv("c")
 pub fn timerCallback(_: *bun.windows.libuv.Timer) {}
@@ -125,7 +167,7 @@ pub fn BundleThread(CompletionStruct: type): type {
         /// This is called from `Bun.build` in JavaScript.
         fn generateInNewThread(completion: *CompletionStruct, generation: bun.Generation)!void {
             let heap = ThreadLocalArena.init();
-            defer heap.deinit();
+            const _heap_guard = DeinitGuard<ThreadLocalArena>{ ptr: unsafe { &heap } };
 
             const allocator = heap.allocator();
             let ast_memory_allocator = allocator.create(js_ast.ASTMemoryAllocator)?;
@@ -161,22 +203,17 @@ pub fn BundleThread(CompletionStruct: type): type {
                 null;
             completion.transpiler = bundle;
 
-            defer {
-                ast_memory_allocator.pop();
-                bundle.deinitWithoutFreeingArena();
-            }
-
-            errdefer {
-                // Wait for wait groups to finish. There still may be ongoing work.
-                bundle.linker.source_maps.line_offset_wait_group.wait();
-                bundle.linker.source_maps.quoted_contents_wait_group.wait();
-
-                let out_log = Logger.Log.init(bun.default_allocator);
-                bun.handleOom(bundle.transpiler.log.appendToWithRecycled(&out_log, true));
-                completion.log = out_log;
-            }
+            const _cleanup_guard = BundleCleanupGuard{
+                ast_memory_allocator: ast_memory_allocator,
+                bundle: bundle,
+            };
+            let err_guard = BundleErrGuard<CompletionStruct>{
+                bundle: bundle,
+                completion: completion,
+            };
 
             completion.result = { value: bundle.runFromJSInNewThread(transpiler.options.entry_points)? };
+            err_guard.armed = false;
 
             let out_log = Logger.Log.init(bun.default_allocator);
             bun.handleOom(bundle.transpiler.log.appendToWithRecycled(&out_log, true));

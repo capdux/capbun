@@ -76,6 +76,21 @@ pub struct EndGuard<T> {
     }
 }
 
+pub struct ClearRetainingCapacityGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.clearRetainingCapacity();
+    }
+}
+
+pub struct AstStoreResetGuard {
+    _dummy: u8 = 0,
+    ~init() {
+        bun.ast.Expr.Data.Store.reset();
+        bun.ast.Stmt.Data.Store.reset();
+    }
+}
+
 pub struct PathBufferPoolGuard<T> {
     buf: T,
     ~init() {
@@ -752,8 +767,8 @@ pub struct StandaloneModuleGraph {
             };
 
             if (output_file.source_map_index != std.math.maxInt(u32)) {
-                defer source_map_header_list.clearRetainingCapacity();
-                defer source_map_string_list.clearRetainingCapacity();
+                const _guard_sm_header_clear = ClearRetainingCapacityGuard<std.array_list.Managed(u8)>{ ptr: &source_map_header_list };
+                const _guard_sm_string_clear = ClearRetainingCapacityGuard<std.array_list.Managed(u8)>{ ptr: &source_map_string_list };
                 * = source_map_arena.reset(.retain_capacity);
                 serializeJsonSourceMapForStandalone(
                     &source_map_header_list,
@@ -1473,10 +1488,7 @@ pub struct StandaloneModuleGraph {
 
         bun.ast.Expr.Data.Store.reset();
         bun.ast.Stmt.Data.Store.reset();
-        defer {
-            bun.ast.Expr.Data.Store.reset();
-            bun.ast.Stmt.Data.Store.reset();
-        }
+        const _guard_ast_store = AstStoreResetGuard{};
         let json = bun.json.parse(&json_src, &log, arena_alloc, false) catch
             return error.InvalidSourceMap;
 

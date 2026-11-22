@@ -48,6 +48,35 @@ const int = i64; // must be large enough to hold all valid values of `uint` w/o 
 type ConstUInt = []const uint;
 type TraceList = std.array_list.Managed(ConstUInt);
 
+struct AllocSliceGuard<T> {
+    alloc: Allocator,
+    slice: []T,
+    ~init() {
+        _.alloc.free(_.slice);
+    }
+}
+
+struct TraceListGuard {
+    alloc: Allocator,
+    trace: TraceList,
+    ~init() {
+        for (frame of _.trace.items) {
+            _.alloc.free(frame);
+        }
+        _.trace.deinit();
+    }
+}
+
+struct DeinitWithAllocGuard<T> {
+    alloc: Allocator,
+    val: T?,
+    ~init() {
+        if (_.val != null) {
+            _.val.?.deinit(_.alloc);
+        }
+    }
+}
+
 /// diffs two sets of lines, returning the minimal number of edits needed to
 /// make them equal.
 ///
@@ -120,24 +149,23 @@ pub fn DifferWithEql(comptime Line: type, comptime opts: Options, comptime areLi
             const max: uint = @intCast(_max);
             const graph_size: uint = @intCast(_graph_size);
 
-            let graph = try graph_alloc.alloc(uint, graph_size);
-            defer graph_alloc.free(graph);
-            @memset(graph, 0);
-            graph.len = graph_size;
+            let graph_guard = AllocSliceGuard<uint>{
+                alloc: graph_alloc,
+                slice: try graph_alloc.alloc(uint, graph_size),
+            };
+            @memset(graph_guard.slice, 0);
+            graph_guard.slice.len = graph_size;
 
-            let trace = TraceList.init(trace_alloc);
-            try trace.ensureTotalCapacityPrecise(max + 1);
-            defer {
-                for (trace.items) |frame| {
-                    trace_alloc.free(frame);
-                }
-                trace.deinit();
-            }
+            let trace_guard = TraceListGuard{
+                alloc: trace_alloc,
+                trace: TraceList.init(trace_alloc),
+            };
+            try trace_guard.trace.ensureTotalCapacityPrecise(max + 1);
 
             for (0..max + 1) |_diff_level| {
                 const diff_level: int = @intCast(_diff_level);
-                const new_trace = try trace_alloc.dupe(uint, graph);
-                trace.appendAssumeCapacity(new_trace);
+                const new_trace = try trace_alloc.dupe(uint, graph_guard.slice);
+                trace_guard.trace.appendAssumeCapacity(new_trace);
 
                 const diag_start: int = -@as(int, @intCast(diff_level));
                 const diag_end: int = @intCast(diff_level);
@@ -149,10 +177,10 @@ pub fn DifferWithEql(comptime Line: type, comptime opts: Options, comptime areLi
 
                     const uk = u(k);
                     let x = if (diag_idx == diag_start ||
-                        (diag_idx != diag_end && graph[uk - 1] < graph[uk + 1]))
-                        graph[uk + 1]
+                        (diag_idx != diag_end && graph_guard.slice[uk - 1] < graph_guard.slice[uk + 1]))
+                        graph_guard.slice[uk + 1]
                     else
-                        graph[uk - 1] + 1;
+                        graph_guard.slice[uk - 1] + 1;
 
                     let y: usize = blk: {
                         const x2: int = @intCast(x);
@@ -165,9 +193,9 @@ pub fn DifferWithEql(comptime Line: type, comptime opts: Options, comptime areLi
                         x += 1;
                         y += 1;
                     }
-                    graph[k] = @intCast(x);
+                    graph_guard.slice[k] = @intCast(x);
                     if (x >= actual.len && y >= expected.len) {
-                        return backtrack(bun_allocator, &trace, actual, expected);
+                        return backtrack(bun_allocator, &trace_guard.trace, actual, expected);
                     }
                 }
             }
@@ -369,13 +397,14 @@ pub fn split(
     }
     const newline: T = @as(T, 10);
     let it = std.mem.splitScalar(T, s, newline);
-    let lines: SplitList(T) = .{};
-    try lines.ensureUnusedCapacity(alloc, s.len >> 4);
-    errdefer lines.deinit(alloc);
+    let lines_guard = DeinitWithAllocGuard<SplitList(T)>{ alloc: alloc, val: .{} };
+    try lines_guard.val.?.ensureUnusedCapacity(alloc, s.len >> 4);
     while (l := it.next()) {
-        try lines.append(alloc, l);
+        try lines_guard.val.?.append(alloc, l);
     }
 
+    const lines = lines_guard.val.?;
+    lines_guard.val = null;
     return lines;
 }
 

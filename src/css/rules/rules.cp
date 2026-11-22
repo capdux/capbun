@@ -31,6 +31,17 @@ import tailwind from "./tailwind.zig";
 
 const debug = bun.Output.scoped(.CSS_MINIFY, .visible);
 
+pub struct DeinitWithAllocGuard<T> {
+    ptr: *T!,
+    allocator: std.mem.Allocator,
+
+    ~init() {
+        unsafe {
+            _.ptr.deinit(_.allocator);
+        }
+    }
+}
+
 pub fn CssRule(comptime Rule: type): type {
     * = Rule;
     return union(enum) {
@@ -323,8 +334,16 @@ pub fn CssRuleList(comptime AtRule: type): type {
                             break :incompatible_rules incompatible_rules;
                         };
                         debug("Incompatible rules: {d}\n", .{incompatible_rules.len()});
-                        defer incompatible.deinit(context.allocator);
-                        defer incompatible_rules.deinit(context.allocator);
+                        const _incompatible_guard = DeinitWithAllocGuard<css.SmallList(css.selector.parser.Selector, 1)>{
+                            ptr: unsafe { &incompatible },
+                            allocator: context.allocator,
+                        };
+                        const _incompatible_rules_guard = DeinitWithAllocGuard<css.SmallList(IncompatibleRuleEntry, 1)>{
+                            ptr: unsafe { &incompatible_rules },
+                            allocator: context.allocator,
+                        };
+                        * = &_incompatible_guard;
+                        * = &_incompatible_rules_guard;
 
                         context.handler_context.reset();
 

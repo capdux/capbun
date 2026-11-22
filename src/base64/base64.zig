@@ -67,7 +67,7 @@ fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
     }
     return val >> shift;
 }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 pub const Base64Encoder = struct {
@@ -118,7 +118,7 @@ pub fn encodeWithoutSizeCheck(self: Base64Encoder, dest: []u8, source: []const u
             return out_idx;
     }
 
-pub fn encode(self: Base64Encoder, dest: []u8, source: []const u8) []const u8 {
+pub fn encode(self: *const Base64Encoder, dest: []u8, source: []const u8) []const u8 {
             var out_len = self.calcSize(source.len);
             _ = &out_len;
             var out_idx = self.encodeWithoutSizeCheck(dest, source);
@@ -387,6 +387,21 @@ pub const Codecs = struct {
     Decoder: Base64Decoder,
 };
 
+pub const SliceFreeGuard = struct {
+    allocator: std.mem.Allocator,
+    slice: ?[]u8,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *SliceFreeGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (self.slice) |s| {
+                _ = &s;
+                _ = self.allocator.free(s);
+            }
+    }
+};
+
 const decoderWithIgnoreProto = *const fn ([]const u8) Base64DecoderWithIgnore;
 const assert = bun.assert;
 const testing = std.testing;
@@ -435,13 +450,15 @@ pub fn decode(destination: []u8, source: []const u8) bun.simdutf.SIMDUTFResult {
 pub fn decodeAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
         var dest = try allocator.alloc(u8, decodeLen(input));
         _ = &dest;
-        errdefer {
-        _ = allocator.free(dest);
-        }
+        var dest_guard = SliceFreeGuard{ .allocator = allocator, .slice = dest };
+        _ = &dest_guard;
+        var __dest_guard_moved = false; _ = &__dest_guard_moved;
+        defer if (!__dest_guard_moved) { __dest_guard_moved = true; const __T = @TypeOf(dest_guard); if (@typeInfo(__T) == .optional) { if (dest_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { dest_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = dest_guard; _drop_val.__cp_deinit(); } };
         const result = decode(dest, input);
         if ((!result.isSuccessful())) {
             return error.DecodingFailed;
         }
+        dest_guard.slice = null;
         return dest[0..result.count];
 }
 
@@ -452,10 +469,12 @@ pub fn encode(destination: []u8, source: []const u8) usize {
 pub fn encodeAlloc(allocator: std.mem.Allocator, source: []const u8) !bun.ByteList {
         const len = encodeLen(source);
         const destination = try allocator.alloc(u8, len);
-        errdefer {
-        _ = allocator.free(destination);
-        }
+        var dest_guard = SliceFreeGuard{ .allocator = allocator, .slice = destination };
+        _ = &dest_guard;
+        var __dest_guard_moved = false; _ = &__dest_guard_moved;
+        defer if (!__dest_guard_moved) { __dest_guard_moved = true; const __T = @TypeOf(dest_guard); if (@typeInfo(__T) == .optional) { if (dest_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { dest_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = dest_guard; _drop_val.__cp_deinit(); } };
         const encoded_len = encode(destination, source);
+        dest_guard.slice = null;
         return .{ .ptr = destination.ptr, .len = @truncate(encoded_len), .cap = @truncate(len) };
 }
 

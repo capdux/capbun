@@ -8,6 +8,13 @@ const JSValue = bun.jsc.JSValue;
 const Expect = bun.jsc.Expect.Expect;
 const getSignature = Expect.getSignature;
 
+struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
 @callconv("c")
 pub fn anythingInIterator(
     _: *jsc.VM,
@@ -15,7 +22,9 @@ pub fn anythingInIterator(
     any_: *!?,
     _: JSValue,
 ) {
-    bun.cast(*bool, any_.?).* = true;
+    unsafe {
+        bun.cast(*bool, any_.?).* = true;
+    }
 }
 
 pub fn toBeEmpty(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFrame): bun.JSError!JSValue {
@@ -28,8 +37,9 @@ pub fn toBeEmpty(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallF
 
     const not = client.flags.not;
     let pass = false;
-    let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-    defer formatter.deinit();
+    let formatter_guard = DeinitGuard<jsc.ConsoleObject.Formatter>{
+        val: jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true },
+    };
 
     const actual_length = value.getLengthIfPropertyExistsInternal(globalThis)?;
 
@@ -45,19 +55,19 @@ pub fn toBeEmpty(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallF
                     return globalThis.throwTypeError("Expected value to be a string, object, or iterable", .{});
                 }
                 const cell = cell_opt.?;
-                let props_iter = jsc.JSPropertyIterator({
+                const PropsIter = jsc.JSPropertyIterator({
                     skip_empty_name: false,
                     own_properties_only: false,
                     include_value: true,
-                }).init(globalThis, cell.toObject(globalThis))?;
-                defer props_iter.deinit();
-                pass = props_iter.len == 0;
+                });
+                let props_iter_guard = DeinitGuard<PropsIter>{ val: PropsIter.init(globalThis, cell.toObject(globalThis))? };
+                pass = props_iter_guard.val.len == 0;
             }
         } else {
             const signature = comptime getSignature("toBeEmpty", "", false);
             const fmt = signature ++ "\n\nExpected value to be a string, object, or iterable" ++
                 "\n\nReceived: <red>{f}<r>\n";
-            return globalThis.throwPretty(fmt, .{ value.toFmt(&formatter) });
+            return globalThis.throwPretty(fmt, .{ value.toFmt(&formatter_guard.val) });
         }
     } else if (std.math.isNan(actual_length)) {
         return globalThis.throw("Received value has non-number length property: {}", .{ actual_length });
@@ -69,7 +79,7 @@ pub fn toBeEmpty(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallF
         const signature = comptime getSignature("toBeEmpty", "", true);
         const fmt = signature ++ "\n\nExpected value <b>not<r> to be a string, object, or iterable" ++
             "\n\nReceived: <red>{f}<r>\n";
-        return globalThis.throwPretty(fmt, .{ value.toFmt(&formatter) });
+        return globalThis.throwPretty(fmt, .{ value.toFmt(&formatter_guard.val) });
     }
 
     if (not) pass = !pass;
@@ -79,11 +89,11 @@ pub fn toBeEmpty(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallF
         const signature = comptime getSignature("toBeEmpty", "", true);
         const fmt = signature ++ "\n\nExpected value <b>not<r> to be empty" ++
             "\n\nReceived: <red>{f}<r>\n";
-        return globalThis.throwPretty(fmt, .{ value.toFmt(&formatter) });
+        return globalThis.throwPretty(fmt, .{ value.toFmt(&formatter_guard.val) });
     }
 
     const signature = comptime getSignature("toBeEmpty", "", false);
     const fmt = signature ++ "\n\nExpected value to be empty" ++
         "\n\nReceived: <red>{f}<r>\n";
-    return globalThis.throwPretty(fmt, .{ value.toFmt(&formatter) });
+    return globalThis.throwPretty(fmt, .{ value.toFmt(&formatter_guard.val) });
 }

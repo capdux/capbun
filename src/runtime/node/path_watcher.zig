@@ -33,166 +33,6 @@ fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
 fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
-// --- Multithreading Synchronization Primitives (cap:sync) ---
-const NativeMutex = struct {
-    state: std.atomic.Value(u32) = std.atomic.Value(u32).init(0),
-    pub fn lock(self: *NativeMutex) void {
-        var spin: usize = 0;
-        while (true) {
-            if (self.state.cmpxchgWeak(0, 1, .acquire, .monotonic) == null) return;
-            if (spin < 100) { std.atomic.spinLoopHint(); spin += 1; } else { std.Thread.yield() catch {}; }
-        }
-    }
-    pub fn unlock(self: *NativeMutex) void { _ = self.state.swap(0, .release); }
-    pub fn tryLock(self: *NativeMutex) bool { return self.state.cmpxchgWeak(0, 1, .acquire, .monotonic) == null; }
-    pub fn isLocked(self: *NativeMutex) bool { return self.state.load(.monotonic) != 0; }
-};
-
-const NativeRwLock = struct {
-    state: std.atomic.Value(u32) = std.atomic.Value(u32).init(0),
-    const WRITER_BIT: u32 = 1 << 31;
-    const READER_MASK: u32 = ~WRITER_BIT;
-    pub fn lockShared(self: *NativeRwLock) void {
-        var spin: usize = 0;
-        while (true) {
-            const current = self.state.load(.monotonic);
-            if ((current & WRITER_BIT) == 0) { if (self.state.cmpxchgWeak(current, current + 1, .acquire, .monotonic) == null) return; }
-            if (spin < 100) { std.atomic.spinLoopHint(); spin += 1; } else { std.Thread.yield() catch {}; }
-        }
-    }
-    pub fn unlockShared(self: *NativeRwLock) void {
-        while (true) {
-            const current = self.state.load(.monotonic);
-            const count = current & READER_MASK;
-            if (count == 0) return;
-            if (self.state.cmpxchgWeak(current, current - 1, .release, .monotonic) == null) return;
-        }
-    }
-    pub fn tryLockShared(self: *NativeRwLock) bool { const current = self.state.load(.monotonic); if ((current & WRITER_BIT) != 0) return false; return self.state.cmpxchgWeak(current, current + 1, .acquire, .monotonic) == null; }
-    pub fn lockExclusive(self: *NativeRwLock) void {
-        var spin: usize = 0;
-        while (true) {
-            if (self.state.cmpxchgWeak(0, WRITER_BIT, .acquire, .monotonic) == null) return;
-            if (spin < 100) { std.atomic.spinLoopHint(); spin += 1; } else { std.Thread.yield() catch {}; }
-        }
-    }
-    pub fn unlockExclusive(self: *NativeRwLock) void { _ = self.state.cmpxchgStrong(WRITER_BIT, 0, .release, .monotonic); }
-    pub fn tryLockExclusive(self: *NativeRwLock) bool { return self.state.cmpxchgWeak(0, WRITER_BIT, .acquire, .monotonic) == null; }
-    pub fn isReadLocked(self: *NativeRwLock) bool { return (self.state.load(.monotonic) & READER_MASK) > 0; }
-    pub fn isWriteLocked(self: *NativeRwLock) bool { return (self.state.load(.monotonic) & WRITER_BIT) != 0; }
-};
-
-const CpBareMutex = struct {
-    raw: NativeMutex = .{},
-    pub fn lock(self: *CpBareMutex) void { self.raw.lock(); }
-    pub fn unlock(self: *CpBareMutex) void { self.raw.unlock(); }
-    pub fn tryLock(self: *CpBareMutex) bool { return self.raw.tryLock(); }
-    pub fn isLocked(self: *CpBareMutex) bool { return self.raw.isLocked(); }
-};
-
-const CpBareRwLock = struct {
-    raw: NativeRwLock = .{},
-    pub fn lock(self: *CpBareRwLock) void { self.raw.lockExclusive(); }
-    pub fn unlock(self: *CpBareRwLock) void { self.raw.unlockExclusive(); }
-    pub fn lockShared(self: *CpBareRwLock) void { self.raw.lockShared(); }
-    pub fn unlockShared(self: *CpBareRwLock) void { self.raw.unlockShared(); }
-    pub fn read(self: *CpBareRwLock) void { self.raw.lockShared(); }
-    pub fn write(self: *CpBareRwLock) void { self.raw.lockExclusive(); }
-    pub fn tryLock(self: *CpBareRwLock) bool { return self.raw.tryLockExclusive(); }
-    pub fn tryLockShared(self: *CpBareRwLock) bool { return self.raw.tryLockShared(); }
-    pub fn tryRead(self: *CpBareRwLock) bool { return self.raw.tryLockShared(); }
-    pub fn tryWrite(self: *CpBareRwLock) bool { return self.raw.tryLockExclusive(); }
-    pub fn isReadLocked(self: *CpBareRwLock) bool { return self.raw.isReadLocked(); }
-    pub fn isWriteLocked(self: *CpBareRwLock) bool { return self.raw.isWriteLocked(); }
-};
-
-fn LockGuard(comptime __T: type) type {
-    return struct {
-        const Self = @This();
-        mutex: *CpMutex(__T),
-        data: *__T,
-        pub fn __cp_deinit(self: Self) void { self.release(); }
-        pub fn release(self: Self) void { self.mutex.raw.unlock(); }
-        pub fn unlock(self: Self) void { self.release(); }
-    };
-}
-
-fn ReadGuard(comptime __T: type) type {
-    return struct {
-        const Self = @This();
-        rwlock: *CpRwLock(__T),
-        data: *const __T,
-        pub fn __cp_deinit(self: Self) void { self.release(); }
-        pub fn release(self: Self) void { self.rwlock.raw.unlockShared(); }
-        pub fn unlock(self: Self) void { self.release(); }
-    };
-}
-
-fn WriteGuard(comptime __T: type) type {
-    return struct {
-        const Self = @This();
-        rwlock: *CpRwLock(__T),
-        data: *__T,
-        pub fn __cp_deinit(self: Self) void { self.release(); }
-        pub fn release(self: Self) void { self.rwlock.raw.unlockExclusive(); }
-        pub fn unlock(self: Self) void { self.release(); }
-    };
-}
-
-fn CpMutex(comptime __T: type) type {
-    return struct {
-        const Self = @This();
-        raw: NativeMutex = .{},
-        data: __T,
-        pub fn init(val: __T) Self { return .{ .data = val }; }
-        pub fn lock(self: *Self) LockGuard(__T) { self.raw.lock(); return .{ .mutex = self, .data = &self.data }; }
-        pub fn tryLock(self: *Self) ?LockGuard(__T) { if (self.raw.tryLock()) { return LockGuard(__T){ .mutex = self, .data = &self.data }; } return null; }
-        pub fn isLocked(self: *Self) bool { return self.raw.isLocked(); }
-    };
-}
-
-fn CpRwLock(comptime __T: type) type {
-    return struct {
-        const Self = @This();
-        raw: NativeRwLock = .{},
-        data: __T,
-        pub fn init(val: __T) Self { return .{ .data = val }; }
-        pub fn read(self: *Self) ReadGuard(__T) { self.raw.lockShared(); return .{ .rwlock = self, .data = &self.data }; }
-        pub fn tryRead(self: *Self) ?ReadGuard(__T) { if (self.raw.tryLockShared()) { return ReadGuard(__T){ .rwlock = self, .data = &self.data }; } return null; }
-        pub fn write(self: *Self) WriteGuard(__T) { self.raw.lockExclusive(); return .{ .rwlock = self, .data = &self.data }; }
-        pub fn tryWrite(self: *Self) ?WriteGuard(__T) { if (self.raw.tryLockExclusive()) { return WriteGuard(__T){ .rwlock = self, .data = &self.data }; } return null; }
-        pub fn isReadLocked(self: *Self) bool { return self.raw.isReadLocked(); }
-        pub fn isWriteLocked(self: *Self) bool { return self.raw.isWriteLocked(); }
-    };
-}
-
-fn CpAtomic(comptime __T: type) type {
-    return struct {
-        const Self = @This();
-        raw: std.atomic.Value(__T),
-        pub fn init(val: __T) Self { return .{ .raw = std.atomic.Value(__T).init(val) }; }
-        pub fn load(self: *const Self) __T { return self.raw.load(.seq_cst); }
-        pub fn store(self: *Self, val: __T) void { self.raw.store(val, .seq_cst); }
-        pub fn swap(self: *Self, val: __T) __T { return self.raw.swap(val, .seq_cst); }
-        pub fn cas(self: *Self, expected: __T, desired: __T) bool { return self.raw.cmpxchgStrong(expected, desired, .seq_cst, .seq_cst) == null; }
-        pub fn compareAndSwap(self: *Self, expected: __T, desired: __T) bool { return self.cas(expected, desired); }
-        pub fn add(self: *Self, delta: __T) __T { return self.raw.fetchAdd(delta, .seq_cst); }
-        pub fn sub(self: *Self, delta: __T) __T { return self.raw.fetchSub(delta, .seq_cst); }
-        pub fn inc(self: *Self) __T { return self.add(1); }
-        pub fn dec(self: *Self) __T { return self.sub(1); }
-        pub fn @"and"(self: *Self, mask: __T) __T { return self.raw.fetchAnd(mask, .seq_cst); }
-        pub fn @"or"(self: *Self, mask: __T) __T { return self.raw.fetchOr(mask, .seq_cst); }
-        pub fn @"xor"(self: *Self, mask: __T) __T { return self.raw.fetchXor(mask, .seq_cst); }
-        pub fn testAndSet(self: *Self) bool { if (comptime __T == bool) { return self.raw.swap(true, .seq_cst); } else { return self.raw.swap(1, .seq_cst) != 0; } }
-        pub fn clear(self: *Self) void { if (comptime __T == bool) { self.raw.store(false, .seq_cst); } else { self.raw.store(0, .seq_cst); } }
-    };
-}
-
-fn cp_make_mutex(val: anytype) CpMutex(@TypeOf(val)) { return CpMutex(@TypeOf(val)).init(val); }
-fn cp_make_rwlock(val: anytype) CpRwLock(@TypeOf(val)) { return CpRwLock(@TypeOf(val)).init(val); }
-fn CpAtomicConcreteType(comptime __T: type) type { if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
-fn cp_make_atomic(val: anytype) CpAtomic(CpAtomicConcreteType(@TypeOf(val))) { const __T = CpAtomicConcreteType(@TypeOf(val)); return CpAtomic(__T).init(@as(__T, val)); }
-
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
@@ -280,16 +120,31 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const MutexGuard = struct {
+    mutex: *bun.Mutex,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *MutexGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = self.mutex.unlock();
+    }
+};
+
 pub const PathWatcherManager = struct {
-    mutex: CpBareMutex = .{},
+    mutex: bun.Mutex = .{},
     watchers: bun.StringArrayHashMapUnmanaged(*PathWatcher) = .{},
     platform: Platform = .{},
 
 pub fn get() bun.sys.Maybe(*PathWatcherManager) {
-            _ = (if (comptime @typeInfo(@TypeOf(default_manager_mutex)) == .pointer) (default_manager_mutex) else &(default_manager_mutex)).lock();
-            defer {
-            _ = (if (comptime @typeInfo(@TypeOf(default_manager_mutex)) == .pointer) (default_manager_mutex) else &(default_manager_mutex)).unlock();
-            }
+            _ = default_manager_mutex.lock();
+            var _manager_lock = MutexGuard{ .mutex = (blk: {
+            break :blk (&default_manager_mutex);
+
+}) };
+            _ = &_manager_lock;
+            var ___manager_lock_moved = false; _ = &___manager_lock_moved;
+            defer if (!___manager_lock_moved) { ___manager_lock_moved = true; const __T = @TypeOf(_manager_lock); if (@typeInfo(__T) == .optional) { if (_manager_lock) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _manager_lock.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _manager_lock; _drop_val.__cp_deinit(); } };
             if (default_manager) |m| {
                 _ = &m;
                 return .{ .result = m };
@@ -371,10 +226,10 @@ pub fn detach(self: *PathWatcher, ctx: *anyopaque) void {
                 return;
             }
             const manager = self.manager.?;
-            _ = (if (comptime @typeInfo(@TypeOf(manager.mutex)) == .pointer) (manager.mutex) else &(manager.mutex)).lock();
+            _ = manager.mutex.lock();
             _ = self.handlers.swapRemove(ctx);
             if ((self.handlers.count() > 0)) {
-                _ = (if (comptime @typeInfo(@TypeOf(manager.mutex)) == .pointer) (manager.mutex) else &(manager.mutex)).unlock();
+                _ = manager.mutex.unlock();
                 return;
             }
             _ = manager.unlinkWatcherLocked(self);
@@ -382,7 +237,7 @@ pub fn detach(self: *PathWatcher, ctx: *anyopaque) void {
             if (comptime (!Environment.isMac)) {
                 _ = Platform.removeWatch(manager, self);
             }
-            _ = (if (comptime @typeInfo(@TypeOf(manager.mutex)) == .pointer) (manager.mutex) else &(manager.mutex)).unlock();
+            _ = manager.mutex.unlock();
             if (comptime Environment.isMac) {
                 _ = Platform.removeWatch(manager, self);
             }
@@ -543,13 +398,13 @@ _ = continue;
 },
 else => |errno| {
 const e: bun.sys.Error = .{ .errno = @truncate(@intFromEnum(errno)), .syscall = .read };
-                _ = (if (comptime @typeInfo(@TypeOf(manager.mutex)) == .pointer) (manager.mutex) else &(manager.mutex)).lock();
+                _ = manager.mutex.lock();
                 for (manager.watchers.values()) |w| {
                     _ = &w;
                     _ = w.emitError(e);
                     _ = w.flush();
                 }
-                _ = (if (comptime @typeInfo(@TypeOf(manager.mutex)) == .pointer) (manager.mutex) else &(manager.mutex)).unlock();
+                _ = manager.mutex.unlock();
                 return;
 },
 }
@@ -557,7 +412,7 @@ const e: bun.sys.Error = .{ .errno = @truncate(@intFromEnum(errno)), .syscall = 
                 if ((n == 0)) {
                     continue;
                 }
-                _ = (if (comptime @typeInfo(@TypeOf(manager.mutex)) == .pointer) (manager.mutex) else &(manager.mutex)).lock();
+                _ = manager.mutex.lock();
                 var touched: std.AutoArrayHashMapUnmanaged(*PathWatcher, void) = .{};
                 _ = &touched;
                 var _touched_guard = DeinitWithAllocGuard(@TypeOf(touched)){ .ptr = (blk: {
@@ -636,7 +491,7 @@ const e: bun.sys.Error = .{ .errno = @truncate(@intFromEnum(errno)), .syscall = 
                     _ = &w;
                     _ = w.flush();
                 }
-                _ = (if (comptime @typeInfo(@TypeOf(manager.mutex)) == .pointer) (manager.mutex) else &(manager.mutex)).unlock();
+                _ = manager.mutex.unlock();
             }
     }
     const WdOwner = struct {
@@ -687,10 +542,14 @@ pub fn onFSEvent(ctx: ?*anyopaque, event: Event, is_file: bool) void {
                 return;
             }
             const manager = default_manager.?;
-            _ = (if (comptime @typeInfo(@TypeOf(manager.mutex)) == .pointer) (manager.mutex) else &(manager.mutex)).lock();
-            defer {
-            _ = (if (comptime @typeInfo(@TypeOf(manager.mutex)) == .pointer) (manager.mutex) else &(manager.mutex)).unlock();
-            }
+            _ = manager.mutex.lock();
+            var _lock = MutexGuard{ .mutex = (blk: {
+            break :blk (&manager.mutex);
+
+}) };
+            _ = &_lock;
+            var ___lock_moved = false; _ = &___lock_moved;
+            defer if (!___lock_moved) { ___lock_moved = true; const __T = @TypeOf(_lock); if (@typeInfo(__T) == .optional) { if (_lock) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _lock.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _lock; _drop_val.__cp_deinit(); } };
             if ((watcher.manager == null)) {
                 return;
             }
@@ -719,10 +578,14 @@ pub fn onFSEventFlush(ctx: ?*anyopaque) void {
                 return;
             }
             const manager = default_manager.?;
-            _ = (if (comptime @typeInfo(@TypeOf(manager.mutex)) == .pointer) (manager.mutex) else &(manager.mutex)).lock();
-            defer {
-            _ = (if (comptime @typeInfo(@TypeOf(manager.mutex)) == .pointer) (manager.mutex) else &(manager.mutex)).unlock();
-            }
+            _ = manager.mutex.lock();
+            var _lock = MutexGuard{ .mutex = (blk: {
+            break :blk (&manager.mutex);
+
+}) };
+            _ = &_lock;
+            var ___lock_moved = false; _ = &___lock_moved;
+            defer if (!___lock_moved) { ___lock_moved = true; const __T = @TypeOf(_lock); if (@typeInfo(__T) == .optional) { if (_lock) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _lock.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _lock; _drop_val.__cp_deinit(); } };
             if ((watcher.manager == null)) {
                 return;
             }
@@ -846,7 +709,7 @@ pub fn threadMain(manager: *PathWatcherManager) void {
                 if ((count <= 0)) {
                     continue;
                 }
-                _ = (if (comptime @typeInfo(@TypeOf(manager.mutex)) == .pointer) (manager.mutex) else &(manager.mutex)).lock();
+                _ = manager.mutex.lock();
                 var touched: std.AutoArrayHashMapUnmanaged(*PathWatcher, void) = .{};
                 _ = &touched;
                 var _touched_guard = DeinitWithAllocGuard(@TypeOf(touched)){ .ptr = (blk: {
@@ -876,7 +739,7 @@ pub fn threadMain(manager: *PathWatcherManager) void {
                     _ = &w;
                     _ = w.flush();
                 }
-                _ = (if (comptime @typeInfo(@TypeOf(manager.mutex)) == .pointer) (manager.mutex) else &(manager.mutex)).unlock();
+                _ = manager.mutex.unlock();
             }
     }
     const KqEntry = struct {
@@ -906,7 +769,7 @@ const Event = FSWatcher.Event;
 const onPathUpdateFn = FSWatcher.onPathUpdate;
 const onUpdateEndFn = FSWatcher.onUpdateEnd;
 var default_manager: ?*PathWatcherManager = null;
-var default_manager_mutex: CpBareMutex = .{};
+var default_manager_mutex: bun.Mutex = .{};
 const log = Output.scoped(.@"fs.watch", .hidden);
 const Platform = (switch (Environment.os) {
 .linux => Linux,

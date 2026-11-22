@@ -1,3 +1,8 @@
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() { unsafe { _.ptr.deinit(); } }
+}
+
 pub fn toMatchSnapshot(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFrame): bun.JSError!JSValue {
     defer client.postMatch(globalThis);
     const thisValue = callFrame.this();
@@ -18,7 +23,7 @@ pub fn toMatchSnapshot(client: *Expect, globalThis: *JSGlobalObject, callFrame: 
         return client.throw(globalThis, signature, "\n\n<b>Matcher error<r>: Snapshot matchers cannot be used outside of a test\n", .{});
     }
     let buntest_strong = buntest_strong_opt.?;
-    defer buntest_strong.deinit();
+    const _buntest_guard = DeinitGuard<@TypeOf(buntest_strong)>{ ptr: unsafe { &buntest_strong } };
 
     let hint_string: ZigString = ZigString.Empty;
     let property_matchers: JSValue? = null;
@@ -50,7 +55,7 @@ pub fn toMatchSnapshot(client: *Expect, globalThis: *JSGlobalObject, callFrame: 
     }
 
     let hint = hint_string.toSlice(default_allocator);
-    defer hint.deinit();
+    const _hint_guard = DeinitGuard<@TypeOf(hint)>{ ptr: unsafe { &hint } };
 
     const value: JSValue = client.getValue(globalThis, thisValue, "toMatchSnapshot", "<green>properties<r><d>, <r>hint")?;
 

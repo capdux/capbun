@@ -23,6 +23,24 @@ const jsc = bun.jsc;
 const ZigString = bun.jsc.ZigString;
 const empty_u16_buf: [0]u16 = undefined;
 
+struct DeinitGuard<T> {
+    target: T,
+    active: bool = true,
+    ~init() {
+        if (_.active) {
+            _.target.deinit();
+        }
+    }
+}
+
+struct FreeGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: []T,
+    ~init() {
+        _.alloc.free(_.slice);
+    }
+}
+
 export enum Tag : u8 {
     /// String is not valid. Observed on some failed operations.
     /// To prevent crashes, this value acts similarly to .Empty (such as length = 0)
@@ -152,7 +170,7 @@ export @c struct String {
             .ZigString => return [this.value.ZigString.toOwnedSlice(allocator)?, .unknown],
             .WTFStringImpl => {
                 const utf8_slice = this.value.WTFStringImpl.toUTF8WithoutRef(allocator);
-                errdefer utf8_slice.deinit();
+                let _utf8_guard = DeinitGuard<ZigString.Slice>{ target: utf8_slice };
 
                 const ascii_status: AsciiStatus = if (utf8_slice.allocator.isNull())
                     .all_ascii
@@ -162,10 +180,11 @@ export @c struct String {
                     .unknown;
 
                 const owned_slice = utf8_slice.cloneIfBorrowed(allocator)?;
+                _utf8_guard.active = false;
                 return [owned_slice.mut(), ascii_status];
             },
             .StaticZigString => return [this.value.StaticZigString.toOwnedSlice(allocator)?, .unknown],
-            else => return [@constCast(""), .all_ascii],
+            else => return [unsafe { @constCast("") }, .all_ascii],
         }
     }
 
@@ -183,7 +202,7 @@ export @c struct String {
         bun.assert(len > 0);
         const str = bun.cpp.BunString__fromLatin1Unitialized(len);
         if (str.tag == .Dead) {
-            return [str, @constCast("")];
+            return [str, unsafe { @constCast("") }];
         }
         * = String.validateRefCount(str);
         const wtf_impl = str.value.WTFStringImpl;
@@ -197,7 +216,7 @@ export @c struct String {
         bun.assert(len > 0);
         const str = bun.cpp.BunString__fromUTF16Unitialized(len);
         if (str.tag == .Dead) {
-            return [str, @constCast(&empty_u16_buf)];
+            return [str, unsafe { @constCast(&empty_u16_buf) }];
         }
         * = String.validateRefCount(str);
         const wtf_impl = str.value.WTFStringImpl;
@@ -262,7 +281,7 @@ export @c struct String {
         let sba = std.heap.stackFallback(512, bun.default_allocator);
         const alloc = sba.get();
         const buf = std.fmt.allocPrint(alloc, fmt, args)?;
-        defer alloc.free(buf);
+        const _buf_guard = FreeGuard<u8>{ alloc: alloc, slice: buf };
         return String.cloneUTF8(buf);
     }
 

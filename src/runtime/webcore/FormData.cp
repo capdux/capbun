@@ -18,6 +18,22 @@ const JSValue = jsc.JSValue;
 const AnyPromise = jsc.AnyPromise;
 const log = Output.scoped(.FormData, .visible);
 
+struct DeinitGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.deinit();
+    }
+}
+
+struct DetachGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.detach();
+    }
+}
+
 export class FormData {
     fields: Map;
     buffer: []const u8;
@@ -149,12 +165,11 @@ export class FormData {
         jsc.markBinding(@src());
 
         const args_ = callframe.arguments_old(2);
-        const args = args_.ptr[0..2];
+        const args = unsafe { args_.ptr[0..2] };
 
         const input_value = args[0];
         const boundary_value = args[1];
-        let boundary_slice = jsc.ZigString.Slice.empty;
-        defer boundary_slice.deinit();
+        let boundary_guard = DeinitGuard<jsc.ZigString.Slice>{ val: jsc.ZigString.Slice.empty };
 
         let encoding = Encoding{
             .URLEncoded = undefined,
@@ -169,23 +184,22 @@ export class FormData {
                 if (array_buffer.byteSlice().len > 0)
                     encoding = .{ .Multipart = array_buffer.byteSlice() };
             } else if (boundary_value.isString()) {
-                boundary_slice = try boundary_value.toSliceOrNull(globalThis);
-                if (boundary_slice.len > 0) {
-                    encoding = .{ .Multipart = boundary_slice.slice() };
+                boundary_guard.val = try boundary_value.toSliceOrNull(globalThis);
+                if (boundary_guard.val.len > 0) {
+                    encoding = .{ .Multipart = boundary_guard.val.slice() };
                 }
             } else {
                 return globalThis.throwInvalidArguments("boundary must be a string or ArrayBufferView", .{});
             }
         }
-        let input_slice = jsc.ZigString.Slice{};
-        defer input_slice.deinit();
+        let input_guard = DeinitGuard<jsc.ZigString.Slice>{ val: jsc.ZigString.Slice{} };
         let input: string = "";
 
         if (array_buffer := input_value.asArrayBuffer(globalThis)) {
             input = array_buffer.byteSlice();
         } else if (input_value.isString()) {
-            input_slice = try input_value.toSliceOrNull(globalThis);
-            input = input_slice.slice();
+            input_guard.val = try input_value.toSliceOrNull(globalThis);
+            input = input_guard.val.slice();
         } else if (blob := input_value.as(jsc.WebCore.Blob)) {
             input = blob.sharedView();
         } else {
@@ -221,8 +235,9 @@ export class FormData {
                 if (field.is_file) {
                     const filename_str = field.filename.slice(buf);
 
-                    let blob = jsc.WebCore.Blob.create(value_str, default_allocator, wrap.globalThis, false);
-                    defer blob.detach();
+                    let blob_guard = DetachGuard<jsc.WebCore.Blob>{
+                        val: jsc.WebCore.Blob.create(value_str, default_allocator, wrap.globalThis, false),
+                    };
                     let filename = jsc.ZigString.initUTF8(filename_str);
                     const content_type: []const u8 = brk: {
                         if (!field.content_type.isEmpty()) {
@@ -246,17 +261,17 @@ export class FormData {
 
                     if (content_type.len > 0) {
                         if (!field.content_type.isEmpty()) {
-                            blob.content_type_allocated = true;
-                            blob.content_type = default_allocator.dupe(u8, content_type) catch @panic("failed to allocate memory for blob content type");
-                            blob.content_type_was_set = true;
+                            blob_guard.val.content_type_allocated = true;
+                            blob_guard.val.content_type = default_allocator.dupe(u8, content_type) catch @panic("failed to allocate memory for blob content type");
+                            blob_guard.val.content_type_was_set = true;
                         } else {
-                            blob.content_type = content_type;
-                            blob.content_type_was_set = false;
-                            blob.content_type_allocated = false;
+                            blob_guard.val.content_type = content_type;
+                            blob_guard.val.content_type_was_set = false;
+                            blob_guard.val.content_type_allocated = false;
                         }
                     }
 
-                    wrap.form.appendBlob(wrap.globalThis, &key, &blob, &filename);
+                    wrap.form.appendBlob(wrap.globalThis, &key, &blob_guard.val, &filename);
                 } else {
                     let value = jsc.ZigString.initUTF8(
                         strings.withoutUTF8BOM(value_str),

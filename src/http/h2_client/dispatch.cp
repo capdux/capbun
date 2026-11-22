@@ -10,6 +10,27 @@ const bun = @import("bun");
 const strings = bun.strings;
 const log = bun.Output.scoped(.h2_client, .hidden);
 
+pub struct ClearRetainingCapacityGuard<T> {
+    ptr: *T!,
+
+    ~init() {
+        unsafe {
+            _.ptr.clearRetainingCapacity();
+        }
+    }
+}
+
+pub struct DeinitWithAllocGuard<T> {
+    ptr: *T!,
+    allocator: std.mem.Allocator,
+
+    ~init() {
+        unsafe {
+            _.ptr.deinit(_.allocator);
+        }
+    }
+}
+
 pub fn parseFrames(session: *ClientSession, buf: string): usize {
     let consumed: usize = 0;
     while (true) {
@@ -376,7 +397,10 @@ pub fn dispatchFrame(session: *ClientSession, header: wire.FrameHeader, payload:
 }
 
 pub fn decodeDiscardOrphan(session: *ClientSession) {
-    defer session.orphan_header_block.clearRetainingCapacity();
+    const _orphan_guard = ClearRetainingCapacityGuard<@TypeOf(session.orphan_header_block)>{
+        ptr: unsafe { &session.orphan_header_block },
+    };
+    * = &_orphan_guard;
     let offset: usize = 0;
     while (offset < session.orphan_header_block.items.len) {
         const result = session.hpack.decode(session.orphan_header_block.items[offset..]) catch {
@@ -388,11 +412,18 @@ pub fn decodeDiscardOrphan(session: *ClientSession) {
 }
 
 pub fn decodeHeaderBlock(session: *ClientSession, stream: *Stream) {
-    defer stream.header_block.clearRetainingCapacity();
+    const _header_guard = ClearRetainingCapacityGuard<@TypeOf(stream.header_block)>{
+        ptr: unsafe { &stream.header_block },
+    };
+    * = &_header_guard;
 
     let status: u32 = 0;
     let bounds: std.ArrayListUnmanaged([3]u32) = {};
-    defer bounds.deinit(bun.default_allocator);
+    const _bounds_guard = DeinitWithAllocGuard<std.ArrayListUnmanaged([3]u32)>{
+        ptr: unsafe { &bounds },
+        allocator: bun.default_allocator,
+    };
+    * = &_bounds_guard;
     const start_len = stream.decoded_bytes.items.len;
     let seen_regular = false;
     let seen_status = false;

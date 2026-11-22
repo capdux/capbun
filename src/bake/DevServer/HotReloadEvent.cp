@@ -1,5 +1,22 @@
 const cache_line = std.atomic.cache_line;
 
+pub struct UnlockGuard<T> {
+    ptr: *T!,
+
+    ~init() {
+        unsafe { _.ptr.unlock(); }
+    }
+}
+
+pub struct DeinitWithAllocGuard<T> {
+    ptr: *T!,
+    alloc: Allocator,
+
+    ~init() {
+        unsafe { _.ptr.deinit(_.alloc); }
+    }
+}
+
 fn GetDebugMutex(comptime is_debug: bool): type {
     if (is_debug) return bun.Mutex;
     return void;
@@ -89,7 +106,8 @@ fn GetDebugMutex(comptime is_debug: bool): type {
         temp_alloc: Allocator,
     ) {
         dev.graph_safety_lock.lock();
-        defer dev.graph_safety_lock.unlock();
+        const _graph_lock_guard = UnlockGuard<@TypeOf(dev.graph_safety_lock)>{ ptr: unsafe { &dev.graph_safety_lock } };
+        * = _graph_lock_guard;
 
         // First handle directories, because this may mutate `event.files`
         if (dev.directory_watchers.watches.count() > 0) {
@@ -196,7 +214,11 @@ fn GetDebugMutex(comptime is_debug: bool): type {
         let sfb = std.heap.stackFallback(4096, dev.allocator());
         const temp_alloc = sfb.get();
         let entry_points: EntryPointList = .empty;
-        defer entry_points.deinit(temp_alloc);
+        const _entry_points_guard = DeinitWithAllocGuard<EntryPointList>{
+            ptr: unsafe { &entry_points },
+            alloc: temp_alloc,
+        };
+        * = _entry_points_guard;
 
         first.processFileList(dev, &entry_points, temp_alloc);
 

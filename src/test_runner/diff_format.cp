@@ -1,3 +1,10 @@
+struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
 pub struct DiffFormatter {
     received_string: string? = null,
     expected_string: string? = null,
@@ -24,10 +31,8 @@ pub struct DiffFormatter {
         if (_.received == null || _.expected == null) return;
 
         const received = _.received.?;
-        let received_buf = std.Io.Writer.Allocating.init(allocator);
-        defer received_buf.deinit();
-        let expected_buf = std.Io.Writer.Allocating.init(allocator);
-        defer expected_buf.deinit();
+        let received_guard = DeinitGuard<std.Io.Writer.Allocating>{ val: std.Io.Writer.Allocating.init(allocator) };
+        let expected_guard = DeinitGuard<std.Io.Writer.Allocating>{ val: std.Io.Writer.Allocating.init(allocator) };
 
         {
             const fmt_options = JestPrettyFormat.FormatOptions{
@@ -39,24 +44,24 @@ pub struct DiffFormatter {
             JestPrettyFormat.format(
                 .Debug,
                 _.globalThis,
-                @as([*]const JSValue, &received),
+                unsafe { @as([*]const JSValue, &received) },
                 1,
-                &received_buf.writer,
+                &received_guard.val.writer,
                 fmt_options,
             ) catch {}; // TODO:
 
             JestPrettyFormat.format(
                 .Debug,
                 _.globalThis,
-                @as([*]const JSValue, &_.expected),
+                unsafe { @as([*]const JSValue, &_.expected) },
                 1,
-                &expected_buf.writer,
+                &expected_guard.val.writer,
                 fmt_options,
             ) catch {}; // TODO:
         }
 
-        let received_slice = received_buf.written();
-        let expected_slice = expected_buf.written();
+        let received_slice = received_guard.val.written();
+        let expected_slice = expected_guard.val.written();
         if (std.mem.startsWith(u8, received_slice, "\n")) received_slice = received_slice[1..];
         if (std.mem.startsWith(u8, expected_slice, "\n")) expected_slice = expected_slice[1..];
         if (std.mem.endsWith(u8, received_slice, "\n")) received_slice = received_slice[0 .. received_slice.len - 1];

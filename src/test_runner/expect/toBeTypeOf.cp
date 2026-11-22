@@ -11,6 +11,20 @@ const getSignature = Expect.getSignature;
 
 type string = []const u8;
 
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
+pub struct DerefGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deref();
+    }
+}
+
 const JSTypeOfMap = bun.ComptimeStringMap(string, .{ 
     .{ "function", "function" },
     .{ "object", "object" },
@@ -42,11 +56,10 @@ pub fn toBeTypeOf(client: *Expect, globalThis: *JSGlobalObject, callFrame: *Call
         return globalThis.throwInvalidArguments("toBeTypeOf() requires a string argument", .{});
     }
 
-    const expected_type = expected.toBunString(globalThis)?;
-    defer expected_type.deref();
+    const expected_type = DerefGuard<bun.String>{ val: expected.toBunString(globalThis)? };
     client.incrementExpectCallCounter();
 
-    const typeof_opt = expected_type.inMap(JSTypeOfMap);
+    const typeof_opt = expected_type.val.inMap(JSTypeOfMap);
     if (typeof_opt == null) {
         return globalThis.throwInvalidArguments("toBeTypeOf() requires a valid type string argument ('function', 'object', 'bigint', 'boolean', 'number', 'string', 'symbol', 'undefined')", .{});
     }
@@ -82,10 +95,9 @@ pub fn toBeTypeOf(client: *Expect, globalThis: *JSGlobalObject, callFrame: *Call
     if (not) pass = !pass;
     if (pass) return JSValue.js_undefined;
 
-    let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-    defer formatter.deinit();
-    const received = value.toFmt(&formatter);
-    const expected_str = expected.toFmt(&formatter);
+    let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true } };
+    const received = value.toFmt(&formatter.val);
+    const expected_str = expected.toFmt(&formatter.val);
 
     if (not) {
         const signature = comptime getSignature("toBeTypeOf", "", true);

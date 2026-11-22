@@ -25,7 +25,7 @@ pub fn deinit(self: *@This()) void {
             self.* = undefined;
     }
 
-pub fn get(self: @This()) ?*T {
+pub fn get(self: *const @This()) ?*T {
             return self.#impl;
     }
 
@@ -81,7 +81,7 @@ pub fn deinit(self: *@This()) void {
             self.* = undefined;
     }
 
-pub fn get(self: @This()) *T {
+pub fn get(self: *const @This()) *T {
             return self.#impl;
     }
 

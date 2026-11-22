@@ -81,7 +81,7 @@ fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
     }
     return val >> shift;
 }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const builtin = @import("builtin");
 pub const DiffError = error{
@@ -89,6 +89,52 @@ pub const DiffError = error{
     InputsTooLarge,
     OutOfMemory,
 };
+
+pub fn AllocSliceGuard(comptime T: type) type {
+    return struct {
+        alloc: Allocator,
+        slice: []T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.alloc.free(self.slice);
+        }
+    };
+}
+
+pub const TraceListGuard = struct {
+    alloc: Allocator,
+    trace: TraceList,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *TraceListGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            for (self.trace.items) |frame| {
+                _ = &frame;
+                _ = self.alloc.free(frame);
+            }
+            _ = self.trace.deinit();
+    }
+};
+
+pub fn DeinitWithAllocGuard(comptime T: type) type {
+    return struct {
+        alloc: Allocator,
+        val: ?T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if ((self.val != null)) {
+                    _ = self.val.?.deinit(self.alloc);
+                }
+        }
+    };
+}
 
 const StringConst = []const u8;
 const StringMut = []u8;
@@ -177,30 +223,22 @@ pub fn diff(bun_allocator: Allocator, actual: []const Line, expected: []const Li
             }
             const max: uint = @intCast(_max);
             const graph_size: uint = @intCast(_graph_size);
-            var graph = try graph_alloc.alloc(uint, graph_size);
-            _ = &graph;
-            defer {
-            _ = graph_alloc.free(graph);
-            }
-            _ = @memset(graph, 0);
-            graph.len = graph_size;
-            var trace = TraceList.init(trace_alloc);
-            _ = &trace;
-            _ = try trace.ensureTotalCapacityPrecise((max + 1));
-            defer {
-            {
-                for (trace.items) |frame| {
-                    _ = &frame;
-                    _ = trace_alloc.free(frame);
-                }
-                _ = trace.deinit();
-            }
-            }
+            var graph_guard = AllocSliceGuard(uint){ .alloc = graph_alloc, .slice = try graph_alloc.alloc(uint, graph_size) };
+            _ = &graph_guard;
+            var __graph_guard_moved = false; _ = &__graph_guard_moved;
+            defer if (!__graph_guard_moved) { __graph_guard_moved = true; const __T = @TypeOf(graph_guard); if (@typeInfo(__T) == .optional) { if (graph_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { graph_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = graph_guard; _drop_val.__cp_deinit(); } };
+            _ = @memset(graph_guard.slice, 0);
+            graph_guard.slice.len = graph_size;
+            var trace_guard = TraceListGuard{ .alloc = trace_alloc, .trace = TraceList.init(trace_alloc) };
+            _ = &trace_guard;
+            var __trace_guard_moved = false; _ = &__trace_guard_moved;
+            defer if (!__trace_guard_moved) { __trace_guard_moved = true; const __T = @TypeOf(trace_guard); if (@typeInfo(__T) == .optional) { if (trace_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { trace_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = trace_guard; _drop_val.__cp_deinit(); } };
+            _ = try trace_guard.trace.ensureTotalCapacityPrecise((max + 1));
             for (0..max + 1) |_diff_level| {
                 _ = &_diff_level;
                 const diff_level: int = @intCast(_diff_level);
-                const new_trace = try trace_alloc.dupe(uint, graph);
-                _ = trace.appendAssumeCapacity(new_trace);
+                const new_trace = try trace_alloc.dupe(uint, graph_guard.slice);
+                _ = trace_guard.trace.appendAssumeCapacity(new_trace);
                 const diag_start: int = (0 - @as(int, @intCast(diff_level)));
                 const diag_end: int = @intCast(diff_level);
                 var diag_idx = diag_start;
@@ -209,7 +247,7 @@ pub fn diff(bun_allocator: Allocator, actual: []const Line, expected: []const Li
                     _ = assert(((diag_idx + max) >= 0));
                     const k: uint = u((diag_idx + max));
                     const uk = u(k);
-                    var x = (if (((diag_idx == diag_start) or ((diag_idx != diag_end) and (graph[@as(usize, @intCast((uk - 1)))] < graph[@as(usize, @intCast((uk + 1)))])))) graph[@as(usize, @intCast((uk + 1)))] else (graph[@as(usize, @intCast((uk - 1)))] + 1));
+                    var x = (if (((diag_idx == diag_start) or ((diag_idx != diag_end) and (graph_guard.slice[@as(usize, @intCast((uk - 1)))] < graph_guard.slice[@as(usize, @intCast((uk + 1)))])))) graph_guard.slice[@as(usize, @intCast((uk + 1)))] else (graph_guard.slice[@as(usize, @intCast((uk - 1)))] + 1));
                     _ = &x;
                     var y: usize = blk: {
                     const x2: int = @intCast(x);
@@ -222,9 +260,9 @@ pub fn diff(bun_allocator: Allocator, actual: []const Line, expected: []const Li
                         x = (x + 1);
                         y = (y + 1);
                     }
-                    graph[cp_cast_int(usize, k)] = @intCast(x);
+                    graph_guard.slice[cp_cast_int(usize, k)] = @intCast(x);
                     if (((x >= actual.len) and (y >= expected.len))) {
-                        return backtrack(bun_allocator, (&trace), actual, expected);
+                        return backtrack(bun_allocator, (&trace_guard.trace), actual, expected);
                     }
                 }
             }
@@ -300,8 +338,8 @@ pub fn printDiff(comptime T: type, diffs: std.array_list.Managed(Diff(T))) !void
         {
             var idx: i32 = 0;
             _ = &idx;
-            const __end_0 = diffs.items.len;
-            while (idx < __end_0) : (idx += 1) {
+            const __end_1 = diffs.items.len;
+            while (idx < __end_1) : (idx += 1) {
                 const d = diffs.items[@as(usize, @intCast((diffs.items.len - (idx + 1))))];
                 const op: u8 = (switch (d.kind) {
 inline .equal => (if (comptime @typeInfo(@TypeOf(32)) == .@"enum") cp_cast_int(u8, @intFromEnum(32)) else cp_cast_int(u8, 32)),
@@ -381,14 +419,15 @@ pub fn split(comptime T: type, alloc: Allocator, s: []const T) Allocator.Error!S
         const newline: T = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(10)) else @as(T, 10));
         var it = std.mem.splitScalar(T, s, newline);
         _ = &it;
-        var lines: SplitList(T) = .{};
-        _ = &lines;
-        _ = try lines.ensureUnusedCapacity(alloc, cp_shr(s.len, 4));
-        errdefer {
-        _ = lines.deinit(alloc);
-        }
+        var lines_guard = DeinitWithAllocGuard(SplitList(T)){ .alloc = alloc, .val = .{} };
+        _ = &lines_guard;
+        var __lines_guard_moved = false; _ = &__lines_guard_moved;
+        defer if (!__lines_guard_moved) { __lines_guard_moved = true; const __T = @TypeOf(lines_guard); if (@typeInfo(__T) == .optional) { if (lines_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { lines_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = lines_guard; _drop_val.__cp_deinit(); } };
+        _ = try lines_guard.val.?.ensureUnusedCapacity(alloc, cp_shr(s.len, 4));
         while (it.next()) |l| {
-            _ = try lines.append(alloc, l);
+            _ = try lines_guard.val.?.append(alloc, l);
         }
+        const lines = lines_guard.val.?;
+        lines_guard.val = null;
         return lines;
 }

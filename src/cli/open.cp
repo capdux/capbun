@@ -14,6 +14,24 @@ const strings = bun.strings;
 type string = []const u8;
 type stringZ = [:0]const u8;
 
+pub struct DestroyGuard<T> {
+    ptr: (*T!)?,
+
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { default_allocator.destroy(p); }
+        }
+    }
+}
+
+pub struct CloseGuard<T> {
+    ptr: *T!,
+
+    ~init() {
+        unsafe { _.ptr.close(); }
+    }
+}
+
 pub const opener = switch (builtin.target.os.tag) {
     .macos => "/usr/bin/open",
     .windows => "start",
@@ -245,10 +263,10 @@ pub enum Editor: u8 {
         * = allocator_;
         let spawned = default_allocator.create(SpawnedEditorContext)?;
         spawned.* = .{};
+        let spawned_guard = DestroyGuard<SpawnedEditorContext>{ ptr: spawned };
         let file_path_buf_stream = std.io.fixedBufferStream(&spawned.file_path_buf);
         let file_path_buf_writer = file_path_buf_stream.writer();
         let args_buf = &spawned.buf;
-        errdefer default_allocator.destroy(spawned);
 
         let i: usize = 0;
 
@@ -334,6 +352,7 @@ pub enum Editor: u8 {
 
         spawned.child_process = std.process.Child.init(args_buf[0..i], default_allocator);
         let thread = std.Thread.spawn(.{}, autoClose, .{ spawned })?;
+        spawned_guard.ptr = null;
         thread.detach();
     }
 }
@@ -347,7 +366,8 @@ pub struct SpawnedEditorContext {
 }
 
 fn autoClose(spawned: *SpawnedEditorContext) {
-    defer bun.default_allocator.destroy(spawned);
+    let spawned_guard = DestroyGuard<SpawnedEditorContext>{ ptr: spawned };
+    * = &spawned_guard;
 
     Global.setThreadName("Open Editor");
     spawned.child_process.spawn() catch return;
@@ -381,7 +401,7 @@ pub struct EditorContext {
         tmpdir.writeFile(basename, blob)?;
 
         let opened = tmpdir.openFile(basename, .{})?;
-        defer opened.close();
+        const opened_guard = CloseGuard<std.fs.File>{ ptr: unsafe { &opened } };
         let path_buf: bun.PathBuffer = undefined;
         editor_.open(
             path,

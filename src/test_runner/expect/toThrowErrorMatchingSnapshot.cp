@@ -1,3 +1,8 @@
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() { unsafe { _.ptr.deinit(); } }
+}
+
 pub fn toThrowErrorMatchingSnapshot(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFrame): bun.JSError!JSValue {
     defer client.postMatch(globalThis);
     const thisValue = callFrame.this();
@@ -18,7 +23,7 @@ pub fn toThrowErrorMatchingSnapshot(client: *Expect, globalThis: *JSGlobalObject
         return client.throw(globalThis, signature, "\n\n<b>Matcher error<r>: Snapshot matchers cannot be used outside of a test\n", .{});
     }
     let bunTest_strong = bunTest_strong_opt.?;
-    defer bunTest_strong.deinit();
+    const _buntest_guard = DeinitGuard<@TypeOf(bunTest_strong)>{ ptr: unsafe { &bunTest_strong } };
 
     let hint_string: ZigString = ZigString.Empty;
     switch (arguments.len) {
@@ -34,7 +39,7 @@ pub fn toThrowErrorMatchingSnapshot(client: *Expect, globalThis: *JSGlobalObject
     }
 
     let hint = hint_string.toSlice(default_allocator);
-    defer hint.deinit();
+    const _hint_guard = DeinitGuard<@TypeOf(hint)>{ ptr: unsafe { &hint } };
 
     const fn_val = client.getValue(globalThis, thisValue, "toThrowErrorMatchingSnapshot", "<green>properties<r><d>, <r>hint")?;
     const value_opt = client.fnToErrStringOrUndefined(globalThis, fn_val)?;

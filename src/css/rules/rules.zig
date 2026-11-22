@@ -67,7 +67,7 @@ fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const
 fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const css = @import("../css_parser.zig");
 pub const import_rule = @import("./import.zig");
@@ -92,6 +92,22 @@ pub const media = @import("./media.zig");
 pub const starting_style = @import("./starting_style.zig");
 pub const tailwind = @import("./tailwind.zig");
 pub const bun = @import("bun");
+pub fn DeinitWithAllocGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        allocator: std.mem.Allocator,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.deinit(self.allocator);
+                }
+        }
+    };
+}
+
 pub const MinifyContext = struct {
     allocator: std.mem.Allocator,
     targets: *const css.targets.Targets,
@@ -312,17 +328,17 @@ const Selector = css.selector.Selector;
                 if ((parent_is_unused or try sty.minify(context, parent_is_unused))) {
                     continue;
                 }
-                var incompatible: css.SmallList(css.selector.parser.Selector,1) = (if ((((sty.selectors.v.len() > 1) and context.targets.shouldCompileSelectors()) and (!sty.isCompatible(context.targets.*)))) incompatible: {
+                var incompatible: css.SmallList(css.selector.parser.Selector, 1) = (if ((((sty.selectors.v.len() > 1) and context.targets.shouldCompileSelectors()) and (!sty.isCompatible(context.targets.*)))) incompatible: {
                 _ = debug("Making incompatible!\n", .{});
                 if (((context.targets.isCompatible(css.compat.Feature.is_selector) and (!sty.selectors.anyHasPseudoElement())) and sty.selectors.specifitiesAllEqual())) {
                     const component = Component{ .is = sty.selectors.v.toOwnedSlice(context.allocator) };
-                    var list: css.SmallList(css.selector.parser.Selector,1) = .{};
+                    var list: css.SmallList(css.selector.parser.Selector, 1) = .{};
                     _ = &list;
                     _ = list.append(context.allocator, Selector.fromComponent(context.allocator, component));
                     sty.selectors = SelectorList{ .v = list };
                     break :incompatible .{};
                 } else {
-                    var incompatible: css.SmallList(Selector,1) = .{};
+                    var incompatible: css.SmallList(Selector, 1) = .{};
                     _ = &incompatible;
                     var i: u32 = 0;
                     _ = &i;
@@ -370,7 +386,7 @@ const Selector = css.selector.Selector;
     supports: ArrayList(css.CssRule(AtRule)),
     logical: ArrayList(css.CssRule(AtRule)),
 };
-                var incompatible_rules: css.SmallList(IncompatibleRuleEntry,1) = incompatible_rules: {
+                var incompatible_rules: css.SmallList(IncompatibleRuleEntry, 1) = incompatible_rules: {
                 var incompatible_rules = css.SmallList(IncompatibleRuleEntry, 1).initCapacity(context.allocator, incompatible.len());
                 _ = &incompatible_rules;
                 for (cp_iter_slice(incompatible.slice_mut())) |sel| {
@@ -387,12 +403,22 @@ const Selector = css.selector.Selector;
 };
                 _ = &incompatible_rules;
                 _ = debug("Incompatible rules: {d}\n", .{ incompatible_rules.len() });
-                defer {
-                _ = incompatible.deinit(context.allocator);
-                }
-                defer {
-                _ = incompatible_rules.deinit(context.allocator);
-                }
+                var _incompatible_guard = DeinitWithAllocGuard(css.SmallList(css.selector.parser.Selector, 1)){ .ptr = (blk: {
+                break :blk (&incompatible);
+
+}), .allocator = context.allocator };
+                _ = &_incompatible_guard;
+                var ___incompatible_guard_moved = false; _ = &___incompatible_guard_moved;
+                defer if (!___incompatible_guard_moved) { ___incompatible_guard_moved = true; const __T = @TypeOf(_incompatible_guard); if (@typeInfo(__T) == .optional) { if (_incompatible_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _incompatible_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _incompatible_guard; _drop_val.__cp_deinit(); } };
+                var _incompatible_rules_guard = DeinitWithAllocGuard(css.SmallList(IncompatibleRuleEntry, 1)){ .ptr = (blk: {
+                break :blk (&incompatible_rules);
+
+}), .allocator = context.allocator };
+                _ = &_incompatible_rules_guard;
+                var ___incompatible_rules_guard_moved = false; _ = &___incompatible_rules_guard_moved;
+                defer if (!___incompatible_rules_guard_moved) { ___incompatible_rules_guard_moved = true; const __T = @TypeOf(_incompatible_rules_guard); if (@typeInfo(__T) == .optional) { if (_incompatible_rules_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _incompatible_rules_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _incompatible_rules_guard; _drop_val.__cp_deinit(); } };
+                _ = (&_incompatible_guard);
+                _ = (&_incompatible_rules_guard);
                 _ = context.handler_context.reset();
                 const nested_rule: ?StyleRule = (if ((((sty.rules.v.items.len > 0) and (sty.selectors.v.len() > 0)) and (((logical.items.len > 0) or (supps.items.len > 0)) or (!incompatible_rules.isEmpty())))) brk: {
                 var rulesss: CssRuleList(AtRule) = .{};

@@ -39,9 +39,16 @@ struct FreeGuard<T> {
     }
 }
 
+struct MutexGuard {
+    mutex: *bun.Mutex!,
+    ~init() {
+        _.mutex.unlock();
+    }
+}
+
 @callconv("c") pub fn getTitle(_: *JSGlobalObject, title: *bun.String) {
     title_mutex.lock();
-    defer title_mutex.unlock();
+    const _title_guard = MutexGuard{ mutex: unsafe { &title_mutex } };
     const str = bun.cli.Bun__Node__ProcessTitle;
     title.* = bun.String.cloneUTF8(str ?? "bun");
 }
@@ -50,7 +57,7 @@ struct FreeGuard<T> {
 @callconv("c") pub fn setTitle(globalObject: *JSGlobalObject, newvalue: *bun.String) {
     const _newvalue_guard = DerefGuard<bun.String>{ ptr: unsafe { @ptrCast(newvalue) } };
     title_mutex.lock();
-    defer title_mutex.unlock();
+    const _title_guard = MutexGuard{ mutex: unsafe { &title_mutex } };
 
     const new_title = newvalue.toOwnedSlice(bun.default_allocator) catch {
         const _e = globalObject.throwOutOfMemory();

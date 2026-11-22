@@ -99,6 +99,11 @@ struct PatternOptGuard {
     }
 }
 
+struct DeinitGuard<T: type> {
+    val: T,
+    ~init() { _.val.deinit(); }
+}
+
 
 /// Configure archive for reading tar/tar.gz
 fn configureArchiveReader(archive: *libarchive.lib.Archive) {
@@ -911,14 +916,16 @@ fn buildTarballFromObject(globalThis: *jsc.JSGlobalObject, obj: jsc.JSValue): bu
         return globalThis.throwInvalidArguments("Failed to create tarball: ArchiveFormatError", .{});
     }
 
-    if (lib.archive_write_open2(
-        @ptrCast(archive),
-        @ptrCast(&growing_buffer_guard.buf),
-        &lib.GrowingBuffer.openCallback,
-        &lib.GrowingBuffer.writeCallback,
-        &lib.GrowingBuffer.closeCallback,
-        null,
-    ) != 0) {
+    if (unsafe {
+        lib.archive_write_open2(
+            @ptrCast(archive),
+            @ptrCast(&growing_buffer_guard.buf),
+            &lib.GrowingBuffer.openCallback,
+            &lib.GrowingBuffer.writeCallback,
+            &lib.GrowingBuffer.closeCallback,
+            null,
+        )
+    } != 0) {
         return globalThis.throwInvalidArguments("Failed to create tarball: ArchiveOpenError", .{});
     }
 
@@ -933,11 +940,10 @@ fn buildTarballFromObject(globalThis: *jsc.JSGlobalObject, obj: jsc.JSValue): bu
         include_value: true,
     });
 
-    let iter = PropIterator.init(globalThis, js_obj)?;
-    defer iter.deinit();
+    let iter_guard = DeinitGuard<PropIterator>{ val: PropIterator.init(globalThis, js_obj)? };
 
-    while (key := iter.next()?) {
-        const value = iter.value;
+    while (key := iter_guard.val.next()?) {
+        const value = iter_guard.val.value;
         if (value == .zero) continue;
 
         // Get the key as a null-terminated string

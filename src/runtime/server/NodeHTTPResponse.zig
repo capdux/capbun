@@ -233,6 +233,22 @@ pub fn __cp_deinit(self: *BodyReadUnrefGuard) void {
     }
 };
 
+pub const MarkDoneOnAbortGuard = struct {
+    resp: *NodeHTTPResponse,
+    is_abort: bool,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *MarkDoneOnAbortGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (self.is_abort) {
+                {
+                    _ = self.resp.markRequestAsDoneIfNecessary();
+                }
+            }
+    }
+};
+
 pub const Flags = packed struct(u8) {
     socket_closed: bool = false,
     request_has_completed: bool = false,
@@ -712,11 +728,13 @@ pub fn handleAbortOrTimeout(self: *NodeHTTPResponse, comptime event: AbortEvent,
         _ = &_guard_deref;
         var ___guard_deref_moved = false; _ = &___guard_deref_moved;
         defer if (!___guard_deref_moved) { ___guard_deref_moved = true; const __T = @TypeOf(_guard_deref); if (@typeInfo(__T) == .optional) { if (_guard_deref) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_deref.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_deref; _drop_val.__cp_deinit(); } };
-        defer {
-        if ((event == .abort)) {
-            _ = self.markRequestAsDoneIfNecessary();
-        }
-        }
+        var _guard_done = MarkDoneOnAbortGuard{ .resp = (blk: {
+        break :blk self;
+
+}), .is_abort = (event == .abort) };
+        _ = &_guard_done;
+        var ___guard_done_moved = false; _ = &___guard_done_moved;
+        defer if (!___guard_done_moved) { ___guard_done_moved = true; const __T = @TypeOf(_guard_done); if (@typeInfo(__T) == .optional) { if (_guard_done) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_done.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_done; _drop_val.__cp_deinit(); } };
         const js_this: JSValue = (if ((js_value == .zero)) self.getThisValue() else js_value);
         if (js.onAbortedGetCached(js_this)) |on_aborted| {
             _ = &on_aborted;

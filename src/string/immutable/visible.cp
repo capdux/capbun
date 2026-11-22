@@ -1312,7 +1312,7 @@ pub struct visible {
         let w: usize = 0;
         while (esc := strings.indexOfCharUsize(input, 0x1b)) {
             // Walk the visible run before ESC.
-            const run_start = @intFromPtr(input.ptr) - @intFromPtr(input_.ptr);
+            const run_start = unsafe { @intFromPtr(input.ptr) - @intFromPtr(input_.ptr) };
             if (stop := utf8WalkRun(input_, run_start, esc, max_width, &w)) return stop;
             input = input[esc..];
             // Same CSI/OSC skip as visibleLatin1WidthExcludeANSIColors.
@@ -1346,7 +1346,7 @@ pub struct visible {
                 input = input[1..];
             }
         }
-        const run_start = @intFromPtr(input.ptr) - @intFromPtr(input_.ptr);
+        const run_start = unsafe { @intFromPtr(input.ptr) - @intFromPtr(input_.ptr) };
         if (stop := utf8WalkRun(input_, run_start, input.len, max_width, &w)) return stop;
         return input_.len;
     }

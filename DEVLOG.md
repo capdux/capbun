@@ -1612,3 +1612,8 @@
 ## [2026-11-22 Wave #30] RAII 改造与 `unsafe {}` 经验
 - `Sink.cp`：`cpc` 会将 `*(*!)` 与 `**void` 折叠为单级 `*anyopaque` / `*void`，对于 `assignToStream` 所需的 `**anyopaque` 二级指针，通过具名别名 `const OpaquePtr = *!;` + `*OpaquePtr` 稳定保留二级指针签名；无载荷 tag `.empty` 与 `JSValue.null` 显式写全。
 - `FileRoute.cp` / `Package.cp` / `P.cp`：POSIX 分支 `void` 参数通过 `const empty_loop: void = undefined;` 传入；`union(enum)` 无载荷 tag 用 `.init(.uninitialized)` 替代 `.init({ uninitialized: {} })`；`source_index` 严格保持 `u31`。
+
+## [2026-11-22 Wave #31] RAII 改造与 `unsafe {}` 经验
+- `HotReloadEvent.cp`：`dev.graph_safety_lock` 实际类型为 `bun.safety.ThreadLock`，须实例化为 `UnlockGuard<@TypeOf(dev.graph_safety_lock)>` 而非 `UnlockGuard<bun.Mutex>`。
+- `node_fs_watcher.cp` / `path_watcher.cp`：模块内 `Mutex` 类型在 struct 字段/变量处应显式使用 `bun.Mutex`，避免 `cpc` 将 `Mutex` 降级为内置 `CpBareMutex` 引发 `*threading.Mutex` 与 `*CpBareMutex` 类型不匹配。
+- 上游工单跟进：投递 `task-bun-20261122-local-alias-raii-drop` 与 `task-bun-20261122-raii-errinit-or-move-disarm` 以解决局部类型别名漏注入 `__cp_deinit` 及推动 `~errinit()`/`move` 自动撤防支持。

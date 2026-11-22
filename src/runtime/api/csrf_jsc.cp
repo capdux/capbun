@@ -1,6 +1,20 @@
 //! `Bun.CSRF.generate` / `Bun.CSRF.verify` host fns. The pure
 //! `generate()`/`verify()` halves stay in `src/csrf/`.
 
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+struct OptValDeinitGuard<T> {
+    val: T?,
+    ~init() {
+        if (v := _.val) v.deinit();
+    }
+}
+
 /// JS binding function for generating CSRF tokens
 /// First argument is secret (required), second is options (optional)
 pub fn csrf__generate(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -9,7 +23,7 @@ pub fn csrf__generate(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFra
 
     // We should have at least one argument (secret)
     const args = callframe.arguments();
-    let secret: jsc.ZigString.Slice? = null;
+    let _guard_secret = OptValDeinitGuard<jsc.ZigString.Slice>{ val: null };
     if (args.len >= 1) {
         const jsSecret = args[0];
         // Extract the secret (required)
@@ -19,9 +33,8 @@ pub fn csrf__generate(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFra
         if (!jsSecret.isString() || jsSecret.getLength(globalObject)? == 0) {
             return globalObject.throwInvalidArguments("Secret must be a non-empty string", {});
         }
-        secret = jsSecret.toSlice(globalObject, bun.default_allocator)?;
+        _guard_secret.val = jsSecret.toSlice(globalObject, bun.default_allocator)?;
     }
-    defer if (s := secret) s.deinit();
 
     // Default values
     let expires_in: u64 = csrf.DEFAULT_EXPIRATION_MS;
@@ -71,7 +84,7 @@ pub fn csrf__generate(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFra
     let token_buffer: [512]u8 = undefined;
 
     let secret_bytes: []const u8 = globalObject.bunVM().rareData().defaultCSRFSecret();
-    if (s := secret) {
+    if (s := _guard_secret.val) {
         secret_bytes = s.slice();
     }
 
@@ -111,12 +124,11 @@ pub fn csrf__verify(globalObject: *jsc.JSGlobalObject, call_frame: *jsc.CallFram
     if (!jsToken.isString() || jsToken.getLength(globalObject)? == 0) {
         return globalObject.throwInvalidArguments("Token must be a non-empty string", {});
     }
-    const token = jsToken.toSlice(globalObject, bun.default_allocator)?;
-    defer token.deinit();
+    let token = jsToken.toSlice(globalObject, bun.default_allocator)?;
+    const _guard_token = DeinitGuard<jsc.ZigString.Slice>{ ptr: &token };
 
     // Default values
-    let secret: jsc.ZigString.Slice? = null;
-    defer if (s := secret) s.deinit();
+    let _guard_secret = OptValDeinitGuard<jsc.ZigString.Slice>{ val: null };
     let max_age: u64 = csrf.DEFAULT_EXPIRATION_MS;
     let encoding: csrf.TokenFormat = .base64url;
 
@@ -131,7 +143,7 @@ pub fn csrf__verify(globalObject: *jsc.JSGlobalObject, call_frame: *jsc.CallFram
             if (secretSlice.len == 0) {
                 return globalObject.throwInvalidArguments("Secret must be a non-empty string", {});
             }
-            secret = secretSlice;
+            _guard_secret.val = secretSlice;
         }
 
         // Extract maxAge (optional)
@@ -169,7 +181,7 @@ pub fn csrf__verify(globalObject: *jsc.JSGlobalObject, call_frame: *jsc.CallFram
     }
 
     let secret_bytes: []const u8 = globalObject.bunVM().rareData().defaultCSRFSecret();
-    if (s := secret) {
+    if (s := _guard_secret.val) {
         secret_bytes = s.slice();
     }
 

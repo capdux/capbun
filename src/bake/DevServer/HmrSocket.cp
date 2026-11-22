@@ -1,3 +1,11 @@
+struct DerefGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.deref();
+    }
+}
+
 @root struct HmrSocket {
     dev: *DevServer,
     underlying: AnyWebSocket? = null,
@@ -114,12 +122,11 @@
                 const maybe_rbi = s.dev.routeToBundleIndexSlow(pattern);
                 if (agent := s.dev.inspector()) {
                     if (s.inspector_connection_id > -1) {
-                        let pattern_str = bun.String.init(pattern);
-                        defer pattern_str.deref();
+                        let pattern_str = DerefGuard<bun.String>{ val: bun.String.init(pattern) };
                         agent.notifyClientNavigated(
                             s.dev.inspector_server_id,
                             s.inspector_connection_id,
-                            &pattern_str,
+                            &pattern_str.val,
                             maybe_rbi,
                         );
                     }
@@ -195,9 +202,8 @@
                 const data = msg[2..];
 
                 if (agent := s.dev.inspector()) {
-                    let log_str = bun.String.init(data);
-                    defer log_str.deref();
-                    agent.notifyConsoleLog(s.dev.inspector_server_id, kind, &log_str);
+                    let log_str = DerefGuard<bun.String>{ val: bun.String.init(data) };
+                    agent.notifyConsoleLog(s.dev.inspector_server_id, kind, &log_str.val);
                 }
 
                 if (s.dev.broadcast_console_log_from_browser_to_server) {
@@ -270,12 +276,11 @@
     static fn notifyInspectorClientNavigation(s: *const HmrSocket, pattern: []const u8, rbi: RouteBundle.Index.Optional) {
         if (s.inspector_connection_id > -1) {
             if (agent := s.dev.inspector()) {
-                let pattern_str = bun.String.init(pattern);
-                defer pattern_str.deref();
+                let pattern_str = DerefGuard<bun.String>{ val: bun.String.init(pattern) };
                 agent.notifyClientNavigated(
                     s.dev.inspector_server_id,
                     s.inspector_connection_id,
-                    &pattern_str,
+                    &pattern_str.val,
                     rbi.unwrap(),
                 );
             }

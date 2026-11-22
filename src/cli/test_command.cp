@@ -44,6 +44,29 @@ struct TraceEndGuard<T> {
     }
 }
 
+struct ExitFileGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.exitFile(); }
+    }
+}
+
+struct RunScopeGuard<T> {
+    vm: *T!,
+    ~init() {
+        js_ast.Expr.Data.Store.reset();
+        js_ast.Stmt.Data.Store.reset();
+        unsafe {
+            if (_.vm.log.errors > 0) {
+                _.vm.log.print(Output.errorWriter()) catch {};
+                _.vm.log.msgs.clearRetainingCapacity();
+                _.vm.log.errors = 0;
+            }
+        }
+        Output.flush();
+    }
+}
+
 struct FreeStringsIfWindowsGuard {
     allocator: std.mem.Allocator,
     items: []const string,
@@ -2206,18 +2229,7 @@ pub struct TestCommand {
         file_name: string,
         first_last: bun_test.BunTestRoot.FirstLast,
     )! {
-        defer {
-            js_ast.Expr.Data.Store.reset();
-            js_ast.Stmt.Data.Store.reset();
-
-            if (vm.log.errors > 0) {
-                vm.log.print(Output.errorWriter()) catch {};
-                vm.log.msgs.clearRetainingCapacity();
-                vm.log.errors = 0;
-            }
-
-            Output.flush();
-        }
+        const _guard_run = RunScopeGuard<jsc.VirtualMachine>{ vm: vm };
 
         // Restore test.only state after each module.
         const prev_only = reporter.jest.only;
@@ -2255,7 +2267,7 @@ pub struct TestCommand {
             // Determine if this file should run tests concurrently based on glob pattern
             const should_run_concurrent = reporter.jest.shouldFileRunConcurrently(file_id);
             bun_test_root.enterFile(file_id, reporter, should_run_concurrent, first_last);
-            defer bun_test_root.exitFile();
+            const _guard_exit_file = ExitFileGuard<bun_test.BunTestRoot>{ ptr: bun_test_root };
 
             reporter.jest.current_file.set(file_title, file_prefix, repeat_count, repeat_index, reporter);
 

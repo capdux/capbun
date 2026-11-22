@@ -19,6 +19,25 @@ const unicode_replacement = strings.unicode_replacement;
 
 pub type SimdScanFn = fn ([]const u8): usize?;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!?,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deinit(); }
+        }
+    }
+};
+
+pub struct DeinitWithAllocGuard<T> {
+    ptr: *T!?,
+    allocator: std.mem.Allocator,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deinit(_.allocator); }
+        }
+    }
+};
+
 pub fn NewCodePointIterator(comptime CodePointType_: type, comptime zeroValue: comptime_int): type {
     return struct {
         const Iterator = @This();
@@ -562,7 +581,7 @@ pub fn allocateLatin1IntoUTF8WithList(list_: std.array_list.Managed(u8), offset_
         }
 
         while (latin1.len > 0 && latin1[0] > 127) {
-            i = @intFromPtr(buf.ptr) - @intFromPtr(list.items.ptr);
+            i = unsafe { @intFromPtr(buf.ptr) - @intFromPtr(list.items.ptr) };
             list.items.len = i;
             list.ensureUnusedCapacity(2 + latin1.len)?;
             buf = list.items.ptr[i..list.capacity];
@@ -571,7 +590,7 @@ pub fn allocateLatin1IntoUTF8WithList(list_: std.array_list.Managed(u8), offset_
             buf = buf[2..];
         }
 
-        i = @intFromPtr(buf.ptr) - @intFromPtr(list.items.ptr);
+        i = unsafe { @intFromPtr(buf.ptr) - @intFromPtr(list.items.ptr) };
         list.items.len = i;
     }
 
@@ -794,9 +813,9 @@ pub fn copyLatin1IntoUTF8StopOnNonASCII(buf_: []u8, latin1_: []const u8, comptim
 
             {
                 const end = latin1.ptr + @min(buf.len, latin1.len);
-                if (comptime Environment.allow_assert) assert(@intFromPtr(latin1.ptr + 8) > @intFromPtr(end));
-                const start_ptr = @intFromPtr(buf.ptr);
-                const start_ptr_latin1 = @intFromPtr(latin1.ptr);
+                if (comptime Environment.allow_assert) assert(unsafe { @intFromPtr(latin1.ptr + 8) > @intFromPtr(end) });
+                const start_ptr = unsafe { @intFromPtr(buf.ptr) };
+                const start_ptr_latin1 = unsafe { @intFromPtr(latin1.ptr) };
 
                 while (latin1.ptr != end && latin1.ptr[0] <= 127) {
                     buf.ptr[0] = latin1.ptr[0];
@@ -804,8 +823,8 @@ pub fn copyLatin1IntoUTF8StopOnNonASCII(buf_: []u8, latin1_: []const u8, comptim
                     latin1.ptr += 1;
                 }
 
-                buf.len -= @intFromPtr(buf.ptr) - start_ptr;
-                latin1.len -= @intFromPtr(latin1.ptr) - start_ptr_latin1;
+                buf.len -= unsafe { @intFromPtr(buf.ptr) } - start_ptr;
+                latin1.len -= unsafe { @intFromPtr(latin1.ptr) } - start_ptr_latin1;
             }
         }
 
@@ -1035,7 +1054,7 @@ pub enum BOM {
             },
             .utf16_le => {
                 const trimmed_bytes = bytes[utf16_le_bytes.len..];
-                const trimmed_bytes_u16: []const u16 = @alignCast(std.mem.bytesAsSlice(u16, trimmed_bytes));
+                const trimmed_bytes_u16: []const u16 = unsafe { @alignCast(std.mem.bytesAsSlice(u16, trimmed_bytes)) };
                 const out = toUTF8Alloc(allocator, trimmed_bytes_u16)?;
                 allocator.free(bytes);
                 return out;
@@ -1062,7 +1081,7 @@ pub enum BOM {
             },
             .utf16_le => {
                 const trimmed_bytes = bytes[utf16_le_bytes.len..];
-                const trimmed_bytes_u16: []const u16 = @alignCast(std.mem.bytesAsSlice(u16, trimmed_bytes));
+                const trimmed_bytes_u16: []const u16 = unsafe { @alignCast(std.mem.bytesAsSlice(u16, trimmed_bytes)) };
                 const out = toUTF8Alloc(allocator, trimmed_bytes_u16)?;
                 if (list.capacity < out.len) {
                     list.ensureTotalCapacity(allocator, out.len)?;
@@ -1150,7 +1169,7 @@ pub fn toUTF16Alloc(allocator: std.mem.Allocator, bytes: []const u8, comptime fa
             strings.copyU8IntoU16(list.items, bytes[0..i]);
             break :fallback list;
         };
-        errdefer output.deinit();
+        let output_guard = DeinitGuard<U16ArrayList>{ ptr: unsafe { &output } };
 
         let remaining = bytes[i..];
 
@@ -1210,9 +1229,11 @@ pub fn toUTF16Alloc(allocator: std.mem.Allocator, bytes: []const u8, comptime fa
         if (comptime sentinel) {
             output.ensureUnusedCapacity(1)?;
             output.appendAssumeCapacity(0);
+            output_guard.ptr = null;
             return output.items[0 .. output.items.len - 1 :0];
         }
 
+        output_guard.ptr = null;
         return output.items;
     }
 
@@ -1277,7 +1298,7 @@ pub fn toUTF16AllocMaybeBuffered(
 
         break :output list;
     } else {};
-    errdefer output.deinit(allocator);
+    let output_guard = DeinitWithAllocGuard<std.ArrayListUnmanaged(u16)>{ ptr: unsafe { &output }, allocator: allocator };
 
     const start = if (output.items.len > 0) first_non_ascii else 0;
     let remaining = bytes[start..];
@@ -1313,6 +1334,7 @@ pub fn toUTF16AllocMaybeBuffered(
                     2 => [ remaining[0], remaining[1], z ],
                     3 => [ remaining[0], remaining[1], remaining[2] ],
                 };
+                output_guard.ptr = null;
                 return .{ output.items, buffered, @truncate(remaining.len) };
             }
         }
@@ -1344,6 +1366,7 @@ pub fn toUTF16AllocMaybeBuffered(
     }
 
     log("toUTF16 {d} UTF8 -> {d} UTF16", .{ bytes.len, output.items.len });
+    output_guard.ptr = null;
     return .{ output.items, [0, 0, 0], 0 };
 }
 

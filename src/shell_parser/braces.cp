@@ -1,5 +1,13 @@
 const log = bun.Output.scoped(.BRACES, .visible);
 
+pub struct DeinitWithAllocGuard<T> {
+    val: T,
+    alloc: Allocator,
+    ~init() {
+        _.val.deinit(_.alloc);
+    }
+}
+
 /// Using u16 because anymore tokens than that results in an unreasonably high
 /// amount of brace expansion (like around 32k variants to expand)
 const ExpansionVariant = packed struct(u32) {
@@ -239,8 +247,7 @@ fn buildExpansionTable(tokens: *[]Token, table: *std.array_list.Managed(Expansio
         prev_tok_end: u16,
     };
     const BraceStack = bun.SmallList(BraceState, MAX_NESTED_BRACES);
-    let brace_stack = BraceStack{};
-    defer brace_stack.deinit(bun.default_allocator);
+    let brace_stack = DeinitWithAllocGuard<BraceStack>{ val: BraceStack{}, alloc: bun.default_allocator };
 
     let i: u16 = 0;
     let prev_close = false;
@@ -249,14 +256,14 @@ fn buildExpansionTable(tokens: *[]Token, table: *std.array_list.Managed(Expansio
             .open => {
                 const table_idx: u16 = @intCast(table.items.len);
                 tokens[i].open.idx = table_idx;
-                brace_stack.append(bun.default_allocator, .{
+                brace_stack.val.append(bun.default_allocator, .{
                     .tok_idx = i,
                     .variants = 0,
                     .prev_tok_end = i,
                 });
             },
             .close => {
-                let top = brace_stack.pop().?;
+                let top = brace_stack.val.pop().?;
 
                 try table.append(.{
                     .end = i,
@@ -270,7 +277,7 @@ fn buildExpansionTable(tokens: *[]Token, table: *std.array_list.Managed(Expansio
                 prev_close = true;
             },
             .comma => {
-                let top = brace_stack.lastMut().?;
+                let top = brace_stack.val.lastMut().?;
 
                 try table.append(.{
                     .end = i,
@@ -467,23 +474,22 @@ pub fn calculateExpandedAmount(tokens: []const Token): u32 {
         accumulator: u32 = 0,
     };
     const NestedBraceStack = bun.SmallList(StackEntry, MAX_NESTED_BRACES);
-    let nested_brace_stack = NestedBraceStack{};
-    defer nested_brace_stack.deinit(bun.default_allocator);
+    let nested_brace_stack = DeinitWithAllocGuard<NestedBraceStack>{ val: NestedBraceStack{}, alloc: bun.default_allocator };
     let variant_count: u32 = 0;
 
     for (tok of tokens) {
         switch (tok) {
-            .open => nested_brace_stack.append(bun.default_allocator, .{}),
+            .open => nested_brace_stack.val.append(bun.default_allocator, .{}),
             .comma => {
-                let top = nested_brace_stack.lastMut().?;
+                let top = nested_brace_stack.val.lastMut().?;
                 top.accumulator = top.accumulator +| top.segment_product;
                 top.segment_product = 1;
             },
             .close => {
-                const entry = nested_brace_stack.pop().?;
+                const entry = nested_brace_stack.val.pop().?;
                 const total = entry.accumulator +| entry.segment_product;
-                if (nested_brace_stack.len() > 0) {
-                    let parent = nested_brace_stack.lastMut().?;
+                if (nested_brace_stack.val.len() > 0) {
+                    let parent = nested_brace_stack.val.lastMut().?;
                     parent.segment_product = std.math.mul(u32, parent.segment_product, total) catch std.math.maxInt(u32);
                 } else if (variant_count == 0) {
                     variant_count = total;
@@ -530,8 +536,7 @@ pub fn NewLexer(comptime encoding: Encoding): type {
         // FIXME: implement rollback on invalid brace
         fn tokenize_impl(this: *@This()): BraceLexerError!bool {
             const BraceStack = bun.SmallList(u32, MAX_NESTED_BRACES);
-            let brace_stack = BraceStack{};
-            defer brace_stack.deinit(bun.default_allocator);
+            let brace_stack = DeinitWithAllocGuard<BraceStack>{ val: BraceStack{}, alloc: bun.default_allocator };
 
             while (true) {
                 let input_opt = this.eat();
@@ -543,19 +548,19 @@ pub fn NewLexer(comptime encoding: Encoding): type {
                 if (!escaped) {
                     switch (char) {
                         '{' => {
-                            brace_stack.append(bun.default_allocator, @intCast(this.tokens.items.len));
+                            brace_stack.val.append(bun.default_allocator, @intCast(this.tokens.items.len));
                             try this.tokens.append(.{ .open = .{} });
                             continue;
                         },
                         '}' => {
-                            if (brace_stack.len() > 0) {
-                                * = brace_stack.pop();
+                            if (brace_stack.val.len() > 0) {
+                                * = brace_stack.val.pop();
                                 try this.tokens.append(.close);
                                 continue;
                             }
                         },
                         ',' => {
-                            if (brace_stack.len() > 0) {
+                            if (brace_stack.val.len() > 0) {
                                 try this.tokens.append(.comma);
                                 continue;
                             }
@@ -568,8 +573,8 @@ pub fn NewLexer(comptime encoding: Encoding): type {
             }
 
             // Unclosed braces
-            while (brace_stack.len() > 0) {
-                const top_idx = brace_stack.pop().?;
+            while (brace_stack.val.len() > 0) {
+                const top_idx = brace_stack.val.pop().?;
                 this.rollbackBraces(top_idx);
             }
 

@@ -53,6 +53,33 @@ pub const CondExprState = union(enum) {
     done,
 };
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+
+    ~init() {
+        unsafe {
+            _.ptr.deinit();
+        }
+    }
+}
+
+pub struct DeinitWithAllocGuard<T> {
+    val: T,
+    alloc: std.mem.Allocator,
+
+    ~init() {
+        _.val.deinit(_.alloc);
+    }
+}
+
+pub struct DerefGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.deref();
+    }
+}
+
 pub struct ShellCondExprStatTask {
     task: ShellTask(ShellCondExprStatTask, runFromThreadPool, runFromMainThread, log),
     condexpr: *CondExpr,
@@ -65,7 +92,7 @@ pub struct ShellCondExprStatTask {
     }
 
     fn runFromMainThread(*_) {
-        defer _.deinit();
+        const _guard = DeinitGuard<ShellCondExprStatTask>{ ptr: unsafe { _ } };
         const ret = _.result.?;
         _.result = null;
         _.condexpr.onStatTaskComplete(ret);
@@ -108,7 +135,9 @@ pub struct ShellCondExprStatTask {
     }
 
     static fn format(condexpr: *const CondExpr, writer: *std.Io.Writer)! {
-        try writer.print("CondExpr(0x{x}, op={s})", .{ @intFromPtr(condexpr), @tagName(condexpr.node.op) });
+        unsafe {
+            try writer.print("CondExpr(0x{x}, op={s})", .{ @intFromPtr(condexpr), @tagName(condexpr.node.op) });
+        }
     }
 
     fn start(*_): Yield {
@@ -251,7 +280,7 @@ pub struct ShellCondExprStatTask {
         if (child.ptr.is(Expansion)) {
             if (exit_code != 0) {
                 const e = _.state.expanding_args.expansion.state.err;
-                defer e.deinit(bun.default_allocator);
+                const _guard = DeinitWithAllocGuard<@TypeOf(e)>{ val: e, alloc: bun.default_allocator };
                 _.state.expanding_args.expansion.deinit();
                 return _.writeFailingError("{f}\n", .{e});
             }
@@ -282,7 +311,7 @@ pub struct ShellCondExprStatTask {
 
     fn onIOWriterChunk(*_, _len: usize, err_opt: (jsc.SystemError)?): Yield {
         if (e := err_opt) {
-            defer e.deref();
+            const _guard = DerefGuard<jsc.SystemError>{ val: e };
             const exit_code: ExitCode = @intFromEnum(e.getErrno());
             return _.parent.childDone(_, exit_code);
         }

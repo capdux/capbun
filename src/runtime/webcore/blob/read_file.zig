@@ -60,7 +60,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 const default_allocator = @import("bun").default_allocator;
@@ -77,6 +77,48 @@ const errnoToZigErr = @import("bun").errnoToZigErr;
 const isRegularFile = @import("bun").isRegularFile;
 const isReadable = @import("bun").isReadable;
 const JSTerminated = @import("bun").JSTerminated;
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        val: T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.val.deinit();
+        }
+    };
+}
+
+pub fn DerefGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.ptr.deref();
+        }
+    };
+}
+
+pub const ReadFileUVFinalizeGuard = struct {
+    rf: *ReadFileUV,
+    event_loop: *EventLoop,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *ReadFileUVFinalizeGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = self.rf.store.deref();
+            _ = self.rf.req.deinit();
+            _ = destroy(self.rf);
+            _ = self.event_loop.unrefConcurrently();
+            _ = log("ReadFileUV.finalize destroy", .{});
+    }
+};
+
 pub const ReadFileRead = struct {
     buf: []u8,
     is_temporary: bool = false,
@@ -206,7 +248,10 @@ pub fn run(ptr: *anyopaque, bytes: ReadFileResultType) void {
             _ = (blk_catch_0: { break :blk_catch_0 ((callback(cast(Context, ptr), bytes)) catch |__ce_0| { _ = &__ce_0;  }); });
     }
 };
-            return try ReadFile.createWithCtx(allocator, store, @ptrCast(context), Handler.run, off, max_len);
+            return try ReadFile.createWithCtx(allocator, store, (blk: {
+            break :blk @ptrCast(context);
+
+}), Handler.run, off, max_len);
     }
 
 pub fn onReadable(request: *io.Request) callconv(.c) void {
@@ -238,9 +283,15 @@ pub fn onIOError(self: *ReadFile, err: sys.Error) void {
 pub fn onRequestReadable(request: *io.Request) io.Action {
             _ = bloblog("ReadFile.onRequestReadable", .{});
             request.scheduled = false;
-            var self_rf: *ReadFile = @alignCast(@fieldParentPtr("io_request", request));
+            var self_rf: *ReadFile = (blk: {
+            break :blk @alignCast(@fieldParentPtr("io_request", request));
+
+});
             _ = &self_rf;
-            return io.Action{ .readable = .{ .onError = @ptrCast((&onIOError)), .ctx = self_rf, .fd = self_rf.opened_fd, .poll = (&self_rf.io_poll), .tag = ReadFile.io_tag } };
+            return io.Action{ .readable = .{ .onError = (blk: {
+            break :blk @ptrCast((&onIOError));
+
+}), .ctx = self_rf, .fd = self_rf.opened_fd, .poll = (&self_rf.io_poll), .tag = ReadFile.io_tag } };
     }
 
 pub fn waitForReadable(self: *ReadFile) void {
@@ -253,7 +304,11 @@ pub fn waitForReadable(self: *ReadFile) void {
     }
 
 pub fn remainingBuffer(self: *const ReadFile, stack_buffer: []u8) []u8 {
-            var remaining = (if ((self.buffer.items.ptr[self.buffer.items.len..self.buffer.capacity].len < stack_buffer.len)) stack_buffer else self.buffer.items.ptr[self.buffer.items.len..self.buffer.capacity]);
+            const unused = (blk: {
+            break :blk self.buffer.items.ptr[self.buffer.items.len..self.buffer.capacity];
+
+});
+            var remaining = (if ((unused.len < stack_buffer.len)) stack_buffer else unused);
             _ = &remaining;
             return remaining[0..@min(remaining.len, (self.max_length -| self.read_off))];
     }
@@ -323,9 +378,10 @@ pub fn then(self: *ReadFile, _: *JSGlobalObject) !void {
             _ = &store;
             var buf = self.buffer.items;
             _ = &buf;
-            defer {
-            _ = store.deref();
-            }
+            var _store_guard = DerefGuard(Store){ .ptr = store };
+            _ = &_store_guard;
+            var ___store_guard_moved = false; _ = &___store_guard_moved;
+            defer if (!___store_guard_moved) { ___store_guard_moved = true; const __T = @TypeOf(_store_guard); if (@typeInfo(__T) == .optional) { if (_store_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _store_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _store_guard; _drop_val.__cp_deinit(); } };
             var system_error = self.system_error;
             _ = &system_error;
             var total_size = self.total_size;
@@ -449,7 +505,10 @@ pub fn runAsyncWithFD(self: *ReadFile, fd: FD) void {
     }
 
 pub fn doReadLoopTask(task: *WorkPoolTask) void {
-            var self_rf: *ReadFile = @alignCast(@fieldParentPtr("task", task));
+            var self_rf: *ReadFile = (blk: {
+            break :blk @alignCast(@fieldParentPtr("task", task));
+
+});
             _ = &self_rf;
             _ = self_rf.update();
     }
@@ -594,7 +653,10 @@ pub fn init(self: *ReadFileUV, loop: *libuv.Loop, event_loop: *EventLoop, file_s
 
 pub fn start(event_loop: *EventLoop, store: *Store, off: SizeType, max_len: SizeType, comptime Handler: type, handler: *anyopaque) void {
             _ = log("ReadFileUV.start", .{});
-            var read_file_uv = bun.new(ReadFileUV, .{ .loop = event_loop.virtual_machine.uvLoop(), .event_loop = event_loop, .file_store = store.data.file, .byte_store = ByteStore{ .allocator = default_allocator }, .store = store, .offset = off, .max_length = max_len, .total_size = Blob.max_size, .opened_fd = invalid_fd, .read_len = 0, .read_off = 0, .read_eof = false, .size = 0, .buffer = .{}, .system_error = null, .errno = null, .on_complete_data = handler, .on_complete_fn = @ptrCast((&Handler.run)), .is_regular_file = false, .req = std.mem.zeroes(libuv.fs_t) });
+            var read_file_uv = bun.new(ReadFileUV, .{ .loop = event_loop.virtual_machine.uvLoop(), .event_loop = event_loop, .file_store = store.data.file, .byte_store = ByteStore{ .allocator = default_allocator }, .store = store, .offset = off, .max_length = max_len, .total_size = Blob.max_size, .opened_fd = invalid_fd, .read_len = 0, .read_off = 0, .read_eof = false, .size = 0, .buffer = .{}, .system_error = null, .errno = null, .on_complete_data = handler, .on_complete_fn = (blk: {
+            break :blk @ptrCast((&Handler.run));
+
+}), .is_regular_file = false, .req = std.mem.zeroes(libuv.fs_t) });
             _ = &read_file_uv;
             _ = store.ref();
             _ = event_loop.refConcurrently();
@@ -603,17 +665,10 @@ pub fn start(event_loop: *EventLoop, store: *Store, off: SizeType, max_len: Size
 
 pub fn finalize(self: *ReadFileUV) void {
             _ = log("ReadFileUV.finalize", .{});
-            var event_loop = self.event_loop;
-            _ = &event_loop;
-            defer {
-            {
-                _ = self.store.deref();
-                _ = self.req.deinit();
-                _ = destroy(self);
-                _ = event_loop.unrefConcurrently();
-                _ = log("ReadFileUV.finalize destroy", .{});
-            }
-            }
+            var _finalize_guard = ReadFileUVFinalizeGuard{ .rf = self, .event_loop = self.event_loop };
+            _ = &_finalize_guard;
+            var ___finalize_guard_moved = false; _ = &___finalize_guard_moved;
+            defer if (!___finalize_guard_moved) { ___finalize_guard_moved = true; const __T = @TypeOf(_finalize_guard); if (@typeInfo(__T) == .optional) { if (_finalize_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _finalize_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _finalize_guard; _drop_val.__cp_deinit(); } };
             var cb = self.on_complete_fn;
             _ = &cb;
             var cb_ctx = self.on_complete_data;
@@ -666,7 +721,10 @@ pub fn onFileOpen(self: *ReadFileUV, opened_fd: FD) void {
 
 pub fn onFileInitialStat(req: *libuv.fs_t) callconv(.c) void {
             _ = log("ReadFileUV.onFileInitialStat", .{});
-            var self_uv: *ReadFileUV = @ptrCast(@alignCast(req.data));
+            var self_uv: *ReadFileUV = (blk: {
+            break :blk @ptrCast(@alignCast(req.data));
+
+});
             _ = &self_uv;
             if (req.result.errEnum()) |errno| {
                 _ = &errno;
@@ -763,7 +821,10 @@ pub fn queueRead(self: *ReadFileUV) void {
     }
 
 pub fn onRead(req: *libuv.fs_t) callconv(.c) void {
-            var self_uv: *ReadFileUV = @ptrCast(@alignCast(req.data));
+            var self_uv: *ReadFileUV = (blk: {
+            break :blk @ptrCast(@alignCast(req.data));
+
+});
             _ = &self_uv;
             var result = req.result;
             _ = &result;
@@ -830,18 +891,17 @@ pub fn NewReadFileHandler(comptime Function: anytype) type {
 pub fn run(handler: *@This(), maybe_bytes: ReadFileResultType) !void {
             var promise = handler.promise.swap();
             _ = &promise;
-            var blob = handler.context.takeOwnership();
-            _ = &blob;
-            defer {
-            _ = blob.deinit();
-            }
+            var blob_guard = DeinitGuard(Blob){ .val = handler.context.takeOwnership() };
+            _ = &blob_guard;
+            var __blob_guard_moved = false; _ = &__blob_guard_moved;
+            defer if (!__blob_guard_moved) { __blob_guard_moved = true; const __T = @TypeOf(blob_guard); if (@typeInfo(__T) == .optional) { if (blob_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { blob_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = blob_guard; _drop_val.__cp_deinit(); } };
             const globalThis = handler.globalThis;
             _ = destroy(handler);
             switch (maybe_bytes) {
 .result => |result| {
 const bytes = result.buf;
-            if ((blob.size > 0)) {
-                blob.size = @min(@as(SizeType, @truncate(bytes.len)), blob.size);
+            if ((blob_guard.val.size > 0)) {
+                blob_guard.val.size = @min(@as(SizeType, @truncate(bytes.len)), blob_guard.val.size);
             }
             const WrappedFn = struct {
 
@@ -849,7 +909,7 @@ pub fn wrapped(b: *Blob, g: *JSGlobalObject, by: []u8) jsc.JSValue {
             return jsc.toJSHostCall(g, @src(), Function, .{ b, g, by, .temporary });
     }
 };
-            _ = try jsc.AnyPromise.wrap(.{ .normal = promise }, globalThis, WrappedFn.wrapped, .{ (&blob), globalThis, bytes });
+            _ = try jsc.AnyPromise.wrap(.{ .normal = promise }, globalThis, WrappedFn.wrapped, .{ (&blob_guard.val), globalThis, bytes });
 },
 .err => |err| {
 _ = try promise.reject(globalThis, err.toErrorInstanceWithAsyncStack(globalThis, promise));

@@ -10,9 +10,8 @@ pub fn toHaveBeenNthCalledWith(client: *Expect, globalThis: *JSGlobalObject, cal
 
     const calls = bun.cpp.JSMockFunction__getCalls(globalThis, value)?;
     if (!calls.jsType().isArray()) {
-        let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-        defer formatter.deinit();
-        return client.throw(globalThis, comptime getSignature("toHaveBeenNthCalledWith", "<green>n<r>, <green>...expected<r>", false), "\n\nMatcher error: <red>received<r> value must be a mock function\nReceived: {f}", .{ value.toFmt(&formatter) });
+        let formatter_guard = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true } };
+        return client.throw(globalThis, comptime getSignature("toHaveBeenNthCalledWith", "<green>n<r>, <green>...expected<r>", false), "\n\nMatcher error: <red>received<r> value must be a mock function\nReceived: {f}", .{ value.toFmt(&formatter_guard.val) });
     }
 
     if (arguments.len == 0 || !arguments[0].isAnyInt()) {
@@ -55,8 +54,7 @@ pub fn toHaveBeenNthCalledWith(client: *Expect, globalThis: *JSGlobalObject, cal
     }
 
     // handle failure
-    let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-    defer formatter.deinit();
+    let formatter_guard = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true } };
 
     const expected_args_slice = arguments[1..];
     const expected_args_js_array = JSValue.createEmptyArray(globalThis, expected_args_slice.len)?;
@@ -70,7 +68,7 @@ pub fn toHaveBeenNthCalledWith(client: *Expect, globalThis: *JSGlobalObject, cal
         const signature = comptime getSignature("toHaveBeenNthCalledWith", "<green>n<r>, <green>...expected<r>", true);
         return client.throw(globalThis, signature, "\n\nExpected call #{d} not to be with: <green>{f}<r>\nBut it was.", .{ 
             nthCallNum,
-            expected_args_js_array.toFmt(&formatter),
+            expected_args_js_array.toFmt(&formatter_guard.val),
         });
     }
     const signature = comptime getSignature("toHaveBeenNthCalledWith", "<green>n<r>, <green>...expected<r>", false);
@@ -105,3 +103,10 @@ const JSValue = bun.jsc.JSValue;
 
 const Expect = bun.jsc.Expect.Expect;
 const getSignature = Expect.getSignature;
+
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}

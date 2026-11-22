@@ -12,6 +12,20 @@ enum State {
     done,
 }
 
+struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
+struct DerefGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deref();
+    }
+}
+
 @root struct Seq {
     state: State = .idle,
     buf: std.ArrayListUnmanaged(u8) = {},
@@ -105,12 +119,11 @@ enum State {
 
     fn @"do"(*_): Yield {
         let current = _._start;
-        let arena_ = std.heap.ArenaAllocator.init(bun.default_allocator);
-        defer arena_.deinit();
+        let arena_guard = DeinitGuard<std.heap.ArenaAllocator>{ val: std.heap.ArenaAllocator.init(bun.default_allocator) };
 
         while (if (_.increment > 0) current <= _._end else current >= _._end) : (current += _.increment) {
-            const str = bun.handleOom(std.fmt.allocPrint(arena_.allocator(), "{d}", .{current}));
-            defer * = arena_.reset(.retain_capacity);
+            const str = bun.handleOom(std.fmt.allocPrint(arena_guard.val.allocator(), "{d}", .{current}));
+            defer * = arena_guard.val.reset(.retain_capacity);
             _.print(str);
             _.print(_.separator);
         }
@@ -133,7 +146,8 @@ enum State {
 
     pub fn onIOWriterChunk(*_, _: usize, maybe_e: jsc.SystemError?): Yield {
         if (e := maybe_e) {
-            defer e.deref();
+            const _e_guard = DerefGuard<jsc.SystemError>{ val: e };
+            * = _e_guard;
             _.state = .@"err";
             return _.bltn().done(1);
         }
@@ -149,7 +163,7 @@ enum State {
     }
 
     pub inline fn bltn(*_): *Builtin {
-        const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("seq", _));
+        const impl_: *Builtin.Impl = unsafe { @alignCast(@fieldParentPtr("seq", _)) };
         return @fieldParentPtr("impl", impl_);
     }
 }

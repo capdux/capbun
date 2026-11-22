@@ -60,7 +60,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 const default_allocator = @import("bun").default_allocator;
@@ -77,6 +77,40 @@ const sys = @import("bun").sys;
 const errnoToZigErr = @import("bun").errnoToZigErr;
 const JSTerminated = @import("bun").JSTerminated;
 const canUseCopyFileRangeSyscall = @import("bun").canUseCopyFileRangeSyscall;
+pub const CopyFileReadLenGuard = struct {
+    copy_file: *CopyFile,
+    total_written: usize = 0,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *CopyFileReadLenGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            {
+                self.copy_file.read_len = @as(SizeType, @truncate(self.total_written));
+            }
+    }
+};
+
+pub const EventLoopEnterGuard = struct {
+    event_loop: *EventLoop,
+    __cp_dropped: bool = false,
+
+pub fn enter(el: *EventLoop) EventLoopEnterGuard {
+            {
+                _ = el.enter();
+            }
+            return EventLoopEnterGuard{ .event_loop = el };
+    }
+
+pub fn __cp_deinit(self: *EventLoopEnterGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            {
+                _ = self.event_loop.exit();
+            }
+    }
+};
+
 pub const CopyFile = struct {
     destination_file_store: Store.File,
     source_file_store: Store.File,
@@ -145,7 +179,10 @@ pub fn deinit(self: *CopyFile) void {
                 switch (self.source_file_store.pathlike.path) {
 .string => {
 if ((self.system_error == null)) {
-                    _ = default_allocator.free(@constCast(self.source_file_store.pathlike.path.slice()));
+                    _ = default_allocator.free((blk: {
+                    break :blk @constCast(self.source_file_store.pathlike.path.slice());
+
+}));
                 }
 },
 else => {
@@ -321,27 +358,24 @@ pub fn doCopyFileRange(self: *CopyFile, use: TryWith, clear_append_if_invalid: b
             if (unknown_size) {
                 remain = 4096;
             }
-            var total_written: usize = 0;
-            _ = &total_written;
+            var len_guard = CopyFileReadLenGuard{ .copy_file = self };
+            _ = &len_guard;
+            var __len_guard_moved = false; _ = &__len_guard_moved;
+            defer if (!__len_guard_moved) { __len_guard_moved = true; const __T = @TypeOf(len_guard); if (@typeInfo(__T) == .optional) { if (len_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { len_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = len_guard; _drop_val.__cp_deinit(); } };
             var src_fd = self.source_fd;
             _ = &src_fd;
             var dest_fd = self.destination_fd;
             _ = &dest_fd;
-            defer {
-            {
-                self.read_len = @as(SizeType, @truncate(total_written));
-            }
-            }
             var has_unset_append = false;
             _ = &has_unset_append;
             if ((!canUseCopyFileRangeSyscall())) {
-                switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", src_fd, dest_fd, (if (unknown_size) 0 else remain), (&total_written))) {
+                switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", src_fd, dest_fd, (if (unknown_size) 0 else remain), (&len_guard.total_written))) {
 .err => |err| {
 self.system_error = err.toSystemError();
                 return errnoToZigErr(err.errno);
 },
 .result => {
-_ = std.os.linux.ftruncate(dest_fd.cast(), @as(posix.off_t, @intCast(total_written)));
+_ = std.os.linux.ftruncate(dest_fd.cast(), @as(posix.off_t, @intCast(len_guard.total_written)));
                 return;
 },
 }
@@ -358,13 +392,13 @@ _ = std.os.linux.ftruncate(dest_fd.cast(), @as(posix.off_t, @intCast(total_writt
 
 },
 .NOSYS, .XDEV, .OPNOTSUPP => {
-switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", src_fd, dest_fd, (if (unknown_size) 0 else remain), (&total_written))) {
+switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", src_fd, dest_fd, (if (unknown_size) 0 else remain), (&len_guard.total_written))) {
 .err => |err| {
 self.system_error = err.toSystemError();
                 return errnoToZigErr(err.errno);
 },
 .result => {
-_ = std.os.linux.ftruncate(dest_fd.cast(), @as(posix.off_t, @intCast(total_written)));
+_ = std.os.linux.ftruncate(dest_fd.cast(), @as(posix.off_t, @intCast(len_guard.total_written)));
                 return;
 },
 }
@@ -381,14 +415,14 @@ if (clear_append_if_invalid) {
                         }
                     }
                 }
-                if ((total_written == 0)) {
-                    switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", src_fd, dest_fd, (if (unknown_size) 0 else remain), (&total_written))) {
+                if ((len_guard.total_written == 0)) {
+                    switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", src_fd, dest_fd, (if (unknown_size) 0 else remain), (&len_guard.total_written))) {
 .err => |err| {
 self.system_error = err.toSystemError();
                     return errnoToZigErr(err.errno);
 },
 .result => {
-_ = std.os.linux.ftruncate(dest_fd.cast(), @as(posix.off_t, @intCast(total_written)));
+_ = std.os.linux.ftruncate(dest_fd.cast(), @as(posix.off_t, @intCast(len_guard.total_written)));
                     return;
 },
 }
@@ -402,7 +436,7 @@ return errnoToZigErr(errno);
                 var written_usize: usize = @intCast(written);
                 _ = &written_usize;
                 remain = (if ((remain > written_usize)) (remain - written_usize) else 0);
-                total_written = (total_written + written_usize);
+                len_guard.total_written = (len_guard.total_written + written_usize);
                 if (((written == 0) or (remain == 0))) {
                     break;
                 }
@@ -686,8 +720,14 @@ pub fn read(self: *CopyFileWindowsReadWriteLoop, parent: *CopyFileWindows) sys.M
             self.uv_buf = libuv.uv_buf_t.init(self.read_buf.allocatedSlice());
             var loop = parent.event_loop.virtual_machine.event_loop_handle.?;
             _ = &loop;
-            parent.io_request.data = @ptrCast(parent);
-            var rc = libuv.uv_fs_read(loop, (&parent.io_request), self.source_fd.uv(), @ptrCast((&self.uv_buf)), 1, -1, (&onRead));
+            parent.io_request.data = (blk: {
+            break :blk @ptrCast(parent);
+
+});
+            var rc = libuv.uv_fs_read(loop, (&parent.io_request), self.source_fd.uv(), (blk: {
+            break :blk @ptrCast((&self.uv_buf));
+
+}), 1, -1, (&onRead));
             _ = &rc;
             if (rc.toError(.read)) |err| {
                 _ = &err;
@@ -699,7 +739,10 @@ pub fn read(self: *CopyFileWindowsReadWriteLoop, parent: *CopyFileWindows) sys.M
 pub fn onRead(req: *libuv.fs_t) callconv(.c) void {
             var parent: *CopyFileWindows = @fieldParentPtr("io_request", req);
             _ = &parent;
-            _ = assert((req.data == @as(?*anyopaque, @ptrCast(parent))));
+            _ = assert((req.data == (blk: {
+            break :blk @as(?*anyopaque, @ptrCast(parent));
+
+})));
             var rc = req.result;
             _ = &rc;
             if (rc.toError(.read)) |err| {
@@ -715,9 +758,15 @@ pub fn onRead(req: *libuv.fs_t) callconv(.c) void {
                 return;
             }
             _ = req.deinit();
-            var rc2 = libuv.uv_fs_write(parent.event_loop.virtual_machine.event_loop_handle.?, (&parent.io_request), parent.read_write_loop.destination_fd.uv(), @ptrCast((&parent.read_write_loop.uv_buf)), 1, -1, (&onWrite));
+            var rc2 = libuv.uv_fs_write(parent.event_loop.virtual_machine.event_loop_handle.?, (&parent.io_request), parent.read_write_loop.destination_fd.uv(), (blk: {
+            break :blk @ptrCast((&parent.read_write_loop.uv_buf));
+
+}), 1, -1, (&onWrite));
             _ = &rc2;
-            req.data = @ptrCast(parent);
+            req.data = (blk: {
+            break :blk @ptrCast(parent);
+
+});
             if (rc2.toError(.write)) |err| {
                 _ = &err;
                 parent.err = err;
@@ -729,7 +778,10 @@ pub fn onRead(req: *libuv.fs_t) callconv(.c) void {
 pub fn onWrite(req: *libuv.fs_t) callconv(.c) void {
             var parent: *CopyFileWindows = @fieldParentPtr("io_request", req);
             _ = &parent;
-            _ = assert((req.data == @as(?*anyopaque, @ptrCast(parent))));
+            _ = assert((req.data == (blk: {
+            break :blk @as(?*anyopaque, @ptrCast(parent));
+
+})));
             var rc = req.result;
             _ = &rc;
             if (rc.toError(.write)) |err| {
@@ -747,9 +799,15 @@ pub fn onWrite(req: *libuv.fs_t) callconv(.c) void {
                     return;
                 }
                 _ = req.deinit();
-                req.data = @ptrCast(parent);
+                req.data = (blk: {
+                break :blk @ptrCast(parent);
+
+});
                 parent.read_write_loop.uv_buf = libuv.uv_buf_t.init(parent.read_write_loop.uv_buf.slice()[wrote..]);
-                var rc2 = libuv.uv_fs_write(parent.event_loop.virtual_machine.event_loop_handle.?, (&parent.io_request), parent.read_write_loop.destination_fd.uv(), @ptrCast((&parent.read_write_loop.uv_buf)), 1, -1, (&onWrite));
+                var rc2 = libuv.uv_fs_write(parent.event_loop.virtual_machine.event_loop_handle.?, (&parent.io_request), parent.read_write_loop.destination_fd.uv(), (blk: {
+                break :blk @ptrCast((&parent.read_write_loop.uv_buf));
+
+}), 1, -1, (&onWrite));
                 _ = &rc2;
                 if (rc2.toError(.write)) |err| {
                     _ = &err;
@@ -852,12 +910,10 @@ pub fn throw(self: *CopyFileWindows, err: sys.Error) void {
             _ = &promise;
             var err_instance = err.toJSWithAsyncStack(globalThis, promise);
             _ = &err_instance;
-            var event_loop = self.event_loop;
-            _ = &event_loop;
-            _ = event_loop.enter();
-            defer {
-            _ = event_loop.exit();
-            }
+            var _el_guard = EventLoopEnterGuard.enter(self.event_loop);
+            _ = &_el_guard;
+            var ___el_guard_moved = false; _ = &___el_guard_moved;
+            defer if (!___el_guard_moved) { ___el_guard_moved = true; const __T = @TypeOf(_el_guard); if (@typeInfo(__T) == .optional) { if (_el_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _el_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _el_guard; _drop_val.__cp_deinit(); } };
             _ = self.deinit();
             _ = (blk_catch_14: { break :blk_catch_14 ((promise.reject(globalThis, err_instance)) catch |__ce_14| { _ = &__ce_14;  }); });
     }
@@ -881,7 +937,10 @@ pub fn onComplete(self: *CopyFileWindows, written_actual: usize) void {
                     _ = &loop;
                     _ = self.io_request.deinit();
                     self.io_request = std.mem.zeroes(libuv.fs_t);
-                    self.io_request.data = @ptrCast(self);
+                    self.io_request.data = (blk: {
+                    break :blk @ptrCast(self);
+
+});
                     var rc = libuv.uv_fs_chmod(loop, (&self.io_request), path, @intCast(mode), (&onChmod));
                     _ = &rc;
                     if (rc.errno()) |errno| {
@@ -904,7 +963,10 @@ pub fn onComplete(self: *CopyFileWindows, written_actual: usize) void {
 pub fn onChmod(req: *libuv.fs_t) callconv(.c) void {
             var parent: *CopyFileWindows = @fieldParentPtr("io_request", req);
             _ = &parent;
-            _ = assert((req.data == @as(?*anyopaque, @ptrCast(parent))));
+            _ = assert((req.data == (blk: {
+            break :blk @as(?*anyopaque, @ptrCast(parent));
+
+})));
             _ = parent.event_loop.unrefConcurrently();
             var rc = req.result;
             _ = &rc;
@@ -926,12 +988,10 @@ pub fn resolvePromise(self: *CopyFileWindows, written: usize) void {
             _ = &globalThis;
             var promise = self.promise.swap();
             _ = &promise;
-            var event_loop = self.event_loop;
-            _ = &event_loop;
-            _ = event_loop.enter();
-            defer {
-            _ = event_loop.exit();
-            }
+            var _el_guard = EventLoopEnterGuard.enter(self.event_loop);
+            _ = &_el_guard;
+            var ___el_guard_moved = false; _ = &___el_guard_moved;
+            defer if (!___el_guard_moved) { ___el_guard_moved = true; const __T = @TypeOf(_el_guard); if (@typeInfo(__T) == .optional) { if (_el_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _el_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _el_guard; _drop_val.__cp_deinit(); } };
             _ = self.deinit();
             _ = (blk_catch_15: { break :blk_catch_15 ((promise.resolve(globalThis, jsc.JSValue.jsNumberFromUint64(written))) catch |__ce_15| { _ = &__ce_15;  }); });
     }

@@ -25,6 +25,29 @@ const Subcommand = PackageManager.Subcommand;
 const UpdateRequest = PackageManager.UpdateRequest;
 const attemptToCreatePackageJSON = PackageManager.attemptToCreatePackageJSON;
 
+pub struct DeinitWithAllocGuard<T> {
+    val: T,
+    allocator: std.mem.Allocator,
+    ~init() {
+        _.val.deinit(_.allocator);
+    }
+}
+
+pub struct CloseGuard<T> {
+    val: T,
+    ~init() {
+        _.val.close();
+    }
+}
+
+pub struct FreeGuard<T> {
+    slice: T,
+    allocator: std.mem.Allocator,
+    ~init() {
+        _.allocator.free(_.slice);
+    }
+}
+
 
 // Convert "/Users/Jarred Sumner" => "/Users/Jarred\ Sumner"
 pub struct ShellPathFormatter {
@@ -107,8 +130,10 @@ pub fn updatePackageJSONAndInstallWithManager(
     ctx: Command.Context,
     original_cwd: string,
 )! {
-    let update_requests = bun.handleOom(UpdateRequest.Array.initCapacity(manager.allocator, 64));
-    defer update_requests.deinit(manager.allocator);
+    let update_requests_guard = DeinitWithAllocGuard<UpdateRequest.Array>{
+        val: bun.handleOom(UpdateRequest.Array.initCapacity(manager.allocator, 64)),
+        allocator: manager.allocator,
+    };
 
     if (manager.options.positionals.len <= 1) {
         switch (manager.subcommand) {
@@ -136,7 +161,7 @@ pub fn updatePackageJSONAndInstallWithManager(
         ctx,
         original_cwd,
         manager.options.positionals[1..],
-        &update_requests,
+        &update_requests_guard.val,
     );
 }
 
@@ -569,9 +594,8 @@ fn updatePackageJSONAndInstallWithManagerWithUpdates(
                 null
             };
             if (node_modules_bin_val := open_res) {
-                let node_modules_bin = node_modules_bin_val;
-                defer node_modules_bin.close();
-                let iter: std.fs.Dir.Iterator = node_modules_bin.iterate();
+                let node_modules_bin_guard = CloseGuard<std.fs.Dir>{ val: node_modules_bin_val };
+                let iter: std.fs.Dir.Iterator = node_modules_bin_guard.val.iterate();
                 while (entry := (iter.next() catch null)) {
                     switch (entry.kind) {
                         .sym_link => {
@@ -582,8 +606,8 @@ fn updatePackageJSONAndInstallWithManagerWithUpdates(
                             node_modules_buf[entry.name.len] = 0;
                             const buf: [:0]u8 = node_modules_buf[0..entry.name.len :0];
 
-                            let file = node_modules_bin.openFileZ(buf, { mode: .read_only }) catch {
-                                node_modules_bin.deleteFileZ(buf) catch {};
+                            let file = node_modules_bin_guard.val.openFileZ(buf, { mode: .read_only }) catch {
+                                node_modules_bin_guard.val.deleteFileZ(buf) catch {};
                                 continue;
                             };
 
@@ -651,8 +675,10 @@ fn updatePackageJSONAndInstallAndCLI(
 )! {
     const init_res = initManagerOrCreate(ctx, cli, subcommand)?;
     let manager = init_res[0];
-    const original_cwd = init_res[1];
-    defer ctx.allocator.free(original_cwd);
+    const original_cwd_guard = FreeGuard<string>{
+        slice: init_res[1],
+        allocator: ctx.allocator,
+    };
 
     if (manager.options.shouldPrintCommandName()) {
         Output.prettyln("<r><b>bun {s} <r><d>v" ++ Global.package_json_version_with_sha ++ "<r>\n", .{ @tagName(subcommand)});
@@ -667,7 +693,7 @@ fn updatePackageJSONAndInstallAndCLI(
         }
     }
 
-    updatePackageJSONAndInstallWithManager(manager, ctx, original_cwd)?;
+    updatePackageJSONAndInstallWithManager(manager, ctx, original_cwd_guard.slice)?;
 
     if (manager.options.patch_features == .patch) {
         manager.preparePatch()?;
@@ -757,7 +783,7 @@ pub fn updatePackageJSONAndInstall(
         let fetcher = bun.bundle_v2.BundleV2.DependenciesScanner{
             ctx: &analyzer,
             entry_points: cli.positionals[1..],
-            onFetch: @ptrCast(&Analyzer.onAnalyze),
+            onFetch: unsafe { @ptrCast(&Analyzer.onAnalyze) },
         };
 
         // This runs the bundler.

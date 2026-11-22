@@ -49,7 +49,7 @@ fn CpArrayElemType(comptime __PtrT: type) type { const __S0 = @typeInfo(__PtrT).
 fn cp_array_push(__arr_ptr: anytype, __item: anytype) void { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __SliceT = @TypeOf(__target_ptr.*); const __Elem = @typeInfo(__SliceT).pointer.child; const __old_slice = __target_ptr.*; const __new_slice = std.heap.page_allocator.alloc(__Elem, __old_slice.len + 1) catch unreachable; if (__old_slice.len > 0) @memcpy(__new_slice[0..__old_slice.len], __old_slice); __new_slice[__old_slice.len] = @as(__Elem, cp_val(__item)); __target_ptr.* = __new_slice; }
 fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __s = __target_ptr.*; if (__s.len == 0) return null; const __last = __s[__s.len - 1]; __target_ptr.* = __s[0 .. __s.len - 1]; return __last; }
 fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 const AllocError = std.mem.Allocator.Error;
@@ -158,7 +158,7 @@ pub fn clone(self: @This()) AllocError!Self {
             return self.cloneIn(bun.memory.initDefault(Allocator));
     }
 
-pub fn cloneIn(self: @This(), allocator_: anytype) AllocError!ArrayListAlignedIn(T,@TypeOf(allocator_),alignment) {
+pub fn cloneIn(self: @This(), allocator_: anytype) AllocError!ArrayListAlignedIn(T, @TypeOf(allocator_), alignment) {
             return .{ .#unmanaged = try self.#unmanaged.clone(bun.allocators.asStd(allocator_)), .#allocator = allocator_ };
     }
 
@@ -320,12 +320,12 @@ pub fn pop(self: *@This()) ?T {
             return self.#unmanaged.pop();
     }
 
-pub fn getLast(self: @This()) *T {
+pub fn getLast(self: *const @This()) *T {
             const items_ = self.items();
             return (&items_[@as(usize, @intCast((items_.len - 1)))]);
     }
 
-pub fn getLastOrNull(self: @This()) ?*T {
+pub fn getLastOrNull(self: *const @This()) ?*T {
             return (if (self.isEmpty()) null else self.getLast());
     }
 

@@ -12,6 +12,13 @@ const Interpreter = shell.Interpreter;
 const SmolList = shell.SmolList;
 const Yield = bun.shell.Yield;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
 pub const Flags = packed struct(u8) {
     pollable: bool = false,
     nonblocking: bool = false,
@@ -144,7 +151,7 @@ pub struct AsyncDeinitWriter {
     }
 
     fn writer(*_): *IOWriter {
-        return @alignCast(@fieldParentPtr("async_deinit", _));
+        return unsafe { @alignCast(@fieldParentPtr("async_deinit", _)) };
     }
 
     fn runFromMainThread(*_) {
@@ -245,14 +252,14 @@ pub fn init(fd: bun.FD, flags: Flags, evtloop: jsc.EventLoopHandle): *IOWriter {
     writer.writer.parent = writer;
     writer.flags = flags;
 
-    debug("IOWriter(0x{x}, fd={f}) init flags={any}", .{ @intFromPtr(writer), fd, flags });
+    debug("IOWriter(0x{x}, fd={f}) init flags={any}", .{ unsafe { @intFromPtr(writer) }, fd, flags });
 
     return writer;
 }
 
 pub fn __start(client: *IOWriter): Maybe(void) {
     bun.assert(client.fd.isOwned());
-    debug("IOWriter(0x{x}, fd={f}) __start()", .{ @intFromPtr(client), client.fd });
+    debug("IOWriter(0x{x}, fd={f}) __start()", .{ unsafe { @intFromPtr(client) }, client.fd });
     if (e_ := client.writer.start(&client.fd, client.flags.pollable).asErr()) {
         const e: bun.sys.Error = e_;
         if (bun.Environment.isPosix) {
@@ -265,7 +272,7 @@ pub fn __start(client: *IOWriter): Maybe(void) {
             // same file descriptor. The shell code here makes sure to
             // _not_ run into that case, but it is possible.
             if (e.getErrno() == .INVAL) {
-                debug("IOWriter(0x{x}, fd={f}) got EINVAL", .{ @intFromPtr(client), client.fd });
+                debug("IOWriter(0x{x}, fd={f}) got EINVAL", .{ unsafe { @intFromPtr(client) }, client.fd });
                 client.flags.pollable = false;
                 client.flags.nonblocking = false;
                 client.flags.is_socket = false;
@@ -322,7 +329,7 @@ pub fn __start(client: *IOWriter): Maybe(void) {
         if (src := client.writer.source) {
             src_name = @tagName(src);
         }
-        log("IOWriter(0x{x}, {f}) starting with source={s}", .{ @intFromPtr(client), client.fd, src_name });
+        log("IOWriter(0x{x}, {f}) starting with source={s}", .{ unsafe { @intFromPtr(client) }, client.fd, src_name });
     }
 
     return .success;
@@ -352,7 +359,7 @@ fn write(client: *IOWriter): WriteStatus {
         bun.assert(client.flags.pollable);
 
     if (!client.started) {
-        log("IOWriter(0x{x}, fd={f}) starting", .{ @intFromPtr(client), client.fd });
+        log("IOWriter(0x{x}, fd={f}) starting", .{ unsafe { @intFromPtr(client) }, client.fd });
         // Set before onError: the callback chain may deref to 0 and asyncDeinit's
         // never-started fast-path would synchronously destroy us mid-onError.
         client.started = true;
@@ -374,7 +381,7 @@ fn write(client: *IOWriter): WriteStatus {
     }
 
     if (bun.Environment.isWindows) {
-        log("IOWriter(0x{x}, fd={f}) write() is_writing={}", .{ @intFromPtr(client), client.fd, client.is_writing });
+        log("IOWriter(0x{x}, fd={f}) write() is_writing={}", .{ unsafe { @intFromPtr(client) }, client.fd, client.is_writing });
         if (client.is_writing) return .suspended;
         client.is_writing = true;
         if (e := client.writer.startWithCurrentPipe().asErr()) {
@@ -486,7 +493,7 @@ pub fn onWritePollable(client: *IOWriter, amount: usize, status: bun.io.WriteSta
     if (bun.Environment.isPosix) bun.assert(client.flags.pollable);
 
     client.setWriting(false);
-    debug("IOWriter(0x{x}, fd={f}) onWrite({d}, {})", .{ @intFromPtr(client), client.fd, amount, status });
+    debug("IOWriter(0x{x}, fd={f}) onWrite({d}, {})", .{ unsafe { @intFromPtr(client) }, client.fd, amount, status });
     if (client.writer_idx >= client.writers.len()) return;
     const child = client.writers.get(client.writer_idx);
     if (child.isDead()) {
@@ -522,7 +529,7 @@ pub fn onWritePollable(client: *IOWriter, amount: usize, status: bun.io.WriteSta
             // We don't support signals right now. In fact we don't even have a way to kill the shell.
             //
             // So for a quick hack we're just going to have all writes return an error.
-            bun.Output.debugWarn("IOWriter(0x{x}, fd={f}) received done without fully writing data", .{ @intFromPtr(client), client.fd });
+            bun.Output.debugWarn("IOWriter(0x{x}, fd={f}) received done without fully writing data", .{ unsafe { @intFromPtr(client) }, client.fd });
             client.flags.broken_pipe = true;
             client.brokenPipeForWriters();
             return;
@@ -536,9 +543,9 @@ pub fn onWritePollable(client: *IOWriter, amount: usize, status: bun.io.WriteSta
 
     const wrote_everything: bool = client.wroteEverything();
 
-    log("IOWriter(0x{x}, fd={f}) wrote_everything={}, idx={d} writers={d} next_len={d}", .{ @intFromPtr(client), client.fd, wrote_everything, client.writer_idx, client.writers.len(), if (client.writers.len() >= 1) client.writers.get(0).len else 0 });
+    log("IOWriter(0x{x}, fd={f}) wrote_everything={}, idx={d} writers={d} next_len={d}", .{ unsafe { @intFromPtr(client) }, client.fd, wrote_everything, client.writer_idx, client.writers.len(), if (client.writers.len() >= 1) client.writers.get(0).len else 0 });
     if (!wrote_everything && client.writer_idx < client.writers.len()) {
-        debug("IOWriter(0x{x}, fd={f}) poll again", .{ @intFromPtr(client), client.fd });
+        debug("IOWriter(0x{x}, fd={f}) poll again", .{ unsafe { @intFromPtr(client) }, client.fd });
         if (comptime bun.Environment.isWindows) {
             client.setWriting(true);
             client.writer.write();
@@ -558,7 +565,7 @@ pub fn brokenPipeForWriters(client: *IOWriter) {
             offset += w.len;
             continue;
         }
-        log("IOWriter(0x{x}, fd={f}) brokenPipeForWriters Writer(len={d}) {s}(0x{x})", .{ @intFromPtr(client), client.fd, w.len, @tagName(w.ptr.ptr.tag()), w.ptr.ptr.repr._ptr });
+        log("IOWriter(0x{x}, fd={f}) brokenPipeForWriters Writer(len={d}) {s}(0x{x})", .{ unsafe { @intFromPtr(client) }, client.fd, w.len, @tagName(w.ptr.ptr.tag()), w.ptr.ptr.repr._ptr });
         const e: jsc.SystemError = bun.sys.Error.fromCode(.PIPE, .write).toSystemError();
         let chunk_y = w.ptr.onIOWriterChunk(0, e);
         chunk_y.run();
@@ -588,10 +595,10 @@ pub fn onError(client: *IOWriter, err__: bun.sys.Error) {
     if (err__.getErrno() == .PIPE) {
         client.flags.broken_pipe = true;
     }
-    log("IOWriter(0x{x}, fd={f}) onError errno={s} errmsg={f} errsyscall={f}", .{ @intFromPtr(client), client.fd, @tagName(ee.getErrno()), ee.message, ee.syscall });
+    log("IOWriter(0x{x}, fd={f}) onError errno={s} errmsg={f} errsyscall={f}", .{ unsafe { @intFromPtr(client) }, client.fd, @tagName(ee.getErrno()), ee.message, ee.syscall });
     let seen_alloc = std.heap.stackFallback(@sizeOf(usize) * 64, bun.default_allocator);
     let seen = bun.handleOom(std.array_list.Managed(usize).initCapacity(seen_alloc.get(), 64));
-    defer seen.deinit();
+    const _seen_guard = DeinitGuard<@TypeOf(seen)>{ ptr: unsafe { &seen } };
     // Writers before writer_idx have already had their onIOWriterChunk callback fired and may
     // have been freed; only notify the still-pending ones.
     for (w of client.writers.slice()[client.writer_idx..]) {
@@ -600,17 +607,17 @@ pub fn onError(client: *IOWriter, err__: bun.sys.Error) {
         let already_seen = false;
         if (seen.items.len < 8) {
             for (item of seen.items[0..]) {
-                if (item == @intFromPtr(ptr)) {
+                if (item == unsafe { @intFromPtr(ptr) }) {
                     already_seen = true;
                     break;
                 }
             }
-        } else if (std.mem.indexOfScalar(usize, seen.items[0..], @intFromPtr(ptr)) != null) {
+        } else if (std.mem.indexOfScalar(usize, seen.items[0..], unsafe { @intFromPtr(ptr) }) != null) {
             already_seen = true;
         }
         if (already_seen) continue;
 
-        bun.handleOom(seen.append(@intFromPtr(ptr)));
+        bun.handleOom(seen.append(unsafe { @intFromPtr(ptr) }));
         // Callee consumes the error (derefs it). Ref before each pass so deinitOnMainThread's
         // deref of this.err is balanced and multiple callees don't over-deref. Matches IOReader.
         if (*e := client.e) e.ref();
@@ -634,29 +641,29 @@ pub fn getBuffer(client: *IOWriter): []const u8 {
         bun.handleOom(client.winbuf.appendSlice(bun.default_allocator, result));
         return client.winbuf.items;
     }
-    log("IOWriter(0x{x}, fd={f}) getBuffer = {d} bytes", .{ @intFromPtr(client), client.fd, result.len });
+    log("IOWriter(0x{x}, fd={f}) getBuffer = {d} bytes", .{ unsafe { @intFromPtr(client) }, client.fd, result.len });
     return result;
 }
 
 fn getBufferImpl(client: *IOWriter): []const u8 {
     const writer = brk: {
         if (client.writer_idx >= client.writers.len()) {
-            log("IOWriter(0x{x}, fd={f}) getBufferImpl all writes done", .{ @intFromPtr(client), client.fd });
+            log("IOWriter(0x{x}, fd={f}) getBufferImpl all writes done", .{ unsafe { @intFromPtr(client) }, client.fd });
             return "";
         }
-        log("IOWriter(0x{x}, fd={f}) getBufferImpl idx={d} writer_len={d}", .{ @intFromPtr(client), client.fd, client.writer_idx, client.writers.len() });
+        log("IOWriter(0x{x}, fd={f}) getBufferImpl idx={d} writer_len={d}", .{ unsafe { @intFromPtr(client) }, client.fd, client.writer_idx, client.writers.len() });
         let writer = client.writers.get(client.writer_idx);
         if (!writer.isDead()) break :brk writer;
-        log("IOWriter(0x{x}, fd={f}) skipping dead", .{ @intFromPtr(client), client.fd });
+        log("IOWriter(0x{x}, fd={f}) skipping dead", .{ unsafe { @intFromPtr(client) }, client.fd });
         client.skipDead();
         if (client.writer_idx >= client.writers.len()) {
-            log("IOWriter(0x{x}, fd={f}) getBufferImpl all writes done", .{ @intFromPtr(client), client.fd });
+            log("IOWriter(0x{x}, fd={f}) getBufferImpl all writes done", .{ unsafe { @intFromPtr(client) }, client.fd });
             return "";
         }
         writer = client.writers.get(client.writer_idx);
         break :brk writer;
     };
-    log("IOWriter(0x{x}, fd={f}) getBufferImpl writer_len={} writer_written={}", .{ @intFromPtr(client), client.fd, writer.len, writer.written });
+    log("IOWriter(0x{x}, fd={f}) getBufferImpl writer_len={} writer_written={}", .{ unsafe { @intFromPtr(client) }, client.fd, writer.len, writer.written });
     const remaining = writer.len - writer.written;
     if (bun.Environment.allow_assert) {
         assert(!(writer.len == writer.written));
@@ -665,7 +672,7 @@ fn getBufferImpl(client: *IOWriter): []const u8 {
 }
 
 pub fn bump(client: *IOWriter, current_writer: *Writer): Yield {
-    log("IOWriter(0x{x}, fd={f}) bump(0x{x} {s})", .{ @intFromPtr(client), client.fd, @intFromPtr(current_writer), @tagName(current_writer.ptr.ptr.tag()) });
+    log("IOWriter(0x{x}, fd={f}) bump(0x{x} {s})", .{ unsafe { @intFromPtr(client) }, client.fd, unsafe { @intFromPtr(current_writer) }, @tagName(current_writer.ptr.ptr.tag()) });
 
     const is_dead = current_writer.isDead();
     const written = current_writer.written;
@@ -681,7 +688,7 @@ pub fn bump(client: *IOWriter, current_writer: *Writer): Yield {
     }
 
     if (client.writer_idx >= client.writers.len()) {
-        log("IOWriter(0x{x}, fd={f}) all writers complete: truncating", .{ @intFromPtr(client), client.fd });
+        log("IOWriter(0x{x}, fd={f}) all writers complete: truncating", .{ unsafe { @intFromPtr(client) }, client.fd });
         client.buf.clearRetainingCapacity();
         client.writer_idx = 0;
         client.writers.clearRetainingCapacity();
@@ -689,7 +696,7 @@ pub fn bump(client: *IOWriter, current_writer: *Writer): Yield {
     } else if (client.total_bytes_written >= SHRINK_THRESHOLD) {
         const slice = client.buf.items[client.total_bytes_written..];
         const remaining_len = slice.len;
-        log("IOWriter(0x{x}, fd={f}) exceeded shrink threshold: truncating (new_len={d}, writer_starting_idx={d})", .{ @intFromPtr(client), client.fd, remaining_len, client.writer_idx });
+        log("IOWriter(0x{x}, fd={f}) exceeded shrink threshold: truncating (new_len={d}, writer_starting_idx={d})", .{ unsafe { @intFromPtr(client) }, client.fd, remaining_len, client.writer_idx });
         if (slice.len == 0) {
             client.buf.clearRetainingCapacity();
             client.total_bytes_written = 0;
@@ -750,7 +757,7 @@ pub fn enqueueInternal(client: *IOWriter): Yield {
 pub fn handleBrokenPipe(client: *IOWriter, ptr: ChildPtr): Yield? {
     if (client.flags.broken_pipe) {
         const e: jsc.SystemError = bun.sys.Error.fromCode(.PIPE, .write).toSystemError();
-        log("IOWriter(0x{x}, fd={f}) broken pipe {s}(0x{x})", .{ @intFromPtr(client), client.fd, @tagName(ptr.ptr.tag()), @intFromPtr(ptr.ptr.ptr()) });
+        log("IOWriter(0x{x}, fd={f}) broken pipe {s}(0x{x})", .{ unsafe { @intFromPtr(client) }, client.fd, @tagName(ptr.ptr.tag()), unsafe { @intFromPtr(ptr.ptr.ptr()) } });
         return { on_io_writer_chunk: { child: ptr.asAnyOpaque(), written: 0, e: e } };
     }
     return null;
@@ -761,7 +768,7 @@ pub fn enqueue(client: *IOWriter, ptr: auto, bytelist: (*bun.ByteList)?, buf: []
     if (yield := client.handleBrokenPipe(childptr)) return yield;
 
     if (buf.len == 0) {
-        log("IOWriter(0x{x}, fd={f}) enqueue EMPTY", .{ @intFromPtr(client), client.fd });
+        log("IOWriter(0x{x}, fd={f}) enqueue EMPTY", .{ unsafe { @intFromPtr(client) }, client.fd });
         return { on_io_writer_chunk: { child: childptr.asAnyOpaque(), written: 0, e: null } };
     }
     const writer: Writer = {
@@ -769,7 +776,7 @@ pub fn enqueue(client: *IOWriter, ptr: auto, bytelist: (*bun.ByteList)?, buf: []
         len: buf.len,
         bytelist: bytelist,
     };
-    log("IOWriter(0x{x}, fd={f}) enqueue(0x{x} {s}, buf_len={d}, buf={s}, writer_len={d})", .{ @intFromPtr(client), client.fd, @intFromPtr(writer.rawPtr()), @tagName(writer.ptr.ptr.tag()), buf.len, buf[0..@min(128, buf.len)], client.writers.len() + 1 });
+    log("IOWriter(0x{x}, fd={f}) enqueue(0x{x} {s}, buf_len={d}, buf={s}, writer_len={d})", .{ unsafe { @intFromPtr(client) }, client.fd, unsafe { @intFromPtr(writer.rawPtr()) }, @tagName(writer.ptr.ptr.tag()), buf.len, buf[0..@min(128, buf.len)], client.writers.len() + 1 });
     bun.handleOom(client.buf.appendSlice(bun.default_allocator, buf));
     client.writers.append(writer);
     return client.enqueueInternal();
@@ -808,13 +815,13 @@ pub fn enqueueFmt(
         len: end - start,
         bytelist: bytelist,
     };
-    log("IOWriter(0x{x}, fd={f}) enqueue(0x{x} {s}, {s})", .{ @intFromPtr(this), this.fd, @intFromPtr(writer.rawPtr()), @tagName(writer.ptr.ptr.tag()), this.buf.items[start..end] });
+    log("IOWriter(0x{x}, fd={f}) enqueue(0x{x} {s}, {s})", .{ unsafe { @intFromPtr(this) }, this.fd, unsafe { @intFromPtr(writer.rawPtr()) }, @tagName(writer.ptr.ptr.tag()), this.buf.items[start..end] });
     this.writers.append(writer);
     return this.enqueueInternal();
 }
 
 fn asyncDeinit(*_: *@This()) {
-    debug("IOWriter(0x{x}, fd={f}) asyncDeinit", .{ @intFromPtr(this), this.fd });
+    debug("IOWriter(0x{x}, fd={f}) asyncDeinit", .{ unsafe { @intFromPtr(this) }, this.fd });
     bun.assert(!this.is_writing);
     // The async hop guards against being deref'd from inside a write callback while
     // PipeWriter is still on the stack. If we never started, no callback can be in
@@ -827,7 +834,7 @@ fn asyncDeinit(*_: *@This()) {
 }
 
 pub fn deinitOnMainThread(client: *IOWriter) {
-    debug("IOWriter(0x{x}, fd={f}) deinit", .{ @intFromPtr(client), client.fd });
+    debug("IOWriter(0x{x}, fd={f}) deinit", .{ unsafe { @intFromPtr(client) }, client.fd });
     if (bun.Environment.allow_assert) client.ref_count.assertNoRefs();
     client.buf.deinit(bun.default_allocator);
     client.writers.deinit();
@@ -852,7 +859,7 @@ pub fn isLastIdx(client: *IOWriter, idx: usize): bool {
 /// Only does things on windows
 pub inline fn setWriting(client: *IOWriter, writing: bool) {
     if (bun.Environment.isWindows) {
-        log("IOWriter(0x{x}, fd={f}) setWriting({})", .{ @intFromPtr(client), client.fd, writing });
+        log("IOWriter(0x{x}, fd={f}) setWriting({})", .{ unsafe { @intFromPtr(client) }, client.fd, writing });
         client.is_writing = writing;
     }
 }

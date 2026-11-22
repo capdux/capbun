@@ -40,7 +40,7 @@ const onUpdateEndFn = FSWatcher.onUpdateEnd;
 /// Process-global manager. Created on first `fs.watch()`, never destroyed (matches
 /// the FSEvents loop and Windows libuv loop lifetimes).
 let default_manager: (*PathWatcherManager)? = null;
-let default_manager_mutex: Mutex = {};
+let default_manager_mutex: bun.Mutex = {};
 
 const log = Output.scoped(.@"fs.watch", .hidden);
 
@@ -66,12 +66,19 @@ pub struct DeinitWithAllocGuard<T> {
     }
 }
 
+pub struct MutexGuard {
+    mutex: *bun.Mutex!,
+    ~init() {
+        _.mutex.unlock();
+    }
+}
+
 pub struct PathWatcherManager {
     /// Guards `watchers` and all per-platform dispatch maps. The reader thread holds
     /// this while dispatching, so `detach()` on the JS thread cannot free a PathWatcher
     /// mid-emit. A single lock here replaces the three interacting mutexes of the old
     /// design.
-    mutex: Mutex = {},
+    mutex: bun.Mutex = {},
 
     /// Dedup map: dedup key → PathWatcher. The key is the resolved path with a one-byte
     /// suffix encoding `recursive` (so `fs.watch(p)` and `fs.watch(p, {recursive:true})`
@@ -89,7 +96,7 @@ pub struct PathWatcherManager {
         // lock a garbage `m.mutex`). `get()` runs once per `fs.watch()` call; the mutex is
         // uncontended after initialization.
         default_manager_mutex.lock();
-        defer default_manager_mutex.unlock();
+        const _manager_lock = MutexGuard{ mutex: unsafe { &default_manager_mutex } };
         if (m := default_manager) return { result: m };
 
         const m = bun.handleOom(bun.default_allocator.create(PathWatcherManager));
@@ -812,7 +819,7 @@ struct Darwin {
         if (default_manager == null) return;
         const manager = default_manager.?;
         manager.mutex.lock();
-        defer manager.mutex.unlock();
+        const _lock = MutexGuard{ mutex: unsafe { &manager.mutex } };
         if (watcher.manager == null) return;
         switch (event) {
             .rename => |path| watcher.emit(.rename, path, is_file),
@@ -827,7 +834,7 @@ struct Darwin {
         if (default_manager == null) return;
         const manager = default_manager.?;
         manager.mutex.lock();
-        defer manager.mutex.unlock();
+        const _lock = MutexGuard{ mutex: unsafe { &manager.mutex } };
         if (watcher.manager == null) return;
         watcher.flush();
     }

@@ -61,17 +61,32 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-const Message = anyopaque;
+const Message = struct { __cp_no_message_sentinel: void = {} };
 fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
-pub fn CpUnpackElemType(comptime __T: type, comptime idx: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") return ti.@"struct".field_types[idx]; return @FieldType(__T, std.fmt.comptimePrint("{d}", .{idx})); }
-pub fn cp_unpack_elem(v: anytype, comptime idx: usize) CpUnpackElemType(@TypeOf(v), idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and idx < m.array.len) { return cp_msg_to_val(m.array[idx]); } } return ""; } else if (comptime __T == Message) { if (v == .array and idx < v.array.len) { return cp_msg_to_val(v.array[idx]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .array)) { return v[idx]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") return @field(v, ti.@"struct".field_names[idx]); return @field(v, std.fmt.comptimePrint("{d}", .{idx})); } }
-pub fn CpUnpackTailType(comptime __T: type, comptime offset_from_end: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return ti.@"struct".field_types[n - offset_from_end]; } return @FieldType(__T, std.fmt.comptimePrint("{d}", .{1})); }
-pub fn cp_unpack_tail(v: anytype, comptime offset_from_end: usize) CpUnpackTailType(@TypeOf(v), offset_from_end) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= offset_from_end) { return cp_msg_to_val(m.array[m.array.len - offset_from_end]); } } return ""; } else if (comptime __T == Message) { if (v == .array and v.array.len >= offset_from_end) { return cp_msg_to_val(v.array[v.array.len - offset_from_end]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[v.*.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .array)) { return v[v.len - offset_from_end]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return @field(v, ti.@"struct".field_names[n - offset_from_end]); } return @field(v, std.fmt.comptimePrint("{d}", .{0})); } }
-pub fn CpUnpackSliceType(comptime __T: type, comptime start_idx: usize) type { if (__T == ?Message or __T == Message) return []const Message; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return __T; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return []const @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const types = ti.@"struct".field_types; if (types.len == 0) return []const i32; const Elem = if (start_idx < types.len) types[start_idx] else types[0]; return []const CpValType(Elem); } return []const i32; }
-pub fn cp_unpack_slice(v: anytype, comptime start_idx: usize, comptime suffix_len: usize) CpUnpackSliceType(@TypeOf(v), start_idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= start_idx + suffix_len) { return m.array[start_idx .. m.array.len - suffix_len]; } } return &[_]Message{}; } else if (comptime __T == Message) { if (v == .array and v.array.len >= start_idx + suffix_len) { return v.array[start_idx .. v.array.len - suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[start_idx .. v.*.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .array)) { return v[start_idx .. v.len - suffix_len]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const names = ti.@"struct".field_names; const types = ti.@"struct".field_types; const end = names.len - suffix_len; const count = if (end > start_idx) end - start_idx else 0; const Elem = if (start_idx < types.len) CpValType(types[start_idx]) else i32; const buf = std.heap.page_allocator.alloc(Elem, count) catch unreachable; inline for (start_idx..end, 0..) |f_idx, out_idx| { buf[out_idx] = cp_val(@field(v, names[f_idx])); } return buf; } return &[_]i32{}; } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.deinit();
+                }
+        }
+    };
+}
+
 pub const IOWriterChildPtr = struct {
     ptr: ChildPtrRaw,
 
@@ -79,7 +94,7 @@ pub fn init(p: anytype) IOWriterChildPtr {
             return .{ .ptr = ChildPtrRaw.init(p) };
     }
 
-pub fn asAnyOpaque(self: IOWriterChildPtr) *anyopaque {
+pub fn asAnyOpaque(self: *const IOWriterChildPtr) *anyopaque {
             return self.ptr.ptr();
     }
 
@@ -111,7 +126,7 @@ pub fn wroteEverything(self: Writer) bool {
             return (self.written >= self.len);
     }
 
-pub fn rawPtr(self: Writer) ?*anyopaque {
+pub fn rawPtr(self: *const Writer) ?*anyopaque {
             return self.ptr.ptr.ptr();
     }
 
@@ -143,7 +158,10 @@ pub fn enqueue(self: *AsyncDeinitWriter) void {
     }
 
 pub fn writer(self: *AsyncDeinitWriter) *IOWriter {
-            return @alignCast(@fieldParentPtr("async_deinit", self));
+            return (blk: {
+            break :blk @alignCast(@fieldParentPtr("async_deinit", self));
+
+});
     }
 
 pub fn runFromMainThread(self: *AsyncDeinitWriter) void {
@@ -194,19 +212,28 @@ pub fn init(fd: bun.FD, flags: Flags, evtloop: jsc.EventLoopHandle) *IOWriter {
         _ = &writer;
         writer.writer.parent = writer;
         writer.flags = flags;
-        _ = debug("IOWriter(0x{x}, fd={f}) init flags={any}", .{ @intFromPtr(writer), fd, flags });
+        _ = debug("IOWriter(0x{x}, fd={f}) init flags={any}", .{ (blk: {
+        break :blk @intFromPtr(writer);
+
+}), fd, flags });
         return writer;
 }
 
 pub fn __start(client: *IOWriter) Maybe(void) {
         _ = bun.assert(client.fd.isOwned());
-        _ = debug("IOWriter(0x{x}, fd={f}) __start()", .{ @intFromPtr(client), client.fd });
+        _ = debug("IOWriter(0x{x}, fd={f}) __start()", .{ (blk: {
+        break :blk @intFromPtr(client);
+
+}), client.fd });
         if (client.writer.start((&client.fd), client.flags.pollable).asErr()) |e_| {
             _ = &e_;
             const e: bun.sys.Error = e_;
             if (bun.Environment.isPosix) {
                 if ((e.getErrno() == .INVAL)) {
-                    _ = debug("IOWriter(0x{x}, fd={f}) got EINVAL", .{ @intFromPtr(client), client.fd });
+                    _ = debug("IOWriter(0x{x}, fd={f}) got EINVAL", .{ (blk: {
+                    break :blk @intFromPtr(client);
+
+}), client.fd });
                     client.flags.pollable = false;
                     client.flags.nonblocking = false;
                     client.flags.is_socket = false;
@@ -259,7 +286,10 @@ pub fn __start(client: *IOWriter) Maybe(void) {
                 _ = &src;
                 src_name = @tagName(src);
             }
-            _ = log("IOWriter(0x{x}, {f}) starting with source={s}", .{ @intFromPtr(client), client.fd, src_name });
+            _ = log("IOWriter(0x{x}, {f}) starting with source={s}", .{ (blk: {
+            break :blk @intFromPtr(client);
+
+}), client.fd, src_name });
         }
         return .success;
 }
@@ -281,7 +311,10 @@ pub fn write(client: *IOWriter) WriteStatus {
             _ = bun.assert(client.flags.pollable);
         }
         if ((!client.started)) {
-            _ = log("IOWriter(0x{x}, fd={f}) starting", .{ @intFromPtr(client), client.fd });
+            _ = log("IOWriter(0x{x}, fd={f}) starting", .{ (blk: {
+            break :blk @intFromPtr(client);
+
+}), client.fd });
             client.started = true;
             if (client.__start().asErr()) |e| {
                 _ = &e;
@@ -298,7 +331,10 @@ pub fn write(client: *IOWriter) WriteStatus {
             return .suspended;
         }
         if (bun.Environment.isWindows) {
-            _ = log("IOWriter(0x{x}, fd={f}) write() is_writing={}", .{ @intFromPtr(client), client.fd, client.is_writing });
+            _ = log("IOWriter(0x{x}, fd={f}) write() is_writing={}", .{ (blk: {
+            break :blk @intFromPtr(client);
+
+}), client.fd, client.is_writing });
             if (client.is_writing) {
                 return .suspended;
             }
@@ -411,7 +447,10 @@ pub fn onWritePollable(client: *IOWriter, amount: usize, status: bun.io.WriteSta
             _ = bun.assert(client.flags.pollable);
         }
         _ = client.setWriting(false);
-        _ = debug("IOWriter(0x{x}, fd={f}) onWrite({d}, {})", .{ @intFromPtr(client), client.fd, amount, status });
+        _ = debug("IOWriter(0x{x}, fd={f}) onWrite({d}, {})", .{ (blk: {
+        break :blk @intFromPtr(client);
+
+}), client.fd, amount, status });
         if ((client.writer_idx >= client.writers.len())) {
             return;
         }
@@ -433,7 +472,10 @@ pub fn onWritePollable(client: *IOWriter, amount: usize, status: bun.io.WriteSta
                 if ((!not_fully_written)) {
                     return;
                 }
-                _ = bun.Output.debugWarn("IOWriter(0x{x}, fd={f}) received done without fully writing data", .{ @intFromPtr(client), client.fd });
+                _ = bun.Output.debugWarn("IOWriter(0x{x}, fd={f}) received done without fully writing data", .{ (blk: {
+                break :blk @intFromPtr(client);
+
+}), client.fd });
                 client.flags.broken_pipe = true;
                 _ = client.brokenPipeForWriters();
                 return;
@@ -445,9 +487,15 @@ pub fn onWritePollable(client: *IOWriter, amount: usize, status: bun.io.WriteSta
             }
         }
         const wrote_everything: bool = client.wroteEverything();
-        _ = log("IOWriter(0x{x}, fd={f}) wrote_everything={}, idx={d} writers={d} next_len={d}", .{ @intFromPtr(client), client.fd, wrote_everything, client.writer_idx, client.writers.len(), (if ((client.writers.len() >= 1)) client.writers.get(0).len else 0) });
+        _ = log("IOWriter(0x{x}, fd={f}) wrote_everything={}, idx={d} writers={d} next_len={d}", .{ (blk: {
+        break :blk @intFromPtr(client);
+
+}), client.fd, wrote_everything, client.writer_idx, client.writers.len(), (if ((client.writers.len() >= 1)) client.writers.get(0).len else 0) });
         if (((!wrote_everything) and (client.writer_idx < client.writers.len()))) {
-            _ = debug("IOWriter(0x{x}, fd={f}) poll again", .{ @intFromPtr(client), client.fd });
+            _ = debug("IOWriter(0x{x}, fd={f}) poll again", .{ (blk: {
+            break :blk @intFromPtr(client);
+
+}), client.fd });
             if (comptime bun.Environment.isWindows) {
                 _ = client.setWriting(true);
                 _ = client.writer.write();
@@ -469,7 +517,10 @@ pub fn brokenPipeForWriters(client: *IOWriter) void {
                 offset = (offset + (w.*).len);
                 continue;
             }
-            _ = log("IOWriter(0x{x}, fd={f}) brokenPipeForWriters Writer(len={d}) {s}(0x{x})", .{ @intFromPtr(client), client.fd, (w.*).len, @tagName((w.*).ptr.ptr.tag()), (w.*).ptr.ptr.repr._ptr });
+            _ = log("IOWriter(0x{x}, fd={f}) brokenPipeForWriters Writer(len={d}) {s}(0x{x})", .{ (blk: {
+            break :blk @intFromPtr(client);
+
+}), client.fd, (w.*).len, @tagName((w.*).ptr.ptr.tag()), (w.*).ptr.ptr.repr._ptr });
             const e: jsc.SystemError = bun.sys.Error.fromCode(.PIPE, .write).toSystemError();
             var chunk_y = (w.*).ptr.onIOWriterChunk(0, e);
             _ = &chunk_y;
@@ -498,14 +549,21 @@ pub fn onError(client: *IOWriter, err__: bun.sys.Error) void {
         if ((err__.getErrno() == .PIPE)) {
             client.flags.broken_pipe = true;
         }
-        _ = log("IOWriter(0x{x}, fd={f}) onError errno={s} errmsg={f} errsyscall={f}", .{ @intFromPtr(client), client.fd, @tagName(ee.getErrno()), ee.message, ee.syscall });
+        _ = log("IOWriter(0x{x}, fd={f}) onError errno={s} errmsg={f} errsyscall={f}", .{ (blk: {
+        break :blk @intFromPtr(client);
+
+}), client.fd, @tagName(ee.getErrno()), ee.message, ee.syscall });
         var seen_alloc = std.heap.stackFallback((@sizeOf(usize) * 64), bun.default_allocator);
         _ = &seen_alloc;
         var seen = bun.handleOom(std.array_list.Managed(usize).initCapacity(seen_alloc.get(), 64));
         _ = &seen;
-        defer {
-        _ = seen.deinit();
-        }
+        var _seen_guard = DeinitGuard(@TypeOf(seen)){ .ptr = (blk: {
+        break :blk (&seen);
+
+}) };
+        _ = &_seen_guard;
+        var ___seen_guard_moved = false; _ = &___seen_guard_moved;
+        defer if (!___seen_guard_moved) { ___seen_guard_moved = true; const __T = @TypeOf(_seen_guard); if (@typeInfo(__T) == .optional) { if (_seen_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _seen_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _seen_guard; _drop_val.__cp_deinit(); } };
         for (cp_iter_slice(client.writers.slice()[client.writer_idx..])) |w| {
             _ = &w;
             if (w.isDead()) {
@@ -517,20 +575,29 @@ pub fn onError(client: *IOWriter, err__: bun.sys.Error) void {
             if ((seen.items.len < 8)) {
                 for (cp_iter_slice(seen.items[0..])) |item| {
                     _ = &item;
-                    if ((item == @intFromPtr(ptr))) {
+                    if ((item == (blk: {
+                    break :blk @intFromPtr(ptr);
+
+}))) {
                         already_seen = true;
                         break;
                     }
                 }
             } else {
-                if ((std.mem.indexOfScalar(usize, seen.items[0..], @intFromPtr(ptr)) != null)) {
+                if ((std.mem.indexOfScalar(usize, seen.items[0..], (blk: {
+                break :blk @intFromPtr(ptr);
+
+})) != null)) {
                     already_seen = true;
                 }
             }
             if (already_seen) {
                 continue;
             }
-            _ = bun.handleOom(seen.append(@intFromPtr(ptr)));
+            _ = bun.handleOom(seen.append((blk: {
+            break :blk @intFromPtr(ptr);
+
+})));
             if (client.e) |*e| {
                 _ = &e;
                 _ = (e.*).ref();
@@ -552,32 +619,50 @@ pub fn getBuffer(client: *IOWriter) []const u8 {
             _ = bun.handleOom(client.winbuf.appendSlice(bun.default_allocator, result));
             return client.winbuf.items;
         }
-        _ = log("IOWriter(0x{x}, fd={f}) getBuffer = {d} bytes", .{ @intFromPtr(client), client.fd, result.len });
+        _ = log("IOWriter(0x{x}, fd={f}) getBuffer = {d} bytes", .{ (blk: {
+        break :blk @intFromPtr(client);
+
+}), client.fd, result.len });
         return result;
 }
 
 pub fn getBufferImpl(client: *IOWriter) []const u8 {
         const writer = brk: {
         if ((client.writer_idx >= client.writers.len())) {
-            _ = log("IOWriter(0x{x}, fd={f}) getBufferImpl all writes done", .{ @intFromPtr(client), client.fd });
+            _ = log("IOWriter(0x{x}, fd={f}) getBufferImpl all writes done", .{ (blk: {
+            break :blk @intFromPtr(client);
+
+}), client.fd });
             return "";
         }
-        _ = log("IOWriter(0x{x}, fd={f}) getBufferImpl idx={d} writer_len={d}", .{ @intFromPtr(client), client.fd, client.writer_idx, client.writers.len() });
+        _ = log("IOWriter(0x{x}, fd={f}) getBufferImpl idx={d} writer_len={d}", .{ (blk: {
+        break :blk @intFromPtr(client);
+
+}), client.fd, client.writer_idx, client.writers.len() });
         var writer = client.writers.get(client.writer_idx);
         _ = &writer;
         if ((!writer.isDead())) {
             break :brk writer;
         }
-        _ = log("IOWriter(0x{x}, fd={f}) skipping dead", .{ @intFromPtr(client), client.fd });
+        _ = log("IOWriter(0x{x}, fd={f}) skipping dead", .{ (blk: {
+        break :blk @intFromPtr(client);
+
+}), client.fd });
         _ = client.skipDead();
         if ((client.writer_idx >= client.writers.len())) {
-            _ = log("IOWriter(0x{x}, fd={f}) getBufferImpl all writes done", .{ @intFromPtr(client), client.fd });
+            _ = log("IOWriter(0x{x}, fd={f}) getBufferImpl all writes done", .{ (blk: {
+            break :blk @intFromPtr(client);
+
+}), client.fd });
             return "";
         }
         writer = client.writers.get(client.writer_idx);
         break :brk writer;
 };
-        _ = log("IOWriter(0x{x}, fd={f}) getBufferImpl writer_len={} writer_written={}", .{ @intFromPtr(client), client.fd, writer.len, writer.written });
+        _ = log("IOWriter(0x{x}, fd={f}) getBufferImpl writer_len={} writer_written={}", .{ (blk: {
+        break :blk @intFromPtr(client);
+
+}), client.fd, writer.len, writer.written });
         const remaining = (writer.len - writer.written);
         if (bun.Environment.allow_assert) {
             _ = assert((!(writer.len == writer.written)));
@@ -586,7 +671,13 @@ pub fn getBufferImpl(client: *IOWriter) []const u8 {
 }
 
 pub fn bump(client: *IOWriter, current_writer: *Writer) Yield {
-        _ = log("IOWriter(0x{x}, fd={f}) bump(0x{x} {s})", .{ @intFromPtr(client), client.fd, @intFromPtr(current_writer), @tagName(current_writer.ptr.ptr.tag()) });
+        _ = log("IOWriter(0x{x}, fd={f}) bump(0x{x} {s})", .{ (blk: {
+        break :blk @intFromPtr(client);
+
+}), client.fd, (blk: {
+        break :blk @intFromPtr(current_writer);
+
+}), @tagName(current_writer.ptr.ptr.tag()) });
         const is_dead = current_writer.isDead();
         const written = current_writer.written;
         const child_ptr = current_writer.ptr;
@@ -601,7 +692,10 @@ pub fn bump(client: *IOWriter, current_writer: *Writer) Yield {
             client.writer_idx = (client.writer_idx + 1);
         }
         if ((client.writer_idx >= client.writers.len())) {
-            _ = log("IOWriter(0x{x}, fd={f}) all writers complete: truncating", .{ @intFromPtr(client), client.fd });
+            _ = log("IOWriter(0x{x}, fd={f}) all writers complete: truncating", .{ (blk: {
+            break :blk @intFromPtr(client);
+
+}), client.fd });
             _ = client.buf.clearRetainingCapacity();
             client.writer_idx = 0;
             _ = client.writers.clearRetainingCapacity();
@@ -610,7 +704,10 @@ pub fn bump(client: *IOWriter, current_writer: *Writer) Yield {
             if ((client.total_bytes_written >= SHRINK_THRESHOLD)) {
                 const slice = client.buf.items[client.total_bytes_written..];
                 const remaining_len = slice.len;
-                _ = log("IOWriter(0x{x}, fd={f}) exceeded shrink threshold: truncating (new_len={d}, writer_starting_idx={d})", .{ @intFromPtr(client), client.fd, remaining_len, client.writer_idx });
+                _ = log("IOWriter(0x{x}, fd={f}) exceeded shrink threshold: truncating (new_len={d}, writer_starting_idx={d})", .{ (blk: {
+                break :blk @intFromPtr(client);
+
+}), client.fd, remaining_len, client.writer_idx });
                 if ((slice.len == 0)) {
                     _ = client.buf.clearRetainingCapacity();
                     client.total_bytes_written = 0;
@@ -666,7 +763,13 @@ return .failed;
 pub fn handleBrokenPipe(client: *IOWriter, ptr: ChildPtr) ?Yield {
         if (client.flags.broken_pipe) {
             const e: jsc.SystemError = bun.sys.Error.fromCode(.PIPE, .write).toSystemError();
-            _ = log("IOWriter(0x{x}, fd={f}) broken pipe {s}(0x{x})", .{ @intFromPtr(client), client.fd, @tagName(ptr.ptr.tag()), @intFromPtr(ptr.ptr.ptr()) });
+            _ = log("IOWriter(0x{x}, fd={f}) broken pipe {s}(0x{x})", .{ (blk: {
+            break :blk @intFromPtr(client);
+
+}), client.fd, @tagName(ptr.ptr.tag()), (blk: {
+            break :blk @intFromPtr(ptr.ptr.ptr());
+
+}) });
             return .{ .on_io_writer_chunk = .{ .child = ptr.asAnyOpaque(), .written = 0, .e = e } };
         }
         return null;
@@ -679,11 +782,20 @@ pub fn enqueue(client: *IOWriter, ptr: anytype, bytelist: ?*bun.ByteList, buf: [
             return yield;
         }
         if ((buf.len == 0)) {
-            _ = log("IOWriter(0x{x}, fd={f}) enqueue EMPTY", .{ @intFromPtr(client), client.fd });
+            _ = log("IOWriter(0x{x}, fd={f}) enqueue EMPTY", .{ (blk: {
+            break :blk @intFromPtr(client);
+
+}), client.fd });
             return .{ .on_io_writer_chunk = .{ .child = childptr.asAnyOpaque(), .written = 0, .e = null } };
         }
         const writer: Writer = .{ .ptr = childptr, .len = buf.len, .bytelist = bytelist };
-        _ = log("IOWriter(0x{x}, fd={f}) enqueue(0x{x} {s}, buf_len={d}, buf={s}, writer_len={d})", .{ @intFromPtr(client), client.fd, @intFromPtr(writer.rawPtr()), @tagName(writer.ptr.ptr.tag()), buf.len, buf[0..@min(128, buf.len)], (client.writers.len() + 1) });
+        _ = log("IOWriter(0x{x}, fd={f}) enqueue(0x{x} {s}, buf_len={d}, buf={s}, writer_len={d})", .{ (blk: {
+        break :blk @intFromPtr(client);
+
+}), client.fd, (blk: {
+        break :blk @intFromPtr(writer.rawPtr());
+
+}), @tagName(writer.ptr.ptr.tag()), buf.len, buf[0..@min(128, buf.len)], (client.writers.len() + 1) });
         _ = bun.handleOom(client.buf.appendSlice(bun.default_allocator, buf));
         _ = client.writers.append(writer);
         return client.enqueueInternal();
@@ -707,13 +819,22 @@ pub fn enqueueFmt(self: *IOWriter, ptr: anytype, bytelist: ?*bun.ByteList, compt
         }
         const end = self.buf.items.len;
         const writer: Writer = .{ .ptr = childptr, .len = (end - start), .bytelist = bytelist };
-        _ = log("IOWriter(0x{x}, fd={f}) enqueue(0x{x} {s}, {s})", .{ @intFromPtr(self), self.fd, @intFromPtr(writer.rawPtr()), @tagName(writer.ptr.ptr.tag()), self.buf.items[start..end] });
+        _ = log("IOWriter(0x{x}, fd={f}) enqueue(0x{x} {s}, {s})", .{ (blk: {
+        break :blk @intFromPtr(self);
+
+}), self.fd, (blk: {
+        break :blk @intFromPtr(writer.rawPtr());
+
+}), @tagName(writer.ptr.ptr.tag()), self.buf.items[start..end] });
         _ = self.writers.append(writer);
         return self.enqueueInternal();
 }
 
 pub fn asyncDeinit(self: *IOWriter) void {
-        _ = debug("IOWriter(0x{x}, fd={f}) asyncDeinit", .{ @intFromPtr(self), self.fd });
+        _ = debug("IOWriter(0x{x}, fd={f}) asyncDeinit", .{ (blk: {
+        break :blk @intFromPtr(self);
+
+}), self.fd });
         _ = bun.assert((!self.is_writing));
         if ((!self.started)) {
             _ = self.deinitOnMainThread();
@@ -723,7 +844,10 @@ pub fn asyncDeinit(self: *IOWriter) void {
 }
 
 pub fn deinitOnMainThread(client: *IOWriter) void {
-        _ = debug("IOWriter(0x{x}, fd={f}) deinit", .{ @intFromPtr(client), client.fd });
+        _ = debug("IOWriter(0x{x}, fd={f}) deinit", .{ (blk: {
+        break :blk @intFromPtr(client);
+
+}), client.fd });
         if (bun.Environment.allow_assert) {
             _ = client.ref_count.assertNoRefs();
         }
@@ -754,7 +878,10 @@ pub fn isLastIdx(client: *IOWriter, idx: usize) bool {
 
 pub inline fn setWriting(client: *IOWriter, writing: bool) void {
         if (bun.Environment.isWindows) {
-            _ = log("IOWriter(0x{x}, fd={f}) setWriting({})", .{ @intFromPtr(client), client.fd, writing });
+            _ = log("IOWriter(0x{x}, fd={f}) setWriting({})", .{ (blk: {
+            break :blk @intFromPtr(client);
+
+}), client.fd, writing });
             client.is_writing = writing;
         }
 }

@@ -1,5 +1,15 @@
 let empty_u8: [0]u8 = undefined;
 
+struct DerefGuard<T: type> {
+    ptr: *T,
+    ~init() { _.ptr.deref(); }
+}
+
+struct DetachGuard<T: type> {
+    ptr: *T,
+    ~init() { _.ptr.detach(); }
+}
+
 pub const State = union(enum) {
     pending: void,
     done: []u8,
@@ -67,7 +77,7 @@ pub const State = union(enum) {
         }
 
         _.ref();
-        defer _.deref();
+        const deref_guard = DerefGuard<PipeReader>{ ptr: _ };
 
         switch (_.reader.start(_.stdio_result.?, true)) {
             .err => |e| {
@@ -141,7 +151,7 @@ pub const State = union(enum) {
     }
 
     pub fn toReadableStream(*_, globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
-        defer _.detach();
+        const detach_guard = DetachGuard<PipeReader>{ ptr: _ };
 
         switch (_.state) {
             .pending => {

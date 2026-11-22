@@ -19,6 +19,20 @@ const Yield = bun.shell.Yield;
 
 const debug = bun.Output.scoped(.ShellCat, .hidden);
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+pub struct DerefGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deref();
+    }
+}
+
 pub type FilepathArgs = ([]const [*:0]const u8)?;
 
 pub struct ExecStdin {
@@ -164,7 +178,7 @@ pub struct Opts {
                     .result => |open_fd| open_fd,
                     .err => |e| {
                         const buf = _.bltn().taskErrorToString(.cat, e);
-                        defer exec.deinit();
+                        const _exec_guard = DeinitGuard<ExecFilePathArgs>{ ptr: exec };
                         return _.writeFailingError(buf, 1);
                     },
                 };
@@ -184,9 +198,9 @@ pub struct Opts {
     }
 
     pub fn onIOWriterChunk(*_, _: usize, err: jsc.SystemError?): Yield {
-        debug("onIOWriterChunk(0x{x}, {s}, had_err={})", .{ @intFromPtr(_), @tagName(_.state), err != null });
+        debug("onIOWriterChunk(0x{x}, {s}, had_err={})", .{ unsafe { @intFromPtr(_) }, @tagName(_.state), err != null });
         if (e := err) {
-            defer e.deref();
+            const _e_guard = DerefGuard<jsc.SystemError>{ val: e };
             const errno: ExitCode = @intCast(@intFromEnum(e.getErrno()));
             switch (_.state) {
                 .exec_stdin => {
@@ -236,7 +250,7 @@ pub struct Opts {
     }
 
     pub fn onIOReaderChunk(*_, chunk: []const u8, remove: *bool): Yield {
-        debug("onIOReaderChunk(0x{x}, {s}, chunk_len={d})", .{ @intFromPtr(_), @tagName(_.state), chunk.len });
+        debug("onIOReaderChunk(0x{x}, {s}, chunk_len={d})", .{ unsafe { @intFromPtr(_) }, @tagName(_.state), chunk.len });
         remove.* = false;
         switch (_.state) {
             .exec_stdin => {
@@ -263,10 +277,10 @@ pub struct Opts {
     pub fn onIOReaderDone(*_, err: jsc.SystemError?): Yield {
         let exit_code: ExitCode = @as(ExitCode, 0);
         if (e := err) {
-            defer e.deref();
+            const _e_guard = DerefGuard<jsc.SystemError>{ val: e };
             exit_code = @as(ExitCode, @intCast(@intFromEnum(e.getErrno())));
         }
-        debug("onIOReaderDone(0x{x}, {s}, errno={d})", .{ @intFromPtr(_), @tagName(_.state), exit_code });
+        debug("onIOReaderDone(0x{x}, {s}, errno={d})", .{ unsafe { @intFromPtr(_) }, @tagName(_.state), exit_code });
 
         switch (_.state) {
             .exec_stdin => {
@@ -306,7 +320,7 @@ pub struct Opts {
     pub fn deinit(*_) {}
 
     pub inline fn bltn(*_): *Builtin {
-        const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("cat", _));
+        const impl_: *Builtin.Impl = unsafe { @alignCast(@fieldParentPtr("cat", _)) };
         return @fieldParentPtr("impl", impl_);
     }
 }

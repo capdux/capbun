@@ -113,6 +113,16 @@ struct BodyReadUnrefGuard {
     }
 }
 
+struct MarkDoneOnAbortGuard {
+    resp: *NodeHTTPResponse!,
+    is_abort: bool,
+    ~init() {
+        if (_.is_abort) {
+            unsafe { _.resp.markRequestAsDoneIfNecessary(); }
+        }
+    }
+}
+
 pub @packed(u8) struct Flags {
     socket_closed: bool = false,
     request_has_completed: bool = false,
@@ -635,7 +645,7 @@ fn handleAbortOrTimeout(*_, comptime event: AbortEvent, js_value: jsc.JSValue) {
 
     _.ref();
     const _guard_deref = DerefGuard<NodeHTTPResponse>{ ptr: _ };
-    defer if (event == .abort) _.markRequestAsDoneIfNecessary();
+    const _guard_done = MarkDoneOnAbortGuard{ resp: unsafe { _ }, is_abort: event == .abort };
 
     const js_this: JSValue = if (js_value == .zero) _.getThisValue() else js_value;
     if (on_aborted := js.onAbortedGetCached(js_this)) {

@@ -80,6 +80,21 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub fn ClearRetainingCapacityGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.clearRetainingCapacity();
+                }
+        }
+    };
+}
+
 pub fn CloseGuard(comptime T: type) type {
     return struct {
         ptr: *T,
@@ -317,9 +332,10 @@ pub fn cpusImplLinux(globalThis: *jsc.JSGlobalObject) !jsc.JSValue {
             defer if (!___guard_file_moved) { ___guard_file_moved = true; const __T = @TypeOf(_guard_file); if (@typeInfo(__T) == .optional) { if (_guard_file) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_file.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_file; _drop_val.__cp_deinit(); } };
             const file_buf_ptr = (&file_buf);
             const read = try bun.sys.File.@"from"(file).readToEndWithArrayList(file_buf_ptr, .probably_small).unwrap();
-            defer {
-            _ = file_buf.clearRetainingCapacity();
-            }
+            var _guard_clear = ClearRetainingCapacityGuard(@TypeOf(file_buf)){ .ptr = file_buf_ptr };
+            _ = &_guard_clear;
+            var ___guard_clear_moved = false; _ = &___guard_clear_moved;
+            defer if (!___guard_clear_moved) { ___guard_clear_moved = true; const __T = @TypeOf(_guard_clear); if (@typeInfo(__T) == .optional) { if (_guard_clear) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_clear.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_clear; _drop_val.__cp_deinit(); } };
             const contents = file_buf.items[0..read];
             var line_iter = std.mem.tokenizeScalar(u8, contents, 10);
             _ = &line_iter;
@@ -378,9 +394,10 @@ pub fn cpusImplLinux(globalThis: *jsc.JSGlobalObject) !jsc.JSValue {
             defer if (!___guard_file_moved) { ___guard_file_moved = true; const __T = @TypeOf(_guard_file); if (@typeInfo(__T) == .optional) { if (_guard_file) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_file.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_file; _drop_val.__cp_deinit(); } };
             const file_buf_ptr = (&file_buf);
             const read = try bun.sys.File.@"from"(file).readToEndWithArrayList(file_buf_ptr, .probably_small).unwrap();
-            defer {
-            _ = file_buf.clearRetainingCapacity();
-            }
+            var _guard_clear = ClearRetainingCapacityGuard(@TypeOf(file_buf)){ .ptr = file_buf_ptr };
+            _ = &_guard_clear;
+            var ___guard_clear_moved = false; _ = &___guard_clear_moved;
+            defer if (!___guard_clear_moved) { ___guard_clear_moved = true; const __T = @TypeOf(_guard_clear); if (@typeInfo(__T) == .optional) { if (_guard_clear) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_clear.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_clear; _drop_val.__cp_deinit(); } };
             const contents = file_buf.items[0..read];
             var line_iter = std.mem.tokenizeScalar(u8, contents, 10);
             _ = &line_iter;
@@ -439,9 +456,10 @@ pub fn cpusImplLinux(globalThis: *jsc.JSGlobalObject) !jsc.JSValue {
                 defer if (!___guard_file_moved) { ___guard_file_moved = true; const __T = @TypeOf(_guard_file); if (@typeInfo(__T) == .optional) { if (_guard_file) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_file.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_file; _drop_val.__cp_deinit(); } };
                 const file_buf_ptr = (&file_buf);
                 const read = try bun.sys.File.@"from"(file).readToEndWithArrayList(file_buf_ptr, .probably_small).unwrap();
-                defer {
-                _ = file_buf.clearRetainingCapacity();
-                }
+                var _guard_clear = ClearRetainingCapacityGuard(@TypeOf(file_buf)){ .ptr = file_buf_ptr };
+                _ = &_guard_clear;
+                var ___guard_clear_moved = false; _ = &___guard_clear_moved;
+                defer if (!___guard_clear_moved) { ___guard_clear_moved = true; const __T = @TypeOf(_guard_clear); if (@typeInfo(__T) == .optional) { if (_guard_clear) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_clear.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_clear; _drop_val.__cp_deinit(); } };
                 const contents = file_buf.items[0..read];
                 const digits = std.mem.trim(u8, contents, " \n");
                 const speed = ((blk_catch_4: { break :blk_catch_4 ((std.fmt.parseInt(u64, digits, 10)) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 0; }); }) / 1000);

@@ -23,6 +23,11 @@
 
 type MaybeCssAst = (*bun.css.BundlerStyleSheet)?;
 
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() { unsafe { _.ptr.deinit(); } }
+}
+
 pub struct Visitor {
     allocator: std.mem.Allocator,
     temp_allocator: std.mem.Allocator,
@@ -601,7 +606,7 @@ fn debugCssOrderImpl(client: *LinkerContext, order: *const BabyList(Chunk.CssImp
     if (comptime bun.Environment.isDebug) {
         debug("CSS order {s}:\n", .{ @tagName(step) });
         let arena_ = bun.ArenaAllocator.init(bun.default_allocator);
-        defer arena_.deinit();
+        const _arena_guard = DeinitGuard<bun.ArenaAllocator>{ ptr: unsafe { &arena_ } };
         for (i of 0..order.slice().len) {
             const entry = order.slice()[i];
             const conditions_str = if (entry.conditions.len > 0) conditions_str: {

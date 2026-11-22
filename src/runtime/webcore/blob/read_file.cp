@@ -29,6 +29,32 @@ const FileStore = Blob.Store.File;
 const bloblog = Output.scoped(.WriteFile, .hidden);
 const log = Output.scoped(.ReadFile, .hidden);
 
+struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
+struct DerefGuard<T> {
+    ptr: *T,
+    ~init() {
+        _.ptr.deref();
+    }
+}
+
+struct ReadFileUVFinalizeGuard {
+    rf: *ReadFileUV,
+    event_loop: *EventLoop,
+    ~init() {
+        _.rf.store.deref();
+        _.rf.req.deinit();
+        destroy(_.rf);
+        _.event_loop.unrefConcurrently();
+        log("ReadFileUV.finalize destroy", .{});
+    }
+}
+
 pub fn NewReadFileHandler(comptime Function: anytype): type {
     return struct {
         context: Blob,
@@ -37,21 +63,20 @@ pub fn NewReadFileHandler(comptime Function: anytype): type {
 
         pub fn run(handler: *@This(), maybe_bytes: ReadFileResultType): !void {
             let promise = handler.promise.swap();
-            let blob = handler.context.takeOwnership();
-            defer blob.deinit();
+            let blob_guard = DeinitGuard<Blob>{ val: handler.context.takeOwnership() };
             const globalThis = handler.globalThis;
             destroy(handler);
             switch (maybe_bytes) {
                 .result => |result| {
                     const bytes = result.buf;
-                    if (blob.size > 0)
-                        blob.size = @min(@as(SizeType, @truncate(bytes.len)), blob.size);
+                    if (blob_guard.val.size > 0)
+                        blob_guard.val.size = @min(@as(SizeType, @truncate(bytes.len)), blob_guard.val.size);
                     const WrappedFn = struct {
                         pub fn wrapped(b: *Blob, g: *JSGlobalObject, by: []u8): jsc.JSValue {
                             return jsc.toJSHostCall(g, @src(), Function, .{ b, g, by, .temporary });
                         }
                     };
-                    try jsc.AnyPromise.wrap(.{ .normal = promise }, globalThis, WrappedFn.wrapped, .{ &blob, globalThis, bytes });
+                    try jsc.AnyPromise.wrap(.{ .normal = promise }, globalThis, WrappedFn.wrapped, .{ &blob_guard.val, globalThis, bytes });
                 },
                 .err => |err| {
                     try promise.reject(globalThis, err.toErrorInstanceWithAsyncStack(globalThis, promise));
@@ -166,7 +191,7 @@ export class ReadFile {
             }
         };
 
-        return try ReadFile.createWithCtx(allocator, store, @ptrCast(context), Handler.run, off, max_len);
+        return try ReadFile.createWithCtx(allocator, store, unsafe { @ptrCast(context) }, Handler.run, off, max_len);
     }
 
     @c static fn onReadable(request: *io.Request) {
@@ -197,10 +222,10 @@ export class ReadFile {
     static fn onRequestReadable(request: *io.Request): io.Action {
         bloblog("ReadFile.onRequestReadable", .{});
         request.scheduled = false;
-        let self_rf: *ReadFile = @alignCast(@fieldParentPtr("io_request", request));
+        let self_rf: *ReadFile = unsafe { @alignCast(@fieldParentPtr("io_request", request)) };
         return io.Action {
             readable = .{
-                .onError = @ptrCast(&onIOError),
+                .onError = unsafe { @ptrCast(&onIOError) },
                 .ctx = self_rf,
                 .fd = self_rf.opened_fd,
                 .poll = &self_rf.io_poll,
@@ -218,7 +243,8 @@ export class ReadFile {
     }
 
     fn remainingBuffer(_: *const ReadFile, stack_buffer: []u8): []u8 {
-        let remaining = if (this.buffer.items.ptr[this.buffer.items.len..this.buffer.capacity].len < stack_buffer.len) stack_buffer else this.buffer.items.ptr[this.buffer.items.len..this.buffer.capacity];
+        const unused = unsafe { this.buffer.items.ptr[this.buffer.items.len..this.buffer.capacity] };
+        let remaining = if (unused.len < stack_buffer.len) stack_buffer else unused;
         return remaining[0..@min(remaining.len, this.max_length -| this.read_off)];
     }
 
@@ -292,7 +318,7 @@ export class ReadFile {
         let store = this.store.?;
         let buf = this.buffer.items;
 
-        defer store.deref();
+        const _store_guard = DerefGuard<Store>{ ptr: store };
         let system_error = this.system_error;
         let total_size = this.total_size;
         destroy(this);
@@ -424,7 +450,7 @@ export class ReadFile {
     }
 
     static fn doReadLoopTask(task: *WorkPoolTask) {
-        let self_rf: *ReadFile = @alignCast(@fieldParentPtr("task", task));
+        let self_rf: *ReadFile = unsafe { @alignCast(@fieldParentPtr("task", task)) };
         self_rf.update();
     }
 
@@ -532,7 +558,7 @@ export class ReadFileUV {
             .system_error = null,
             .errno = null,
             .on_complete_data = handler,
-            .on_complete_fn = @ptrCast(&Handler.run),
+            .on_complete_fn = unsafe { @ptrCast(&Handler.run) },
             .is_regular_file = false,
             .req = std.mem.zeroes(libuv.fs_t),
         });
@@ -543,14 +569,10 @@ export class ReadFileUV {
 
     pub fn finalize(*_) {
         log("ReadFileUV.finalize", .{});
-        let event_loop = this.event_loop;
-        defer {
-            this.store.deref();
-            this.req.deinit();
-            destroy(this);
-            event_loop.unrefConcurrently();
-            log("ReadFileUV.finalize destroy", .{});
-        }
+        const _finalize_guard = ReadFileUVFinalizeGuard{
+            rf: this,
+            event_loop: this.event_loop,
+        };
 
         let cb = this.on_complete_fn;
         let cb_ctx = this.on_complete_data;
@@ -604,7 +626,7 @@ export class ReadFileUV {
 
     @c static fn onFileInitialStat(req: *libuv.fs_t) {
         log("ReadFileUV.onFileInitialStat", .{});
-        let self_uv: *ReadFileUV = @ptrCast(@alignCast(req.data));
+        let self_uv: *ReadFileUV = unsafe { @ptrCast(@alignCast(req.data)) };
 
         if (errno := req.result.errEnum()) {
             self_uv.errno = errnoToZigErr(errno);
@@ -725,7 +747,7 @@ export class ReadFileUV {
     }
 
     @c static fn onRead(req: *libuv.fs_t) {
-        let self_uv: *ReadFileUV = @ptrCast(@alignCast(req.data));
+        let self_uv: *ReadFileUV = unsafe { @ptrCast(@alignCast(req.data)) };
         let result = req.result;
 
         if (errno := result.errEnum()) {

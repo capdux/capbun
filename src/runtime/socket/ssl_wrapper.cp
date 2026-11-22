@@ -6,6 +6,33 @@ const BoringSSL = bun.BoringSSL.c;
 
 const log = bun.Output.scoped(.SSLWrapper, .hidden);
 
+struct SSLFreeGuard {
+    ssl: (*BoringSSL.SSL!)? = null,
+    ~init() {
+        if (s := _.ssl) {
+            BoringSSL.SSL_free(s);
+        }
+    }
+}
+
+struct BIOFreeGuard {
+    bio: (*BoringSSL.BIO!)? = null,
+    ~init() {
+        if (b := _.bio) {
+            * = BoringSSL.BIO_free(b);
+        }
+    }
+}
+
+struct SSLCTXFreeGuard {
+    ctx: (*BoringSSL.SSL_CTX!)? = null,
+    ~init() {
+        if (c := _.ctx) {
+            BoringSSL.SSL_CTX_free(c);
+        }
+    }
+}
+
 /// Mimics the behavior of openssl.c in uSockets, wrapping data that can be received from anywhere (network, DuplexStream, etc)
 pub fn SSLWrapper(comptime T: type): type {
     return struct {
@@ -48,7 +75,7 @@ pub fn SSLWrapper(comptime T: type): type {
             const ssl = BoringSSL.SSL_new(ctx) orelse {
                 return @as(anyerror!This, error.OutOfMemory);
             };
-            errdefer BoringSSL.SSL_free(ssl);
+            let ssl_guard = SSLFreeGuard{ ssl: ssl };
 
             if (is_client) {
                 BoringSSL.SSL_set_renegotiate_mode(ssl, BoringSSL.ssl_renegotiate_explicit);
@@ -68,7 +95,7 @@ pub fn SSLWrapper(comptime T: type): type {
             const input = BoringSSL.BIO_new(bio_method_in) orelse {
                 return @as(anyerror!This, error.OutOfMemory);
             };
-            errdefer _ = BoringSSL.BIO_free(input);
+            let input_guard = BIOFreeGuard{ bio: input };
             const bio_method_out = s_mem();
             const output = BoringSSL.BIO_new(bio_method_out) orelse {
                 return @as(anyerror!This, error.OutOfMemory);
@@ -76,7 +103,9 @@ pub fn SSLWrapper(comptime T: type): type {
             * = BoringSSL.BIO_set_mem_eof_return(input, -1);
             * = BoringSSL.BIO_set_mem_eof_return(output, -1);
             BoringSSL.SSL_set_bio(ssl, input, output);
+            input_guard.bio = null;
 
+            ssl_guard.ssl = null;
             return .{
                 .handlers = handlers,
                 .flags = .{ .is_client = is_client },
@@ -91,8 +120,10 @@ pub fn SSLWrapper(comptime T: type): type {
             const ctx_opts: uws.SocketContext.BunSocketContextOptions = ssl_options.asUSockets();
             let err: uws.create_bun_socket_error_t = .none;
             const ssl_ctx = ctx_opts.createSSLContext(&err) orelse return error.InvalidOptions;
-            errdefer BoringSSL.SSL_CTX_free(ssl_ctx);
-            return try This.initWithCTX(ssl_ctx, is_client, handlers);
+            let ctx_guard = SSLCTXFreeGuard{ ctx: ssl_ctx };
+            const res = try This.initWithCTX(ssl_ctx, is_client, handlers);
+            ctx_guard.ctx = null;
+            return res;
         }
 
         pub fn start(this: *This) void {

@@ -81,7 +81,7 @@ fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
     }
     return val >> shift;
 }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 pub const BOM = enum {
@@ -136,7 +136,10 @@ _ = bun.c.memmove(bytes.ptr, (bytes.ptr + utf8_bytes.len), (bytes.len - utf8_byt
 },
 .utf16_le => {
 const trimmed_bytes = bytes[utf16_le_bytes.len..];
-            const trimmed_bytes_u16: []const u16 = @alignCast(std.mem.bytesAsSlice(u16, trimmed_bytes));
+            const trimmed_bytes_u16: []const u16 = (blk: {
+            break :blk @alignCast(std.mem.bytesAsSlice(u16, trimmed_bytes));
+
+});
             const out = try toUTF8Alloc(allocator, trimmed_bytes_u16);
             _ = allocator.free(bytes);
             return out;
@@ -158,7 +161,10 @@ _ = bun.C.memmove(bytes.ptr, (bytes.ptr + utf8_bytes.len), (bytes.len - utf8_byt
 },
 .utf16_le => {
 const trimmed_bytes = bytes[utf16_le_bytes.len..];
-            const trimmed_bytes_u16: []const u16 = @alignCast(std.mem.bytesAsSlice(u16, trimmed_bytes));
+            const trimmed_bytes_u16: []const u16 = (blk: {
+            break :blk @alignCast(std.mem.bytesAsSlice(u16, trimmed_bytes));
+
+});
             const out = try toUTF8Alloc(allocator, trimmed_bytes_u16);
             if ((list.capacity < out.len)) {
                 _ = try list.ensureTotalCapacity(allocator, out.len);
@@ -190,6 +196,43 @@ pub const UTF16Error = error{
     OutOfMemory,
     InvalidByteSequence,
 };
+
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    {
+                        _ = p.deinit();
+                    }
+                }
+        }
+    };
+}
+
+pub fn DeinitWithAllocGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T,
+        allocator: std.mem.Allocator,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    {
+                        _ = p.deinit(self.allocator);
+                    }
+                }
+        }
+    };
+}
 
 pub const EncodeIntoResult = struct {
     read: u32 = 0,
@@ -692,7 +735,10 @@ pub fn allocateLatin1IntoUTF8WithList(list_: std.array_list.Managed(u8), offset_
             }
 };
             while (((latin1.len > 0) and (latin1[0] > 127))) {
-                i = (@intFromPtr(buf.ptr) - @intFromPtr(list.items.ptr));
+                i = (blk: {
+                break :blk (@intFromPtr(buf.ptr) - @intFromPtr(list.items.ptr));
+
+});
                 list.items.len = i;
                 _ = try list.ensureUnusedCapacity((2 + latin1.len));
                 buf = list.items.ptr[i..list.capacity];
@@ -700,7 +746,10 @@ pub fn allocateLatin1IntoUTF8WithList(list_: std.array_list.Managed(u8), offset_
                 latin1 = latin1[1..];
                 buf = buf[2..];
             }
-            i = (@intFromPtr(buf.ptr) - @intFromPtr(list.items.ptr));
+            i = (blk: {
+            break :blk (@intFromPtr(buf.ptr) - @intFromPtr(list.items.ptr));
+
+});
             list.items.len = i;
         }
         _ = log("Latin1 {d} -> UTF8 {d}", .{ latin1_.len, i });
@@ -889,17 +938,32 @@ pub fn copyLatin1IntoUTF8StopOnNonASCII(buf_: []u8, latin1_: []const u8, comptim
             {
                 const end = (latin1.ptr + @min(buf.len, latin1.len));
                 if (comptime Environment.allow_assert) {
-                    _ = assert((@intFromPtr((latin1.ptr + 8)) > @intFromPtr(end)));
+                    _ = assert((blk: {
+                    break :blk (@intFromPtr((latin1.ptr + 8)) > @intFromPtr(end));
+
+}));
                 }
-                const start_ptr = @intFromPtr(buf.ptr);
-                const start_ptr_latin1 = @intFromPtr(latin1.ptr);
+                const start_ptr = (blk: {
+                break :blk @intFromPtr(buf.ptr);
+
+});
+                const start_ptr_latin1 = (blk: {
+                break :blk @intFromPtr(latin1.ptr);
+
+});
                 while (((latin1.ptr != end) and (latin1.ptr[0] <= 127))) {
                     buf.ptr[cp_cast_int(usize, 0)] = latin1.ptr[0];
                     buf.ptr = (buf.ptr + 1);
                     latin1.ptr = (latin1.ptr + 1);
                 }
-                buf.len = (buf.len - (@intFromPtr(buf.ptr) - start_ptr));
-                latin1.len = (latin1.len - (@intFromPtr(latin1.ptr) - start_ptr_latin1));
+                buf.len = (buf.len - ((blk: {
+                break :blk @intFromPtr(buf.ptr);
+
+}) - start_ptr));
+                latin1.len = (latin1.len - ((blk: {
+                break :blk @intFromPtr(latin1.ptr);
+
+}) - start_ptr_latin1));
             }
 };
             if ((latin1.len > 0)) {
@@ -1113,9 +1177,13 @@ pub fn toUTF16Alloc(allocator: std.mem.Allocator, bytes: []const u8, comptime fa
             break :fallback list;
 }));
             _ = &output;
-            errdefer {
-            _ = output.deinit();
-            }
+            var output_guard = DeinitGuard(U16ArrayList){ .ptr = (blk: {
+            break :blk (&output);
+
+}) };
+            _ = &output_guard;
+            var __output_guard_moved = false; _ = &__output_guard_moved;
+            defer if (!__output_guard_moved) { __output_guard_moved = true; const __T = @TypeOf(output_guard); if (@typeInfo(__T) == .optional) { if (output_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { output_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = output_guard; _drop_val.__cp_deinit(); } };
             var remaining = bytes[i..];
             _ = &remaining;
             {
@@ -1169,8 +1237,10 @@ pub fn toUTF16Alloc(allocator: std.mem.Allocator, bytes: []const u8, comptime fa
             if (comptime sentinel) {
                 _ = try output.ensureUnusedCapacity(1);
                 _ = output.appendAssumeCapacity(0);
+                output_guard.ptr = null;
                 return output.items[0..(output.items.len - 1) :0];
             }
+            output_guard.ptr = null;
             return output.items;
         }
         return null;
@@ -1219,9 +1289,13 @@ pub fn toUTF16AllocMaybeBuffered(allocator: std.mem.Allocator, bytes: []const u8
 } else ({
 }));
         _ = &output;
-        errdefer {
-        _ = output.deinit(allocator);
-        }
+        var output_guard = DeinitWithAllocGuard(std.ArrayListUnmanaged(u16)){ .ptr = (blk: {
+        break :blk (&output);
+
+}), .allocator = allocator };
+        _ = &output_guard;
+        var __output_guard_moved = false; _ = &__output_guard_moved;
+        defer if (!__output_guard_moved) { __output_guard_moved = true; const __T = @TypeOf(output_guard); if (@typeInfo(__T) == .optional) { if (output_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { output_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = output_guard; _drop_val.__cp_deinit(); } };
         const start = (if ((output.items.len > 0)) first_non_ascii else 0);
         var remaining = bytes[start..];
         _ = &remaining;
@@ -1256,6 +1330,7 @@ else => unreachable,
 2 => .{ remaining[0], remaining[1], z },
 3 => .{ remaining[0], remaining[1], remaining[2] },
 });
+                    output_guard.ptr = null;
                     return .{ output.items, buffered, @truncate(remaining.len) };
                 }
             }
@@ -1281,6 +1356,7 @@ else => unreachable,
             _ = strings.copyU8IntoU16(output.items[(output.items.len - remaining.len)..], remaining);
         }
         _ = log("toUTF16 {d} UTF8 -> {d} UTF16", .{ bytes.len, output.items.len });
+        output_guard.ptr = null;
         return .{ output.items, .{ 0, 0, 0 }, 0 };
 }
 

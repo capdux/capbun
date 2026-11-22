@@ -62,15 +62,15 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-const Message = anyopaque;
+const Message = struct { __cp_no_message_sentinel: void = {} };
 fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
-pub fn CpUnpackElemType(comptime __T: type, comptime idx: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") return ti.@"struct".field_types[idx]; return @FieldType(__T, std.fmt.comptimePrint("{d}", .{idx})); }
-pub fn cp_unpack_elem(v: anytype, comptime idx: usize) CpUnpackElemType(@TypeOf(v), idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and idx < m.array.len) { return cp_msg_to_val(m.array[idx]); } } return ""; } else if (comptime __T == Message) { if (v == .array and idx < v.array.len) { return cp_msg_to_val(v.array[idx]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .array)) { return v[idx]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") return @field(v, ti.@"struct".field_names[idx]); return @field(v, std.fmt.comptimePrint("{d}", .{idx})); } }
-pub fn CpUnpackTailType(comptime __T: type, comptime offset_from_end: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return ti.@"struct".field_types[n - offset_from_end]; } return @FieldType(__T, std.fmt.comptimePrint("{d}", .{1})); }
-pub fn cp_unpack_tail(v: anytype, comptime offset_from_end: usize) CpUnpackTailType(@TypeOf(v), offset_from_end) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= offset_from_end) { return cp_msg_to_val(m.array[m.array.len - offset_from_end]); } } return ""; } else if (comptime __T == Message) { if (v == .array and v.array.len >= offset_from_end) { return cp_msg_to_val(v.array[v.array.len - offset_from_end]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[v.*.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .array)) { return v[v.len - offset_from_end]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return @field(v, ti.@"struct".field_names[n - offset_from_end]); } return @field(v, std.fmt.comptimePrint("{d}", .{0})); } }
-pub fn CpUnpackSliceType(comptime __T: type, comptime start_idx: usize) type { if (__T == ?Message or __T == Message) return []const Message; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return __T; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return []const @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const types = ti.@"struct".field_types; if (types.len == 0) return []const i32; const Elem = if (start_idx < types.len) types[start_idx] else types[0]; return []const CpValType(Elem); } return []const i32; }
-pub fn cp_unpack_slice(v: anytype, comptime start_idx: usize, comptime suffix_len: usize) CpUnpackSliceType(@TypeOf(v), start_idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= start_idx + suffix_len) { return m.array[start_idx .. m.array.len - suffix_len]; } } return &[_]Message{}; } else if (comptime __T == Message) { if (v == .array and v.array.len >= start_idx + suffix_len) { return v.array[start_idx .. v.array.len - suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[start_idx .. v.*.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .array)) { return v[start_idx .. v.len - suffix_len]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const names = ti.@"struct".field_names; const types = ti.@"struct".field_types; const end = names.len - suffix_len; const count = if (end > start_idx) end - start_idx else 0; const Elem = if (start_idx < types.len) CpValType(types[start_idx]) else i32; const buf = std.heap.page_allocator.alloc(Elem, count) catch unreachable; inline for (start_idx..end, 0..) |f_idx, out_idx| { buf[out_idx] = cp_val(@field(v, names[f_idx])); } return buf; } return &[_]i32{}; } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const DirInfo = @import("../resolver/dir_info.zig");
 pub const Options = @import("../bundler/options.zig");
@@ -80,6 +80,35 @@ pub const Param = struct {
     name: []const u8,
     value: []const u8,
     pub const List = std.MultiArrayList(Param);
+};
+
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.deinit();
+                }
+        }
+    };
+}
+
+pub const FileCloseGuard = struct {
+    file: std.fs.File,
+    active: bool = false,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *FileCloseGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (self.active) {
+                _ = self.file.close();
+            }
+    }
 };
 
 pub const Router = @This();
@@ -290,7 +319,7 @@ pub const RouteLoader = struct {
     fs: *FileSystem,
     config: Options.RouteConfig,
     route_dirname_len: u16 = 0,
-    dedupe_dynamic: std.AutoArrayHashMap(u32,string),
+    dedupe_dynamic: std.AutoArrayHashMap(u32, string),
     log: *Logger.Log,
     index: ?*Route = null,
     static_list: bun.StringHashMap(*Route),
@@ -358,9 +387,14 @@ pub fn loadAll(allocator: std.mem.Allocator, config: Options.RouteConfig, log: *
             }
             var loader = RouteLoader{ .allocator = allocator, .log = log, .fs = resolver.fs, .config = config, .static_list = bun.StringHashMap(RoutePtr).init(allocator), .dedupe_dynamic = std.AutoArrayHashMap(u32, string).init(allocator), .all_routes = .{}, .route_dirname_len = r_dirname_len };
             _ = &loader;
-            defer {
-            _ = loader.dedupe_dynamic.deinit();
-            }
+            var dedupe_guard = DeinitGuard(std.AutoArrayHashMap(u32, string)){ .ptr = (blk: {
+            break :blk (&loader.dedupe_dynamic);
+
+}) };
+            _ = &dedupe_guard;
+            var __dedupe_guard_moved = false; _ = &__dedupe_guard_moved;
+            defer if (!__dedupe_guard_moved) { __dedupe_guard_moved = true; const __T = @TypeOf(dedupe_guard); if (@typeInfo(__T) == .optional) { if (dedupe_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { dedupe_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = dedupe_guard; _drop_val.__cp_deinit(); } };
+            _ = (&dedupe_guard);
             _ = loader.load(ResolverType, resolver, root_dir_info, base_dir);
             if ((loader.all_routes.items.len == 0)) {
                 return Routes{ .static = loader.static_list, .config = config, .allocator = allocator };
@@ -473,7 +507,7 @@ pub const TinyPtr = packed struct(u32) {
     offset: u16 = 0,
     len: u16 = 0,
 
-pub inline fn str(self: TinyPtr, slice: []const u8) []const u8 {
+pub inline fn str(self: *const TinyPtr, slice: []const u8) []const u8 {
             if ((self.len > 0)) {
                 return slice[self.offset..(self.offset + self.len)];
             }
@@ -492,13 +526,22 @@ pub fn from(parent: []const u8, child: []const u8) TinyPtr {
             if (((child.len == 0) or (parent.len == 0))) {
                 return TinyPtr{  };
             }
-            const right = (@intFromPtr(child.ptr) + child.len);
-            const end = (@intFromPtr(parent.ptr) + parent.len);
+            const _tmp_v2 = (blk: {
+            break :blk .{ (@intFromPtr(child.ptr) + child.len), (@intFromPtr(parent.ptr) + parent.len) };
+
+});
+            const right = cp_unpack_elem(_tmp_v2, 0);
+            _ = &right;
+            const end = cp_unpack_elem(_tmp_v2, 1);
+            _ = &end;
             if (comptime Environment.isDebug) {
                 _ = bun.assert((end < right));
             }
             const length = (@max(end, right) - right);
-            const offset = (@max(@intFromPtr(child.ptr), @intFromPtr(parent.ptr)) - @intFromPtr(parent.ptr));
+            const offset = (blk: {
+            break :blk (@max(@intFromPtr(child.ptr), @intFromPtr(parent.ptr)) - @intFromPtr(parent.ptr));
+
+});
             return TinyPtr{ .offset = @as(u16, @truncate(offset)), .len = @as(u16, @truncate(length)) };
     }
 };
@@ -506,7 +549,7 @@ pub fn from(parent: []const u8, child: []const u8) TinyPtr {
 pub const WindowsAbsPath = struct {
     path: []const u8,
 
-pub fn slice(self: WindowsAbsPath) []const u8 {
+pub fn slice(self: *const WindowsAbsPath) []const u8 {
             return self.path;
     }
 
@@ -554,9 +597,15 @@ pub fn parse(base_: []const u8, extname: []const u8, entry: *Fs.FileSystem.Entry
             _ = bun.copy(u8, buf, extname);
             buf = buf[extname.len..];
             if (comptime Environment.isWindows) {
-                _ = bun.path.platformToPosixInPlace(u8, route_file_buf[0..(@intFromPtr(buf.ptr) - @intFromPtr(route_file_buf))]);
+                _ = bun.path.platformToPosixInPlace(u8, route_file_buf[0..(blk: {
+                break :blk (@intFromPtr(buf.ptr) - @intFromPtr(route_file_buf));
+
+})]);
             }
-            break :brk route_file_buf[0..(@intFromPtr(buf.ptr) - @intFromPtr(route_file_buf))];
+            break :brk route_file_buf[0..(blk: {
+            break :blk (@intFromPtr(buf.ptr) - @intFromPtr(route_file_buf));
+
+})];
 };
             _ = &public_path;
             var name = public_path[0..(public_path.len - extname.len)];
@@ -589,7 +638,10 @@ pub fn parse(base_: []const u8, extname: []const u8, entry: *Fs.FileSystem.Entry
                     has_uppercase = ((public_path[@as(usize, @intCast(name_i))] >= 65) and (public_path[@as(usize, @intCast(name_i))] <= 90));
                     name_i = (name_i + 1);
                 }
-                const name_offset = (@intFromPtr(name.ptr) - @intFromPtr(public_path.ptr));
+                const name_offset = (blk: {
+                break :blk (@intFromPtr(name.ptr) - @intFromPtr(public_path.ptr));
+
+});
                 if (has_uppercase) {
                     public_path = ((FileSystem.DirnameStore.instance.append(@TypeOf(public_path), public_path)) catch unreachable);
                     name = public_path[name_offset..][0..name.len];
@@ -611,31 +663,25 @@ pub fn parse(base_: []const u8, extname: []const u8, entry: *Fs.FileSystem.Entry
                 public_path = ((FileSystem.DirnameStore.instance.append(@TypeOf(public_path), public_path)) catch unreachable);
             }
             if ((abs_path_str.len == 0)) {
-                var file = std.fs.File{ .handle = -1 };
-                _ = &file;
-                var needs_close = true;
-                _ = &needs_close;
-                defer {
-                if (needs_close) {
-                    _ = file.close();
-                }
-                }
+                var file_guard = FileCloseGuard{ .file = std.fs.File{ .handle = -1 }, .active = false };
+                _ = &file_guard;
+                var __file_guard_moved = false; _ = &__file_guard_moved;
+                defer if (!__file_guard_moved) { __file_guard_moved = true; const __T = @TypeOf(file_guard); if (@typeInfo(__T) == .optional) { if (file_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { file_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = file_guard; _drop_val.__cp_deinit(); } };
                 if (entry.cache.fd.unwrapValid()) |valid| {
                     _ = &valid;
-                    file = valid.stdFile();
-                    needs_close = false;
+                    file_guard.file = valid.stdFile();
                 } else {
                     var parts: [2][]const u8 = .{ entry.dir, entry.base() };
                     _ = &parts;
                     abs_path_str = FileSystem.instance.absBuf((&parts), route_file_buf);
                     route_file_buf[cp_cast_int(usize, abs_path_str.len)] = 0;
                     const buf = route_file_buf[0..abs_path_str.len :0];
-                    file = (blk_catch_18: { break :blk_catch_18 ((std.fs.openFileAbsoluteZ(buf, .{ .mode = .read_only })) catch |e| { _ = &e; needs_close = false;
-                    _ = ((log.addErrorFmt(null, Logger.Loc.Empty, allocator, "{s} opening route: {s}", .{ @errorName(e), abs_path_str })) catch unreachable);
+                    file_guard.file = (blk_catch_18: { break :blk_catch_18 ((std.fs.openFileAbsoluteZ(buf, .{ .mode = .read_only })) catch |e| { _ = &e; _ = ((log.addErrorFmt(null, Logger.Loc.Empty, allocator, "{s} opening route: {s}", .{ @errorName(e), abs_path_str })) catch unreachable);
                     return null; }); });
-                    _ = FileSystem.setMaxFd(file.handle);
+                    file_guard.active = true;
+                    _ = FileSystem.setMaxFd(file_guard.file.handle);
                 }
-                const _abs = (blk_catch_20: { break :blk_catch_20 ((bun.getFdPath(FD.fromStdFile(file), route_file_buf)) catch |e| { _ = &e; _ = ((log.addErrorFmt(null, Logger.Loc.Empty, allocator, "{s} resolving route: {s}", .{ @errorName(e), abs_path_str })) catch unreachable);
+                const _abs = (blk_catch_20: { break :blk_catch_20 ((bun.getFdPath(FD.fromStdFile(file_guard.file), route_file_buf)) catch |e| { _ = &e; _ = ((log.addErrorFmt(null, Logger.Loc.Empty, allocator, "{s} resolving route: {s}", .{ @errorName(e), abs_path_str })) catch unreachable);
                 return null; }); });
                 abs_path_str = ((FileSystem.DirnameStore.instance.append(@TypeOf(_abs), _abs)) catch unreachable);
                 entry.abs_path = PathString.init(abs_path_str);
@@ -847,7 +893,7 @@ pub fn validate(input: []const u8, allocator: std.mem.Allocator, log: *Logger.Lo
             const end = (if (comptime @typeInfo(@TypeOf((input.len - 1))) == .@"enum") cp_cast_int(u32, @intFromEnum((input.len - 1))) else cp_cast_int(u32, (input.len - 1)));
             while ((offset < end)) {
                 const pattern: Pattern = (blk_catch_31: { break :blk_catch_31 ((Pattern.initUnhashed(input, offset)) catch |e| { _ = &e; const source: Logger.Source = Logger.Source.initEmptyFile(input);
-                __sw_blk_2: { const __disc_2 = e; _ = &__disc_2; if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .CatchAllMustBeAtTheEnd)) {  _ = (blk_catch_32: { break :blk_catch_32 ((log.addErrorFmt((&source), Logger.Loc.Empty, allocator, "Catch-all route must be at the end of the path", .{})) catch |__ce_32| { _ = &__ce_32;  }); }); break :__sw_blk_2; } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .InvalidCatchAllRoute)) {  _ = (blk_catch_33: { break :blk_catch_33 ((log.addErrorFmt((&source), Logger.Loc.Empty, allocator, "Invalid catch-all route, e.g. should be [...param]", .{})) catch |__ce_33| { _ = &__ce_33;  }); }); break :__sw_blk_2; } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .InvalidOptionalCatchAllRoute)) {  _ = (blk_catch_34: { break :blk_catch_34 ((log.addErrorFmt((&source), Logger.Loc.Empty, allocator, "Invalid optional catch-all route, e.g. should be [[...param]]", .{})) catch |__ce_34| { _ = &__ce_34;  }); }); break :__sw_blk_2; } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .InvalidRoutePattern)) {  _ = (blk_catch_35: { break :blk_catch_35 ((log.addErrorFmt((&source), Logger.Loc.Empty, allocator, "Invalid dynamic route", .{})) catch |__ce_35| { _ = &__ce_35;  }); }); break :__sw_blk_2; } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .MissingParamName)) {  _ = (blk_catch_36: { break :blk_catch_36 ((log.addErrorFmt((&source), Logger.Loc.Empty, allocator, "Route is missing a parameter name, e.g. [param]", .{})) catch |__ce_36| { _ = &__ce_36;  }); }); break :__sw_blk_2; } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .PatternMissingClosingBracket)) {  _ = (blk_catch_37: { break :blk_catch_37 ((log.addErrorFmt((&source), Logger.Loc.Empty, allocator, "Route is missing a closing bracket]", .{})) catch |__ce_37| { _ = &__ce_37;  }); }); break :__sw_blk_2; } }  }
+                __sw_blk_3: { const __disc_3 = e; _ = &__disc_3; if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .CatchAllMustBeAtTheEnd)) {  _ = (blk_catch_32: { break :blk_catch_32 ((log.addErrorFmt((&source), Logger.Loc.Empty, allocator, "Catch-all route must be at the end of the path", .{})) catch |__ce_32| { _ = &__ce_32;  }); }); break :__sw_blk_3; } } if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .InvalidCatchAllRoute)) {  _ = (blk_catch_33: { break :blk_catch_33 ((log.addErrorFmt((&source), Logger.Loc.Empty, allocator, "Invalid catch-all route, e.g. should be [...param]", .{})) catch |__ce_33| { _ = &__ce_33;  }); }); break :__sw_blk_3; } } if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .InvalidOptionalCatchAllRoute)) {  _ = (blk_catch_34: { break :blk_catch_34 ((log.addErrorFmt((&source), Logger.Loc.Empty, allocator, "Invalid optional catch-all route, e.g. should be [[...param]]", .{})) catch |__ce_34| { _ = &__ce_34;  }); }); break :__sw_blk_3; } } if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .InvalidRoutePattern)) {  _ = (blk_catch_35: { break :blk_catch_35 ((log.addErrorFmt((&source), Logger.Loc.Empty, allocator, "Invalid dynamic route", .{})) catch |__ce_35| { _ = &__ce_35;  }); }); break :__sw_blk_3; } } if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .MissingParamName)) {  _ = (blk_catch_36: { break :blk_catch_36 ((log.addErrorFmt((&source), Logger.Loc.Empty, allocator, "Route is missing a parameter name, e.g. [param]", .{})) catch |__ce_36| { _ = &__ce_36;  }); }); break :__sw_blk_3; } } if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .PatternMissingClosingBracket)) {  _ = (blk_catch_37: { break :blk_catch_37 ((log.addErrorFmt((&source), Logger.Loc.Empty, allocator, "Route is missing a closing bracket]", .{})) catch |__ce_37| { _ = &__ce_37;  }); }); break :__sw_blk_3; } }  }
                 return null; }); });
                 offset = pattern.len;
                 const tag = std.meta.activeTag(pattern.value);
