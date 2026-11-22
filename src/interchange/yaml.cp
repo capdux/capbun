@@ -3750,7 +3750,10 @@ pub struct Parser<const enc: Encoding> {
 
                         lit_ch = _.next(); continue :lit_sw;
                     },
-                    else => |c| lit_ch = c,
+                    else => |c| {
+                        lit_ch = c;
+                        continue :lit_sw;
+                    },
                     }
                 }
             },

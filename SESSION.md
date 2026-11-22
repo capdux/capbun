@@ -612,3 +612,10 @@
   - `src/runtime/server/{server,ServerConfig,RequestContext,FileResponseStream,WebSocketServerContext}.cp` 与 `src/uws_sys/Request.cp`（重编同步滞后文件，补全 `static fn` 与指针类型别名）。
 - 验证：`bun run zig:check` 5/5 通过（29s）；`bun-serve-html.test.ts -t "^serve html$"` 1/1 通过；`serve-http3.test.ts` ASan 崩溃消除（43 pass / 1 超时）；`serve-protocols.test.ts` 20/20 通过。
 - 推导下一阶段 Wave #69：Subagent 1 运行 `bun-serve-html-manifest.test.ts` 及 Batch 1a 此前未跑的余下 14 个 `test/js/bun/http` 文件；Subagent 2 只读排查全仓 `while (true) { switch` 是否还有遗漏 `return`/`break` 的状态机。
+
+## [2026-11-23] Wave #69：`test/js/bun/http` 尾段验证与 `Installer.cp` / `yaml.cp` 死循环修复完成与提交
+- 完成全仓 `while (true) { switch (...) }` 状态机死循环排查与 2 处真实 Bug 修复（均通过 `cpc_brief.py` 4 项门禁）：
+  - `src/install/isolated_install/Installer.cp`（L294 `next_step_sw: while (true)`，将 `.clonefile`/`.hardlink`/`else` 末尾 `continue;` 改为 `continue :next_step_sw;`，消除内层 `backend` 死循环）；
+  - `src/interchange/yaml.cp`（L3753 `newlines_sw` 内 `else => |c| { lit_ch = c; continue :lit_sw; }`，消除死循环）。
+- 验证：`bun run zig:check` 5/5 通过（29s）；`bun-serve-html-manifest.test.ts` 4/4 通过；`test/js/bun/http` 尾段 14 文件 346 pass / 21 fail / 2 skip / 3 todo（全程零 ASan 崩溃，`serve.test.ts:1890` 与 `bun-server.test.ts` 均实测确认为 debug+ASan 并发/时序阈值问题，非 CP 语义缺陷）。
+- 推导下一阶段 Wave #70：Subagent 1 执行 Batch 1b（`test/js/bun/util`，53 个测试文件）；Subagent 2 只读使用 `cpc check --brief` 预检 171 个 `.cp` mtime 晚于 `.zig` 的文件，定位待重编前的潜在 `cpc` 诊断。

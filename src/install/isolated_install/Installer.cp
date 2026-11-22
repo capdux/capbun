@@ -291,7 +291,7 @@ pub struct TopTask {
         const pkg_res = pkg_resolutions[pkg_id];
 
         let current_step_val = entry_steps[_.entry_id.get()].load(.acquire);
-        while (true) {
+        next_step_sw: while (true) {
             switch (current_step_val) {
             .link_package => {
                 const string_buf = lockfile.buffers.string_bytes.items;
@@ -558,7 +558,7 @@ pub struct TopTask {
                         }
 
                         current_step_val = _.nextStep(.link_package);
-                        continue;
+                        continue :next_step_sw;
                     },
 
                     .hardlink => {
@@ -615,7 +615,7 @@ pub struct TopTask {
                         }
 
                         current_step_val = _.nextStep(.link_package);
-                        continue;
+                        continue :next_step_sw;
                     },
 
                     // fallthrough copyfile
@@ -670,7 +670,7 @@ pub struct TopTask {
                         }
 
                         current_step_val = _.nextStep(.link_package);
-                        continue;
+                        continue :next_step_sw;
                     },
                     }
                 }

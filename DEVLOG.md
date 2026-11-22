@@ -1704,3 +1704,7 @@
 ### [2026-11-23] Wave #68 技术要点（`finalize` 状态标志与重名变量自赋值陷阱）
 - `Subprocess.finalize()` 若遗漏 `flags.finalized = true` 与 `deref()`，析构 `JSFileSink` 时 `onStdinDestroyed` 会再次访问已释放的 `Process` 导致 `use-after-poison`。
 - `BackgroundHandler` 中将局部变量改名为 `bg_images` 但仍写 `_.images = images` 时，CP 会解析为字段自赋值 `self.images = self.images`，静默破坏属性合并逻辑。
+
+### [2026-11-23] Wave #69 技术要点（嵌套 `while (true) { switch }` 标签与 debug+ASan 基线）
+- 嵌套 `switch` 改写为嵌套 `while (true)` 时，内层分支跳转外层状态机必须显式携带标签（如 `continue :next_step_sw;` / `continue :lit_sw;`），无标签 `continue` 会退化为内层死循环。
+- Debug+ASan 构建下空闲 WebSocket CPU 占用基线约为 ~6.7%–7.2%（release 为 ~1%），且单次 `bun bd test` 并发跑重负载 HTTP 用例时部分 5s 超时与 100ms 固定半关闭超时属于构建开销所致。

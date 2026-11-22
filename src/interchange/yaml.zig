@@ -3420,6 +3420,7 @@ _ = try ctx.text.ensureUnusedCapacity((ctx.leading_newlines + 1));
 },
 else => |c| {
 lit_ch = c;
+                        continue :lit_sw;
 },
 }
                     }
@@ -4767,6 +4768,12 @@ pub fn parse(comptime encoding: Encoding, allocator: std.mem.Allocator, input: [
         _ = &parser;
         const stream = (blk_catch_5: { break :blk_catch_5 ((parser.parse()) catch |e| { _ = &e; return Parser(encoding).ParseResult.fail(e, (&parser)); }); });
         return Parser(encoding).ParseResult.success(stream, (&parser));
+}
+
+pub fn print(comptime encoding: Encoding, allocator: std.mem.Allocator, stream: Parser(encoding).Stream, writer: anytype) std.Io.Writer.Error!void {
+        var printer: Parser(encoding).Printer(@TypeOf(writer)) = .{ .input = stream.input, .stream = stream, .indent = .none, .writer = writer, .allocator = allocator };
+        _ = &printer;
+        _ = try printer.print();
 }
 
 pub fn yamlMergeKeyExprEql(l: Expr, r: Expr) bool {

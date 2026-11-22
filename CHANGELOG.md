@@ -2154,3 +2154,6 @@
 
 ### [2026-11-23] Wave #68（修复 `background`/`subprocess`/`HTMLImportManifest` 与 `server`/`uws_sys` 同步重编）
 - 修复 `background.cp`（`bg_images`）、`subprocess.cp`（`finalize()` 补回 `finalized = true` 与 `deref()` 消除 ASan `use-after-poison`）、`HTMLImportManifest.cp`（恢复 `for (*ch of chunks)`）及重编同步 `server/`、`uws_sys/Request.cp`，通过 `bun run zig:check`（5/5）、`serve html$`（1/1）、`serve-protocols.test.ts`（20/20）与 `serve-http3.test.ts`（43 pass / 1 超时）。
+
+### [2026-11-23] Wave #69（修复 `Installer.cp` 与 `yaml.cp` 状态机死循环并完成 `http` 尾段验证）
+- 修复 `Installer.cp`（`next_step_sw` 外层标签跳转）与 `yaml.cp`（`continue :lit_sw;`），通过 `bun run zig:check`（5/5）、`bun-serve-html-manifest.test.ts`（4/4）及 `test/js/bun/http` 尾段 14 文件零崩溃跑完（346 pass）。

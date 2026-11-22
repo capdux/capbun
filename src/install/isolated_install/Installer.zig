@@ -508,7 +508,7 @@ pub fn run(self: *TopTask) OOM!Yield {
             const pkg_res = pkg_resolutions[@as(usize, @intCast(pkg_id))];
             var current_step_val = entry_steps[@as(usize, @intCast(self.entry_id.get()))].load(.acquire);
             _ = &current_step_val;
-            while (true) {
+            next_step_sw: while (true) {
                 switch (current_step_val) {
 .link_package => {
 const string_buf = lockfile.buffers.string_bytes.items;
@@ -723,7 +723,7 @@ return Yield.failure(.{ .link_package = err });
 },
 }
                     current_step_val = self.nextStep(.link_package);
-                    continue;
+                    continue :next_step_sw;
 },
 .hardlink => {
 cached_package_dir.fd = (switch (bun.openDirForIteration(cache_dir, pkg_cache_dir_subpath_guard.val.slice())) {
@@ -766,7 +766,7 @@ if ((err.getErrno() == .XDEV)) {
 },
 }
                     current_step_val = self.nextStep(.link_package);
-                    continue;
+                    continue :next_step_sw;
 },
 else => {
 cached_package_dir.fd = (switch (bun.openDirForIteration(cache_dir, pkg_cache_dir_subpath_guard.val.slice())) {
@@ -804,7 +804,7 @@ if (PackageManager.verbose_install) {
 },
 }
                     current_step_val = self.nextStep(.link_package);
-                    continue;
+                    continue :next_step_sw;
 },
 }
                 }
@@ -1242,12 +1242,13 @@ pub fn onPackageDownloadError(self: *Installer, task_id: install.Task.Id, name: 
                 }
             } else {
                 const string_buf = self.lockfile.buffers.string_bytes.items;
-                _ = Output.errGeneric("failed to download <b>{s}@{f}<r>: {s}\n  <d>{s}<r>", .{ name, resolution.fmt(string_buf, .auto), Installer.downloadErrorReason(download_err), url });
+                _ = Output.errGeneric("failed to download <b>{s}@{f}<r>: {s}\n  <d>{s}<r>", .{ name, resolution.fmt(string_buf, .auto), self.downloadErrorReason(download_err), url });
                 _ = Output.flush();
             }
     }
 
-pub fn downloadErrorReason(e: anyerror) []const u8 {
+pub fn downloadErrorReason(self: *const Installer, e: anyerror) []const u8 {
+        _ = self;
             return (switch (e) {
 error.TarballHTTP400 => "400 Bad Request",
 error.TarballHTTP401 => "401 Unauthorized",
@@ -1306,7 +1307,7 @@ _ = Output.errGeneric("failed to patch package: {s}@{f}", .{ pkg_name.slice(stri
 _ = Output.err(bin_err, "failed to link binaries for package: {s}@{f}", .{ pkg_name.slice(string_buf), pkg_res.fmt(string_buf, .auto) });
 },
 .download => |dl| {
-_ = Output.errGeneric("failed to download <b>{s}@{f}<r>: {s}\n  <d>{s}<r>", .{ pkg_name.slice(string_buf), pkg_res.fmt(string_buf, .auto), Installer.downloadErrorReason(dl.download_err), dl.url });
+_ = Output.errGeneric("failed to download <b>{s}@{f}<r>: {s}\n  <d>{s}<r>", .{ pkg_name.slice(string_buf), pkg_res.fmt(string_buf, .auto), self.downloadErrorReason(dl.download_err), dl.url });
 },
 else => {
 
@@ -1682,7 +1683,7 @@ pub fn commitGlobalStoreEntry(self: *const Installer, entry_id: Store.Entry.Id) 
 return .success;
 },
 .err => |err| {
-if ((!Installer.isRenameCollision(err))) {
+if ((!self.isRenameCollision(err))) {
                 _ = (blk_catch_6: { break :blk_catch_6 ((FD.cwd().deleteTree(staging.val.slice())) catch |__ce_6| { _ = &__ce_6;  }); });
                 return .initErr(err);
             }
@@ -1706,7 +1707,7 @@ _ = (blk_catch_8: { break :blk_catch_8 ((FD.cwd().deleteTree(old.val.slice())) c
 .err => |publish_err| {
 _ = (blk_catch_9: { break :blk_catch_9 ((FD.cwd().deleteTree(staging.val.slice())) catch |__ce_9| { _ = &__ce_9;  }); });
                 _ = (blk_catch_10: { break :blk_catch_10 ((FD.cwd().deleteTree(old.val.slice())) catch |__ce_10| { _ = &__ce_10;  }); });
-                return (if (Installer.isRenameCollision(publish_err)) .success else .initErr(publish_err));
+                return (if (self.isRenameCollision(publish_err)) .success else .initErr(publish_err));
 },
 }
             }
@@ -1716,7 +1717,8 @@ _ = (blk_catch_9: { break :blk_catch_9 ((FD.cwd().deleteTree(staging.val.slice()
 }
     }
 
-pub fn isRenameCollision(err: sys.Error) bool {
+pub fn isRenameCollision(self: Installer, err: sys.Error) bool {
+        _ = self;
             return (switch (err.getErrno()) {
 .EXIST, .NOTEMPTY => true,
 .PERM, .ACCES => Environment.isWindows,
