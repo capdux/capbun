@@ -386,7 +386,7 @@ pub inline fn toCss(comptime T: type, this: *const T, dest: *Printer): PrintErr!
             if (comptime info.params.len > 0) {
                 const p0 = @typeInfo(info.params[0].@"type".?);
                 if (comptime p0 == .pointer && !p0.pointer.is_const) {
-                    return T.toCss(@constCast(this), dest);
+                    return T.toCss(unsafe { @constCast(this) }, dest);
                 }
             }
             return T.toCss(this, dest);
@@ -516,7 +516,7 @@ pub inline fn deepClone(comptime T: type, this: *const T, allocator: Allocator):
         @compileError(@typeName(T) ++ " does not have a deepClone() function");
     }
 
-    return @constCast(this).deepClone(allocator);
+    return (unsafe { @constCast(this) }).deepClone(allocator);
 }
 
 pub inline fn tryFromAngle(comptime T: type, angle: Angle): T? {
@@ -686,7 +686,7 @@ pub fn hash(comptime T: type, this: *const T, hasher: *std.hash.Wyhash) {
             }
             const hp0 = @typeInfo(h_info.params[0].type.?);
             if (comptime hp0 == .pointer && !hp0.pointer.is_const) {
-                return T.hash(@constCast(this), hasher);
+                return T.hash(unsafe { @constCast(this) }, hasher);
             }
             return T.hash(this, hasher);
         },

@@ -62,7 +62,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const css = @import("./css_parser.zig");
 pub const bun = @import("bun");
@@ -258,7 +258,7 @@ pub fn implementHash(comptime T: type, self: *const T, hasher: *std.hash.Wyhash)
             return;
         }
         if (comptime bun.@"meta".isSimpleEqlType(T)) {
-            return hasher.update(std.mem.asBytes(self));
+            return hasher.update(std.mem.asBytes((&self)));
         }
         if ((comptime bun.@"meta".looksLikeListContainerType(T))) |result| {
             _ = &result;
@@ -418,7 +418,6 @@ pub inline fn parse(comptime T: type, input: *Parser) Result(T) {
         if (comptime (@typeInfo(T) == .pointer)) {
             const TT = std.@"meta".Child(T);
             const ResT = Result(T);
-            _ = &ResT;
             return (switch (parse(TT, input)) {
 .result => |v| ResT{ .result = bun.create(input.allocator(), TT, v) },
 .err => |e| ResT{ .err = e },
@@ -446,12 +445,12 @@ return input.parseCommaSeparated(result.child, parseFor(result.child));
 }
 
 pub inline fn parseFor(comptime T: type) *const fn (*Parser) Result(T) {
-        return struct {
+        return (struct {
 
 pub fn parsefn(input: *Parser) Result(T) {
             return parse(T, input);
     }
-}.parsefn;
+}).parsefn;
 }
 
 pub fn hasToCss(comptime T: type) bool {
@@ -520,7 +519,10 @@ _ = @compileError("TODO");
             if (comptime (info.params.len > 0)) {
                 const p0 = @typeInfo(info.params[0].@"type".?);
                 if (comptime ((p0 == .pointer) and (!p0.pointer.is_const))) {
-                    return T.toCss(@constCast(self), dest);
+                    return T.toCss((blk: {
+                    break :blk @constCast(self);
+
+}), dest);
                 }
             }
             return T.toCss(self, dest);
@@ -671,7 +673,10 @@ pub inline fn deepClone(comptime T: type, self: *const T, allocator: Allocator) 
         if ((!@hasDecl(T, "deepClone"))) {
             _ = @compileError((@typeName(T) ++ " does not have a deepClone() function"));
         }
-        return @constCast(self).deepClone(allocator);
+        return (blk: {
+        break :blk @constCast(self);
+
+}).deepClone(allocator);
 }
 
 pub inline fn tryFromAngle(comptime T: type, angle: Angle) ?T {
@@ -840,7 +845,7 @@ return self.hash(hasher);
 }
         }
         if (comptime bun.@"meta".isSimpleEqlType(T)) {
-            const bytes = std.mem.asBytes(self);
+            const bytes = std.mem.asBytes((&self));
             _ = hasher.update(bytes);
             return;
         }
@@ -852,7 +857,10 @@ return self.hash(hasher);
             }
             const hp0 = @typeInfo(h_info.params[0].type.?);
             if (comptime ((hp0 == .pointer) and (!hp0.pointer.is_const))) {
-                return T.hash(@constCast(self), hasher);
+                return T.hash((blk: {
+                break :blk @constCast(self);
+
+}), hasher);
             }
             return T.hash(self, hasher);
         }

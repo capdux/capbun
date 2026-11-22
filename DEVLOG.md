@@ -1681,3 +1681,7 @@
 ### [2026-11-23] Wave #63 技术要点（残余裸接收者纯化）
 - 无字段结构体（如 `FeaturesFormatter`）的只读实例方法若未在方法体中引用 `_`，`cpc` 会将其降级为静态函数并省略 `self` 参数；需在方法体首行添加 `* = _;` 保留实例方法签名。
 - `enum`（tagged union）上的只读实例方法 `_` 按值传递（`self: Copy`），应直接使用 `switch (_)` 与 `if (_ == .tag)`，不可解引用 `_.*`。
+
+### [2026-11-23] Wave #64 技术要点（全仓语法纯化收官）
+- `while (switch (...) { ... }) |next|` 可直接改写为 `while (next := switch (...) { ... })`。
+- 全仓 1295 个 `.cp` 模块已完成 `zig {}`、`var`、`anyopaque`、`@import`、`_ = `、`orelse`、`try`、`and`/`or`、`const X = struct/enum/union/opaque`、`?T`、`: void`、`self`/`this` 接收者、`if`/`while` `|capture|` 全波次纯化（仅 `return struct/union/enum` 原生 Zig 透传泛型工厂块及条件平台 `@import` 按规范保留）。

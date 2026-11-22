@@ -532,3 +532,8 @@
 - 完成 `temp/wave63_bare_recv_todo.txt` 全部 43 个模块（2 组并行）的裸 `self`/`this` 接收者清扫：`src/analytics/analytics.cp`、`src/bun_alloc/bun_alloc.cp`、`src/bun_core/fmt.cp`、`src/crash_handler/crash_handler.cp`、`src/http_types/URLPath.cp`、`src/install_types/SemverString.cp`、`src/interchange/toml/lexer.cp`、`src/resolver/tsconfig_json.cp` 已完成纯化，其余 35 个位于 `return struct/union(enum)` 原生 Zig 透传泛型工厂块内部按规范保留，全部通过 `cpc_brief.py` 四项门禁。
 - 修复 `src/analytics/analytics.cp`（`FeaturesFormatter.format` 添加 `* = _;` 保留实例方法签名）与 `src/http_jsc/websocket_client.cp`（`enum Copy` 只读方法 `_.*` -> `_`）后，`bun run zig:check` 5/5 通过（23s），`bun bd test test/regression/issue/29181.test.ts test/js/bun/util/bun-file.test.ts` 8/8 通过（460 expect）。
 - 推导下一阶段：全仓主要语法纯化波次已基本收敛，排查非透传 `if`/`while` `|capture|` 尾项并扩大 `bun bd test` 回归测试覆盖。
+
+## [2026-11-23] Wave #64：非透传 `if`/`while` `|capture|` 尾项清扫完成与验收（全仓语法纯化收官）
+- 完成 `temp/wave64_if_while_capture_todo.txt` 排查与纯化：修复 `src/cli/publish_command.cp`、`src/css/css_parser.cp`（`MozDocumentFn`）及 `src/css/generics.cp`（`unsafe { @constCast(this) }`），其余 `src/css/values/calc.cp` 等均位于 `return struct/union` 原生 Zig 透传泛型工厂块内按规范保留，全仓非透传 `if`/`while` `|capture|` 已清零。
+- `bun run zig:check` 5/5 通过（29s），`bun bd test test/regression/issue/29181.test.ts test/js/bun/util/bun-file.test.ts` 8/8 通过（460 expect）。
+- 全仓 1295 个 `.cp` 模块语法纯化波次已全面收敛，下一阶段转入扩大范围的 `bun bd test` 分模块回归测试验证。

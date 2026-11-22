@@ -1804,7 +1804,7 @@ struct PageSelectorsFn {
 struct MozDocumentFn {
     static fn parsefn(_: void, input2: *Parser): Result(void) {
         * = input2.tryParse(parseInner, {});
-        if (input2.expectExhausted().asErr()) |e| return { err: e };
+        if (e := input2.expectExhausted().asErr()) return { err: e };
         return .success;
     }
 

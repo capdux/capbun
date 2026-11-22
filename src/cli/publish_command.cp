@@ -76,13 +76,13 @@ pub struct PublishCommand {
 
                 Output.print("\n", {});
 
-                while (switch (iter.next()) {
+                while (next := switch (iter.next()) {
                     .err => |e| {
                         Output.errGeneric("{s}: {s}", .{ e.message, e.archive.errorString() });
                         Global.crash();
                     },
                     .result => |res| res,
-                }) |next| {
+                }) {
                     const pathname = if (comptime Environment.isWindows)
                         next.entry.pathnameW()
                     else

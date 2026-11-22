@@ -2139,3 +2139,6 @@
 
 ### [2026-11-23] Wave #63（残余裸 `self`/`this` 接收者纯化）
 - 完成 43 个候选 `src/**/*.cp` 模块的裸 `self`/`this`/`*self`/`*this` 接收者清扫（8 个非透传模块实际改写，其余 35 个透传泛型工厂块按规范保留），通过 `bun run zig:check`（5/5）及 `bun bd test`（8/8）。
+
+### [2026-11-23] Wave #64（非透传 `if`/`while` `|capture|` 尾项清扫与语法纯化收官）
+- 完成 `publish_command.cp`、`css_parser.cp`、`generics.cp` 的尾项纯化与 `unsafe` 补全，全仓 1295 个 `.cp` 模块主干及尾项语法纯化全面收敛，通过 `bun run zig:check`（5/5）及 `bun bd test`（8/8）。
