@@ -619,3 +619,11 @@
   - `src/interchange/yaml.cp`（L3753 `newlines_sw` 内 `else => |c| { lit_ch = c; continue :lit_sw; }`，消除死循环）。
 - 验证：`bun run zig:check` 5/5 通过（29s）；`bun-serve-html-manifest.test.ts` 4/4 通过；`test/js/bun/http` 尾段 14 文件 346 pass / 21 fail / 2 skip / 3 todo（全程零 ASan 崩溃，`serve.test.ts:1890` 与 `bun-server.test.ts` 均实测确认为 debug+ASan 并发/时序阈值问题，非 CP 语义缺陷）。
 - 推导下一阶段 Wave #70：Subagent 1 执行 Batch 1b（`test/js/bun/util`，53 个测试文件）；Subagent 2 只读使用 `cpc check --brief` 预检 171 个 `.cp` mtime 晚于 `.zig` 的文件，定位待重编前的潜在 `cpc` 诊断。
+
+## [2026-11-23] Wave #70：Batch 1b（`test/js/bun/util`）回归与 `Blob.cp`/`SlicedString.cp` 修复完成与提交
+- 完成 Batch 1b（`test/js/bun/util`，53 个测试文件）全量回归：**1,318 pass / 48 fail / 19 skip**（65,877 expect，738.5s，**全程零 ASan/段错误崩溃**）。
+  - 独立复现确认 `peek.test.ts`（2 pass）、`filesystem_router.test.ts`（20 pass）、`bunstring-tothreadsafe.test.ts`（2 pass）、`pathToFileURL-invalid.test.ts`（1 pass / 1 skip）在独立运行时均 100% PASS。
+- 完成 2 个模块修复与验证（均通过 `cpc_brief.py` 4 项门禁 + `bun run zig:check` 5/5 通过）：
+  - `src/runtime/webcore/Blob.cp`（L1814-1826 `Blob.writeFormat` 恢复 `_.getNameString()` 判定与输出，修复 `inspect.test.js` `File` 名称缺失）；
+  - `src/install_types/SlicedString.cp`（14 处 `@intFromPtr` 包裹 `unsafe`，消除全部 `E0209`）。
+- 推导下一阶段 Wave #71：Subagent 1 先验证 `inspect.test.js`，随后执行 Batch 1c（`test/js/bun/test`，75 个测试文件）；Subagent 2 只读对 `src/` 核心目录批量运行 `cpc check --brief` 预检。

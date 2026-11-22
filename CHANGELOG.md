@@ -2157,3 +2157,6 @@
 
 ### [2026-11-23] Wave #69（修复 `Installer.cp` 与 `yaml.cp` 状态机死循环并完成 `http` 尾段验证）
 - 修复 `Installer.cp`（`next_step_sw` 外层标签跳转）与 `yaml.cp`（`continue :lit_sw;`），通过 `bun run zig:check`（5/5）、`bun-serve-html-manifest.test.ts`（4/4）及 `test/js/bun/http` 尾段 14 文件零崩溃跑完（346 pass）。
+
+### [2026-11-23] Wave #70（Batch 1b `util` 回归与 `Blob.cp`/`SlicedString.cp` 修复）
+- 修复 `Blob.cp`（`writeFormat` 恢复 `_.getNameString()`）与 `SlicedString.cp`（14 处 `@intFromPtr` `unsafe`），通过 `bun run zig:check`（5/5）；完成 `test/js/bun/util` 53 文件全量回归（1,318 pass / 48 fail / 19 skip，零崩溃）。

@@ -1708,3 +1708,6 @@
 ### [2026-11-23] Wave #69 技术要点（嵌套 `while (true) { switch }` 标签与 debug+ASan 基线）
 - 嵌套 `switch` 改写为嵌套 `while (true)` 时，内层分支跳转外层状态机必须显式携带标签（如 `continue :next_step_sw;` / `continue :lit_sw;`），无标签 `continue` 会退化为内层死循环。
 - Debug+ASan 构建下空闲 WebSocket CPU 占用基线约为 ~6.7%–7.2%（release 为 ~1%），且单次 `bun bd test` 并发跑重负载 HTTP 用例时部分 5s 超时与 100ms 固定半关闭超时属于构建开销所致。
+
+### [2026-11-23] Wave #70 技术要点（`File` `writeFormat` 名称惰性解析）
+- `new File(bits, name)` 将文件名保存在 `store.data.bytes.stored_name` 而 `blob.name` 为 `.Dead`；`Blob.writeFormat` 必须调用 `_.getNameString()` 触发从 `stored_name` 读取并缓存，不可仅检查 `!_.name.isEmpty()`。

@@ -1100,8 +1100,7 @@ _ = try Blob.writeFormatForSize(self.is_jsdom_file, self.size, writer, enable_an
 },
 }
         }
-        const has_name = (!self.name.isEmpty());
-        const show_name = ((self.is_jsdom_file and has_name) or ((has_name and (self.store != null)) and (self.store.?.data == .bytes)));
+        const show_name = ((self.is_jsdom_file and (self.getNameString() != null)) or (((!self.name.isEmpty()) and (self.store != null)) and (self.store.?.data == .bytes)));
         if (((!self.isS3()) and ((((self.content_type.len > 0) or (self.offset > 0)) or show_name) or (self.last_modified != 0.0)))) {
             _ = try writer.writeAll(" {\n");
             {
@@ -1111,7 +1110,7 @@ _ = try Blob.writeFormatForSize(self.is_jsdom_file, self.size, writer, enable_an
                 }
                 if (show_name) {
                     _ = try formatter.writeIndent(Writer, writer);
-                    _ = try writer.print((comptime Output.prettyFmt("name<d>:<r> <green>\"{f}\"<r>", enable_ansi_colors)), .{ self.name });
+                    _ = try writer.print((comptime Output.prettyFmt("name<d>:<r> <green>\"{f}\"<r>", enable_ansi_colors)), .{ ((self.getNameString()) orelse (bun.String.empty)) });
                     if ((((self.content_type.len > 0) or (self.offset > 0)) or (self.last_modified != 0))) {
                         _ = try formatter.printComma(Writer, writer, enable_ansi_colors);
                     }

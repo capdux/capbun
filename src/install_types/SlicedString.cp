@@ -11,7 +11,7 @@ const String = bun.Semver.String;
 
     @inline static fn init(buf: string, slice: string): SlicedString {
         if (Environment.allow_assert && !@inComptime()) {
-            if (@intFromPtr(buf.ptr) > @intFromPtr(slice.ptr)) {
+            if (unsafe { @intFromPtr(buf.ptr) > @intFromPtr(slice.ptr) }) {
                 @panic("SlicedString.init buf is not in front of slice");
             }
         }
@@ -20,14 +20,14 @@ const String = bun.Semver.String;
 
     @inline fn external(): ExternalString {
         if (comptime Environment.allow_assert) {
-            assert(@intFromPtr(_.buf.ptr) <= @intFromPtr(_.slice.ptr) && ((@intFromPtr(_.slice.ptr) + _.slice.len) <= (@intFromPtr(_.buf.ptr) + _.buf.len)));
+            assert(unsafe { @intFromPtr(_.buf.ptr) <= @intFromPtr(_.slice.ptr) && ((@intFromPtr(_.slice.ptr) + _.slice.len) <= (@intFromPtr(_.buf.ptr) + _.buf.len)) });
         }
         return ExternalString.init(_.buf, _.slice, bun.Wyhash11.hash(0, _.slice));
     }
 
     @inline fn value(): String {
         if (comptime Environment.allow_assert) {
-            assert(@intFromPtr(_.buf.ptr) <= @intFromPtr(_.slice.ptr) && ((@intFromPtr(_.slice.ptr) + _.slice.len) <= (@intFromPtr(_.buf.ptr) + _.buf.len)));
+            assert(unsafe { @intFromPtr(_.buf.ptr) <= @intFromPtr(_.slice.ptr) && ((@intFromPtr(_.slice.ptr) + _.slice.len) <= (@intFromPtr(_.buf.ptr) + _.buf.len)) });
         }
         return String.init(_.buf, _.slice);
     }
@@ -35,10 +35,10 @@ const String = bun.Semver.String;
     @inline fn sub(input: string): SlicedString {
         if (Environment.allow_assert) {
             if (!bun.isSliceInBuffer(input, _.buf)) {
-                const start_buf = @intFromPtr(_.buf.ptr);
-                const end_buf = @intFromPtr(_.buf.ptr) + _.buf.len;
-                const start_i = @intFromPtr(input.ptr);
-                const end_i = @intFromPtr(input.ptr) + input.len;
+                const start_buf = unsafe { @intFromPtr(_.buf.ptr) };
+                const end_buf = unsafe { @intFromPtr(_.buf.ptr) } + _.buf.len;
+                const start_i = unsafe { @intFromPtr(input.ptr) };
+                const end_i = unsafe { @intFromPtr(input.ptr) } + input.len;
 
                 bun.Output.panic("SlicedString.sub input [{}, {}) is not a substring of the slice [{}, {})", [start_i, end_i, start_buf, end_buf]);
             }

@@ -1811,8 +1811,7 @@ pub struct BlobExternalSharedDescriptor {
             }
         }
 
-        const has_name = !_.name.isEmpty();
-        const show_name = (_.is_jsdom_file && has_name) || (has_name && _.store != null && _.store.?.data == .bytes);
+        const show_name = (_.is_jsdom_file && _.getNameString() != null) || (!_.name.isEmpty() && _.store != null && _.store.?.data == .bytes);
         if (!_.isS3() && (_.content_type.len > 0 || _.offset > 0 || show_name || _.last_modified != 0.0)) {
             writer.writeAll(" {\n")?;
             {
@@ -1823,7 +1822,7 @@ pub struct BlobExternalSharedDescriptor {
                     formatter.writeIndent(Writer, writer)?;
                     writer.print(
                         comptime Output.prettyFmt("name<d>:<r> <green>\"{f}\"<r>", enable_ansi_colors),
-                        .{_.name},
+                        .{_.getNameString() ?? bun.String.empty},
                     )?;
                     if (_.content_type.len > 0 || _.offset > 0 || _.last_modified != 0) {
                         formatter.printComma(Writer, writer, enable_ansi_colors)?;
