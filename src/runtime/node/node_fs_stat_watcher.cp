@@ -35,6 +35,13 @@ pub struct DeinitGuard<T> {
     }
 }
 
+pub struct UnlockGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.unlock();
+    }
+}
+
 fn statToJSStats(globalThis: *jsc.JSGlobalObject, stats: *const bun.sys.PosixStat, bigint: bool): bun.JSError!jsc.JSValue {
     if (bigint) {
         return StatsBig.init(stats).toJS(globalThis);
@@ -373,14 +380,14 @@ pub struct StatWatcher {
     /// value instead of referencing by pointer.
     fn getLastStat(*_): bun.sys.PosixStat {
         const value = _.@"#last_stat".lock();
-        defer _.@"#last_stat".unlock();
+        const _unlock_guard = UnlockGuard<bun.threading.Guarded(bun.sys.PosixStat)>{ ptr: unsafe { &_.@"#last_stat" } };
         return value.*;
     }
 
     /// Set the last stat.
     fn setLastStat(*_, stat: *const bun.sys.PosixStat) {
         const value = _.@"#last_stat".lock();
-        defer _.@"#last_stat".unlock();
+        const _unlock_guard = UnlockGuard<bun.threading.Guarded(bun.sys.PosixStat)>{ ptr: unsafe { &_.@"#last_stat" } };
         value.* = stat.*;
     }
 

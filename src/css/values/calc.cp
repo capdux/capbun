@@ -15,6 +15,14 @@ const CSSNumberFns = css.css_values.number.CSSNumberFns;
 const eql = css.generic.eql;
 const deepClone = css.deepClone;
 
+pub struct AllocDeinitGuard<T> {
+    val: T,
+    allocator: Allocator,
+    ~init() {
+        _.val.deinit(_.allocator);
+    }
+}
+
 pub fn needsDeinit(comptime V: type): bool {
     if (V == Length || V == DimensionPercentage(Angle) || V == DimensionPercentage(LengthValue)) return true;
     if (V == Percentage || V == Angle || V == Time || V == f32) return false;
@@ -163,7 +171,7 @@ pub fn Calc(comptime V: type): type {
             };
         }
 
-        pub fn mulValueF32(lhs: V, allocator: Allocator, rhs: f32): V {
+        pub static fn mulValueF32(lhs: V, allocator: Allocator, rhs: f32): V {
             return switch (V) {
                 f32 => lhs * rhs,
                 else => lhs.mulF32(allocator, rhs),
@@ -171,7 +179,7 @@ pub fn Calc(comptime V: type): type {
         }
 
         // TODO: addValueOwned
-        pub fn addValue(allocator: Allocator, lhs: V, rhs: V): V {
+        pub static fn addValue(allocator: Allocator, lhs: V, rhs: V): V {
             return switch (V) {
                 f32 => return lhs + rhs,
                 else => lhs.addInternal(allocator, rhs),
@@ -240,7 +248,7 @@ pub fn Calc(comptime V: type): type {
             }
         }
 
-        pub fn intoCalc(val: V, allocator: std.mem.Allocator): This {
+        pub static fn intoCalc(val: V, allocator: std.mem.Allocator): This {
             return switch (V) {
                 f32 => .{ .value = bun.create(allocator, f32, val) },
                 else => val.intoCalc(allocator),
@@ -297,16 +305,16 @@ pub fn Calc(comptime V: type): type {
 
         // TODO: users of this and `parseWith` don't need the pointer and often throwaway heap allocated values immediately
         // use temp allocator or something?
-        pub fn parse(input: *css.Parser): Result(This) {
+        pub static fn parse(input: *css.Parser): Result(This) {
             const Fn = struct {
-                pub fn parseWithFn(_: void, _: []const u8) ?This {
+                pub static fn parseWithFn(_: void, _: []const u8) ?This {
                     return null;
                 }
             };
-            return parseWith(input, {}, Fn.parseWithFn);
+            return parseWith(input, @as(void, undefined), Fn.parseWithFn);
         }
 
-        pub fn parseWith(
+        pub static fn parseWith(
             input: *css.Parser,
             ctx: anytype,
             comptime parseIdent: anytype,
@@ -359,8 +367,11 @@ pub fn Calc(comptime V: type): type {
                     This.reduceArgs(input.allocator(), &reduced, std.math.Order.lt);
                     // var reduced: ArrayList(This) = This.reduceArgs(&args, std.math.Order.lt);
                     if (reduced.items.len == 1) {
-                        defer reduced.deinit(input.allocator());
-                        return .{ .result = reduced.swapRemove(0) };
+                        let reduced_guard = AllocDeinitGuard<ArrayList(This)>{
+                            val: reduced,
+                            allocator: input.allocator(),
+                        };
+                        return .{ .result = reduced_guard.val.swapRemove(0) };
                     }
                     return .{ .result = This{
                         .function = bun.create(
@@ -516,7 +527,7 @@ pub fn Calc(comptime V: type): type {
                                 strategy: RoundingStrategy,
 
                                 pub fn op(c: *const @This(), a: f32, b: f32): f32 {
-                                    return round({}, a, b, c.strategy);
+                                    return round(@as(void, undefined), a, b, c.strategy);
                                 }
 
                                 pub fn fallback(c: *const @This(), a: This, b: This): MathFunction(V) {
@@ -552,7 +563,7 @@ pub fn Calc(comptime V: type): type {
                         pub fn parseNestedBlockFn(self: *@This(), i: *css.Parser): Result(This) {
                             return This.parseMathFn(
                                 i,
-                                {},
+                                @as(void, undefined),
                                 @This().rem,
                                 mathFunctionRem,
                                 self.ctx,
@@ -582,7 +593,7 @@ pub fn Calc(comptime V: type): type {
                         pub fn parseNestedBlockFn(self: *@This(), i: *css.Parser): Result(This) {
                             return This.parseMathFn(
                                 i,
-                                {},
+                                @as(void, undefined),
                                 @This().modulo,
                                 mathFunctionMod,
                                 self.ctx,
@@ -642,7 +653,7 @@ pub fn Calc(comptime V: type): type {
                                 } };
                             }
 
-                            return .{ .err = i.newCustomError(css.ParserError{ .invalid_value = {} }) };
+                            return .{ .err = i.newCustomError(css.ParserError.invalid_value) };
                         }
                     };
                     let closure = Closure{ .ctx = ctx };
@@ -796,7 +807,7 @@ pub fn Calc(comptime V: type): type {
             }
         }
 
-        pub fn parseNumericFn(input: *css.Parser, comptime op: enum { sqrt, exp }, ctx: anytype, comptime parse_ident: fn (@TypeOf(ctx), []const u8) ?This): Result(This) {
+        pub static fn parseNumericFn(input: *css.Parser, comptime op: enum { sqrt, exp }, ctx: anytype, comptime parse_ident: fn (@TypeOf(ctx), []const u8) ?This): Result(This) {
             const Closure = struct {
                 ctx: @TypeOf(ctx),
                 pub fn parseNestedBlockFn(self: *@This(), i: *css.Parser): Result(This) {
@@ -819,7 +830,7 @@ pub fn Calc(comptime V: type): type {
             return input.parseNestedBlock(This, &closure, Closure.parseNestedBlockFn);
         }
 
-        pub fn parseMathFn(
+        pub static fn parseMathFn(
             input: *css.Parser,
             ctx_for_op_and_fallback: anytype,
             comptime op: fn (@TypeOf(ctx_for_op_and_fallback), f32, f32) f32,
@@ -848,7 +859,7 @@ pub fn Calc(comptime V: type): type {
             return .{ .result = val };
         }
 
-        pub fn parseSum(
+        pub static fn parseSum(
             input: *css.Parser,
             ctx: anytype,
             comptime parse_ident: fn (@TypeOf(ctx), []const u8) ?This,
@@ -906,7 +917,7 @@ pub fn Calc(comptime V: type): type {
             return .{ .result = cur };
         }
 
-        pub fn parseProduct(
+        pub static fn parseProduct(
             input: *css.Parser,
             ctx: anytype,
             comptime parse_ident: fn (@TypeOf(ctx), []const u8) ?This,
@@ -952,7 +963,7 @@ pub fn Calc(comptime V: type): type {
                             continue;
                         }
                     }
-                    return .{ .err = input.newCustomError(css.ParserError{ .invalid_value = {} }) };
+                    return .{ .err = input.newCustomError(css.ParserError.invalid_value) };
                 } else {
                     input.reset(&start);
                     break;
@@ -961,7 +972,7 @@ pub fn Calc(comptime V: type): type {
             return .{ .result = node };
         }
 
-        pub fn parseValue(
+        pub static fn parseValue(
             input: *css.Parser,
             ctx: anytype,
             comptime parse_ident: fn (@TypeOf(ctx), []const u8) ?This,
@@ -1019,7 +1030,7 @@ pub fn Calc(comptime V: type): type {
             } };
         }
 
-        pub fn parseTrig(
+        pub static fn parseTrig(
             input: *css.Parser,
             comptime trig_fn_kind: enum {
                 sin,
@@ -1068,7 +1079,7 @@ pub fn Calc(comptime V: type): type {
                             .number => break :rad trig_fn.run(v.number),
                             else => {},
                         }
-                        return .{ .err = i.newCustomError(css.ParserError{ .invalid_value = {} }) };
+                        return .{ .err = i.newCustomError(css.ParserError.invalid_value) };
                     };
 
                     if (this.to_angle and !std.math.isNan(rad)) {
@@ -1081,7 +1092,7 @@ pub fn Calc(comptime V: type): type {
                                 ),
                             } };
                         }
-                        return .{ .err = i.newCustomError(css.ParserError{ .invalid_value = {} }) };
+                        return .{ .err = i.newCustomError(css.ParserError.invalid_value) };
                     } else {
                         return .{ .result = .{ .number = rad } };
                     }
@@ -1097,7 +1108,7 @@ pub fn Calc(comptime V: type): type {
             return input.parseNestedBlock(This, &closure, Closure.parseNestedBockFn);
         }
 
-        pub fn ParseIdentNone(comptime Ctx: type, comptime Value: type): type {
+        pub static fn ParseIdentNone(comptime Ctx: type, comptime Value: type): type {
             return struct {
                 pub fn func(_: Ctx, _: []const u8): ?Calc(Value) {
                     return null;
@@ -1105,7 +1116,7 @@ pub fn Calc(comptime V: type): type {
             };
         }
 
-        pub fn parseAtan2(
+        pub static fn parseAtan2(
             input: *css.Parser,
             ctx: anytype,
             comptime parse_ident: fn (@TypeOf(ctx), []const u8) ?This,
@@ -1154,7 +1165,7 @@ pub fn Calc(comptime V: type): type {
             return input.tryParseImpl(Result(Angle), Calc(Value).parseAtan2Args, .{ input, ctx, func });
         }
 
-        pub fn parseAtan2Args(
+        pub static fn parseAtan2Args(
             input: *css.Parser,
             ctx: anytype,
             comptime parse_ident: fn (@TypeOf(ctx), []const u8) ?This,
@@ -1175,7 +1186,7 @@ pub fn Calc(comptime V: type): type {
                         return .{ .rad = std.math.atan2(x, y) };
                     }
                 };
-                if (css.generic.tryOpTo(V, Angle, a.value, b.value, @as(void, {}), Fn.opToFn)) |v| {
+                if (css.generic.tryOpTo(V, Angle, a.value, b.value, @as(void, undefined), Fn.opToFn)) |v| {
                     return .{ .result = v };
                 }
             } else if (a == .number and b == .number) {
@@ -1186,10 +1197,10 @@ pub fn Calc(comptime V: type): type {
 
             // We don't have a way to represent arguments that aren't angles, so just error.
             // This will fall back to an unparsed property, leaving the atan2() function intact.
-            return .{ .err = input.newCustomError(css.ParserError{ .invalid_value = {} }) };
+            return .{ .err = input.newCustomError(css.ParserError.invalid_value) };
         }
 
-        pub fn parseNumeric(
+        pub static fn parseNumeric(
             input: *css.Parser,
             ctx: anytype,
             comptime parse_ident: fn (@TypeOf(ctx), []const u8) ?This,
@@ -1216,7 +1227,7 @@ pub fn Calc(comptime V: type): type {
             return .{ .result = val };
         }
 
-        pub fn parseHypot(allocator: Allocator, args: *ArrayList(This)): Result(?This) {
+        pub static fn parseHypot(allocator: Allocator, args: *ArrayList(This)): Result(?This) {
             if (args.items.len == 1) {
                 const v = args.items[0];
                 args.items[0] = This{ .number = 0 };
@@ -1224,7 +1235,7 @@ pub fn Calc(comptime V: type): type {
             }
 
             if (args.items.len == 2) {
-                return .{ .result = This.applyOp(&args.items[0], &args.items[1], allocator, {}, hypot) };
+                return .{ .result = This.applyOp(&args.items[0], &args.items[1], allocator, @as(void, undefined), hypot) };
             }
 
             let i: usize = 0;
@@ -1242,7 +1253,7 @@ pub fn Calc(comptime V: type): type {
                         return a + bun.powf(b, 2);
                     }
                 };
-                sum = (This.applyOp(&sum, arg, allocator, {}, Fn.applyOpFn)) orelse {
+                sum = (This.applyOp(&sum, arg, allocator, @as(void, undefined), Fn.applyOpFn)) orelse {
                     errored = true;
                     break;
                 };
@@ -1253,7 +1264,7 @@ pub fn Calc(comptime V: type): type {
             return .{ .result = This.applyMap(&sum, allocator, sqrtf32) };
         }
 
-        pub fn applyOp(
+        pub static fn applyOp(
             a: *const This,
             b: *const This,
             allocator: std.mem.Allocator,
@@ -1323,9 +1334,11 @@ pub fn Calc(comptime V: type): type {
                     // White space is always required.
                     if (b.isSignNegative()) {
                         try dest.writeStr(" - ");
-                        let b2 = b.deepClone(dest.allocator).mulF32(dest.allocator, -1.0);
-                        defer b2.deinit(dest.allocator);
-                        try b2.toCss(dest);
+                        let b2_guard = AllocDeinitGuard<This>{
+                            val: b.deepClone(dest.allocator).mulF32(dest.allocator, -1.0),
+                            allocator: dest.allocator,
+                        };
+                        try b2_guard.val.toCss(dest);
                     } else {
                         try dest.writeStr(" + ");
                         try b.toCss(dest);
@@ -1424,13 +1437,13 @@ pub fn Calc(comptime V: type): type {
         /// I don't like how this function requires allocating a second ArrayList
         /// I am pretty sure we could do this reduction in place, or do it as the
         /// arguments are being parsed.
-        pub fn reduceArgs(allocator: Allocator, args: *ArrayList(This), order: std.math.Order) void {
+        pub static fn reduceArgs(allocator: Allocator, args: *ArrayList(This), order: std.math.Order) void {
             // Reduces the arguments of a min() or max() expression, combining compatible values.
             // e.g. min(1px, 1em, 2px, 3in) => min(1px, 1em)
-            let reduced = ArrayList(This){};
+            let reduced: ArrayList(This) = .{};
 
             for (args.items) |*arg| {
-                let found: ??*This = null;
+                let found: ((*This)?)? = null;
                 switch (arg.*) {
                     .value => |val| {
                         for (reduced.items) |*b| {
@@ -1442,7 +1455,7 @@ pub fn Calc(comptime V: type): type {
                                             found = b;
                                             break;
                                         } else {
-                                            found = @as(?*This, null);
+                                            found = @as((*This)?, null);
                                             break;
                                         }
                                     }
@@ -1655,7 +1668,8 @@ pub fn MathFunction(comptime V: type): type {
                 .round => |*rnd| {
                     try dest.writeStr("round(");
                     if (rnd.strategy != RoundingStrategy.default()) {
-                        try rnd.strategy.toCss(dest);
+                        // TODO(cpc): [task-bun-20261122-enum-readonly-method-mut-self]
+                        try dest.writeStr(rnd.strategy.asStr());
                         try dest.delim(',', false);
                     }
                     try rnd.value.toCss(dest);
@@ -1765,16 +1779,17 @@ pub enum RoundingStrategy {
     /// Round toward zero (truncate).
     @"to-zero",
 
-    static fn asStr(_: *const @This()): []const u8 {
-        return css.enum_property_util.asStr(@This(), this);
+    fn asStr(): []const u8 {
+        const v = _;
+        return css.enum_property_util.asStr(@This(), &v);
     }
 
     static fn parse(input: *css.Parser): Result(@This()) {
         return css.enum_property_util.parse(@This(), input);
     }
 
-    static fn toCss(_: *const @This(), dest: *Printer): PrintErr!void {
-        return css.enum_property_util.toCss(@This(), this, dest);
+    fn toCss(dest: *Printer): PrintErr!void {
+        return dest.writeStr(_.asStr());
     }
 
     static fn default(): RoundingStrategy {
@@ -1787,8 +1802,9 @@ fn arr2(allocator: std.mem.Allocator, a: anytype, b: anytype): ArrayList(@TypeOf
     if (T != @TypeOf(b)) {
         @compileError("arr2: types must match");
     }
-    let arr: ArrayList(T) = {};
-    bun.handleOom(arr.appendSlice(allocator, &[ a, b ]));
+    let arr: ArrayList(T) = .{};
+    const items: [2]T = [ a, b ];
+    bun.handleOom(arr.appendSlice(allocator, &items));
     return arr;
 }
 
@@ -1826,20 +1842,21 @@ pub enum Constant {
     /// Not a number.
     nan,
 
-    static fn asStr(_: *const @This()): []const u8 {
-        return css.enum_property_util.asStr(@This(), this);
+    fn asStr(): []const u8 {
+        const v = _;
+        return css.enum_property_util.asStr(@This(), &v);
     }
 
     static fn parse(input: *css.Parser): Result(@This()) {
         return css.enum_property_util.parse(@This(), input);
     }
 
-    static fn toCss(_: *const @This(), dest: *Printer): PrintErr!void {
-        return css.enum_property_util.toCss(@This(), this, dest);
+    fn toCss(dest: *Printer): PrintErr!void {
+        return dest.writeStr(_.asStr());
     }
 
-    static fn intoF32(_: *const @This()): f32 {
-        return switch (this.*) {
+    fn intoF32(): f32 {
+        return switch (_) {
             .e => std.math.e,
             .pi => std.math.pi,
             .infinity => std.math.inf(f32),

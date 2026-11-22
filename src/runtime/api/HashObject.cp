@@ -6,6 +6,13 @@ const ZigString = jsc.ZigString;
 
 pub const HashObject = @This();
 
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
 pub struct Crc32Hasher {
     pub fn hash(seed: u32, bytes: []const u8): u32 {
         // zlib takes a 32-bit length, so chunk large inputs to avoid truncation.
@@ -15,7 +22,7 @@ pub struct Crc32Hasher {
             const remaining = bytes.len - offset;
             const max_len: usize = std.math.maxInt(u32);
             const chunk_len: u32 = if (remaining > max_len) @as(u32, @intCast(max_len)) else @as(u32, @intCast(remaining));
-            crc = bun.zlib.crc32(crc, bytes.ptr + offset, chunk_len);
+            crc = bun.zlib.crc32(crc, unsafe { bytes.ptr + offset }, chunk_len);
             offset += chunk_len;
         }
         return @as(u32, @intCast(crc));
@@ -46,11 +53,11 @@ pub fn HashWrapper(comptime Hasher_: auto): type {
         pub fn hash(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
             const arguments = callframe.arguments_old(2).slice();
             let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
-            defer args.deinit();
+            const _args_guard = DeinitGuard<jsc.CallFrame.ArgumentsSlice>{ ptr: unsafe { &args } };
 
             let input: []const u8 = "";
             let input_slice = ZigString.Slice.empty;
-            defer input_slice.deinit();
+            const _input_slice_guard = DeinitGuard<ZigString.Slice>{ ptr: unsafe { &input_slice } };
             if (arg := args.nextEat()) {
                 if (blob := arg.@"as"(jsc.WebCore.Blob)) {
                     // TODO: files

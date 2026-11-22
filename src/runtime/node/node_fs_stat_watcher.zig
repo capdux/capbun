@@ -139,6 +139,19 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub fn UnlockGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.ptr.unlock();
+        }
+    };
+}
+
 pub const StatWatcherScheduler = struct {
     current_interval: std.atomic.Value(i32) = .{ .raw = 0 },
     task: jsc.WorkPoolTask = .{ .callback = (&workPoolCallback) },
@@ -415,17 +428,25 @@ pub fn enqueueTaskConcurrent(self: StatWatcher, task: *jsc.ConcurrentTask) void 
 
 pub fn getLastStat(self: *StatWatcher) bun.sys.PosixStat {
             const value = self.@"#last_stat".lock();
-            defer {
-            _ = self.@"#last_stat".unlock();
-            }
+            var _unlock_guard = UnlockGuard(bun.threading.Guarded(bun.sys.PosixStat)){ .ptr = (blk: {
+            break :blk (&self.@"#last_stat");
+
+}) };
+            _ = &_unlock_guard;
+            var ___unlock_guard_moved = false; _ = &___unlock_guard_moved;
+            defer if (!___unlock_guard_moved) { ___unlock_guard_moved = true; const __T = @TypeOf(_unlock_guard); if (@typeInfo(__T) == .optional) { if (_unlock_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _unlock_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _unlock_guard; _drop_val.__cp_deinit(); } };
             return value.*;
     }
 
 pub fn setLastStat(self: *StatWatcher, stat: *const bun.sys.PosixStat) void {
             const value = self.@"#last_stat".lock();
-            defer {
-            _ = self.@"#last_stat".unlock();
-            }
+            var _unlock_guard = UnlockGuard(bun.threading.Guarded(bun.sys.PosixStat)){ .ptr = (blk: {
+            break :blk (&self.@"#last_stat");
+
+}) };
+            _ = &_unlock_guard;
+            var ___unlock_guard_moved = false; _ = &___unlock_guard_moved;
+            defer if (!___unlock_guard_moved) { ___unlock_guard_moved = true; const __T = @TypeOf(_unlock_guard); if (@typeInfo(__T) == .optional) { if (_unlock_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _unlock_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _unlock_guard; _drop_val.__cp_deinit(); } };
             value.* = stat.*;
     }
 

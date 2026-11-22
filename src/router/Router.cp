@@ -181,6 +181,15 @@ export struct Routes {
     }
 }
 
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+type DedupeDynamicMap = std.AutoArrayHashMap(u32, string);
+
 export struct RouteLoader {
     allocator: std.mem.Allocator,
     fs: *FileSystem,
@@ -284,11 +293,11 @@ export struct RouteLoader {
             .fs = resolver.fs,
             .config = config,
             .static_list = bun.StringHashMap(RoutePtr).init(allocator),
-            .dedupe_dynamic = std.AutoArrayHashMap(u32, string).init(allocator),
+            .dedupe_dynamic = DedupeDynamicMap.init(allocator),
             .all_routes = .{},
             .route_dirname_len = r_dirname_len,
         };
-        defer loader.dedupe_dynamic.deinit();
+        const _dedupe_guard = DeinitGuard<DedupeDynamicMap>{ ptr: unsafe { &loader.dedupe_dynamic } };
         loader.load(ResolverType, resolver, root_dir_info, base_dir);
         if (loader.all_routes.items.len == 0) {
             return Routes{
@@ -405,7 +414,7 @@ export struct RouteLoader {
                                 bun.assert(bun.path.isSepAny(entry.dir[base_dir.len - 1]));
                             }
 
-                            const public_dir = entry.dir.ptr[base_dir.len - 1 .. entry.dir.len];
+                            const public_dir = unsafe { entry.dir.ptr[base_dir.len - 1 .. entry.dir.len] };
 
                             if (route := Route.parse(
                                 entry.base(),

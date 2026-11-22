@@ -6,6 +6,23 @@
 
 @opaque pub struct SecretsJobOptions {}
 
+struct EnqueueTaskGuard {
+    vm: *jsc.VirtualMachine,
+    job: *SecretsJob,
+
+    ~init() {
+        _.vm.enqueueTaskConcurrent(jsc.ConcurrentTask.create(_.job.any_task.task()));
+    }
+}
+
+struct SecretsJobDeinitGuard {
+    job: *SecretsJob,
+
+    ~init() {
+        _.job.deinit();
+    }
+}
+
 pub struct SecretsJob {
     vm: *jsc.VirtualMachine,
     task: jsc.WorkPoolTask,
@@ -32,24 +49,23 @@ pub struct SecretsJob {
 
     static fn runTask(task: *jsc.WorkPoolTask) {
         const job: *SecretsJob = @fieldParentPtr("task", task);
-        let vm = job.vm;
-        defer vm.enqueueTaskConcurrent(jsc.ConcurrentTask.create(job.any_task.task()));
+        const enqueue_guard = EnqueueTaskGuard{ vm: job.vm, job: job };
 
-        Bun__SecretsJobOptions__runTask(job.ctx, vm.global);
+        Bun__SecretsJobOptions__runTask(job.ctx, enqueue_guard.vm.global);
     }
 
     fn runFromJS(*_) {
-        defer _.deinit();
-        const vm = _.vm;
+        const deinit_guard = SecretsJobDeinitGuard{ job: _ };
+        const vm = deinit_guard.job.vm;
 
         if (vm.isShuttingDown()) {
             return;
         }
 
-        const promise = _.promise.get();
+        const promise = deinit_guard.job.promise.get();
         if (promise == .zero) return;
 
-        Bun__SecretsJobOptions__runFromJS(_.ctx, vm.global, promise);
+        Bun__SecretsJobOptions__runFromJS(deinit_guard.job.ctx, vm.global, promise);
     }
 
     fn deinit(*_) {

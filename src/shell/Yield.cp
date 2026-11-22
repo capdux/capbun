@@ -36,6 +36,14 @@ pub struct OnIOWriterChunk {
 /// Used in debug builds to ensure the shell is not creating a callstack that is too deep.
 @tls let _dbg_catch_exec_within_exec: if (Environment.isDebug) usize else u0 = 0;
 
+struct PipelineStackGuard {
+    stack: std.array_list.Managed(*Pipeline),
+
+    ~init() {
+        _.stack.deinit();
+    }
+}
+
 pub union(enum) Yield {
     script: *Script,
     stmt: *Stmt,
@@ -94,8 +102,9 @@ pub union(enum) Yield {
         // there can be nested pipelines, so we need a stack.
         let sfb = std.heap.stackFallback(@sizeOf(*Pipeline) * 4, bun.default_allocator);
         const alloc = sfb.get();
-        let pipeline_stack = bun.handleOom(std.array_list.Managed(*Pipeline).initCapacity(alloc, 4));
-        defer pipeline_stack.deinit();
+        let stack_guard = PipelineStackGuard{
+            stack: bun.handleOom(std.array_list.Managed(*Pipeline).initCapacity(alloc, 4)),
+        };
 
         // Note that we're using labelled switch statements but _not_
         // re-assigning `this`, so the `this` variable is stale after the first
@@ -106,14 +115,14 @@ pub union(enum) Yield {
                 .pipeline x => {
                     if (x.state == .done) {
                         // remove it from the pipeline stack as calling `.next()` will now deinit it
-                        if (idx := std.mem.indexOfScalar(*Pipeline, pipeline_stack.items, x)) {
-                            * = pipeline_stack.orderedRemove(idx);
+                        if (idx := std.mem.indexOfScalar(*Pipeline, stack_guard.stack.items, x)) {
+                            * = stack_guard.stack.orderedRemove(idx);
                         }
                         cur = x.next();
                         continue;
                     }
-                    bun.assert_eql(std.mem.indexOfScalar(*Pipeline, pipeline_stack.items, x), null);
-                    bun.handleOom(pipeline_stack.append(x));
+                    bun.assert_eql(std.mem.indexOfScalar(*Pipeline, stack_guard.stack.items, x), null);
+                    bun.handleOom(stack_guard.stack.append(x));
                     cur = x.next();
                 },
                 .cmd x => cur = x.next(),
@@ -129,7 +138,7 @@ pub union(enum) Yield {
                     cur = child.onIOWriterChunk(x.written, x.e);
                 },
                 .failed, .suspended, .done => {
-                    if (yield := drainPipelines(&pipeline_stack)) {
+                    if (yield := drainPipelines(&stack_guard.stack)) {
                         cur = yield;
                         continue;
                     }
@@ -155,6 +164,7 @@ pub union(enum) Yield {
 }
 
 
+import std from "std";
 import bun from "bun";
 const Environment = bun.Environment;
 const jsc = bun.jsc;

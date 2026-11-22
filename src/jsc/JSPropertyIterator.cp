@@ -18,6 +18,14 @@ pub struct JSPropertyIteratorOptions {
     fn Bun__JSPropertyIterator__getLongestPropertyName(iter: *JSPropertyIteratorImpl, globalObject: *jsc.JSGlobalObject, object: *jsc.JSObject): usize;
 }
 
+pub struct TopExceptionScopeGuard {
+    scope: *bun.jsc.TopExceptionScope,
+
+    ~init() {
+        _.scope.deinit();
+    }
+}
+
 @opaque pub struct JSPropertyIteratorImpl {
     static fn init(
         globalObject: *jsc.JSGlobalObject,
@@ -34,18 +42,18 @@ pub struct JSPropertyIteratorOptions {
     static fn getNameAndValue(iter: *JSPropertyIteratorImpl, globalObject: *jsc.JSGlobalObject, object: *jsc.JSObject, propertyName: *bun.String, i: usize): bun.JSError!jsc.JSValue {
         let scope: bun.jsc.TopExceptionScope = undefined;
         scope.init(globalObject, @src());
-        defer scope.deinit();
+        const scope_guard = TopExceptionScopeGuard{ scope: &scope };
         const value = Bun__JSPropertyIterator__getNameAndValue(iter, globalObject, object, propertyName, i);
-        scope.returnIfException()?;
+        scope_guard.scope.returnIfException()?;
         return value;
     }
 
     static fn getNameAndValueNonObservable(iter: *JSPropertyIteratorImpl, globalObject: *jsc.JSGlobalObject, object: *jsc.JSObject, propertyName: *bun.String, i: usize): bun.JSError!jsc.JSValue {
         let scope: bun.jsc.TopExceptionScope = undefined;
         scope.init(globalObject, @src());
-        defer scope.deinit();
+        const scope_guard = TopExceptionScopeGuard{ scope: &scope };
         const value = Bun__JSPropertyIterator__getNameAndValueNonObservable(iter, globalObject, object, propertyName, i);
-        scope.returnIfException()?;
+        scope_guard.scope.returnIfException()?;
         return value;
     }
 

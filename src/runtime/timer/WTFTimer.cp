@@ -16,6 +16,15 @@ pub struct RunLoopTimer {
     fn WTFTimer__fire(timer: *RunLoopTimer);
 }
 
+/// RAII guard for WTFTimer mutex
+struct MutexGuard {
+    lock: *bun.Mutex!;
+
+    ~init() {
+        _.lock.unlock();
+    }
+}
+
 /// A timer created by WTF code and invoked by Bun's event loop
 @root struct WTFTimer {
     vm: *VirtualMachine;
@@ -30,7 +39,7 @@ pub struct RunLoopTimer {
 
     pub fn run(*_: *WTFTimer, vm: *VirtualMachine) {
         if (_.event_loop_timer.state == .ACTIVE) {
-            vm.timer.remove(&_.event_loop_timer);
+            vm.timer.remove(unsafe { &_.event_loop_timer });
         }
         _.runWithoutRemoving();
     }
@@ -57,19 +66,19 @@ pub struct RunLoopTimer {
             interval.nsec -= std.time.ns_per_s;
         }
 
-        _.vm.timer.update(&_.event_loop_timer, &interval);
+        _.vm.timer.update(unsafe { &_.event_loop_timer }, unsafe { &interval });
         _.repeat = repeat;
     }
 
     pub fn cancel(*_: *WTFTimer) {
         _.lock.lock();
-        defer _.lock.unlock();
+        const _guard = MutexGuard{ lock: unsafe { &_.lock } };
 
         if (_.script_execution_context_id.valid()) {
             * = _.imminent.cmpxchgStrong(_, null, .seq_cst, .seq_cst);
 
             if (_.event_loop_timer.state == .ACTIVE) {
-                _.vm.timer.remove(&_.event_loop_timer);
+                _.vm.timer.remove(unsafe { &_.event_loop_timer });
             }
         }
     }
@@ -101,7 +110,7 @@ pub struct RunLoopTimer {
 
     const timer = WTFTimer.new(.{
         .vm = vm,
-        .imminent = &vm.eventLoop().imminent_gc_timer,
+        .imminent = unsafe { &vm.eventLoop().imminent_gc_timer },
         .event_loop_timer = .{
             .next = .{
                 .sec = std.math.maxInt(i64),
@@ -136,9 +145,9 @@ pub struct RunLoopTimer {
 
 @export @c fn WTFTimer__secondsUntilTimer(timer: *WTFTimer): f64 {
     timer.lock.lock();
-    defer timer.lock.unlock();
+    const _guard = MutexGuard{ lock: unsafe { &timer.lock } };
     if (timer.event_loop_timer.state == .ACTIVE) {
-        const until = timer.event_loop_timer.next.duration(&bun.timespec.now(.force_real_time));
+        const until = timer.event_loop_timer.next.duration(unsafe { &bun.timespec.now(.force_real_time) });
         const sec: f64 = @floatFromInt(until.sec);
         const nsec: f64 = @floatFromInt(until.nsec);
         return sec + nsec / std.time.ns_per_s;

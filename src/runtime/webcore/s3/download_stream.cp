@@ -12,6 +12,26 @@ const log = bun.Output.scoped(.S3, .hidden);
 
 let empty_u8: [0]u8 = undefined;
 
+struct MutexGuard {
+    lock: *bun.Mutex!;
+
+    ~init() {
+        _.lock.unlock();
+    }
+}
+
+struct ResponseGuard {
+    task: *S3HttpDownloadStreamingTask!;
+    has_more: bool;
+
+    ~init() {
+        _.task.mutex.unlock();
+        if (!_.has_more) {
+            _.task.deinit();
+        }
+    }
+}
+
 export class S3HttpDownloadStreamingTask {
     pub const new = bun.TrivialNew(S3HttpDownloadStreamingTask);
 
@@ -160,10 +180,7 @@ export class S3HttpDownloadStreamingTask {
         this.mutex.lock();
         const state = this.getState();
         const has_more = state.has_more;
-        defer {
-            this.mutex.unlock();
-            if (!has_more) this.deinit();
-        }
+        const _guard = ResponseGuard{ task: unsafe { this as *S3HttpDownloadStreamingTask! }, has_more: has_more };
 
         if (has_more) this.has_schedule_callback.store(false, .monotonic);
         this.reportProgress(state);
@@ -206,12 +223,12 @@ export class S3HttpDownloadStreamingTask {
         result: bun.http.HTTPClientResult,
     ): bool {
         this.mutex.lock();
-        defer this.mutex.unlock();
+        const _guard = MutexGuard{ lock: unsafe { &this.mutex } };
 
         let state = this.getState();
         bun.assert(state.has_more);
         const is_done = !result.has_more;
-        const wait_until_done = this.updateState(async_http, result, &state);
+        const wait_until_done = this.updateState(async_http, result, unsafe { &state });
         const should_enqueue = !wait_until_done or is_done;
 
         if (should_enqueue) {

@@ -1,5 +1,20 @@
 import css from "../css_parser.zig";
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+pub struct DeinitAllocGuard<T> {
+    ptr: *T!,
+    alloc: std.mem.Allocator,
+    ~init() {
+        unsafe { _.ptr.deinit(_.alloc); }
+    }
+}
+
 const Printer = css.Printer;
 const PrintErr = css.PrintErr;
 
@@ -331,7 +346,7 @@ fn toCssFontFamily(this_ff: *const FontFamily, dest: *Printer): PrintErr!void {
                 ).isOk())
             {
                 let id = std.Io.Writer.Allocating.init(dest.allocator);
-                defer id.deinit();
+                const _id_guard = DeinitGuard<@TypeOf(id)>{ ptr: unsafe { &id } };
                 let first = true;
                 let split_iter = std.mem.splitScalar(u8, val, ' ');
                 while (slice := split_iter.next()) {
@@ -962,7 +977,7 @@ pub struct FontHandler {
                 let sfb = std.heap.stackFallback(664, bun.default_allocator);
                 const alloc = sfb.get();
                 let seen: FontFamily.HashMap(void) = {};
-                defer seen.deinit(alloc);
+                const _seen_guard = DeinitAllocGuard<@TypeOf(seen)>{ ptr: unsafe { &seen }, alloc: alloc };
 
                 let i: usize = 0;
                 while (i < f.len) {

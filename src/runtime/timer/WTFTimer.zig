@@ -13,6 +13,17 @@ pub fn fire(self: *RunLoopTimer) void {
     }
 };
 
+pub const MutexGuard = struct {
+    lock: *bun.Mutex,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *MutexGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = self.lock.unlock();
+    }
+};
+
 pub const WTFTimer = @This();
 
 vm: *VirtualMachine,
@@ -25,7 +36,10 @@ script_execution_context_id: bun.webcore.ScriptExecutionContext.Identifier,
 
 pub fn run(self: *WTFTimer, vm: *VirtualMachine) void {
         if ((self.event_loop_timer.state == .ACTIVE)) {
-            _ = vm.timer.remove((&self.event_loop_timer));
+            _ = vm.timer.remove((blk: {
+            break :blk (&self.event_loop_timer);
+
+}));
         }
         _ = self.runWithoutRemoving();
 }
@@ -50,19 +64,32 @@ pub fn update(self: *WTFTimer, seconds: f64, repeat: bool) void {
             interval.sec = (interval.sec + 1);
             interval.nsec = (interval.nsec - std.time.ns_per_s);
         }
-        _ = self.vm.timer.update((&self.event_loop_timer), (&interval));
+        _ = self.vm.timer.update((blk: {
+        break :blk (&self.event_loop_timer);
+
+}), (blk: {
+        break :blk (&interval);
+
+}));
         self.repeat = repeat;
 }
 
 pub fn cancel(self: *WTFTimer) void {
         _ = self.lock.lock();
-        defer {
-        _ = self.lock.unlock();
-        }
+        var _guard = MutexGuard{ .lock = (blk: {
+        break :blk (&self.lock);
+
+}) };
+        _ = &_guard;
+        var ___guard_moved = false; _ = &___guard_moved;
+        defer if (!___guard_moved) { ___guard_moved = true; const __T = @TypeOf(_guard); if (@typeInfo(__T) == .optional) { if (_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard; _drop_val.__cp_deinit(); } };
         if (self.script_execution_context_id.valid()) {
             _ = self.imminent.cmpxchgStrong(self, null, .seq_cst, .seq_cst);
             if ((self.event_loop_timer.state == .ACTIVE)) {
-                _ = self.vm.timer.remove((&self.event_loop_timer));
+                _ = self.vm.timer.remove((blk: {
+                break :blk (&self.event_loop_timer);
+
+}));
             }
         }
 }
@@ -95,7 +122,10 @@ pub export fn WTFTimer__create(run_loop_timer: *RunLoopTimer) callconv(.c) ?*any
             return null;
         }
         const vm = VirtualMachine.get();
-        const timer = WTFTimer.new(.{ .vm = vm, .imminent = (&vm.eventLoop().imminent_gc_timer), .event_loop_timer = .{ .next = .{ .sec = std.math.maxInt(i64), .nsec = 0 }, .tag = .WTFTimer, .state = .CANCELLED }, .run_loop_timer = run_loop_timer, .repeat = false, .script_execution_context_id = @enumFromInt(vm.initial_script_execution_context_identifier) });
+        const timer = WTFTimer.new(.{ .vm = vm, .imminent = (blk: {
+        break :blk (&vm.eventLoop().imminent_gc_timer);
+
+}), .event_loop_timer = .{ .next = .{ .sec = std.math.maxInt(i64), .nsec = 0 }, .tag = .WTFTimer, .state = .CANCELLED }, .run_loop_timer = run_loop_timer, .repeat = false, .script_execution_context_id = @enumFromInt(vm.initial_script_execution_context_identifier) });
         return timer;
 }
 
@@ -117,11 +147,18 @@ pub export fn WTFTimer__cancel(timer: *WTFTimer) callconv(.c) void {
 
 pub export fn WTFTimer__secondsUntilTimer(timer: *WTFTimer) callconv(.c) f64 {
         _ = timer.lock.lock();
-        defer {
-        _ = timer.lock.unlock();
-        }
+        var _guard = MutexGuard{ .lock = (blk: {
+        break :blk (&timer.lock);
+
+}) };
+        _ = &_guard;
+        var ___guard_moved = false; _ = &___guard_moved;
+        defer if (!___guard_moved) { ___guard_moved = true; const __T = @TypeOf(_guard); if (@typeInfo(__T) == .optional) { if (_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard; _drop_val.__cp_deinit(); } };
         if ((timer.event_loop_timer.state == .ACTIVE)) {
-            const until = timer.event_loop_timer.next.duration((&bun.timespec.now(.force_real_time)));
+            const until = timer.event_loop_timer.next.duration((blk: {
+            break :blk (&bun.timespec.now(.force_real_time));
+
+}));
             const sec: f64 = @floatFromInt(until.sec);
             const nsec: f64 = @floatFromInt(until.nsec);
             return (sec + (nsec / std.time.ns_per_s));

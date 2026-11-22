@@ -8,6 +8,29 @@ pub const bun = @import("bun");
 pub const SecretsJobOptions = opaque {
 };
 
+pub const EnqueueTaskGuard = struct {
+    vm: *jsc.VirtualMachine,
+    job: *SecretsJob,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *EnqueueTaskGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = self.vm.enqueueTaskConcurrent(jsc.ConcurrentTask.create(self.job.any_task.task()));
+    }
+};
+
+pub const SecretsJobDeinitGuard = struct {
+    job: *SecretsJob,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *SecretsJobDeinitGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = self.job.deinit();
+    }
+};
+
 pub const SecretsJob = struct {
     vm: *jsc.VirtualMachine,
     task: jsc.WorkPoolTask,
@@ -25,27 +48,27 @@ pub fn create(global: *jsc.JSGlobalObject, ctx: *SecretsJobOptions, promise: jsc
 
 pub fn runTask(task: *jsc.WorkPoolTask) void {
             const job: *SecretsJob = @fieldParentPtr("task", task);
-            var vm = job.vm;
-            _ = &vm;
-            defer {
-            _ = vm.enqueueTaskConcurrent(jsc.ConcurrentTask.create(job.any_task.task()));
-            }
-            _ = Bun__SecretsJobOptions__runTask(job.ctx, vm.global);
+            var enqueue_guard = EnqueueTaskGuard{ .vm = job.vm, .job = job };
+            _ = &enqueue_guard;
+            var __enqueue_guard_moved = false; _ = &__enqueue_guard_moved;
+            defer if (!__enqueue_guard_moved) { __enqueue_guard_moved = true; const __T = @TypeOf(enqueue_guard); if (@typeInfo(__T) == .optional) { if (enqueue_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { enqueue_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = enqueue_guard; _drop_val.__cp_deinit(); } };
+            _ = Bun__SecretsJobOptions__runTask(job.ctx, enqueue_guard.vm.global);
     }
 
 pub fn runFromJS(self: *SecretsJob) void {
-            defer {
-            _ = self.deinit();
-            }
-            const vm = self.vm;
+            var deinit_guard = SecretsJobDeinitGuard{ .job = self };
+            _ = &deinit_guard;
+            var __deinit_guard_moved = false; _ = &__deinit_guard_moved;
+            defer if (!__deinit_guard_moved) { __deinit_guard_moved = true; const __T = @TypeOf(deinit_guard); if (@typeInfo(__T) == .optional) { if (deinit_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { deinit_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = deinit_guard; _drop_val.__cp_deinit(); } };
+            const vm = deinit_guard.job.vm;
             if (vm.isShuttingDown()) {
                 return;
             }
-            const promise = self.promise.get();
+            const promise = deinit_guard.job.promise.get();
             if ((promise == .zero)) {
                 return;
             }
-            _ = Bun__SecretsJobOptions__runFromJS(self.ctx, vm.global, promise);
+            _ = Bun__SecretsJobOptions__runFromJS(deinit_guard.job.ctx, vm.global, promise);
     }
 
 pub fn deinit(self: *SecretsJob) void {

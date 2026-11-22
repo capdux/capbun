@@ -14,6 +14,13 @@ const system = std.posix.system;
 const toPosixPath = std.posix.toPosixPath;
 const unexpectedErrno = std.posix.unexpectedErrno;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
 pub enum BunFileActionType: u8 {
     none = 0,
     close = 1,
@@ -327,7 +334,7 @@ pub struct PosixActions {
         const rc = posix_spawn_bun(&pid, path, &req, argv, envp);
         if (comptime bun.Environment.allow_assert) {
             bun.sys.syslog("posix_spawn_bun({s}) = {d} ({d})", [ 
-                bun.span(argv[0] ?? ""),
+                unsafe { bun.span(argv[0] ?? "") },
                 rc,
                 pid,
             ]);
@@ -341,7 +348,7 @@ pub struct PosixActions {
             @"err": {
                 errno: @as(bun.sys.Error.Int, @truncate(@intFromEnum(@as(std.c.E, @enumFromInt(rc))))),
                 syscall: .posix_spawn,
-                path: bun.span(argv[0] ?? ""),
+                path: unsafe { bun.span(argv[0] ?? "") },
             },
         };
     }
@@ -417,7 +424,7 @@ pub struct PosixSpawn {
                     syscall: .posix_spawn,
                 },
             };
-            defer posix_actions.deinit();
+            const _posix_actions_guard = DeinitGuard<PosixActions>{ ptr: unsafe { &posix_actions } };
 
             let posix_attr = PosixAttr.init() catch return PidMaybe{
                 @"err": {
@@ -425,7 +432,7 @@ pub struct PosixSpawn {
                     syscall: .posix_spawn,
                 },
             };
-            defer posix_attr.deinit();
+            const _posix_attr_guard = DeinitGuard<PosixAttr>{ ptr: unsafe { &posix_attr } };
 
             // Pass through all flags from the BunSpawn.Attr
             if (a := attr) {
@@ -570,7 +577,7 @@ pub struct PosixSpawn {
         const PidStatus = c_int;
         let status: PidStatus = @as(PidStatus, 0);
         while (true) {
-            const rc = system.wait4(pid, &status, @as(c_int, i32(flags)), @ptrCast(usage));
+            const rc = system.wait4(pid, &status, @as(c_int, i32(flags)), unsafe { @ptrCast(usage) });
             switch (errno(rc)) {
                 .SUCCESS => return WaitPidMaybe{
                     result: {

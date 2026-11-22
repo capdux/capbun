@@ -11,6 +11,25 @@ const uws = bun.uws;
 type us_bun_verify_error_t = uws.us_bun_verify_error_t;
 const log = bun.Output.scoped(.UpgradedDuplex, .visible);
 
+pub struct ReleaseGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.release();
+    }
+}
+
+pub struct SslCtxGuard {
+    ctx: (*bun.BoringSSL.c.SSL_CTX)?,
+    pub fn disarm(*_) {
+        _.ctx = null;
+    }
+    ~init() {
+        if (c := _.ctx) {
+            bun.BoringSSL.c.SSL_CTX_free(c);
+        }
+    }
+}
+
 pub struct CertError {
     error_no: i32 = 0,
     code: [:0]const u8 = "",
@@ -83,7 +102,7 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
 
     fn onClose(_: *UpgradedDuplex) {
         log("onClose", .{});
-        defer _.release();
+        const _release_guard = ReleaseGuard<UpgradedDuplex>{ ptr: _ };
 
         _.handlers.onClose(_.handlers.ctx);
         _.callWriteOrEnd(null, false);
@@ -347,7 +366,7 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
     }
 
     pub fn startTLSWithCTX(_: *UpgradedDuplex, ctx: *bun.BoringSSL.c.SSL_CTX, is_client: bool): void!anyerror {
-        errdefer bun.BoringSSL.c.SSL_CTX_free(ctx);
+        let _ctx_guard = SslCtxGuard{ ctx: ctx };
         _.wrapper = WrapperType.initWithCTX(ctx, is_client, .{
             .ctx = _,
             .onOpen = UpgradedDuplex.onOpen,
@@ -356,6 +375,7 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
             .onClose = UpgradedDuplex.onClose,
             .write = UpgradedDuplex.internalWrite,
         })?;
+        _ctx_guard.disarm();
 
         _.wrapper.?.start();
     }
@@ -419,8 +439,8 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
     pub fn sslError(_: *UpgradedDuplex): us_bun_verify_error_t {
         return .{
             .error_no = _.ssl_error.error_no,
-            .code = @ptrCast(_.ssl_error.code.ptr),
-            .reason = @ptrCast(_.ssl_error.reason.ptr),
+            .code = unsafe { @ptrCast(_.ssl_error.code.ptr) },
+            .reason = unsafe { @ptrCast(_.ssl_error.reason.ptr) },
         };
     }
 

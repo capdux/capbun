@@ -2,6 +2,11 @@ import bun from "bun";
 const jsc = bun.jsc;
 const JSHostFunctionType = jsc.JSHostFn;
 
+struct DeinitGuard<T> {
+    val: T,
+    ~init() { _.val.deinit(); }
+}
+
 /// Generated for "src/bake/DevServer.zig"
 pub const DevServer = struct {
     pub const jsGetDeinitCountForTesting = @extern(*const JSHostFunctionType, .{ .name = "bindgen_DevServer_jsGetDeinitCountForTesting" });
@@ -149,10 +154,9 @@ const binding_internals = struct {
     @export @c static fn bindgen_NodeModuleModule_dispatch_stat1(global: *jsc.JSGlobalObject, arg_str: *const bun.String, out: *i32) bool {
         if (!@hasDecl(import_NodeModuleModule, "_stat"))
             @compileError("Missing binding declaration \"_stat\" in \"NodeModuleModule.zig\"");
-        const arg_str_utf8 = arg_str.toUTF8(bun.default_allocator);
-        defer arg_str_utf8.deinit();
+        let arg_str_utf8 = DeinitGuard<bun.ZigString.Slice>{ val: arg_str.toUTF8(bun.default_allocator) };
         out.* = @as(bun.JSError!i32, import_NodeModuleModule._stat(
-            arg_str_utf8.slice(),
+            arg_str_utf8.val.slice(),
         )) catch |e| {
             if (e == error.OutOfMemory) {
                 * = global.throwOutOfMemoryValue();
@@ -203,11 +207,10 @@ const binding_internals = struct {
     @export @c static fn bindgen_Fmt_jsc_dispatchFmtString1(arg_global: *jsc.JSGlobalObject, arg_code: *const bun.String, arg_formatter: *const fmt_jsc.Formatter, out: *bun.String) bool {
         if (!@hasDecl(import_fmt_jsc.js_bindings, "fmtString"))
             @compileError("Missing binding declaration \"js_bindings.fmtString\" in \"fmt_jsc.zig\"");
-        const arg_code_utf8 = arg_code.toUTF8(bun.default_allocator);
-        defer arg_code_utf8.deinit();
+        let arg_code_utf8 = DeinitGuard<bun.ZigString.Slice>{ val: arg_code.toUTF8(bun.default_allocator) };
         out.* = @as(bun.JSError!bun.String, import_fmt_jsc.js_bindings.fmtString(
             arg_global,
-            arg_code_utf8.slice(),
+            arg_code_utf8.val.slice(),
             arg_formatter.*,
         )) catch |e| {
             if (e == error.OutOfMemory) {

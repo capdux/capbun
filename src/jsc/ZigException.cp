@@ -14,6 +14,11 @@ const ZigStackTrace = jsc.ZigStackTrace;
 import url from "../url/url.zig";
 const ZigURL = url.URL;
 
+struct DeinitGuard<T> {
+    val: T,
+    ~init() { _.val.deinit(); }
+}
+
 @c {
     fn ZigException__collectSourceLines(jsValue: JSValue, global: *JSGlobalObject, exception: *ZigException);
     fn ZigException__fromException(exception: *Exception): ZigException;
@@ -149,13 +154,11 @@ const ZigURL = url.URL;
         root_path: string,
         origin: (*const ZigURL)?,
     )! {
-        const name_slice = _.name.toUTF8(bun.default_allocator);
-        const message_slice = _.message.toUTF8(bun.default_allocator);
+        let name_guard = DeinitGuard<bun.ZigString.Slice>{ val: _.name.toUTF8(bun.default_allocator) };
+        let message_guard = DeinitGuard<bun.ZigString.Slice>{ val: _.message.toUTF8(bun.default_allocator) };
 
-        const _name = name_slice.slice();
-        defer name_slice.deinit();
-        const message = message_slice.slice();
-        defer message_slice.deinit();
+        const _name = name_guard.val.slice();
+        const message = message_guard.val.slice();
 
         let is_empty = true;
         let api_exception = api.JsException{

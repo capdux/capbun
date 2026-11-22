@@ -135,6 +135,20 @@ let uuid_v7_lock: bun.Mutex = bun.Mutex{};
 let uuid_v7_last_timestamp: std.atomic.Value(u64) = { raw: 0 };
 let uuid_v7_counter: std.atomic.Value(u32) = { raw: 0 };
 
+struct UnlockGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.unlock();
+    }
+}
+
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
 /// # --- 48 ---   -- 4 --   - 12 -   -- 2 --   - 62 -
 /// # unix_ts_ms | version | rand_a | variant | rand_b
 pub struct UUID7 {
@@ -142,7 +156,7 @@ pub struct UUID7 {
 
     static fn getCount(timestamp: u64): u32 {
         uuid_v7_lock.lock();
-        defer uuid_v7_lock.unlock();
+        const _lock_guard = UnlockGuard<bun.Mutex>{ ptr: unsafe { &uuid_v7_lock } };
         if (uuid_v7_last_timestamp.swap(timestamp, .monotonic) != timestamp) {
             uuid_v7_counter.store(0, .monotonic);
         }
@@ -228,7 +242,7 @@ pub struct UUID5 {
     /// Generate a UUID v5 from a namespace UUID and name data
     pub fn init(namespace: *const [16]u8, name: []const u8): UUID5 {
         let sha1_hasher = bun.sha.SHA1.init();
-        defer sha1_hasher.deinit();
+        const _sha1_guard = DeinitGuard<bun.sha.SHA1>{ ptr: unsafe { &sha1_hasher } };
 
         sha1_hasher.update(namespace);
         sha1_hasher.update(name);

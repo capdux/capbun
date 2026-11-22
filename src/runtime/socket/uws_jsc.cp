@@ -7,6 +7,15 @@ const jsc = bun.jsc;
 const uws = bun.uws;
 const us_socket_stream_buffer_t = uws.us_socket_stream_buffer_t;
 
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe {
+            _.ptr.deinit();
+        }
+    }
+}
+
 pub fn createBunSocketErrorToJS(err: uws.create_bun_socket_error_t, globalObject: *jsc.JSGlobalObject): jsc.JSValue {
     return switch (err) {
         .none => bun.BoringSSL.ERR_toJS(globalObject, bun.BoringSSL.c.ERR_get_error()),
@@ -73,7 +82,7 @@ pub fn anyWebSocketGetTopicsAsJSArray(ws: uws.AnyWebSocket, globalObject: *jsc.J
         }
     }
 
-    defer node_buffer.deinit();
+    const _node_buffer_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &node_buffer } };
     if (node_buffer == .blob and node_buffer.blob.needsToReadFile()) {
         if (globalObject.throw("File blob not supported yet in this function.", .{}) == error.JSError) {}
         return .zero;

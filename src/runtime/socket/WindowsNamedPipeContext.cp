@@ -13,6 +13,30 @@ type TCPSocket = jsc.API.TCPSocket;
 type TLSSocket = jsc.API.TLSSocket;
 const log = Output.scoped(.WindowsNamedPipeContext, .visible);
 
+struct NamedPipeConnectErrGuard {
+    obj: (*WindowsNamedPipeContext)?,
+    socket: WindowsNamedPipeContext.SocketType,
+
+    fn disarm(*_) {
+        _.obj = null;
+    }
+
+    ~init() {
+        if (obj := _.obj) {
+            switch (_.socket) {
+                .tls tls => {
+                    tls.handleConnectError(@intFromEnum(bun.sys.SystemErrno.ENOENT)) catch {};
+                },
+                .tcp tcp => {
+                    tcp.handleConnectError(@intFromEnum(bun.sys.SystemErrno.ENOENT)) catch {};
+                },
+                .none => {},
+            }
+            obj.deref();
+        }
+    }
+}
+
 pub struct WindowsNamedPipeContext {
     ref_count: RefCount,
     named_pipe: uws.WindowsNamedPipe,
@@ -200,16 +224,16 @@ pub struct WindowsNamedPipeContext {
 
         obj.named_pipe = uws.WindowsNamedPipe.from(bun.new(uv.Pipe, std.mem.zeroes(uv.Pipe)), .{
             .ctx = obj,
-            .ref_ctx = @ptrCast(&WindowsNamedPipeContext.ref),
-            .deref_ctx = @ptrCast(&WindowsNamedPipeContext.deref),
-            .onOpen = @ptrCast(&WindowsNamedPipeContext.onOpen),
-            .onData = @ptrCast(&WindowsNamedPipeContext.onData),
-            .onHandshake = @ptrCast(&WindowsNamedPipeContext.onHandshake),
-            .onEnd = @ptrCast(&WindowsNamedPipeContext.onEnd),
-            .onWritable = @ptrCast(&WindowsNamedPipeContext.onWritable),
-            .onError = @ptrCast(&WindowsNamedPipeContext.onError),
-            .onTimeout = @ptrCast(&WindowsNamedPipeContext.onTimeout),
-            .onClose = @ptrCast(&WindowsNamedPipeContext.onClose),
+            .ref_ctx = unsafe { @ptrCast(&WindowsNamedPipeContext.ref) },
+            .deref_ctx = unsafe { @ptrCast(&WindowsNamedPipeContext.deref) },
+            .onOpen = unsafe { @ptrCast(&WindowsNamedPipeContext.onOpen) },
+            .onData = unsafe { @ptrCast(&WindowsNamedPipeContext.onData) },
+            .onHandshake = unsafe { @ptrCast(&WindowsNamedPipeContext.onHandshake) },
+            .onEnd = unsafe { @ptrCast(&WindowsNamedPipeContext.onEnd) },
+            .onWritable = unsafe { @ptrCast(&WindowsNamedPipeContext.onWritable) },
+            .onError = unsafe { @ptrCast(&WindowsNamedPipeContext.onError) },
+            .onTimeout = unsafe { @ptrCast(&WindowsNamedPipeContext.onTimeout) },
+            .onClose = unsafe { @ptrCast(&WindowsNamedPipeContext.onClose) },
         }, vm);
         obj.task = jsc.AnyTask.New(WindowsNamedPipeContext, WindowsNamedPipeContext.runEvent).init(obj);
 
@@ -229,36 +253,21 @@ pub struct WindowsNamedPipeContext {
     pub fn open(globalThis: *jsc.JSGlobalObject, fd: bun.FD, ssl_config: jsc.API.ServerConfig.SSLConfig?, owned_ctx: *BoringSSL.SSL_CTX?, socket: SocketType): !*uws.WindowsNamedPipe {
         let obj = WindowsNamedPipeContext.create(globalThis, socket);
 
-        errdefer {
-            switch (socket) {
-                .tls tls => {
-                    tls.handleConnectError(@intFromEnum(bun.sys.SystemErrno.ENOENT)) catch {};
-                },
-                .tcp tcp => {
-                    tcp.handleConnectError(@intFromEnum(bun.sys.SystemErrno.ENOENT)) catch {};
-                },
-                .none => {},
-            }
-            obj.deref();
-        }
+        let err_guard = NamedPipeConnectErrGuard{
+            obj: obj,
+            socket: socket,
+        };
         obj.named_pipe.open(fd, ssl_config, owned_ctx).unwrap()?;
+        err_guard.disarm();
         return &obj.named_pipe;
     }
 
     pub fn connect(globalThis: *jsc.JSGlobalObject, path: string, ssl_config: jsc.API.ServerConfig.SSLConfig?, owned_ctx: *BoringSSL.SSL_CTX?, socket: SocketType): !*uws.WindowsNamedPipe {
         let obj = WindowsNamedPipeContext.create(globalThis, socket);
-        errdefer {
-            switch (socket) {
-                .tls tls => {
-                    tls.handleConnectError(@intFromEnum(bun.sys.SystemErrno.ENOENT)) catch {};
-                },
-                .tcp tcp => {
-                    tcp.handleConnectError(@intFromEnum(bun.sys.SystemErrno.ENOENT)) catch {};
-                },
-                .none => {},
-            }
-            obj.deref();
-        }
+        let err_guard = NamedPipeConnectErrGuard{
+            obj: obj,
+            socket: socket,
+        };
 
         if (path[path.len - 1] == 0) {
             const slice_z = path[0 .. path.len - 1 :0];
@@ -271,6 +280,7 @@ pub struct WindowsNamedPipeContext {
             const slice_z = path_buf[0..len :0];
             obj.named_pipe.connect(slice_z, ssl_config, owned_ctx).unwrap()?;
         }
+        err_guard.disarm();
         return &obj.named_pipe;
     }
 

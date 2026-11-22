@@ -29,6 +29,28 @@ pub const SeenDeclKey = struct {
     []const u8,
 };
 
+type SeenDeclMap = std.ArrayHashMap(
+    SeenDeclKey,
+    usize,
+    SeenDeclContext,
+    false,
+);
+
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
+pub struct AllocDeinitGuard<T> {
+    val: T,
+    allocator: std.mem.Allocator,
+    ~init() {
+        _.val.deinit(_.allocator);
+    }
+}
+
 const SeenDeclContext = struct {
     pub fn hash(s: SeenDeclKey): u32 {
         const _ctx = _;
@@ -169,13 +191,9 @@ pub union(enum) SupportsCondition {
         let expected_type: i32? = null;
         let conditions: ArrayList(SupportsCondition) = .{};
         const mapalloc: std.mem.Allocator = input.allocator();
-        let seen_declarations = std.ArrayHashMap(
-            SeenDeclKey,
-            usize,
-            SeenDeclContext,
-            false,
-        ).init(mapalloc);
-        defer seen_declarations.deinit();
+        let seen_guard = DeinitGuard<SeenDeclMap>{
+            val: SeenDeclMap.init(mapalloc),
+        };
 
         while (true) {
             let closure = SupportsParseClosure{
@@ -190,7 +208,7 @@ pub union(enum) SupportsCondition {
                         if (in_parens == .declaration) {
                             const property_id = in_parens.declaration.property_id;
                             const value = in_parens.declaration.value;
-                            seen_declarations.put(
+                            seen_guard.val.put(
                                 .{ property_id.withPrefix(css.VendorPrefix{ .none = true }), value },
                                 0,
                             ) catch |e| bun.handleOom(e);
@@ -204,13 +222,13 @@ pub union(enum) SupportsCondition {
 
                         const property_id = property_id_.withPrefix(css.VendorPrefix{ .none = true });
                         const key: SeenDeclKey = .{ property_id, value };
-                        if (index := seen_declarations.get(key)) {
+                        if (index := seen_guard.val.get(key)) {
                             const cond = &conditions.items[index];
                             if (cond.* == .declaration) {
                                 cond.declaration.property_id.addPrefix(property_id.prefix());
                             }
                         } else {
-                            bun.handleOom(seen_declarations.put(key, conditions.items.len));
+                            bun.handleOom(seen_guard.val.put(key, conditions.items.len));
                             conditions.append(input.allocator(), SupportsCondition{ .declaration = {
                                 property_id: property_id,
                                 value: value,
@@ -228,8 +246,11 @@ pub union(enum) SupportsCondition {
         }
 
         if (conditions.items.len == 1) {
-            const ret = conditions.pop().?;
-            defer conditions.deinit(input.allocator());
+            let cond_guard = AllocDeinitGuard<ArrayList(SupportsCondition)>{
+                val: conditions,
+                allocator: input.allocator(),
+            };
+            const ret = cond_guard.val.pop().?;
             return { result: ret };
         }
 

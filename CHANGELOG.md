@@ -2098,3 +2098,6 @@
 
 ## [2026-11-22 Wave #33] RAII `~init()` 与 `unsafe {}` 改造（2-defer 36 模块）
 - `production`, `generateCodeForLazyExport`, `prepareCssAstsForChunk`, `options_jsc`, `add_completions`, `SourceFileProjectGenerator`, `fuzzilli_command`, `link_command`, `multi_run`, `pm_view_command`, `repl_command`, `scan_command`, `unlink_command`, `media_query`, `printer`, `background`, `url`, `pe`, `encode`, `http`, `PackageManagerEnqueue`, `PackageManagerResolution`, `security_scanner`, `lifecycle_script_runner`, `Yarn`, `npm`, `toml/lexer`, `io`, `CharFreq`, `Expr`, `Symbol`, `parse`, `parseJSXElement`, `parsePrefix`, `skipTypescript`, `runtime` (ratio `0.643 ~ 1.129`)
+
+## [2026-11-22 Wave #34] RAII `~init()` 与 `unsafe {}` 改造（2-defer 29 模块核验 / 27 模块变更）
+- `font`, `transform`, `supports`, `builder`, `calc`, `JSPropertyIterator`, `JSSecrets`, `TopExceptionScope`, `ZigException`, `GeneratedBindings`, `resolve_path_jsc`, `uuid`, `Router`, `HashObject`, `JSBundler`, `SecureContext`, `spawn`, `node_fs_stat_watcher`, `UpgradedDuplex`, `WindowsNamedPipeContext`, `uws_jsc`, `WTFTimer`, `BakeResponse`, `download_stream`, `CriticalSection`, `Yield`, `Chunk` (ratio `0.727 ~ 1.14`)

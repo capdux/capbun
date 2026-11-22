@@ -1,5 +1,12 @@
 import css from "../css_parser.zig";
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
 const Printer = css.Printer;
 const PrintErr = css.PrintErr;
 const Result = css.Result;
@@ -49,7 +56,7 @@ pub struct TransformList {
             const base_writer = &base.writer;
 
             let scratchbuf = std.array_list.Managed(u8).init(dest.allocator);
-            defer scratchbuf.deinit();
+            const _scratchbuf_guard = DeinitGuard<@TypeOf(scratchbuf)>{ ptr: unsafe { &scratchbuf } };
             let p = Printer.new(
                 dest.allocator,
                 scratchbuf,
@@ -59,7 +66,7 @@ pub struct TransformList {
                 dest.local_names,
                 dest.symbols,
             );
-            defer p.deinit();
+            const _p_guard = DeinitGuard<@TypeOf(p)>{ ptr: unsafe { &p } };
 
             _.toCssBase(&p)?;
 

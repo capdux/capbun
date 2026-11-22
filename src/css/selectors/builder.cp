@@ -22,6 +22,13 @@ import css from "../css_parser.zig";
 pub const Printer = css.Printer;
 pub const PrintErr = css.PrintErr;
 
+pub struct DeinitPtrGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
 const parser = css.selector.parser;
 
 const ValidSelectorImpl = parser.ValidSelectorImpl;
@@ -120,7 +127,7 @@ pub fn SelectorBuilder(comptime Impl: type): type {
                 .has_part = parsed_part,
             };
             // `buildWithSpecificityAndFlags()` will
-            defer _.deinit();
+            const _deinit_guard = unsafe { DeinitPtrGuard<@This()>{ ptr: _ } };
             return _.buildWithSpecificityAndFlags(SpecificityAndFlags{ .specificity = specificity, .flags = flags });
         }
 

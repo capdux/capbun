@@ -7,11 +7,14 @@ const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 
+struct DerefGuard<T> { val: T; ~init() { _.val.deref(); } }
+struct DeinitGuard<T> { val: T; ~init() { _.val.deinit(); } }
+
 pub fn fixDeadCodeElimination() {
     const f1 = BakeResponseClass__constructForSSR;
-    std.mem.doNotOptimizeAway(&f1);
+    std.mem.doNotOptimizeAway(unsafe { &f1 });
     const f2 = BakeResponseClass__constructRender;
-    std.mem.doNotOptimizeAway(&f2);
+    std.mem.doNotOptimizeAway(unsafe { &f2 });
 }
 
 @c
@@ -70,17 +73,11 @@ pub fn constructor(
 }
 
 @callconv(jsc.conv)
-@export pub fn BakeResponseClass__constructRedirect(
-    globalObject: *jsc.JSGlobalObject,
-    callFrame: *jsc.CallFrame,
-): jsc.JSValue {
+@export pub fn BakeResponseClass__constructRedirect(globalObject: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): jsc.JSValue {
     return jsc.toJSHostCall(globalObject, @src(), constructRedirect, .{ globalObject, callFrame });
 }
 
-pub fn constructRedirect(
-    globalThis: *jsc.JSGlobalObject,
-    callframe: *jsc.CallFrame,
-): bun.JSError!JSValue {
+pub fn constructRedirect(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
     const response = Response.constructRedirectImpl(globalThis, callframe) ?;
     const ptr = bun.new(Response, response);
 
@@ -94,18 +91,12 @@ pub fn constructRedirect(
 }
 
 @callconv(jsc.conv)
-@export pub fn BakeResponseClass__constructRender(
-    globalObject: *jsc.JSGlobalObject,
-    callFrame: *jsc.CallFrame,
-): jsc.JSValue {
+@export pub fn BakeResponseClass__constructRender(globalObject: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): jsc.JSValue {
     return @call(bun.callmod_inline, jsc.toJSHostFn(constructRender), .{ globalObject, callFrame });
 }
 
 /// This function is only available on JSBakeResponse
-pub fn constructRender(
-    globalThis: *jsc.JSGlobalObject,
-    callframe: *jsc.CallFrame,
-): bun.JSError!JSValue {
+pub fn constructRender(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
     const arguments = callframe.argumentsAsArray(2);
     const vm = globalThis.bunVM();
 
@@ -125,10 +116,10 @@ pub fn constructRender(
     }
 
     const path_str = path_arg.toBunString(globalThis) ?;
-    defer path_str.deref();
+    const _path_str_guard = DerefGuard<bun.String>{ val: path_str };
 
     const path_utf8 = path_str.toUTF8(bun.default_allocator);
-    defer path_utf8.deinit();
+    const _path_utf8_guard = DeinitGuard<bun.ZigString.Slice>{ val: path_utf8 };
 
     const response = bun.new(Response, Response.init(
         .{

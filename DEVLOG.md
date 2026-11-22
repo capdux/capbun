@@ -1624,3 +1624,7 @@
 ## [2026-11-22 Wave #33] RAII 改造与 `unsafe {}` 经验
 - `media_query.cp`：`const a, const b = switch (...)` 多变量解包不被 `cpc` 支持，须先绑定 `const pair = switch (...)`，再索引 `pair[0]` / `pair[1]`；`switch` 分支中的 `|` 按位或掩码会被拆分为多标签导致重复分支，须改为 `if` 掩码判断。
 - `io.cp` / `production.cp`：`static let once` 须显式标注 `@TypeOf(std.once(load))`；`if (cond) val` 缺少 `else` 分支时须补全 `else @as(void, undefined)`；`event.events & FLAG != 0` 须加括号 `(event.events & FLAG) != 0`；局部同名变量 `pending` 遮蔽 struct 字段 `_.pending` 时易被自动补全误重写为 `self.pending`，命名应避开字段名；`EntryPointRollbackGuard` 直接持有 `map: *EntryPointMap!` 传入 `_` 可避免 `unsafe { &_.files }` 风险。
+
+## [2026-11-22 Wave #34] RAII 改造与 `unsafe {}` 经验
+- `JSPropertyIterator.cp`：`TopExceptionScope` 内部存在 `location == &bytes[0]` 地址自检断言，Guard 须持有 `*bun.jsc.TopExceptionScope` 指针而非按值拷贝，避免栈帧移动触发断言失败。
+- `calc.cp`：CP 表达 `void` 实参不可写 `{}`（会被降维为匿名结构体 `.{}`），须显式传 `@as(void, undefined)`；`css.ParserError.invalid_value` 不可写 `{ .invalid_value = {} }`；`pub enum` 中未写 `*_` 的只读方法 `toCss` 存在被 `cpc` 误生成 `*Enum` 可变接收者的问题（已提单 `task-bun-20261122-enum-readonly-method-mut-self`）。

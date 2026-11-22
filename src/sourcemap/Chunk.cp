@@ -13,6 +13,14 @@ const MutableString = bun.MutableString;
 const strings = bun.strings;
 const FileSystem = bun.fs.FileSystem;
 
+struct MutableStringGuard {
+    val: MutableString,
+
+    ~init() {
+        _.val.deinit();
+    }
+}
+
 export @root struct Chunk {
     buffer: MutableString,
     mappings_count: usize = 0,
@@ -52,10 +60,9 @@ export @root struct Chunk {
         comptime ascii_only: bool,
     )! {
         const ism = InternalSourceMap{ data: this.buffer.list.items.ptr };
-        let vlq = MutableString.initEmpty(bun.default_allocator);
-        defer vlq.deinit();
-        ism.appendVLQTo(&vlq);
-        printSourceMapContentsJSON(source, mutable, include_sources_contents, vlq.list.items, ascii_only)?;
+        let vlq_guard = MutableStringGuard{ val: MutableString.initEmpty(bun.default_allocator) };
+        ism.appendVLQTo(&vlq_guard.val);
+        printSourceMapContentsJSON(source, mutable, include_sources_contents, vlq_guard.val.list.items, ascii_only)?;
     }
 
     static fn printSourceMapContentsJSON(

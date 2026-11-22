@@ -12,6 +12,11 @@ pub const fromJSDirect = js.fromJSDirect;
 
 const ssl_ctx_base_cost: usize = 50 * 1024;
 
+struct SSLConfigGuard {
+    config: SSLConfig,
+    ~init() { _.config.deinit(); }
+}
+
 
 struct cpp {
     pub extern fn Bun__SecureContextCache__get(global: *jsc.JSGlobalObject, key: u64): jsc.JSValue;
@@ -67,10 +72,9 @@ fn createWithDigest(global: *jsc.JSGlobalObject, ctx_opts: uws.SocketContext.Bun
         const args = callframe.arguments();
         const opts = if (args.len > 0) args[0] else .js_undefined;
 
-        let config = (SSLConfig.fromJS(global.bunVM(), global, opts)?) orelse SSLConfig.zero;
-        defer config.deinit();
+        const config_guard = SSLConfigGuard{ config: (SSLConfig.fromJS(global.bunVM(), global, opts)?) orelse SSLConfig.zero };
 
-        return create(global, &config)?;
+        return create(global, &config_guard.config)?;
     }
 
     /// Mode-neutral: Node lets one `SecureContext` back both `tls.connect()` and
@@ -96,10 +100,9 @@ fn createWithDigest(global: *jsc.JSGlobalObject, ctx_opts: uws.SocketContext.Bun
         const args = callframe.arguments();
         const opts = if (args.len > 0) args[0] else .js_undefined;
 
-        let config = (SSLConfig.fromJS(global.bunVM(), global, opts)?) orelse SSLConfig.zero;
-        defer config.deinit();
+        const config_guard = SSLConfigGuard{ config: (SSLConfig.fromJS(global.bunVM(), global, opts)?) orelse SSLConfig.zero };
 
-        const ctx_opts = config.asUSockets();
+        const ctx_opts = config_guard.config.asUSockets();
         const d = ctx_opts.digest();
         const key = std.mem.readInt(u64, d[0..8], .little);
 
