@@ -2142,3 +2142,6 @@
 
 ### [2026-11-23] Wave #64（非透传 `if`/`while` `|capture|` 尾项清扫与语法纯化收官）
 - 完成 `publish_command.cp`、`css_parser.cp`、`generics.cp` 的尾项纯化与 `unsafe` 补全，全仓 1295 个 `.cp` 模块主干及尾项语法纯化全面收敛，通过 `bun run zig:check`（5/5）及 `bun bd test`（8/8）。
+
+### [2026-11-23] Wave #65（全仓 1280 模块普查与首轮语义一致性修复）
+- 修复 `unicode.cp`、`yaml.cp`、`types.cp`、`InitError.cp`、`http.cp`、`fetch.cp`、`Version.cp`、`FrameworkRouter.cp`、`DevServer.cp`、`expect.cp`、`owned.cp`、`macho.cp`、`sys.cp`、`Futex.cp` 共 14 个模块的语义边界、符号可见性及与新版 `cpc` 的适配，通过 `bun run zig:check`（5/5）及 `bun bd test`（8/8 + `does propagate type for Blob`）。

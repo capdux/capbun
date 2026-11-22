@@ -1205,7 +1205,7 @@ pub const HmrTopicBits = packed struct(u6) {
 
 pub const c = struct {
 
-pub extern "c" fn BakeGetDefaultExportFromModule(global: *jsc.JSGlobalObject, module: JSValue) callconv(.c) JSValue;
+pub extern "c" fn BakeGetDefaultExportFromModule(self: c, global: *jsc.JSGlobalObject, module: JSValue) callconv(.c) JSValue;
 
 pub fn BakeLoadServerHmrPatch(global: *jsc.JSGlobalObject, code: bun.String) bun.JSError!JSValue {
             const f = (@extern(*const fn (*jsc.JSGlobalObject, bun.String) callconv(.c) JSValue, .{ .name = "BakeLoadServerHmrPatch" })).*;
@@ -1424,6 +1424,7 @@ pub fn toDevResponse(self: *PromiseEnsureRouteBundledCtx) DevResponse {
 
 pub const OptDir = ?std.fs.Dir;
 pub const DumpDir = if (bun.FeatureFlags.bake_debugging_features) OptDir else void;
+const HmrSocketPtr = *HmrSocket;
 const Route = FrameworkRouter.Route;
 const BundleV2 = bun.bundle_v2.BundleV2;
 const Chunk = bun.bundle_v2.Chunk;
@@ -1691,7 +1692,7 @@ pub fn deinit(dev: *DevServer) void {
         {
             const count = dev.active_websocket_connections.count();
             if ((count > 0)) {
-                var sockets_guard = HmrSocketSliceGuard{ .sockets = bun.handleOom(alloc.alloc(*HmrSocket, count)), .alloc = alloc };
+                var sockets_guard = HmrSocketSliceGuard{ .sockets = bun.handleOom(alloc.alloc(HmrSocketPtr, count)), .alloc = alloc };
                 _ = &sockets_guard;
                 var __sockets_guard_moved = false; _ = &__sockets_guard_moved;
                 defer if (!__sockets_guard_moved) { __sockets_guard_moved = true; const __T = @TypeOf(sockets_guard); if (@typeInfo(__T) == .optional) { if (sockets_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { sockets_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = sockets_guard; _drop_val.__cp_deinit(); } };
@@ -4220,7 +4221,7 @@ pub fn onWebSocketUpgrade(dev: *DevServer, res: anytype, req: *Request, upgrade_
         _ = assert((id == 0));
         const dw = HmrSocket.new(dev, res);
         _ = bun.handleOom(dev.active_websocket_connections.put(dev.allocator(), dw, undefined));
-        _ = res.upgrade(*HmrSocket, dw, ((req.header("sec-websocket-key")) orelse ("")), ((req.header("sec-websocket-protocol")) orelse ("")), ((req.header("sec-websocket-extension")) orelse ("")), upgrade_ctx);
+        _ = res.upgrade(HmrSocketPtr, dw, ((req.header("sec-websocket-key")) orelse ("")), ((req.header("sec-websocket-protocol")) orelse ("")), ((req.header("sec-websocket-extension")) orelse ("")), upgrade_ctx);
 }
 
 pub fn routeToBundleIndexSlow(dev: *DevServer, pattern: []const u8) ?RouteBundle.Index {

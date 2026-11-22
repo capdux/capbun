@@ -1810,8 +1810,8 @@ p[cp_cast_int(usize, 0)] = @as(u8, @truncate((240 | cp_shr(r, 18))));
 pub fn wtf8Sequence(code_point: u32) [4]u8 {
         return (switch (code_point) {
 0...127 => .{ @truncate(code_point), 0, 0, 0 },
-128...2046 => .{ @truncate((192 | cp_shr(code_point, 6))), @truncate((128 | (code_point & 63))), 0, 0 },
-2048...65534 => .{ @truncate((224 | cp_shr(code_point, 12))), @truncate((128 | (cp_shr(code_point, 6) & 63))), @truncate((128 | (code_point & 63))), 0 },
+128...2047 => .{ @truncate((192 | cp_shr(code_point, 6))), @truncate((128 | (code_point & 63))), 0, 0 },
+2048...65535 => .{ @truncate((224 | cp_shr(code_point, 12))), @truncate((128 | (cp_shr(code_point, 6) & 63))), @truncate((128 | (code_point & 63))), 0 },
 else => .{ @truncate((240 | cp_shr(code_point, 18))), @truncate((128 | (cp_shr(code_point, 12) & 63))), @truncate((128 | (cp_shr(code_point, 6) & 63))), @truncate((128 | (code_point & 63))) },
 });
 }
@@ -1826,7 +1826,7 @@ else => (if (((first_byte & 224) == 192)) 2 else (if (((first_byte & 240) == 224
 pub inline fn wtf8ByteSequenceLengthWithInvalid(first_byte: u8) u8 {
         return (switch (first_byte) {
 0...127 => 1,
-else => (if (((first_byte & 224) == 192)) 2 else (if (((first_byte & 240) == 224)) 3 else (if (((first_byte & 248) == 240)) 4 else 0))),
+else => (if (((first_byte & 224) == 192)) 2 else (if (((first_byte & 240) == 224)) 3 else (if (((first_byte & 248) == 240)) 4 else 1))),
 });
 }
 

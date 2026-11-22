@@ -73,7 +73,7 @@ pub fn OwnedIn(comptime Pointer: type, comptime Allocator: type): type {
         ///
         /// If `Allocator` is a zero-sized type, there is no advantage to using this type. Just
         /// use a normal owned pointer, which has no overhead in this case.
-        const Unmanaged = owned.Unmanaged(Pointer, Allocator);
+        pub const Unmanaged = owned.Unmanaged(Pointer, Allocator);
 
         static fn allocSingle(value: Child): Self ! AllocError {
             return Self.allocIn(value, bun.memory.initDefault(Allocator));
@@ -85,7 +85,7 @@ pub fn OwnedIn(comptime Pointer: type, comptime Allocator: type): type {
         }
 
         /// Allocates a new owned pointer with a default-initialized `Allocator`.
-        const alloc = if (info.kind() == .single) allocSingle else allocSlice;
+        pub const alloc = if (info.kind() == .single) allocSingle else allocSlice;
 
         static fn allocInSingle(value: Child, allocator_: Allocator): Self ! AllocError {
             const data = bun.memory.create(
@@ -110,7 +110,7 @@ pub fn OwnedIn(comptime Pointer: type, comptime Allocator: type): type {
         }
 
         /// Allocates a new owned pointer with the given allocator.
-        const allocIn = if (info.kind() == .single) allocInSingle else allocInSlice;
+        pub const allocIn = if (info.kind() == .single) allocInSingle else allocInSlice;
 
         static fn newImpl(value: Child): Self {
             return bun.handleOom(Self.alloc(value));
@@ -255,7 +255,7 @@ pub fn OwnedIn(comptime Pointer: type, comptime Allocator: type): type {
         /// `bun.default_allocator.destroy`. Or it can be turned back into an owned pointer.
         ///
         /// This method invalidates `_`.
-        const intoRawWithAllocator = if (info.isOptional()) intoRawWithAllocatorOpt else intoRawWithAllocatorNonOpt;
+        pub const intoRawWithAllocator = if (info.isOptional()) intoRawWithAllocatorOpt else intoRawWithAllocatorNonOpt;
 
         static fn initNullImpl(): Self {
             return Self{
@@ -373,7 +373,7 @@ pub fn OwnedIn(comptime Pointer: type, comptime Allocator: type): type {
         /// Not all allocators have a separate borrowed type; in this case, the allocator is
         /// returned as-is. For example, if `Allocator` is `std.mem.Allocator`, this method also
         /// returns `std.mem.Allocator`.
-        const allocator = if (info.isOptional()) allocatorOpt else allocatorNonOpt;
+        pub const allocator = if (info.isOptional()) allocatorOpt else allocatorNonOpt;
 
         fn getStdAllocator(): std.mem.Allocator {
             return bun.allocators.asStd(_.#allocator);

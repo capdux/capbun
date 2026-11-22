@@ -507,14 +507,14 @@ pub fn isNsChar(c: encoding.unit()) bool {
 .utf8 => (switch (c) {
 ' ', 9 => false,
 10, 13 => false,
-33...125 => true,
+33...126 => true,
 128...255 => true,
 else => false,
 }),
 .utf16 => (switch (c) {
 ' ', 9 => false,
 10, 13 => false,
-33...125 => true,
+33...126 => true,
 133 => true,
 160...55295 => true,
 57344...65533 => true,
@@ -1940,7 +1940,8 @@ pub fn isEmpty(self: @This()) bool {
 });
         }
 
-pub fn eql(l: *const @This(), r: []const u8, input: []const enc.unit()) bool {
+pub fn eql(self: @This(), l: *const @This(), r: []const u8, input: []const enc.unit()) bool {
+            _ = self;
                 const l_slice = l.slice(input);
                 return std.mem.eql(enc.unit(), l_slice, r);
         }
@@ -2074,7 +2075,8 @@ pub fn deinit(self: *@This()) void {
                 _ = self.whitespace_buf.deinit();
         }
 
-pub fn unexpectedToken() UnexpectedTokenError {
+pub fn unexpectedToken(self: @This()) UnexpectedTokenError {
+            _ = self;
                 return error.UnexpectedToken;
         }
 
@@ -3291,7 +3293,7 @@ return error.UnexpectedCharacter;
 pub fn scanAutoIndentedLiteralScalar(self: *@This(), chomp: Chomp, folded: bool, start: Pos, line: Line) ScanLiteralScalarError!Token(enc) {
                 var ctx: LiteralScalarCtx = .{ .chomp = chomp, .text = .init(self.allocator), .folded = folded, .start = start, .line = line, .leading_newlines = 0, .content_indent = .none, .previous_indent = .none, .max_leading_indent = .none };
                 _ = &ctx;
-                var first = (if (comptime @typeInfo(enc.unit()) == .@"enum") @as(enc.unit(), @enumFromInt(0)) else @as(enc.unit(), 0));
+                var first = (if (comptime @typeInfo(enc.unit()) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(enc.unit(), @enumFromInt(0)) else @as(enc.unit(), 0));
                 _ = &first;
                 var first_ch = self.next();
                 _ = &first_ch;
@@ -3351,7 +3353,7 @@ return ctx.done(true);
 if ((self.peek(1) == 10)) {
                         _ = self.inc(1);
                     }
-                    lit_ch = (if (comptime @typeInfo(enc.unit()) == .@"enum") @as(enc.unit(), @enumFromInt(10)) else @as(enc.unit(), 10));
+                    lit_ch = (if (comptime @typeInfo(enc.unit()) == .@"enum" and (@typeInfo(@TypeOf(10)) == .int or @typeInfo(@TypeOf(10)) == .comptime_int)) @as(enc.unit(), @enumFromInt(10)) else @as(enc.unit(), 10));
                     continue :lit_sw;
 },
 10 => {
@@ -3806,7 +3808,7 @@ nl = false;
         }
 
 pub fn decodeHexCodePoint(self: *@This(), comptime escape: Escape, text: *std.array_list.Managed(enc.unit())) DecodeHexCodePointError!void {
-                var value = (if (comptime @typeInfo(escape.cp()) == .@"enum") @as(escape.cp(), @enumFromInt(0)) else @as(escape.cp(), 0));
+                var value = (if (comptime @typeInfo(escape.cp()) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(escape.cp(), @enumFromInt(0)) else @as(escape.cp(), 0));
                 _ = &value;
                 var esc_i: usize = 0;
                 _ = &esc_i;
@@ -3821,7 +3823,7 @@ else => {
 return error.UnexpectedCharacter;
 },
 });
-                    value = ((value * (if (comptime @typeInfo(escape.cp()) == .@"enum") @as(escape.cp(), @enumFromInt(16)) else @as(escape.cp(), 16))) + (if (comptime @typeInfo(escape.cp()) == .@"enum") @as(escape.cp(), @enumFromInt(num)) else @as(escape.cp(), num)));
+                    value = ((value * (if (comptime @typeInfo(escape.cp()) == .@"enum" and (@typeInfo(@TypeOf(16)) == .int or @typeInfo(@TypeOf(16)) == .comptime_int)) @as(escape.cp(), @enumFromInt(16)) else @as(escape.cp(), 16))) + (if (comptime @typeInfo(escape.cp()) == .@"enum" and (@typeInfo(@TypeOf(num)) == .int or @typeInfo(@TypeOf(num)) == .comptime_int)) @as(escape.cp(), @enumFromInt(num)) else @as(escape.cp(), num)));
                 }
                 var cp_u21: u21 = 0;
                 _ = &cp_u21;

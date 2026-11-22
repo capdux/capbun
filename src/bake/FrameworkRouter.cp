@@ -1120,7 +1120,7 @@ dynamic_routes: DynamicRouteMap,
 pattern_string_arena: bun.ArenaAllocator,
 
 
-pub fn initEmpty(root: []const u8, types: []Type, allocator: Allocator): !FrameworkRouter {
+pub static fn initEmpty(root: []const u8, types: []Type, allocator: Allocator): !FrameworkRouter {
     bun.assert(std.fs.path.isAbsolute(root));
 
     let routes = std.ArrayListUnmanaged(Route).initCapacity(allocator, types.len)?;

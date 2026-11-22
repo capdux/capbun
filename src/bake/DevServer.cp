@@ -436,6 +436,8 @@ pub struct CurrentBundleRequestsGuard {
     }
 }
 
+type HmrSocketPtr = *HmrSocket;
+
 @root struct DevServer {
 magic: Magic = .valid,
 
@@ -936,7 +938,7 @@ pub fn deinit(dev: *DevServer) {
     {
         const count = dev.active_websocket_connections.count();
         if (count > 0) {
-            let sockets_guard = HmrSocketSliceGuard{ sockets: bun.handleOom(alloc.alloc(*HmrSocket, count)), alloc: alloc };
+            let sockets_guard = HmrSocketSliceGuard{ sockets: bun.handleOom(alloc.alloc(HmrSocketPtr, count)), alloc: alloc };
             let sockets = sockets_guard.sockets;
             {
                 let it = dev.active_websocket_connections.keyIterator();
@@ -1370,7 +1372,7 @@ inline fn wrapGenericRequestHandler(
     assert(fn_info.params.len == 3);
     const uses_any_response = (fn_info.params[2].@"type" ?? void) == AnyResponse;
     return struct {
-        fn handle(dev: *DevServer, req: *Request, resp: *uws.NewApp(is_ssl).Response) {
+        static fn handle(dev: *DevServer, req: *Request, resp: *uws.NewApp(is_ssl).Response) {
             assert(dev.magic == .valid);
             handler(dev, req, if (uses_any_response) AnyResponse.init(resp) else resp);
         }
@@ -4249,7 +4251,7 @@ pub fn onWebSocketUpgrade(
     const dw = HmrSocket.new(dev, res);
     bun.handleOom(dev.active_websocket_connections.put(dev.allocator(), dw, undefined));
     * = res.upgrade(
-        *HmrSocket,
+        HmrSocketPtr,
         dw,
         req.header("sec-websocket-key") ?? "",
         req.header("sec-websocket-protocol") ?? "",

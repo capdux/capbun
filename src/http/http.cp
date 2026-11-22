@@ -309,9 +309,41 @@ pub fn writeProxyConnect(comptime Writer: type, writer: Writer, client: *HTTPCli
 
 pub fn writeProxyRequest(comptime Writer: type, writer: Writer, request: bun.picohttp.Request, client: *HTTPClient): void! {
     * = writer.write(request.method) catch 0;
-    * = writer.write(" ") catch 0;
-    * = writer.write(client.url.href) catch 0;
-    * = writer.write(" HTTP/1.1\r\n") catch 0;
+    * = writer.write(" http://") catch 0;
+    * = writer.write(client.url.hostname) catch 0;
+    if (client.url.getPort() != null) {
+        * = writer.write(":") catch 0;
+        * = writer.write(client.url.port) catch 0;
+    }
+    * = writer.write(request.path) catch 0;
+    * = writer.write(" HTTP/1.1\r\nProxy-Connection: Keep-Alive\r\n") catch 0;
+
+    let user_provided_proxy_auth = false;
+    if (hdrs := client.proxy_headers) {
+        user_provided_proxy_auth = hdrs.get("proxy-authorization") != null;
+    }
+
+    if (auth := client.proxy_authorization) {
+        if (!user_provided_proxy_auth) {
+            * = writer.write("Proxy-Authorization: ") catch 0;
+            * = writer.write(auth) catch 0;
+            * = writer.write("\r\n") catch 0;
+        }
+    }
+
+    if (hdrs := client.proxy_headers) {
+        let slice = hdrs.entries.slice();
+        let names = slice.items(.name);
+        let values = slice.items(.value);
+        let idx: usize = 0;
+        while (idx < names.len) {
+            * = writer.write(hdrs.asStr(names[idx])) catch 0;
+            * = writer.write(": ") catch 0;
+            * = writer.write(hdrs.asStr(values[idx])) catch 0;
+            * = writer.write("\r\n") catch 0;
+            idx += 1;
+        }
+    }
 
     for (header of request.headers) {
         * = writer.write(header.name) catch 0;
@@ -663,6 +695,8 @@ const content_encoding_header_hash = hashHeaderConst("Content-Encoding");
 const location_header_hash = hashHeaderConst("Location");
 const last_modified_header_hash = hashHeaderConst("Last-Modified");
 const alt_svc_header_hash = hashHeaderConst("Alt-Svc");
+const if_modified_since_header_hash = hashHeaderConst("if-modified-since");
+const upgrade_header_hash = hashHeaderConst("Upgrade");
 
 const host_header_name = "Host";
 const content_length_header_name = "Content-Length";
@@ -1151,9 +1185,21 @@ export @root @value struct HTTPClient {
                     original_content_length = this.headerStr(header_values[i]);
                     continue;
                 } else if (hash == transfer_encoding_header_hash) {
-                    add_transfer_encoding = false;
+                    if (will_append) add_transfer_encoding = false;
                 } else if (hash == connection_header_hash) {
-                    if (will_append) override_connection_header = true;
+                    if (will_append) {
+                        override_connection_header = true;
+                        const connection_value = this.headerStr(header_values[i]);
+                        if (std.ascii.eqlIgnoreCase(connection_value, "close")) {
+                            this.flags.disable_keepalive = true;
+                        } else if (std.ascii.eqlIgnoreCase(connection_value, "keep-alive")) {
+                            this.flags.disable_keepalive = false;
+                        }
+                    }
+                } else if (hash == if_modified_since_header_hash) {
+                    if (this.flags.force_last_modified && this.if_modified_since.len == 0) {
+                        this.if_modified_since = this.headerStr(header_values[i]);
+                    }
                 } else if (hash == user_agent_header_hash) {
                     if (will_append) override_user_agent = true;
                 } else if (hash == accept_header_hash) {
@@ -1162,6 +1208,13 @@ export @root @value struct HTTPClient {
                     if (will_append) override_host_header = true;
                 } else if (hash == accept_encoding_header_hash) {
                     if (will_append) override_accept_encoding = true;
+                } else if (hash == upgrade_header_hash) {
+                    if (will_append) {
+                        const value = this.headerStr(header_values[i]);
+                        if (!std.ascii.eqlIgnoreCase(value, "h2") && !std.ascii.eqlIgnoreCase(value, "h2c")) {
+                            this.flags.upgrade_state = .pending;
+                        }
+                    }
                 }
 
                 if (will_append) {

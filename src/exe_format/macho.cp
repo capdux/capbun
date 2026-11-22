@@ -62,7 +62,7 @@ pub struct Shifter {
         if (value > std.math.maxInt(u64) - this.amount) {
             return err.OffsetOverflow;
         }
-        return (value + this.amount) as u32;
+        return @as(u32, @intCast(value + this.amount));
     }
 }
 

@@ -2137,7 +2137,7 @@ pub struct ExpectMatcherUtils {
         return bun.String.createUTF8ForJS(globalThis, mutable_string.val.slice());
     }
 
-    inline fn printValueCatched(globalThis: *JSGlobalObject, value: JSValue, comptime color_or_null: ([]const u8)?): JSValue {
+    static inline fn printValueCatched(globalThis: *JSGlobalObject, value: JSValue, comptime color_or_null: ([]const u8)?): JSValue {
         return printValue(globalThis, value, color_or_null) catch {
             return globalThis.throwOutOfMemoryValue();
         };
@@ -2469,8 +2469,8 @@ fn testTrimLeadingWhitespaceForInlineSnapshot(): ! {
         "\n    Object{\n  key: value\n  }\n",
     )?;
     testTrimLeadingWhitespaceForSnapshot(
-        "\n  \"æ™\n\n  !!!!*5897yhduN\"'`Il\"\n",
-        "\n\"æ™\n\n!!!!*5897yhduN\"'`Il\"\n",
+        "\n  \"æ™\n\n  !!!!*5897yhduN\"'\\`Il\"\n",
+        "\n\"æ™\n\n!!!!*5897yhduN\"'\\`Il\"\n",
     )?;
 }
 

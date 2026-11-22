@@ -300,20 +300,20 @@ _ = self.getStdAllocator().free(data);
     const NonOptionalPointer = info.NonOptionalPointer;
     const Child = info.Child;
     const ConstPointer = AddConst(Pointer);
-    const Unmanaged = owned.Unmanaged(Pointer, Allocator);
-    const alloc = (if ((info.kind() == .single)) allocSingle else allocSlice);
-    const allocIn = (if ((info.kind() == .single)) allocInSingle else allocInSlice);
+    pub const Unmanaged = owned.Unmanaged(Pointer, Allocator);
+    pub const alloc = (if ((info.kind() == .single)) allocSingle else allocSlice);
+    pub const allocIn = (if ((info.kind() == .single)) allocInSingle else allocInSlice);
     pub const new = (if ((info.kind() == .single)) newImpl else null);
     const PointerAndAllocatorNonOpt = .{ Pointer, Allocator };
     const PointerAndAllocatorPair = .{ NonOptionalPointer, Allocator };
-    const intoRawWithAllocator = (if (info.isOptional()) intoRawWithAllocatorOpt else intoRawWithAllocatorNonOpt);
+    pub const intoRawWithAllocator = (if (info.isOptional()) intoRawWithAllocatorOpt else intoRawWithAllocatorNonOpt);
     pub const initNull = (if (info.isOptional()) initNullImpl else null);
     const OwnedNonOptional = (if (info.isOptional()) OwnedIn(NonOptionalPointer, Allocator) else void);
     pub const take = (if (info.isOptional()) takeImpl else null);
     pub const reset = (if (info.isOptional()) resetImpl else null);
     const OwnedOptional = (if ((!info.isOptional())) OwnedIn(OptionalPtr(Pointer), Allocator) else void);
     pub const toOptional = (if ((!info.isOptional())) toOptionalImpl else null);
-    const allocator = (if (info.isOptional()) allocatorOpt else allocatorNonOpt);
+    pub const allocator = (if (info.isOptional()) allocatorOpt else allocatorNonOpt);
 };
 }
 

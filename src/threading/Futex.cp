@@ -142,7 +142,7 @@ struct DarwinImpl {
         if (status >= 0) return;
         switch (@as(c.E, @enumFromInt(-status))) {
             .INTR => {},
-            .FAULT => @panic("__ulock_wait() returned EFAULT unexpectedly"),
+            .FAULT => {},
             .NOENT => {},
             .TIMEDOUT => {
                 if (timeout_overflowed) return;

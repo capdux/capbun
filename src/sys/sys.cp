@@ -4525,7 +4525,7 @@ pub fn copyFileZSlowWithHandle(in_handle: bun.FD, to_dir: bun.FD, destination: [
         const _out_handle_guard = FdGuard{ fd: out_handle };
 
         if (comptime Environment.isLinux) {
-            * = std.os.linux.fallocate(out_handle.cast(), 0, 0, i32(stat_.size));
+            * = std.os.linux.fallocate(out_handle.cast(), 0, 0, @as(i64, @intCast(stat_.size)));
         }
 
         // Seek input to beginning — the caller may have written to this fd,

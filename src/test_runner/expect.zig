@@ -2546,7 +2546,7 @@ pub fn testTrimLeadingWhitespaceForInlineSnapshot() !void {
         _ = try testTrimLeadingWhitespaceForSnapshot("\n  Object{\n    key: value\n  }\n", "\nObject{\n  key: value\n}\n");
         _ = try testTrimLeadingWhitespaceForSnapshot("\n  Object{\n  key: value\n\n  }\n", "\nObject{\nkey: value\n\n}\n");
         _ = try testTrimLeadingWhitespaceForSnapshot("\n    Object{\n  key: value\n  }\n", "\n    Object{\n  key: value\n  }\n");
-        _ = try testTrimLeadingWhitespaceForSnapshot("\n  \"æ™\n\n  !!!!*5897yhduN\"'`Il\"\n", "\n\"æ™\n\n!!!!*5897yhduN\"'`Il\"\n");
+        _ = try testTrimLeadingWhitespaceForSnapshot("\n  \"æ™\n\n  !!!!*5897yhduN\"'\\`Il\"\n", "\n\"æ™\n\n!!!!*5897yhduN\"'\\`Il\"\n");
 }
 
 pub fn testFuzzExpectTrimLeadingWhitespaceForInlineSnapshot() !void {

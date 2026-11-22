@@ -867,7 +867,7 @@ pub struct Valid {
 
     static fn pathSlice(zig_str: jsc.ZigString.Slice, ctx: *jsc.JSGlobalObject)! {
         switch (zig_str.len) {
-            0..MAX_PATH_BYTES => { return; },
+            0..=MAX_PATH_BYTES => { return; },
             else => {
                 let system_error = bun.sys.Error.fromCode(.NAMETOOLONG, .open).withPath(zig_str.slice()).toSystemError();
                 system_error.syscall = bun.String.dead;
@@ -879,7 +879,7 @@ pub struct Valid {
 
     static fn pathStringLength(len: usize, ctx: *jsc.JSGlobalObject)! {
         switch (len) {
-            0..MAX_PATH_BYTES => { return; },
+            0..=MAX_PATH_BYTES => { return; },
             else => {
                 let system_error = bun.sys.Error.fromCode(.NAMETOOLONG, .open).toSystemError();
                 system_error.syscall = bun.String.dead;
@@ -899,7 +899,7 @@ pub struct Valid {
             0 => {
                 return ctx.throwInvalidArguments("Invalid path buffer: can't be empty", .{});
             },
-            1..MAX_PATH_BYTES => { return; },
+            1..=MAX_PATH_BYTES => { return; },
             else => {
                 let system_error = bun.sys.Error.fromCode(.NAMETOOLONG, .open).toSystemError();
                 system_error.syscall = bun.String.dead;

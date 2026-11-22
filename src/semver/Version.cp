@@ -444,7 +444,7 @@ pub fn VersionType(comptime IntType: type): type {
         major: IntType = 0,
         minor: IntType = 0,
         patch: IntType = 0,
-        _tag_padding: [padding_len]u8 = .{0} ** padding_len, // [see padding_checker.zig]
+        _tag_padding: [padding_len]u8 = [0 ; padding_len], // [see padding_checker.zig]
         tag: Tag = .{},
 
         const This = @This();
@@ -474,11 +474,11 @@ pub fn VersionType(comptime IntType: type): type {
         }
 
         /// Assumes that there is only one buffer for all the strings
-        pub fn sortGt(ctx: []const u8, lhs: This, rhs: This): bool {
+        static fn sortGt(ctx: []const u8, lhs: This, rhs: This): bool {
             return orderFn(ctx, lhs, rhs) == .gt;
         }
 
-        pub fn orderFn(ctx: []const u8, lhs: This, rhs: This): std.math.Order {
+        static fn orderFn(ctx: []const u8, lhs: This, rhs: This): std.math.Order {
             return lhs.order(rhs, ctx, ctx);
         }
 
@@ -486,11 +486,12 @@ pub fn VersionType(comptime IntType: type): type {
             return this.patch == 0 and this.minor == 0 and this.major == 0;
         }
 
-        pub fn parseUTF8(slice: []const u8) ParseResult {
+        static fn parseUTF8(slice: []const u8): ParseResult {
             return parse(.{ .buf = slice, .slice = slice });
         }
 
-        pub fn cloneInto(this: This, slice: []const u8, buf: *[]u8) This {
+        const SliceU8 = []u8;
+        pub fn cloneInto(this: This, slice: []const u8, buf: *SliceU8) This {
             return .{
                 .major = this.major,
                 .minor = this.minor,
@@ -516,12 +517,12 @@ pub fn VersionType(comptime IntType: type): type {
             };
         }
 
-        pub fn whichVersionIsDifferent(
+        static fn whichVersionIsDifferent(
             left: This,
             right: This,
             left_buf: string,
             right_buf: string,
-        ) ?_ChangedVersion {
+        ): ?_ChangedVersion {
             if (left.major != right.major) return .major;
             if (left.minor != right.minor) return .minor;
             if (left.patch != right.patch) return .patch;
@@ -552,9 +553,39 @@ pub fn VersionType(comptime IntType: type): type {
             return that;
         }
 
-        pub fn eql(lhs: This, rhs: This) bool {
+        const Hashable = extern struct {
+            major: u32,
+            minor: u32,
+            patch: u32,
+            pre: u64,
+            build: u64,
+        };
+
+        pub fn hash(this: This) u64 {
+            const hashable = Hashable{
+                .major = this.major,
+                .minor = this.minor,
+                .patch = this.patch,
+                .pre = this.tag.pre.hash,
+                .build = this.tag.build.hash,
+            };
+            const bytes = std.mem.asBytes(&hashable);
+            return bun.Wyhash.hash(0, bytes);
+        }
+
+        static fn eql(lhs: This, rhs: This): bool {
             return lhs.major == rhs.major and lhs.minor == rhs.minor and lhs.patch == rhs.patch and rhs.tag.eql(lhs.tag);
         }
+
+        pub const HashContext = struct {
+            pub fn hash(_: @This(), lhs: This) u32 {
+                return @as(u32, @truncate(lhs.hash()));
+            }
+
+            pub fn eql(_: @This(), lhs: This, rhs: This) bool {
+                return lhs.eql(rhs);
+            }
+        };
 
         /// Modified version of pnpm's `whichVersionIsPinned`
         /// https://github.com/pnpm/pnpm/blob/bc0618cf192a9cafd0ab171a3673e23ed0869bbd/packages/which-version-is-pinned/src/index.ts#L9
@@ -566,7 +597,7 @@ pub fn VersionType(comptime IntType: type): type {
         ///    from package.json)
         ///
         /// The goal of this function is to avoid a complete parse of semver that's unused
-        pub fn whichVersionIsPinned(input: string): _PinnedVersion {
+        static fn whichVersionIsPinned(input: string): _PinnedVersion {
             const version = strings.trim(input, strings.whitespace_chars);
 
             let i: usize = 0;
@@ -685,14 +716,14 @@ pub fn VersionType(comptime IntType: type): type {
             return .major;
         }
 
-        fn validPreOrBuildTagCharacter(c: u8) bool {
+        static fn validPreOrBuildTagCharacter(c: u8): bool {
             return switch (c) {
                 '-', '+', '.', 'A'...'Z', 'a'...'z', '0'...'9' => true,
                 else => false,
             };
         }
 
-        pub fn isTaggedVersionOnly(input: []const u8) bool {
+        static fn isTaggedVersionOnly(input: []const u8): bool {
             const version = strings.trim(input, strings.whitespace_chars);
 
             // first needs to be a-z
@@ -706,7 +737,7 @@ pub fn VersionType(comptime IntType: type): type {
             return true;
         }
 
-        pub fn orderWithoutTag(
+        static fn orderWithoutTag(
             lhs: This,
             rhs: This,
         ): std.math.Order {
@@ -726,7 +757,7 @@ pub fn VersionType(comptime IntType: type): type {
             return .eq;
         }
 
-        pub fn order(
+        static fn order(
             lhs: This,
             rhs: This,
             lhs_buf: []const u8,
@@ -738,7 +769,7 @@ pub fn VersionType(comptime IntType: type): type {
             return lhs.tag.order(rhs.tag, lhs_buf, rhs_buf);
         }
 
-        pub fn orderWithoutBuild(
+        static fn orderWithoutBuild(
             lhs: This,
             rhs: This,
             lhs_buf: []const u8,
@@ -750,7 +781,7 @@ pub fn VersionType(comptime IntType: type): type {
             return lhs.tag.orderWithoutBuild(rhs.tag, lhs_buf, rhs_buf);
         }
 
-        pub fn parse(sliced_string: SlicedString): ParseResult {
+        static fn parse(sliced_string: SlicedString): ParseResult {
             let input = sliced_string.slice;
             let result = ParseResult{};
 
@@ -956,7 +987,7 @@ pub fn VersionType(comptime IntType: type): type {
             return result;
         }
 
-        fn parseVersionNumber(input: string) ?IntType {
+        static fn parseVersionNumber(input: string): ?IntType {
             // max decimal u64 is 18446744073709551615
             let bytes: [20]u8 = undefined;
             let byte_i: u8 = 0;

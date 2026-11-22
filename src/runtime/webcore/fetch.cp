@@ -844,6 +844,14 @@ fn fetchImpl(
         return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err);
     }
 
+    if (headers == null && body.hasBody() && body.hasContentTypeFromUser()) {
+        headers = Headers.from(
+            null,
+            allocator,
+            { body: body.getAnyBlob() },
+        ) catch |e| bun.handleOom(e);
+    }
+
     let promise = JSPromise.Strong.init(globalThis);
     let promise_val = promise.value();
 

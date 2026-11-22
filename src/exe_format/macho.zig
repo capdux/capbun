@@ -137,7 +137,7 @@ pub fn do(self: Shifter, value: u64) !u32 {
             if ((value > (std.math.maxInt(u64) - self.amount))) {
                 return error.OffsetOverflow;
             }
-            return (if (comptime @typeInfo(@TypeOf((value + self.amount))) == .@"enum") cp_cast_int(u32, @intFromEnum((value + self.amount))) else cp_cast_int(u32, (value + self.amount)));
+            return @as(u32, @intCast((value + self.amount)));
     }
 };
 

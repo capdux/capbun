@@ -1995,13 +1995,13 @@ pub fn wtf8Sequence(code_point: u32): [4]u8 {
             0,
             0,
         ],
-        0x80..0x7ff => [
+        0x80..=0x7ff => [
             @truncate(0xc0 | (code_point >> 6)),
             @truncate(0x80 | (code_point & 0x3f)),
             0,
             0,
         ],
-        0x800..0xffff => [
+        0x800..=0xffff => [
             @truncate(0xe0 | (code_point >> 12)),
             @truncate(0x80 | ((code_point >> 6) & 0x3f)),
             @truncate(0x80 | (code_point & 0x3f)),
@@ -2041,7 +2041,7 @@ pub inline fn wtf8ByteSequenceLengthWithInvalid(first_byte: u8): u8 {
         else if ((first_byte & 0xF8) == 0xF0)
             4
         else
-            0,
+            1,
     };
 }
 

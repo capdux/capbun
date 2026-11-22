@@ -1685,3 +1685,8 @@
 ### [2026-11-23] Wave #64 技术要点（全仓语法纯化收官）
 - `while (switch (...) { ... }) |next|` 可直接改写为 `while (next := switch (...) { ... })`。
 - 全仓 1295 个 `.cp` 模块已完成 `zig {}`、`var`、`anyopaque`、`@import`、`_ = `、`orelse`、`try`、`and`/`or`、`const X = struct/enum/union/opaque`、`?T`、`: void`、`self`/`this` 接收者、`if`/`while` `|capture|` 全波次纯化（仅 `return struct/union/enum` 原生 Zig 透传泛型工厂块及条件平台 `@import` 按规范保留）。
+
+### [2026-11-23] Wave #65 技术要点（语义一致性与新版 `cpc` 适配）
+- `return struct` 泛型工厂块现已接入新版 `cpc` 完整 lowering，内部无接收者的方法必须显式标注 `static fn`（否则注入 `self: @This()` 导致未使用参数或签名不匹配）。
+- 调用实参中的指针类型（如 `*HmrSocket`、`*[]u8`）在表达式上下文可能被解析为借用或切片，需通过顶层 `type Ptr = *T;` / `const SliceU8 = []u8;` 别名传递。
+- `wtf8ByteSequenceLengthWithInvalid` 的非法首字节 `else` 分支必须返回 `1` 而非 `0`，否则 `js_parser/lexer` 遇到 `0xEF 0xBF 0xBD`（U+FFFD）时会在续字节返回 `slice.len == 0 => -1` 误判 EOF。

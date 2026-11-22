@@ -750,31 +750,56 @@ pub fn buildRequest(self: *HTTPClient, body_len: usize) picohttp.Request {
                 continue;
             } else {
                 if ((hash == transfer_encoding_header_hash)) {
-                    add_transfer_encoding = false;
+                    if (will_append) {
+                        add_transfer_encoding = false;
+                    }
                 } else {
                     if ((hash == connection_header_hash)) {
                         if (will_append) {
                             override_connection_header = true;
+                            const connection_value = self.headerStr(header_values[@as(usize, @intCast(i))]);
+                            if (std.ascii.eqlIgnoreCase(connection_value, "close")) {
+                                self.flags.disable_keepalive = true;
+                            } else {
+                                if (std.ascii.eqlIgnoreCase(connection_value, "keep-alive")) {
+                                    self.flags.disable_keepalive = false;
+                                }
+                            }
                         }
                     } else {
-                        if ((hash == user_agent_header_hash)) {
-                            if (will_append) {
-                                override_user_agent = true;
+                        if ((hash == if_modified_since_header_hash)) {
+                            if ((self.flags.force_last_modified and (self.if_modified_since.len == 0))) {
+                                self.if_modified_since = self.headerStr(header_values[@as(usize, @intCast(i))]);
                             }
                         } else {
-                            if ((hash == accept_header_hash)) {
+                            if ((hash == user_agent_header_hash)) {
                                 if (will_append) {
-                                    override_accept_header = true;
+                                    override_user_agent = true;
                                 }
                             } else {
-                                if ((hash == host_header_hash)) {
+                                if ((hash == accept_header_hash)) {
                                     if (will_append) {
-                                        override_host_header = true;
+                                        override_accept_header = true;
                                     }
                                 } else {
-                                    if ((hash == accept_encoding_header_hash)) {
+                                    if ((hash == host_header_hash)) {
                                         if (will_append) {
-                                            override_accept_encoding = true;
+                                            override_host_header = true;
+                                        }
+                                    } else {
+                                        if ((hash == accept_encoding_header_hash)) {
+                                            if (will_append) {
+                                                override_accept_encoding = true;
+                                            }
+                                        } else {
+                                            if ((hash == upgrade_header_hash)) {
+                                                if (will_append) {
+                                                    const value = self.headerStr(header_values[@as(usize, @intCast(i))]);
+                                                    if (((!std.ascii.eqlIgnoreCase(value, "h2")) and (!std.ascii.eqlIgnoreCase(value, "h2c")))) {
+                                                        self.flags.upgrade_state = .pending;
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -2300,6 +2325,8 @@ const content_encoding_header_hash = hashHeaderConst("Content-Encoding");
 const location_header_hash = hashHeaderConst("Location");
 const last_modified_header_hash = hashHeaderConst("Last-Modified");
 const alt_svc_header_hash = hashHeaderConst("Alt-Svc");
+const if_modified_since_header_hash = hashHeaderConst("if-modified-since");
+const upgrade_header_hash = hashHeaderConst("Upgrade");
 const host_header_name = "Host";
 const content_length_header_name = "Content-Length";
 const chunked_encoded_header = picohttp.Header{ .name = "Transfer-Encoding", .value = "chunked" };
@@ -2397,17 +2424,54 @@ pub fn writeProxyConnect(comptime Writer: type, writer: Writer, client: *HTTPCli
 
 pub fn writeProxyRequest(comptime Writer: type, writer: Writer, request: bun.picohttp.Request, client: *HTTPClient) !void {
         _ = (blk_catch_47: { break :blk_catch_47 ((writer.write(request.method)) catch |__ce_47| { _ = &__ce_47; break :blk_catch_47 0; }); });
-        _ = (blk_catch_48: { break :blk_catch_48 ((writer.write(" ")) catch |__ce_48| { _ = &__ce_48; break :blk_catch_48 0; }); });
-        _ = (blk_catch_49: { break :blk_catch_49 ((writer.write(client.url.href)) catch |__ce_49| { _ = &__ce_49; break :blk_catch_49 0; }); });
-        _ = (blk_catch_50: { break :blk_catch_50 ((writer.write(" HTTP/1.1\r\n")) catch |__ce_50| { _ = &__ce_50; break :blk_catch_50 0; }); });
+        _ = (blk_catch_48: { break :blk_catch_48 ((writer.write(" http://")) catch |__ce_48| { _ = &__ce_48; break :blk_catch_48 0; }); });
+        _ = (blk_catch_49: { break :blk_catch_49 ((writer.write(client.url.hostname)) catch |__ce_49| { _ = &__ce_49; break :blk_catch_49 0; }); });
+        if ((client.url.getPort() != null)) {
+            _ = (blk_catch_50: { break :blk_catch_50 ((writer.write(":")) catch |__ce_50| { _ = &__ce_50; break :blk_catch_50 0; }); });
+            _ = (blk_catch_51: { break :blk_catch_51 ((writer.write(client.url.port)) catch |__ce_51| { _ = &__ce_51; break :blk_catch_51 0; }); });
+        }
+        _ = (blk_catch_52: { break :blk_catch_52 ((writer.write(request.path)) catch |__ce_52| { _ = &__ce_52; break :blk_catch_52 0; }); });
+        _ = (blk_catch_53: { break :blk_catch_53 ((writer.write(" HTTP/1.1\r\nProxy-Connection: Keep-Alive\r\n")) catch |__ce_53| { _ = &__ce_53; break :blk_catch_53 0; }); });
+        var user_provided_proxy_auth = false;
+        _ = &user_provided_proxy_auth;
+        if (client.proxy_headers) |hdrs| {
+            _ = &hdrs;
+            user_provided_proxy_auth = (hdrs.get("proxy-authorization") != null);
+        }
+        if (client.proxy_authorization) |auth| {
+            _ = &auth;
+            if ((!user_provided_proxy_auth)) {
+                _ = (blk_catch_54: { break :blk_catch_54 ((writer.write("Proxy-Authorization: ")) catch |__ce_54| { _ = &__ce_54; break :blk_catch_54 0; }); });
+                _ = (blk_catch_55: { break :blk_catch_55 ((writer.write(auth)) catch |__ce_55| { _ = &__ce_55; break :blk_catch_55 0; }); });
+                _ = (blk_catch_56: { break :blk_catch_56 ((writer.write("\r\n")) catch |__ce_56| { _ = &__ce_56; break :blk_catch_56 0; }); });
+            }
+        }
+        if (client.proxy_headers) |hdrs| {
+            _ = &hdrs;
+            var slice = hdrs.entries.slice();
+            _ = &slice;
+            var names = slice.items(.name);
+            _ = &names;
+            var values = slice.items(.value);
+            _ = &values;
+            var idx: usize = 0;
+            _ = &idx;
+            while ((idx < names.len)) {
+                _ = (blk_catch_57: { break :blk_catch_57 ((writer.write(hdrs.asStr(names[@as(usize, @intCast(idx))]))) catch |__ce_57| { _ = &__ce_57; break :blk_catch_57 0; }); });
+                _ = (blk_catch_58: { break :blk_catch_58 ((writer.write(": ")) catch |__ce_58| { _ = &__ce_58; break :blk_catch_58 0; }); });
+                _ = (blk_catch_59: { break :blk_catch_59 ((writer.write(hdrs.asStr(values[@as(usize, @intCast(idx))]))) catch |__ce_59| { _ = &__ce_59; break :blk_catch_59 0; }); });
+                _ = (blk_catch_60: { break :blk_catch_60 ((writer.write("\r\n")) catch |__ce_60| { _ = &__ce_60; break :blk_catch_60 0; }); });
+                idx = (idx + 1);
+            }
+        }
         for (cp_iter_slice(request.headers)) |header| {
             _ = &header;
-            _ = (blk_catch_51: { break :blk_catch_51 ((writer.write((if (@typeInfo(@TypeOf(header)) == .@"enum" or @typeInfo(@TypeOf(header)) == .@"union") @tagName(header) else header.name))) catch |__ce_51| { _ = &__ce_51; break :blk_catch_51 0; }); });
-            _ = (blk_catch_52: { break :blk_catch_52 ((writer.write(": ")) catch |__ce_52| { _ = &__ce_52; break :blk_catch_52 0; }); });
-            _ = (blk_catch_53: { break :blk_catch_53 ((writer.write((if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value))) catch |__ce_53| { _ = &__ce_53; break :blk_catch_53 0; }); });
-            _ = (blk_catch_54: { break :blk_catch_54 ((writer.write("\r\n")) catch |__ce_54| { _ = &__ce_54; break :blk_catch_54 0; }); });
+            _ = (blk_catch_61: { break :blk_catch_61 ((writer.write((if (@typeInfo(@TypeOf(header)) == .@"enum" or @typeInfo(@TypeOf(header)) == .@"union") @tagName(header) else header.name))) catch |__ce_61| { _ = &__ce_61; break :blk_catch_61 0; }); });
+            _ = (blk_catch_62: { break :blk_catch_62 ((writer.write(": ")) catch |__ce_62| { _ = &__ce_62; break :blk_catch_62 0; }); });
+            _ = (blk_catch_63: { break :blk_catch_63 ((writer.write((if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value))) catch |__ce_63| { _ = &__ce_63; break :blk_catch_63 0; }); });
+            _ = (blk_catch_64: { break :blk_catch_64 ((writer.write("\r\n")) catch |__ce_64| { _ = &__ce_64; break :blk_catch_64 0; }); });
         }
-        _ = (blk_catch_55: { break :blk_catch_55 ((writer.write("\r\n")) catch |__ce_55| { _ = &__ce_55; break :blk_catch_55 0; }); });
+        _ = (blk_catch_65: { break :blk_catch_65 ((writer.write("\r\n")) catch |__ce_65| { _ = &__ce_65; break :blk_catch_65 0; }); });
 }
 
 pub fn printRequest(protocol: Protocol, request: bun.picohttp.Request, url: []const u8, ignore_insecure: bool, body: []const u8, curl: bool) void {
@@ -2435,10 +2499,10 @@ ver = "HTTP/3";
         if (bun.Output.enable_ansi_colors_stderr) {
             prefix = bun.Output.prettyFmt("<r><d>[fetch]<r> ", true);
         }
-        _ = (blk_catch_56: { break :blk_catch_56 ((bun.Output.errorWriter().print("{s}> {s} {s} {s}\n", .{ prefix, ver, request_.method, request_.path })) catch |__ce_56| { _ = &__ce_56;  }); });
+        _ = (blk_catch_66: { break :blk_catch_66 ((bun.Output.errorWriter().print("{s}> {s} {s} {s}\n", .{ prefix, ver, request_.method, request_.path })) catch |__ce_66| { _ = &__ce_66;  }); });
         for (cp_iter_slice(request_.headers)) |header| {
             _ = &header;
-            _ = (blk_catch_57: { break :blk_catch_57 ((bun.Output.errorWriter().print("{s}> {f}\n", .{ prefix, header })) catch |__ce_57| { _ = &__ce_57;  }); });
+            _ = (blk_catch_67: { break :blk_catch_67 ((bun.Output.errorWriter().print("{s}> {f}\n", .{ prefix, header })) catch |__ce_67| { _ = &__ce_67;  }); });
         }
         _ = bun.Output.flush();
 }
@@ -2481,9 +2545,9 @@ pub fn checkServerIdentity(client: *HTTPClient, comptime is_ssl: bool, socket: N
 pub fn registerAbortTracker(client: *HTTPClient, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket) void {
         if ((client.signals.aborted != null)) {
             if (is_ssl) {
-                _ = (blk_catch_58: { break :blk_catch_58 ((socket_async_http_abort_tracker.put(client.async_http_id, .{ .SocketTLS = socket })) catch |__ce_58| { _ = &__ce_58; @panic("unreachable"); }); });
+                _ = (blk_catch_68: { break :blk_catch_68 ((socket_async_http_abort_tracker.put(client.async_http_id, .{ .SocketTLS = socket })) catch |__ce_68| { _ = &__ce_68; @panic("unreachable"); }); });
             } else {
-                _ = (blk_catch_59: { break :blk_catch_59 ((socket_async_http_abort_tracker.put(client.async_http_id, .{ .SocketTCP = socket })) catch |__ce_59| { _ = &__ce_59; @panic("unreachable"); }); });
+                _ = (blk_catch_69: { break :blk_catch_69 ((socket_async_http_abort_tracker.put(client.async_http_id, .{ .SocketTCP = socket })) catch |__ce_69| { _ = &__ce_69; @panic("unreachable"); }); });
             }
         }
 }

@@ -537,3 +537,33 @@
 - 完成 `temp/wave64_if_while_capture_todo.txt` 排查与纯化：修复 `src/cli/publish_command.cp`、`src/css/css_parser.cp`（`MozDocumentFn`）及 `src/css/generics.cp`（`unsafe { @constCast(this) }`），其余 `src/css/values/calc.cp` 等均位于 `return struct/union` 原生 Zig 透传泛型工厂块内按规范保留，全仓非透传 `if`/`while` `|capture|` 已清零。
 - `bun run zig:check` 5/5 通过（29s），`bun bd test test/regression/issue/29181.test.ts test/js/bun/util/bun-file.test.ts` 8/8 通过（460 expect）。
 - 全仓 1295 个 `.cp` 模块语法纯化波次已全面收敛，下一阶段转入扩大范围的 `bun bd test` 分模块回归测试验证。
+
+### [2026-11-23] 向 `cp_agy` 提交 6 项 `cpc` 编译器加强与缺陷修复工单
+- `task-bun-20261123-passthrough-factory-lowering` (`repro_passthrough_factory.cp`)：支持 `return struct/union/enum` 泛型工厂体与嵌套容器完整 CP Lowering。
+- `task-bun-20261123-optional-type-vs-try-disambig` (`repro_opt_type_disambig.cp`)：消除类型位置 `?` 与表达式位置 `?` 的语法二义性。
+- `task-bun-20261123-addr-of-const-var-vs-type` (`repro_addr_of_const_var.cp`)：修复 `&ident` 误判为 `*const ident` 及 `const *!` 指针修饰符问题。
+- `task-bun-20261123-as-enum-tag-union` (`repro_as_enum_tag_union.cp`)：修复 `union(EnumTag)` 上 `@as(EnumTag, _)` 误生成 `@enumFromInt(self)`。
+- `task-bun-20261123-zero-field-struct-method-recv` (`repro_zero_field_method.cp`)：修复无字段结构体实例方法未引用 `_` 时丢失 `self` 参数。
+- `task-bun-20261123-strict-purification-flag` (`repro_strict_purification.cp`)：为 `cpc check` 增加 `--strict` 严苛纯化门禁模式。
+
+### [2026-11-23] 收到 `cp_agy` 结单验收通知（6 条全部验证通过并已 `ack`）
+- `task-bun-20261123-passthrough-factory-lowering`：支持 `return struct/union/enum` 泛型工厂返回体与嵌套容器完整 CP 语义解析与递归 lowering。
+- `task-bun-20261123-optional-type-vs-try-disambig`：消除类型位置 `?` 与表达式位置 `?` 语法二义性（`T?` / `(*Owner)?` 不再误生成 `try`）。
+- `task-bun-20261123-addr-of-const-var-vs-type`：修复 `&const_var` 误判为 `*const ident` 及 `const *!` 双层指针问题。
+- `task-bun-20261123-as-enum-tag-union`：修复 `union(EnumTag)` 上 `@as(EnumTag, _)` 盲目生成 `@enumFromInt(self)`。
+- `task-bun-20261123-zero-field-struct-method-recv`：修复无字段结构体实例方法未引用 `_` 时丢失 `self` 参数。
+- `task-bun-20261123-strict-purification-flag`：新增 `cpc check --strict` 严苛纯化门禁（拦截 E0301..E0311 旧语法）。
+
+### [2026-11-23] 向 `cp_agy` 提交 `cpc` 静默丢弃顶层函数缺陷工单
+- `task-bun-20261123-silent-drop-comptime-auto-dotted-err` (`repro_silent_drop_comptime_auto_err.cp`)：`comptime` 参数 + `auto` 参数 + 带点号错误联合返回类型（`std.Io.Writer.Error!void`）同时出现时，顶层函数会被 `cpc` 静默丢弃（`yaml.cp:52` `pub fn print`）。
+
+### [2026-11-23] 收到 `cp_agy` 结单验收通知（`task-bun-20261123-silent-drop-comptime-auto-dotted-err`）
+- 根因为 `codegen/actor.rs` 无差别过滤了所有顶层 `print`/`spawn`/`join` 函数；已收敛为仅过滤单条内建原语委托桩函数（`is_builtin_runtime_stub_fn`）并修复同名别名冲突，已验证通过并执行 `ack`。
+
+## [2026-11-23] Wave #65：全仓 1280 模块普查与首轮语义一致性修复完成与提交
+- 完成全仓 1280 对 `(.cp, _.zig)` 自动化完整性普查（`temp/full_census.txt`）与多子系统抽查，修复 14 个模块的语义与编译细节：
+  - `src/string/immutable/unicode.cp`（`wtf8ByteSequenceLengthWithInvalid` `else => 1`、`wtf8Sequence` `..=` 闭区间）、`src/interchange/yaml.cp`（`0x21..=0x7e`、`writer: anytype` 与 `Token` `static fn`）、`src/runtime/node/types.cp`（`..=MAX_PATH_BYTES`）、`src/http/InitError.cp`（1.00x 精简）；
+  - `src/http/http.cp`（补全 `buildRequest` `Connection`/`if-modified-since`/`Upgrade` 与 `writeProxyRequest`）、`src/runtime/webcore/fetch.cp`（补全 `body` `Content-Type` 传播）、`src/semver/Version.cp`（补回 `Hashable`/`hash`/`HashContext` 与 `SliceU8`）；
+  - `src/bake/FrameworkRouter.cp`（`pub static fn initEmpty`）、`src/bake/DevServer.cp`（`HmrSocketPtr` 与 `static fn handle`）、`src/test_runner/expect.cp`（转义与 `static`）、`src/ptr/owned.cp`（补全 `pub`）、`src/exe_format/macho.cp`（`@intCast` 溢出检查）、`src/sys/sys.cp`（`i64` `fallocate`）、`src/threading/Futex.cp`（Darwin `.FAULT => {}`）。
+- 验证：`bun run zig:check` 5/5 通过（23s），`29181.test.ts` + `bun-file.test.ts` 8/8 通过（460 expect），`serve.test.ts` `does propagate type for Blob` 通过。
+- 推导下一阶段 Wave #66：根据普查结果补全 `fetch.cp`（`needsToReadFile`/`SendFile`/`isS3`/协议校验）、`c_ares.cp`、`uws_sys/Response.cp` 与 `blob/copy_file.cp` 遗漏核心逻辑。

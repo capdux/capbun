@@ -872,7 +872,7 @@ pub fn getcwdZ(buf: *bun.PathBuffer) Maybe(ConstByteSliceZ) {
         break :blk @ptrCast(std.c.getcwd(buf, bun.MAX_PATH_BYTES));
 
 });
-        return (if ((rc != null)) Result{ .result = rc.?[0..std.mem.len(rc.?) :0] } else (Result.errnoSysP((if (comptime @typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(0)) else @as(c_int, 0)), .getcwd, buf)).?);
+        return (if ((rc != null)) Result{ .result = rc.?[0..std.mem.len(rc.?) :0] } else (Result.errnoSysP((if (comptime @typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(c_int, @enumFromInt(0)) else @as(c_int, 0)), .getcwd, buf)).?);
 }
 
 pub fn fchown(fd: bun.FD, uid: jsc.Node.uid_t, gid: jsc.Node.gid_t) Maybe(void) {
@@ -984,7 +984,7 @@ pub fn chdir(path: anytype, destination: anytype) Maybe(void) {
                 return .success;
             }
             if (comptime ((Type == bun.OSPathSliceZ) or (Type == U16SliceZ))) {
-                return chdirOSPath(path, (if (comptime @typeInfo(bun.OSPathSliceZ) == .@"enum") @as(bun.OSPathSliceZ, @enumFromInt(destination)) else @as(bun.OSPathSliceZ, destination)));
+                return chdirOSPath(path, (if (comptime @typeInfo(bun.OSPathSliceZ) == .@"enum" and (@typeInfo(@TypeOf(destination)) == .int or @typeInfo(@TypeOf(destination)) == .comptime_int)) @as(bun.OSPathSliceZ, @enumFromInt(destination)) else @as(bun.OSPathSliceZ, destination)));
             }
             return chdirOSPath(path, destination);
         }
@@ -1362,7 +1362,7 @@ else => mkdir(file_path, flags),
 
 pub fn fcntl(fd: bun.FD, cmd: i32, arg: anytype) Maybe(fnctl_int) {
         while (true) {
-            const result = (if ((@TypeOf(arg) == i32) or (@TypeOf(arg) == comptime_int) or (@TypeOf(arg) == c_int)) fcntl_symbol(fd.native(), cmd, (if (comptime @typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(arg)) else @as(c_int, arg))) else if (@TypeOf(arg) == i64) fcntl_symbol(fd.cast(), cmd, @as(c_long, @bitCast(arg))) else if ((@TypeOf(arg) == *const anyopaque) or (@TypeOf(arg) == *anyopaque) or (@TypeOf(arg) == usize)) fcntl_symbol(fd.cast(), cmd, arg) else @compileError("Unsupported argument type for fcntl"));
+            const result = (if ((@TypeOf(arg) == i32) or (@TypeOf(arg) == comptime_int) or (@TypeOf(arg) == c_int)) fcntl_symbol(fd.native(), cmd, (if (comptime @typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(arg)) == .int or @typeInfo(@TypeOf(arg)) == .comptime_int)) @as(c_int, @enumFromInt(arg)) else @as(c_int, arg))) else if (@TypeOf(arg) == i64) fcntl_symbol(fd.cast(), cmd, @as(c_long, @bitCast(arg))) else if ((@TypeOf(arg) == *const anyopaque) or (@TypeOf(arg) == *anyopaque) or (@TypeOf(arg) == usize)) fcntl_symbol(fd.cast(), cmd, arg) else @compileError("Unsupported argument type for fcntl"));
             if (Maybe(fnctl_int).errnoSysFd(result, .fcntl, fd)) |e| {
                 _ = &e;
                 if ((e.getErrno() == .INTR)) {
@@ -2180,7 +2180,7 @@ pub inline fn sigemptyset() sigset_t {
 
 pub inline fn sigaddset(set: *sigset_t, sig: u8) void {
         if (comptime Environment.isAndroid) {
-            set.* = (set.* | (if (comptime @typeInfo(sigset_t) == .@"enum") @as(sigset_t, @enumFromInt(cp_shl((if (comptime @typeInfo(c_ulong) == .@"enum") @as(c_ulong, @enumFromInt(1)) else @as(c_ulong, 1)), (if (comptime @typeInfo(u6) == .@"enum") @as(u6, @enumFromInt((if (comptime @typeInfo(@TypeOf((sig - 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((sig - 1))) else cp_cast_int(i32, (sig - 1))))) else @as(u6, (if (comptime @typeInfo(@TypeOf((sig - 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((sig - 1))) else cp_cast_int(i32, (sig - 1)))))))) else @as(sigset_t, cp_shl((if (comptime @typeInfo(c_ulong) == .@"enum") @as(c_ulong, @enumFromInt(1)) else @as(c_ulong, 1)), (if (comptime @typeInfo(u6) == .@"enum") @as(u6, @enumFromInt((if (comptime @typeInfo(@TypeOf((sig - 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((sig - 1))) else cp_cast_int(i32, (sig - 1))))) else @as(u6, (if (comptime @typeInfo(@TypeOf((sig - 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((sig - 1))) else cp_cast_int(i32, (sig - 1)))))))));
+            set.* = (set.* | (if (comptime @typeInfo(sigset_t) == .@"enum" and (@typeInfo(@TypeOf(cp_shl((if (comptime @typeInfo(c_ulong) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_ulong, @enumFromInt(1)) else @as(c_ulong, 1)), (if (comptime @typeInfo(u6) == .@"enum" and (@typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf((sig - 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((sig - 1))) else cp_cast_int(i32, (sig - 1))))) == .int or @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf((sig - 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((sig - 1))) else cp_cast_int(i32, (sig - 1))))) == .comptime_int)) @as(u6, @enumFromInt((if (comptime @typeInfo(@TypeOf((sig - 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((sig - 1))) else cp_cast_int(i32, (sig - 1))))) else @as(u6, (if (comptime @typeInfo(@TypeOf((sig - 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((sig - 1))) else cp_cast_int(i32, (sig - 1)))))))) == .int or @typeInfo(@TypeOf(cp_shl((if (comptime @typeInfo(c_ulong) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_ulong, @enumFromInt(1)) else @as(c_ulong, 1)), (if (comptime @typeInfo(u6) == .@"enum" and (@typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf((sig - 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((sig - 1))) else cp_cast_int(i32, (sig - 1))))) == .int or @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf((sig - 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((sig - 1))) else cp_cast_int(i32, (sig - 1))))) == .comptime_int)) @as(u6, @enumFromInt((if (comptime @typeInfo(@TypeOf((sig - 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((sig - 1))) else cp_cast_int(i32, (sig - 1))))) else @as(u6, (if (comptime @typeInfo(@TypeOf((sig - 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((sig - 1))) else cp_cast_int(i32, (sig - 1)))))))) == .comptime_int)) @as(sigset_t, @enumFromInt(cp_shl((if (comptime @typeInfo(c_ulong) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_ulong, @enumFromInt(1)) else @as(c_ulong, 1)), (if (comptime @typeInfo(u6) == .@"enum" and (@typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf((sig - 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((sig - 1))) else cp_cast_int(i32, (sig - 1))))) == .int or @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf((sig - 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((sig - 1))) else cp_cast_int(i32, (sig - 1))))) == .comptime_int)) @as(u6, @enumFromInt((if (comptime @typeInfo(@TypeOf((sig - 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((sig - 1))) else cp_cast_int(i32, (sig - 1))))) else @as(u6, (if (comptime @typeInfo(@TypeOf((sig - 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((sig - 1))) else cp_cast_int(i32, (sig - 1)))))))) else @as(sigset_t, cp_shl((if (comptime @typeInfo(c_ulong) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(c_ulong, @enumFromInt(1)) else @as(c_ulong, 1)), (if (comptime @typeInfo(u6) == .@"enum" and (@typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf((sig - 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((sig - 1))) else cp_cast_int(i32, (sig - 1))))) == .int or @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf((sig - 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((sig - 1))) else cp_cast_int(i32, (sig - 1))))) == .comptime_int)) @as(u6, @enumFromInt((if (comptime @typeInfo(@TypeOf((sig - 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((sig - 1))) else cp_cast_int(i32, (sig - 1))))) else @as(u6, (if (comptime @typeInfo(@TypeOf((sig - 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((sig - 1))) else cp_cast_int(i32, (sig - 1)))))))));
             return;
         }
         _ = posix.sigaddset(set, sig);
@@ -3649,7 +3649,7 @@ pub fn dupWithFlags(fd: bun.FD, _: i32) Maybe(bun.FD) {
             return .{ .result = duplicated_fd };
         }
         const ArgType = (if (comptime Environment.isLinux) usize else c_int);
-        const out = (switch (fcntl(fd, (if (comptime @typeInfo(@TypeOf(bun.c.F_DUPFD_CLOEXEC)) == .@"enum") cp_cast_int(i32, @intFromEnum(bun.c.F_DUPFD_CLOEXEC)) else cp_cast_int(i32, bun.c.F_DUPFD_CLOEXEC)), (if (comptime @typeInfo(ArgType) == .@"enum") @as(ArgType, @enumFromInt(0)) else @as(ArgType, 0)))) {
+        const out = (switch (fcntl(fd, (if (comptime @typeInfo(@TypeOf(bun.c.F_DUPFD_CLOEXEC)) == .@"enum") cp_cast_int(i32, @intFromEnum(bun.c.F_DUPFD_CLOEXEC)) else cp_cast_int(i32, bun.c.F_DUPFD_CLOEXEC)), (if (comptime @typeInfo(ArgType) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(ArgType, @enumFromInt(0)) else @as(ArgType, 0)))) {
 .result => |result| result,
 .err => |e| {
 {
@@ -4057,7 +4057,7 @@ return .{ .err = e };
             var ___out_handle_guard_moved = false; _ = &___out_handle_guard_moved;
             defer if (!___out_handle_guard_moved) { ___out_handle_guard_moved = true; const __T = @TypeOf(_out_handle_guard); if (@typeInfo(__T) == .optional) { if (_out_handle_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _out_handle_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _out_handle_guard; _drop_val.__cp_deinit(); } };
             if (comptime Environment.isLinux) {
-                _ = std.os.linux.fallocate(out_handle.cast(), 0, 0, (if (comptime @typeInfo(@TypeOf(stat_.size)) == .@"enum") cp_cast_int(i32, @intFromEnum(stat_.size)) else cp_cast_int(i32, stat_.size)));
+                _ = std.os.linux.fallocate(out_handle.cast(), 0, 0, @as(i64, @intCast(stat_.size)));
             }
             _ = setFileOffset(in_handle, 0);
             switch (bun.copyFile(in_handle, out_handle)) {
@@ -4114,7 +4114,8 @@ var paths = List.init(allocator);
         defer if (!__paths_guard_moved) { __paths_guard_moved = true; const __T = @TypeOf(paths_guard); if (@typeInfo(__T) == .optional) { if (paths_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { paths_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = paths_guard; _drop_val.__cp_deinit(); } };
         _ = try posix.dl_iterate_phdr((&paths), error{OutOfMemory}, (struct {
 
-pub fn callback(info: *posix.dl_phdr_info, size: usize, list: *List) !void {
+pub fn callback(self: @This(), info: *posix.dl_phdr_info, size: usize, list: *List) !void {
+        _ = self;
             _ = &size;
             const name = ((info.dlpi_name) orelse { return; });
             if ((name[0] == 47)) {

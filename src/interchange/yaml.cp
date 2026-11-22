@@ -49,7 +49,7 @@ pub fn parse(comptime encoding: Encoding, allocator: std.mem.Allocator, input: [
     return Parser(encoding).ParseResult.success(stream, &parser);
 }
 
-pub fn print(comptime encoding: Encoding, allocator: std.mem.Allocator, stream: Parser(encoding).Stream, writer: auto): std.Io.Writer.Error!void {
+pub fn print(comptime encoding: Encoding, allocator: std.mem.Allocator, stream: Parser(encoding).Stream, writer: anytype): std.Io.Writer.Error!void {
     let printer: Parser(encoding).Printer(@TypeOf(writer)) = {
         input: stream.input,
         stream: stream,
@@ -314,7 +314,7 @@ pub struct EncodingChars<const encoding: Encoding> {
 
                 // TODO: exclude BOM
 
-                0x21..0x7e => true,
+                0x21..=0x7e => true,
 
                 0x80..=0xff => true,
 
@@ -326,7 +326,7 @@ pub struct EncodingChars<const encoding: Encoding> {
                 '\n', '\r' => false,
                 // TODO: exclude BOM
 
-                0x21..0x7e => true,
+                0x21..=0x7e => true,
 
                 0x85 => true,
 
@@ -1046,7 +1046,7 @@ struct ParserScalarResolverCtx<const enc: Encoding> {
         // ScalarTypeMismatch,
     };
 
-    pub fn resolve(
+    pub static fn resolve(
         ctx: *@This(),
         scalar: NodeScalar,
         off: Pos,
@@ -1104,7 +1104,7 @@ struct ParserScalarResolverCtx<const enc: Encoding> {
         }
     }
 
-    pub fn tryResolveNumber(
+    pub static fn tryResolveNumber(
         ctx: *@This(),
         parser: *Parser(enc),
         first_char: ScalarFirstChar,
@@ -5692,7 +5692,7 @@ pub struct Token<const encoding: Encoding> {
     data: Data,
 
 
-    pub fn eof(init: TokenInit): @This() {
+    pub static fn eof(init: TokenInit): @This() {
         return {
             start: init.start,
             indent: init.indent,
@@ -5701,7 +5701,7 @@ pub struct Token<const encoding: Encoding> {
         };
     }
 
-    pub fn sequenceEntry(init: TokenInit): @This() {
+    pub static fn sequenceEntry(init: TokenInit): @This() {
         return {
             start: init.start,
             indent: init.indent,
@@ -5710,7 +5710,7 @@ pub struct Token<const encoding: Encoding> {
         };
     }
 
-    pub fn mappingKey(init: TokenInit): @This() {
+    pub static fn mappingKey(init: TokenInit): @This() {
         return {
             start: init.start,
             indent: init.indent,
@@ -5719,7 +5719,7 @@ pub struct Token<const encoding: Encoding> {
         };
     }
 
-    pub fn mappingValue(init: TokenInit): @This() {
+    pub static fn mappingValue(init: TokenInit): @This() {
         return {
             start: init.start,
             indent: init.indent,
@@ -5728,7 +5728,7 @@ pub struct Token<const encoding: Encoding> {
         };
     }
 
-    pub fn collectEntry(init: TokenInit): @This() {
+    pub static fn collectEntry(init: TokenInit): @This() {
         return {
             start: init.start,
             indent: init.indent,
@@ -5737,7 +5737,7 @@ pub struct Token<const encoding: Encoding> {
         };
     }
 
-    pub fn sequenceStart(init: TokenInit): @This() {
+    pub static fn sequenceStart(init: TokenInit): @This() {
         return {
             start: init.start,
             indent: init.indent,
@@ -5746,7 +5746,7 @@ pub struct Token<const encoding: Encoding> {
         };
     }
 
-    pub fn sequenceEnd(init: TokenInit): @This() {
+    pub static fn sequenceEnd(init: TokenInit): @This() {
         return {
             start: init.start,
             indent: init.indent,
@@ -5755,7 +5755,7 @@ pub struct Token<const encoding: Encoding> {
         };
     }
 
-    pub fn mappingStart(init: TokenInit): @This() {
+    pub static fn mappingStart(init: TokenInit): @This() {
         return {
             start: init.start,
             indent: init.indent,
@@ -5764,7 +5764,7 @@ pub struct Token<const encoding: Encoding> {
         };
     }
 
-    pub fn mappingEnd(init: TokenInit): @This() {
+    pub static fn mappingEnd(init: TokenInit): @This() {
         return {
             start: init.start,
             indent: init.indent,
@@ -5775,7 +5775,7 @@ pub struct Token<const encoding: Encoding> {
 
     type AnchorInit = TokenAnchorInit<encoding>;
 
-    pub fn anchor(init: AnchorInit): @This() {
+    pub static fn anchor(init: AnchorInit): @This() {
         return {
             start: init.start,
             indent: init.indent,
@@ -5786,7 +5786,7 @@ pub struct Token<const encoding: Encoding> {
 
     type AliasInit = TokenAliasInit<encoding>;
 
-    pub fn alias(init: AliasInit): @This() {
+    pub static fn alias(init: AliasInit): @This() {
         return {
             start: init.start,
             indent: init.indent,
@@ -5797,7 +5797,7 @@ pub struct Token<const encoding: Encoding> {
 
     type TagInit = TokenTagInit<encoding>;
 
-    pub fn tag(init: TagInit): @This() {
+    pub static fn tag(init: TagInit): @This() {
         return {
             start: init.start,
             indent: init.indent,
@@ -5806,7 +5806,7 @@ pub struct Token<const encoding: Encoding> {
         };
     }
 
-    pub fn directive(init: TokenInit): @This() {
+    pub static fn directive(init: TokenInit): @This() {
         return {
             start: init.start,
             indent: init.indent,
@@ -5815,7 +5815,7 @@ pub struct Token<const encoding: Encoding> {
         };
     }
 
-    pub fn reserved(init: TokenInit): @This() {
+    pub static fn reserved(init: TokenInit): @This() {
         return {
             start: init.start,
             indent: init.indent,
@@ -5824,7 +5824,7 @@ pub struct Token<const encoding: Encoding> {
         };
     }
 
-    pub fn documentStart(init: TokenInit): @This() {
+    pub static fn documentStart(init: TokenInit): @This() {
         return {
             start: init.start,
             indent: init.indent,
@@ -5833,7 +5833,7 @@ pub struct Token<const encoding: Encoding> {
         };
     }
 
-    pub fn documentEnd(init: TokenInit): @This() {
+    pub static fn documentEnd(init: TokenInit): @This() {
         return {
             start: init.start,
             indent: init.indent,
@@ -5844,7 +5844,7 @@ pub struct Token<const encoding: Encoding> {
 
     type ScalarInit = TokenScalarInit<encoding>;
 
-    pub fn scalar(init: ScalarInit): @This() {
+    pub static fn scalar(init: ScalarInit): @This() {
         return {
             start: init.start,
             indent: init.indent,

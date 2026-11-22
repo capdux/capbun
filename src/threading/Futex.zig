@@ -95,7 +95,7 @@ pub fn wait(ptr: *const atomic.Value(u32), expect: u32, timeout: ?u64) TimeoutEr
             if (timeout) |delay| {
                 _ = &delay;
                 timeout_value = @as(windows.LARGE_INTEGER, @intCast((delay / 100)));
-                timeout_value = ((if (comptime @typeInfo(windows.LARGE_INTEGER) == .@"enum") @as(windows.LARGE_INTEGER, @enumFromInt(0)) else @as(windows.LARGE_INTEGER, 0)) - timeout_value);
+                timeout_value = ((if (comptime @typeInfo(windows.LARGE_INTEGER) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(windows.LARGE_INTEGER, @enumFromInt(0)) else @as(windows.LARGE_INTEGER, 0)) - timeout_value);
                 timeout_ptr = (&timeout_value);
             }
             const rc = windows.ntdll.RtlWaitOnAddress(ptr, (&expect), @sizeOf(@TypeOf(expect)), timeout_ptr);
@@ -167,7 +167,7 @@ pub fn wait(ptr: *const atomic.Value(u32), expect: u32, timeout: ?u64) TimeoutEr
 
 },
 .FAULT => {
-_ = @panic("__ulock_wait() returned EFAULT unexpectedly");
+
 },
 .NOENT => {
 
@@ -295,7 +295,7 @@ pub fn wait(ptr: *const atomic.Value(u32), expect: u32, timeout: ?u64) TimeoutEr
             const rc = c._umtx_op((blk: {
             break :blk @intFromPtr((&ptr.raw));
 
-}), @intFromEnum(c.UMTX_OP.WAIT_UINT_PRIVATE), (if (comptime @typeInfo(c_ulong) == .@"enum") @as(c_ulong, @enumFromInt(expect)) else @as(c_ulong, expect)), tm_size, (blk: {
+}), @intFromEnum(c.UMTX_OP.WAIT_UINT_PRIVATE), (if (comptime @typeInfo(c_ulong) == .@"enum" and (@typeInfo(@TypeOf(expect)) == .int or @typeInfo(@TypeOf(expect)) == .comptime_int)) @as(c_ulong, @enumFromInt(expect)) else @as(c_ulong, expect)), tm_size, (blk: {
             break :blk @intFromPtr(tm_ptr);
 
 }));
