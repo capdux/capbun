@@ -157,8 +157,8 @@ pub const Copy = union(enum) {
     pub fn has(s: []const u8) bool { if (comptime @typeInfo(@This()).@"union".tag_type) |TagType| { return std.meta.stringToEnum(TagType, s) != null; } return false; }
     pub fn name(self: @This()) []const u8 { return @tagName(self); }
 
-pub fn len(self: *Copy, byte_len: *usize) usize {
-            switch (self.*) {
+pub fn len(self: Copy, byte_len: *usize) usize {
+            switch (self) {
 .utf16 => {
 {
                 byte_len.* = strings.elementLengthUTF16IntoUTF8(self.utf16);
@@ -195,8 +195,8 @@ pub fn len(self: *Copy, byte_len: *usize) usize {
 }
     }
 
-pub fn copy(self: *Copy, globalThis: *jsc.JSGlobalObject, buf: []u8, content_byte_len: usize, opcode: Opcode) void {
-            if ((self.* == .raw)) {
+pub fn copy(self: Copy, globalThis: *jsc.JSGlobalObject, buf: []u8, content_byte_len: usize, opcode: Opcode) void {
+            if ((self == .raw)) {
                 _ = bun.assert((buf.len >= self.raw.len));
                 _ = bun.assert((buf.ptr != self.raw.ptr));
                 _ = @memcpy(buf[0..self.raw.len], self.raw);
@@ -229,7 +229,7 @@ _ = unreachable;
             header.final = true;
             header.opcode = opcode;
             _ = bun.assert((WebsocketHeader.frameSizeIncludingMask(content_byte_len) == buf.len));
-            switch (self.*) {
+            switch (self) {
 .utf16 => |utf16| {
 header.len = WebsocketHeader.packLength(content_byte_len);
             const encode_into_result = strings.copyUTF16IntoUTF8Impl(to_mask, utf16, true);

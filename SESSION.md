@@ -527,3 +527,8 @@
 - 完成 `temp/wave62_prefix_q_todo.txt`（31 个 `?T` 模块）与 `temp/wave62_void_todo.txt`（第 3 组 22 个 `: void` 模块；其余 46 个复核为 `void!` 错误联合或函数指针，0 残留）的清扫，全量通过 `cpc_brief.py` 四项门禁。
 - 修复 `src/bake/DevServer/ErrorReportRequest.cp`（内联 `SourceMapStore.GetResult?`）与 `src/uws_sys/socket.cp`（`OptPtr` 辅助函数类型注解 `const x: (*T)? = null; return @TypeOf(x);`）后，`bun run zig:check` 5/5 通过（26s），`bun bd test test/regression/issue/29181.test.ts test/js/bun/util/bun-file.test.ts` 8/8 通过（460 expect）。
 - 推导下一阶段 Wave #63：残余裸 `this`/`*this`/`self`/`*self` 接收者纯化（如 `analytics/schema.cp`、`brotli/brotli.cp` 等）。
+
+## [2026-11-23] Wave #63：残余裸 `self`/`this`/`*self`/`*this` 接收者纯化完成与验收
+- 完成 `temp/wave63_bare_recv_todo.txt` 全部 43 个模块（2 组并行）的裸 `self`/`this` 接收者清扫：`src/analytics/analytics.cp`、`src/bun_alloc/bun_alloc.cp`、`src/bun_core/fmt.cp`、`src/crash_handler/crash_handler.cp`、`src/http_types/URLPath.cp`、`src/install_types/SemverString.cp`、`src/interchange/toml/lexer.cp`、`src/resolver/tsconfig_json.cp` 已完成纯化，其余 35 个位于 `return struct/union(enum)` 原生 Zig 透传泛型工厂块内部按规范保留，全部通过 `cpc_brief.py` 四项门禁。
+- 修复 `src/analytics/analytics.cp`（`FeaturesFormatter.format` 添加 `* = _;` 保留实例方法签名）与 `src/http_jsc/websocket_client.cp`（`enum Copy` 只读方法 `_.*` -> `_`）后，`bun run zig:check` 5/5 通过（23s），`bun bd test test/regression/issue/29181.test.ts test/js/bun/util/bun-file.test.ts` 8/8 通过（460 expect）。
+- 推导下一阶段：全仓主要语法纯化波次已基本收敛，排查非透传 `if`/`while` `|capture|` 尾项并扩大 `bun bd test` 回归测试覆盖。

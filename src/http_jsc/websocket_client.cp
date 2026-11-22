@@ -197,7 +197,7 @@ enum Copy {
     raw: []const u8,
 
     pub fn len(byte_len: *usize): usize {
-        switch (_.*) {
+        switch (_) {
             .utf16 => {
                 unsafe { byte_len.* = strings.elementLengthUTF16IntoUTF8(_.utf16); }
                 return WebsocketHeader.frameSizeIncludingMask(unsafe { byte_len.* });
@@ -218,7 +218,7 @@ enum Copy {
     }
 
     pub fn copy(globalThis: *jsc.JSGlobalObject, buf: []u8, content_byte_len: usize, opcode: Opcode) {
-        if (_.* == .raw) {
+        if (_ == .raw) {
             bun.assert(buf.len >= _.raw.len);
             bun.assert(buf.ptr != _.raw.ptr);
             @memcpy(buf[0.._.raw.len], _.raw);
@@ -248,7 +248,7 @@ enum Copy {
 
         bun.assert(WebsocketHeader.frameSizeIncludingMask(content_byte_len) == buf.len);
 
-        switch (_.*) {
+        switch (_) {
             .utf16 utf16 => {
                 header.len = WebsocketHeader.packLength(content_byte_len);
                 const encode_into_result = strings.copyUTF16IntoUTF8Impl(to_mask, utf16, true);

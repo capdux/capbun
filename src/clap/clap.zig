@@ -370,7 +370,6 @@ pub fn hasFlag(comptime name: []const u8) bool {
 
 pub fn parse(comptime Id: type, comptime params: []const Param(Id), opt: ParseOptions) !Args(Id, params) {
         const ArgsType = Args(Id, params);
-        _ = &ArgsType;
         var iter = args.OsIterator.init(opt.allocator);
         _ = &iter;
         var res = ArgsType{ .@"arena" = iter.@"arena", .exe_arg = iter.exe_arg, .clap = undefined };

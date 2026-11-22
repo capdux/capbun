@@ -68,105 +68,105 @@ pub @value class Lexer {
 
     should_redact_logs: bool = false,
 
-    pub inline fn loc(this) logger.Loc {
-        return logger.usize2Loc(this.start);
+    pub inline fn loc() logger.Loc {
+        return logger.usize2Loc(_.start);
     }
 
-    pub fn syntaxError(*this) !void {
+    pub fn syntaxError(*_) !void {
         @branchHint(.cold);
 
-        // Only add this if there is not already an error.
+        // Only add _ if there is not already an error.
         // It is possible that there is a more descriptive error already emitted.
-        if (!this.log.hasErrors()) {
-            this.addError(this.start, "Syntax Error", .{});
+        if (!_.log.hasErrors()) {
+            _.addError(_.start, "Syntax Error", .{});
         }
 
         return Error.SyntaxError;
     }
 
-    pub fn addError(*this, _loc: usize, comptime format: []const u8, args: anytype) void {
+    pub fn addError(*_, _loc: usize, comptime format: []const u8, args: anytype) void {
         @branchHint(.cold);
 
         let __loc = logger.usize2Loc(_loc);
-        if (__loc.eql(this.prev_error_loc)) {
+        if (__loc.eql(_.prev_error_loc)) {
             return;
         }
 
-        this.log.addErrorFmtOpts(
-            this.log.msgs.allocator,
+        _.log.addErrorFmtOpts(
+            _.log.msgs.allocator,
             format,
             args,
             .{
-                .source = &this.source,
+                .source = &_.source,
                 .loc = __loc,
-                .redact_sensitive_information = this.should_redact_logs,
+                .redact_sensitive_information = _.should_redact_logs,
             },
         ) catch unreachable;
-        this.prev_error_loc = __loc;
+        _.prev_error_loc = __loc;
     }
 
-    pub fn addDefaultError(*this, msg: []const u8) !void {
+    pub fn addDefaultError(*_, msg: []const u8) !void {
         @branchHint(.cold);
 
-        this.addError(this.start, "{s}", .{msg});
+        _.addError(_.start, "{s}", .{msg});
         return Error.SyntaxError;
     }
 
-    pub fn addSyntaxError(*this, _loc: usize, comptime fmt: []const u8, args: anytype) !void {
+    pub fn addSyntaxError(*_, _loc: usize, comptime fmt: []const u8, args: anytype) !void {
         @branchHint(.cold);
-        this.addError(_loc, fmt, args);
+        _.addError(_loc, fmt, args);
         return Error.SyntaxError;
     }
 
-    pub fn addRangeError(*this, r: logger.Range, comptime format: []const u8, args: anytype) !void {
+    pub fn addRangeError(*_, r: logger.Range, comptime format: []const u8, args: anytype) !void {
         @branchHint(.cold);
 
-        if (this.prev_error_loc.eql(r.loc)) {
+        if (_.prev_error_loc.eql(r.loc)) {
             return;
         }
 
-        const errorMessage = std.fmt.allocPrint(this.log.msgs.allocator, format, args) catch unreachable;
-        this.log.addErrorOpts(errorMessage, .{
-            .source = &this.source,
+        const errorMessage = std.fmt.allocPrint(_.log.msgs.allocator, format, args) catch unreachable;
+        _.log.addErrorOpts(errorMessage, .{
+            .source = &_.source,
             .loc = r.loc,
             .len = r.len,
-            .redact_sensitive_information = this.should_redact_logs,
+            .redact_sensitive_information = _.should_redact_logs,
         })?;
-        this.prev_error_loc = r.loc;
+        _.prev_error_loc = r.loc;
     }
 
     /// Look ahead at the next n codepoints without advancing the iterator.
     /// If fewer than n codepoints are available, then return the remainder of the string.
-    fn peek(*this, n: usize) string {
-        const original_i = this.current;
-        defer this.current = original_i;
+    fn peek(*_, n: usize) string {
+        const original_i = _.current;
+        defer _.current = original_i;
 
         let end_ix = original_i;
         let found: usize = 0;
         while (found < n) : (found += 1) {
-            const next_codepoint = this.nextCodepointSlice();
+            const next_codepoint = _.nextCodepointSlice();
             if (next_codepoint.len == 0) break;
             end_ix += next_codepoint.len;
         }
 
-        return this.source.contents[original_i..end_ix];
+        return _.source.contents[original_i..end_ix];
     }
 
-    inline fn nextCodepointSlice(*this) []const u8 {
-        if (this.current >= this.source.contents.len) {
+    inline fn nextCodepointSlice(*_) []const u8 {
+        if (_.current >= _.source.contents.len) {
             return "";
         }
-        const cp_len = strings.wtf8ByteSequenceLengthWithInvalid(unsafe { this.source.contents.ptr[this.current] });
-        return if (!(cp_len + this.current > this.source.contents.len)) this.source.contents[this.current .. cp_len + this.current] else "";
+        const cp_len = strings.wtf8ByteSequenceLengthWithInvalid(unsafe { _.source.contents.ptr[_.current] });
+        return if (!(cp_len + _.current > _.source.contents.len)) _.source.contents[_.current .. cp_len + _.current] else "";
     }
 
-    inline fn nextCodepoint(*this) CodePoint {
-        if (this.current >= this.source.contents.len) {
-            this.end = this.source.contents.len;
+    inline fn nextCodepoint(*_) CodePoint {
+        if (_.current >= _.source.contents.len) {
+            _.end = _.source.contents.len;
             return -1;
         }
-        const cp_len = strings.wtf8ByteSequenceLengthWithInvalid(unsafe { this.source.contents.ptr[this.current] });
-        const slice = if (!(cp_len + this.current > this.source.contents.len)) this.source.contents[this.current .. cp_len + this.current] else "";
+        const cp_len = strings.wtf8ByteSequenceLengthWithInvalid(unsafe { _.source.contents.ptr[_.current] });
+        const slice = if (!(cp_len + _.current > _.source.contents.len)) _.source.contents[_.current .. cp_len + _.current] else "";
 
         const code_point = switch (slice.len) {
             0 => -1,
@@ -174,9 +174,9 @@ pub @value class Lexer {
             else => strings.decodeWTF8RuneTMultibyte(unsafe { slice.ptr[0..4] }, @as(u3, @intCast(slice.len)), CodePoint, strings.unicode_replacement),
         };
 
-        this.end = this.current;
+        _.end = _.current;
 
-        this.current += if (code_point != strings.unicode_replacement)
+        _.current += if (code_point != strings.unicode_replacement)
             cp_len
         else
             1;
@@ -184,21 +184,21 @@ pub @value class Lexer {
         return code_point;
     }
 
-    inline fn step(*this) void {
-        this.code_point = this.nextCodepoint();
+    inline fn step(*_) void {
+        _.code_point = _.nextCodepoint();
 
-        this.line_number += @as(u32, @intFromBool(this.code_point == '\n'));
+        _.line_number += @as(u32, @intFromBool(_.code_point == '\n'));
     }
 
-    fn parseNumericLiteralOrDot(*this) !void {
+    fn parseNumericLiteralOrDot(*_) !void {
         // Number or dot
-        const first = this.code_point;
-        this.step();
+        const first = _.code_point;
+        _.step();
 
         // Dot without a digit after it
-        if (first == '.' && (this.code_point < '0' || this.code_point > '9')) {
+        if (first == '.' && (_.code_point < '0' || _.code_point > '9')) {
             // "."
-            this.token = TokenType.t_dot;
+            _.token = TokenType.t_dot;
             return;
         }
 
@@ -209,12 +209,12 @@ pub @value class Lexer {
 
         let is_legacy_octal_literal = false;
 
-        // Assume this is a number, but potentially change to a date/time later
-        this.token = TokenType.t_numeric_literal;
+        // Assume _ is a number, but potentially change to a date/time later
+        _.token = TokenType.t_numeric_literal;
 
         // Check for binary, octal, or hexadecimal literal
         if (first == '0') {
-            switch (this.code_point) {
+            switch (_.code_point) {
                 'b', 'B' => {
                     base = 2;
                 },
@@ -239,87 +239,87 @@ pub @value class Lexer {
             // Integer literal
             let isFirst = true;
             let isInvalidLegacyOctalLiteral = false;
-            this.number = 0;
+            _.number = 0;
             if (!is_legacy_octal_literal) {
-                this.step();
+                _.step();
             }
 
             integerLiteral: while (true) {
-                switch (this.code_point) {
+                switch (_.code_point) {
                     '_' => {
                         // Cannot have multiple underscores in a row
-                        if (lastUnderscoreEnd > 0 && this.end == lastUnderscoreEnd + 1) {
-                            this.syntaxError()?;
+                        if (lastUnderscoreEnd > 0 && _.end == lastUnderscoreEnd + 1) {
+                            _.syntaxError()?;
                         }
 
                         // The first digit must exist
                         if (isFirst || is_legacy_octal_literal) {
-                            this.syntaxError()?;
+                            _.syntaxError()?;
                         }
 
-                        lastUnderscoreEnd = this.end;
+                        lastUnderscoreEnd = _.end;
                         underscoreCount += 1;
                     },
 
                     '0', '1' => {
-                        this.number = this.number * base + float64(this.code_point - '0');
+                        _.number = _.number * base + float64(_.code_point - '0');
                     },
 
                     '2', '3', '4', '5', '6', '7' => {
                         if (base == 2) {
-                            this.syntaxError()?;
+                            _.syntaxError()?;
                         }
-                        this.number = this.number * base + float64(this.code_point - '0');
+                        _.number = _.number * base + float64(_.code_point - '0');
                     },
                     '8', '9' => {
                         if (is_legacy_octal_literal) {
                             isInvalidLegacyOctalLiteral = true;
                         } else if (base < 10) {
-                            this.syntaxError()?;
+                            _.syntaxError()?;
                         }
-                        this.number = this.number * base + float64(this.code_point - '0');
+                        _.number = _.number * base + float64(_.code_point - '0');
                     },
                     'A', 'B', 'C', 'D', 'E', 'F' => {
                         if (base != 16) {
-                            this.syntaxError()?;
+                            _.syntaxError()?;
                         }
-                        this.number = this.number * base + float64(this.code_point + 10 - 'A');
+                        _.number = _.number * base + float64(_.code_point + 10 - 'A');
                     },
 
                     'a', 'b', 'c', 'd', 'e', 'f' => {
                         if (base != 16) {
-                            this.syntaxError()?;
+                            _.syntaxError()?;
                         }
-                        this.number = this.number * base + float64(this.code_point + 10 - 'a');
+                        _.number = _.number * base + float64(_.code_point + 10 - 'a');
                     },
                     else => {
                         // The first digit must exist
                         if (isFirst) {
-                            this.syntaxError()?;
+                            _.syntaxError()?;
                         }
 
                         break :integerLiteral;
                     },
                 }
 
-                this.step();
+                _.step();
                 isFirst = false;
             }
 
-            const isBigIntegerLiteral = this.code_point == 'n' && !hasDotOrExponent;
+            const isBigIntegerLiteral = _.code_point == 'n' && !hasDotOrExponent;
 
             // Slow path: do we need to re-scan the input as text?
             if (isBigIntegerLiteral || isInvalidLegacyOctalLiteral) {
-                const text = this.raw();
+                const text = _.raw();
 
                 // Can't use a leading zero for bigint literals
                 if (isBigIntegerLiteral && is_legacy_octal_literal) {
-                    this.syntaxError()?;
+                    _.syntaxError()?;
                 }
 
                 // Filter out underscores
                 if (underscoreCount > 0) {
-                    let bytes = this.allocator.alloc(u8, text.len - underscoreCount) catch unreachable;
+                    let bytes = _.allocator.alloc(u8, text.len - underscoreCount) catch unreachable;
                     let i: usize = 0;
                     for (char of text) {
                         if (char != '_') {
@@ -331,119 +331,119 @@ pub @value class Lexer {
 
                 // Store bigints as text to avoid precision loss
                 if (isBigIntegerLiteral) {
-                    this.identifier = text;
+                    _.identifier = text;
                 } else if (isInvalidLegacyOctalLiteral) {
                     if (num := std.fmt.parseFloat(f64, text) catch null) {
-                        this.number = num;
+                        _.number = num;
                     } else {
-                        this.addSyntaxError(this.start, "Invalid number {s}", .{text})?;
+                        _.addSyntaxError(_.start, "Invalid number {s}", .{text})?;
                     }
                 }
             }
         } else {
             // Floating-point literal
-            const isInvalidLegacyOctalLiteral = first == '0' && (this.code_point == '8' || this.code_point == '9');
+            const isInvalidLegacyOctalLiteral = first == '0' && (_.code_point == '8' || _.code_point == '9');
 
             // Initial digits
             while (true) {
-                if (this.code_point < '0' || this.code_point > '9') {
-                    switch (this.code_point) {
+                if (_.code_point < '0' || _.code_point > '9') {
+                    switch (_.code_point) {
                         '_' => {},
                         else => break,
                     }
-                    if (this.code_point != '_') {
+                    if (_.code_point != '_') {
                         break;
                     }
 
                     // Cannot have multiple underscores in a row
-                    if (lastUnderscoreEnd > 0 && this.end == lastUnderscoreEnd + 1) {
-                        this.syntaxError()?;
+                    if (lastUnderscoreEnd > 0 && _.end == lastUnderscoreEnd + 1) {
+                        _.syntaxError()?;
                     }
 
-                    // The specification forbids underscores in this case
+                    // The specification forbids underscores in _ case
                     if (isInvalidLegacyOctalLiteral) {
-                        this.syntaxError()?;
+                        _.syntaxError()?;
                     }
 
-                    lastUnderscoreEnd = this.end;
+                    lastUnderscoreEnd = _.end;
                     underscoreCount += 1;
                 }
-                this.step();
+                _.step();
             }
 
             // Fractional digits
-            if (first != '.' && this.code_point == '.') {
+            if (first != '.' && _.code_point == '.') {
                 // An underscore must not come last
-                if (lastUnderscoreEnd > 0 && this.end == lastUnderscoreEnd + 1) {
-                    this.end -= 1;
-                    this.syntaxError()?;
+                if (lastUnderscoreEnd > 0 && _.end == lastUnderscoreEnd + 1) {
+                    _.end -= 1;
+                    _.syntaxError()?;
                 }
 
                 hasDotOrExponent = true;
-                this.step();
-                if (this.code_point == '_') {
-                    this.syntaxError()?;
+                _.step();
+                if (_.code_point == '_') {
+                    _.syntaxError()?;
                 }
                 while (true) {
-                    if (this.code_point < '0' || this.code_point > '9') {
-                        if (this.code_point != '_') {
+                    if (_.code_point < '0' || _.code_point > '9') {
+                        if (_.code_point != '_') {
                             break;
                         }
 
                         // Cannot have multiple underscores in a row
-                        if (lastUnderscoreEnd > 0 && this.end == lastUnderscoreEnd + 1) {
-                            this.syntaxError()?;
+                        if (lastUnderscoreEnd > 0 && _.end == lastUnderscoreEnd + 1) {
+                            _.syntaxError()?;
                         }
 
-                        lastUnderscoreEnd = this.end;
+                        lastUnderscoreEnd = _.end;
                         underscoreCount += 1;
                     }
-                    this.step();
+                    _.step();
                 }
             }
 
             // Exponent
-            if (this.code_point == 'e' || this.code_point == 'E') {
+            if (_.code_point == 'e' || _.code_point == 'E') {
                 // An underscore must not come last
-                if (lastUnderscoreEnd > 0 && this.end == lastUnderscoreEnd + 1) {
-                    this.end -= 1;
-                    this.syntaxError()?;
+                if (lastUnderscoreEnd > 0 && _.end == lastUnderscoreEnd + 1) {
+                    _.end -= 1;
+                    _.syntaxError()?;
                 }
 
                 hasDotOrExponent = true;
-                this.step();
-                if (this.code_point == '+' || this.code_point == '-') {
-                    this.step();
+                _.step();
+                if (_.code_point == '+' || _.code_point == '-') {
+                    _.step();
                 }
-                if (this.code_point < '0' || this.code_point > '9') {
-                    this.syntaxError()?;
+                if (_.code_point < '0' || _.code_point > '9') {
+                    _.syntaxError()?;
                 }
                 while (true) {
-                    if (this.code_point < '0' || this.code_point > '9') {
-                        if (this.code_point != '_') {
+                    if (_.code_point < '0' || _.code_point > '9') {
+                        if (_.code_point != '_') {
                             break;
                         }
 
                         // Cannot have multiple underscores in a row
-                        if (lastUnderscoreEnd > 0 && this.end == lastUnderscoreEnd + 1) {
-                            this.syntaxError()?;
+                        if (lastUnderscoreEnd > 0 && _.end == lastUnderscoreEnd + 1) {
+                            _.syntaxError()?;
                         }
 
-                        lastUnderscoreEnd = this.end;
+                        lastUnderscoreEnd = _.end;
                         underscoreCount += 1;
                     }
-                    this.step();
+                    _.step();
                 }
             }
 
             // Take a slice of the text to parse
-            let text = this.raw();
+            let text = _.raw();
 
             // Filter out underscores
             if (underscoreCount > 0) {
                 let i: usize = 0;
-                let bytes = this.allocator.alloc(u8, text.len - underscoreCount) catch {
-                    this.addSyntaxError(this.start, "Out of Memory Wah Wah Wah", .{})?;
+                let bytes = _.allocator.alloc(u8, text.len - underscoreCount) catch {
+                    _.addSyntaxError(_.start, "Out of Memory Wah Wah Wah", .{})?;
                     return;
                 };
                 for (char of text) {
@@ -455,130 +455,130 @@ pub @value class Lexer {
                 text = bytes;
             }
 
-            if (!hasDotOrExponent && this.end - this.start < 10) {
+            if (!hasDotOrExponent && _.end - _.start < 10) {
                 // Parse a 32-bit integer (very fast path)
                 let parsed_num: u32 = 0;
                 for (c of text) {
                     parsed_num = parsed_num * 10 + @as(u32, @intCast(c - '0'));
                 }
                 const f: f64 = @floatFromInt(parsed_num);
-                this.number = f;
+                _.number = f;
             } else {
                 // Parse a double-precision floating-point number
                 if (num := std.fmt.parseFloat(f64, text) catch null) {
-                    this.number = num;
+                    _.number = num;
                 } else {
-                    this.addSyntaxError(this.start, "Invalid number", .{})?;
+                    _.addSyntaxError(_.start, "Invalid number", .{})?;
                 }
             }
         }
 
         // if it's a space, it might be a date timestamp
-        if (isIdentifierPart(this.code_point) || this.code_point == ' ') {}
+        if (isIdentifierPart(_.code_point) || _.code_point == ' ') {}
     }
 
-    pub inline fn expect(*this, comptime token: TokenType) !void {
-        if (this.token != token) {
-            this.expected(token)?;
+    pub inline fn expect(*_, comptime token: TokenType) !void {
+        if (_.token != token) {
+            _.expected(token)?;
         }
 
-        this.next()?;
+        _.next()?;
     }
 
-    pub inline fn expectAssignment(*this) !void {
-        switch (this.token) {
+    pub inline fn expectAssignment(*_) !void {
+        switch (_.token) {
             .t_equal, .t_colon => {},
             else => {
-                this.expected(TokenType.t_equal)?;
+                _.expected(TokenType.t_equal)?;
             },
         }
 
-        this.next()?;
+        _.next()?;
     }
 
-    pub fn next(*this) !void {
-        this.has_newline_before = this.end == 0;
+    pub fn next(*_) !void {
+        _.has_newline_before = _.end == 0;
 
         while (true) {
-            this.start = this.end;
-            this.token = TokenType.t_end_of_file;
+            _.start = _.end;
+            _.token = TokenType.t_end_of_file;
 
-            switch (this.code_point) {
+            switch (_.code_point) {
                 -1 => {
-                    this.token = TokenType.t_end_of_file;
+                    _.token = TokenType.t_end_of_file;
                 },
 
                 '\r', '\n', 0x2028, 0x2029 => {
-                    this.step();
-                    this.has_newline_before = true;
+                    _.step();
+                    _.has_newline_before = true;
                     continue;
                 },
 
                 '\t', ' ' => {
-                    this.step();
+                    _.step();
                     continue;
                 },
 
                 '[' => {
-                    this.step();
-                    this.token = TokenType.t_open_bracket;
-                    if (this.code_point == '[' && this.allow_double_bracket) {
-                        this.step();
-                        this.token = TokenType.t_open_bracket_double;
+                    _.step();
+                    _.token = TokenType.t_open_bracket;
+                    if (_.code_point == '[' && _.allow_double_bracket) {
+                        _.step();
+                        _.token = TokenType.t_open_bracket_double;
                         return;
                     }
 
-                    if (this.code_point == ']') {
-                        this.step();
-                        this.token = TokenType.t_empty_array;
+                    if (_.code_point == ']') {
+                        _.step();
+                        _.token = TokenType.t_empty_array;
                     }
                 },
                 ']' => {
-                    this.step();
-                    this.token = TokenType.t_close_bracket;
+                    _.step();
+                    _.token = TokenType.t_close_bracket;
 
-                    if (this.code_point == ']' && this.allow_double_bracket) {
-                        this.step();
-                        this.token = TokenType.t_close_bracket_double;
+                    if (_.code_point == ']' && _.allow_double_bracket) {
+                        _.step();
+                        _.token = TokenType.t_close_bracket_double;
                     }
                 },
                 '+' => {
-                    this.step();
-                    this.token = TokenType.t_plus;
+                    _.step();
+                    _.token = TokenType.t_plus;
                 },
                 '-' => {
-                    this.step();
-                    this.token = TokenType.t_minus;
+                    _.step();
+                    _.token = TokenType.t_minus;
                 },
 
                 '{' => {
-                    this.step();
-                    this.token = TokenType.t_open_brace;
+                    _.step();
+                    _.token = TokenType.t_open_brace;
                 },
                 '}' => {
-                    this.step();
-                    this.token = TokenType.t_close_brace;
+                    _.step();
+                    _.token = TokenType.t_close_brace;
                 },
 
                 '=' => {
-                    this.step();
-                    this.token = TokenType.t_equal;
+                    _.step();
+                    _.token = TokenType.t_equal;
                 },
                 ':' => {
-                    this.step();
-                    this.token = TokenType.t_colon;
+                    _.step();
+                    _.token = TokenType.t_colon;
                 },
                 ',' => {
-                    this.step();
-                    this.token = TokenType.t_comma;
+                    _.step();
+                    _.token = TokenType.t_comma;
                 },
                 ';' => {
-                    if (this.has_newline_before) {
-                        this.step();
+                    if (_.has_newline_before) {
+                        _.step();
 
                         singleLineComment: while (true) {
-                            this.step();
-                            switch (this.code_point) {
+                            _.step();
+                            switch (_.code_point) {
                                 '\r', '\n', 0x2028, 0x2029 => {
                                     break :singleLineComment;
                                 },
@@ -591,14 +591,14 @@ pub @value class Lexer {
                         continue;
                     }
 
-                    this.addDefaultError("Unexpected semicolon")?;
+                    _.addDefaultError("Unexpected semicolon")?;
                 },
                 '#' => {
-                    this.step();
+                    _.step();
 
                     singleLineComment: while (true) {
-                        this.step();
-                        switch (this.code_point) {
+                        _.step();
+                        switch (_.code_point) {
                             '\r', '\n', 0x2028, 0x2029 => {
                                 break :singleLineComment;
                             },
@@ -613,190 +613,190 @@ pub @value class Lexer {
 
                 // unescaped string
                 '\'' => {
-                    this.step();
-                    this.string_literal_is_ascii = true;
-                    const str_start = this.end;
+                    _.step();
+                    _.string_literal_is_ascii = true;
+                    const str_start = _.end;
                     let is_multiline_string_literal = false;
 
-                    if (this.code_point == '\'') {
-                        this.step();
+                    if (_.code_point == '\'') {
+                        _.step();
                         // it's a multiline string literal
-                        if (this.code_point == '\'') {
-                            this.step();
+                        if (_.code_point == '\'') {
+                            _.step();
                             is_multiline_string_literal = true;
                         } else {
                             // it's an empty string
-                            this.token = TokenType.t_string_literal;
-                            this.string_literal_slice = this.source.contents[str_start..str_start];
+                            _.token = TokenType.t_string_literal;
+                            _.string_literal_slice = _.source.contents[str_start..str_start];
                             return;
                         }
                     }
 
                     if (is_multiline_string_literal) {
                         while (true) {
-                            switch (this.code_point) {
+                            switch (_.code_point) {
                                 -1 => {
-                                    this.addDefaultError("Unterminated string literal")?;
+                                    _.addDefaultError("Unterminated string literal")?;
                                 },
                                 '\'' => {
-                                    const str_end = this.end;
-                                    this.step();
-                                    if (this.code_point != '\'') continue;
-                                    this.step();
-                                    if (this.code_point != '\'') continue;
-                                    this.step();
-                                    this.token = TokenType.t_string_literal;
-                                    this.string_literal_slice = this.source.contents[str_start + 2 .. str_end];
+                                    const str_end = _.end;
+                                    _.step();
+                                    if (_.code_point != '\'') continue;
+                                    _.step();
+                                    if (_.code_point != '\'') continue;
+                                    _.step();
+                                    _.token = TokenType.t_string_literal;
+                                    _.string_literal_slice = _.source.contents[str_start + 2 .. str_end];
                                     return;
                                 },
                                 else => {},
                             }
-                            this.step();
+                            _.step();
                         }
                     } else {
                         while (true) {
-                            switch (this.code_point) {
+                            switch (_.code_point) {
                                 '\r', '\n', 0x2028, 0x2029 => {
-                                    this.addDefaultError("Unterminated string literal (single-line)")?;
+                                    _.addDefaultError("Unterminated string literal (single-line)")?;
                                 },
                                 -1 => {
-                                    this.addDefaultError("Unterminated string literal")?;
+                                    _.addDefaultError("Unterminated string literal")?;
                                 },
                                 '\'' => {
-                                    this.step();
-                                    this.token = TokenType.t_string_literal;
-                                    this.string_literal_slice = this.source.contents[str_start .. this.end - 1];
+                                    _.step();
+                                    _.token = TokenType.t_string_literal;
+                                    _.string_literal_slice = _.source.contents[str_start .. _.end - 1];
                                     return;
                                 },
                                 else => {},
                             }
-                            this.step();
+                            _.step();
                         }
                     }
                 },
                 '"' => {
-                    this.step();
+                    _.step();
                     let needs_slow_pass = false;
-                    const str_start = this.end;
+                    const str_start = _.end;
                     let is_multiline_string_literal = false;
-                    this.string_literal_is_ascii = true;
+                    _.string_literal_is_ascii = true;
 
-                    if (this.code_point == '"') {
-                        this.step();
+                    if (_.code_point == '"') {
+                        _.step();
                         // it's a multiline basic string
-                        if (this.code_point == '"') {
-                            this.step();
+                        if (_.code_point == '"') {
+                            _.step();
                             is_multiline_string_literal = true;
                         } else {
                             // it's an empty string
-                            this.token = TokenType.t_string_literal;
-                            this.string_literal_slice = this.source.contents[str_start..str_start];
+                            _.token = TokenType.t_string_literal;
+                            _.string_literal_slice = _.source.contents[str_start..str_start];
                             return;
                         }
                     }
 
                     if (is_multiline_string_literal) {
                         while (true) {
-                            switch (this.code_point) {
+                            switch (_.code_point) {
                                 -1 => {
-                                    this.addDefaultError("Unterminated basic string")?;
+                                    _.addDefaultError("Unterminated basic string")?;
                                 },
                                 '\\' => {
-                                    this.step();
+                                    _.step();
                                     needs_slow_pass = true;
-                                    if (this.code_point == '"') {
-                                        this.step();
+                                    if (_.code_point == '"') {
+                                        _.step();
                                         continue;
                                     }
                                 },
                                 '"' => {
-                                    const str_end = this.end;
-                                    this.step();
-                                    if (this.code_point != '"') continue;
-                                    this.step();
-                                    if (this.code_point != '"') continue;
-                                    this.step();
+                                    const str_end = _.end;
+                                    _.step();
+                                    if (_.code_point != '"') continue;
+                                    _.step();
+                                    if (_.code_point != '"') continue;
+                                    _.step();
 
-                                    this.token = TokenType.t_string_literal;
-                                    this.string_literal_slice = this.source.contents[str_start + 2 .. str_end];
+                                    _.token = TokenType.t_string_literal;
+                                    _.string_literal_slice = _.source.contents[str_start + 2 .. str_end];
                                     if (needs_slow_pass) break;
                                     return;
                                 },
                                 else => {},
                             }
-                            this.step();
+                            _.step();
                         }
                     } else {
                         while (true) {
-                            switch (this.code_point) {
+                            switch (_.code_point) {
                                 '\r', '\n', 0x2028, 0x2029 => {
-                                    this.addDefaultError("Unterminated basic string (single-line)")?;
+                                    _.addDefaultError("Unterminated basic string (single-line)")?;
                                 },
                                 -1 => {
-                                    this.addDefaultError("Unterminated basic string")?;
+                                    _.addDefaultError("Unterminated basic string")?;
                                 },
                                 '\\' => {
-                                    this.step();
+                                    _.step();
                                     needs_slow_pass = true;
-                                    if (this.code_point == '"') {
-                                        this.step();
+                                    if (_.code_point == '"') {
+                                        _.step();
                                         continue;
                                     }
                                 },
                                 '"' => {
-                                    this.step();
+                                    _.step();
 
-                                    this.token = TokenType.t_string_literal;
-                                    this.string_literal_slice = this.source.contents[str_start .. this.end - 1];
+                                    _.token = TokenType.t_string_literal;
+                                    _.string_literal_slice = _.source.contents[str_start .. _.end - 1];
                                     if (needs_slow_pass) break;
                                     return;
                                 },
                                 else => {},
                             }
-                            this.step();
+                            _.step();
                         }
                     }
 
-                    this.start = str_start;
+                    _.start = str_start;
                     if (needs_slow_pass) {
-                        const text = this.string_literal_slice;
-                        let array_list = std.array_list.Managed(u8).initCapacity(this.allocator, text.len)?;
+                        const text = _.string_literal_slice;
+                        let array_list = std.array_list.Managed(u8).initCapacity(_.allocator, text.len)?;
                         if (is_multiline_string_literal) {
-                            this.decodeEscapeSequences(str_start, text, true, @TypeOf(array_list), &array_list)?;
+                            _.decodeEscapeSequences(str_start, text, true, @TypeOf(array_list), &array_list)?;
                         } else {
-                            this.decodeEscapeSequences(str_start, text, false, @TypeOf(array_list), &array_list)?;
+                            _.decodeEscapeSequences(str_start, text, false, @TypeOf(array_list), &array_list)?;
                         }
-                        this.string_literal_slice = array_list.toOwnedSlice()?;
-                        this.string_literal_is_ascii = false;
+                        _.string_literal_slice = array_list.toOwnedSlice()?;
+                        _.string_literal_is_ascii = false;
                     }
 
-                    this.token = TokenType.t_string_literal;
+                    _.token = TokenType.t_string_literal;
                 },
 
                 '.', '0'...'9' => {
-                    this.parseNumericLiteralOrDot()?;
+                    _.parseNumericLiteralOrDot()?;
                 },
 
                 '@', 'a'...'z', 'A'...'Z', '$', '_' => {
-                    this.step();
-                    while (isIdentifierPart(this.code_point)) {
-                        this.step();
+                    _.step();
+                    while (isIdentifierPart(_.code_point)) {
+                        _.step();
                     }
-                    this.identifier = this.raw();
-                    this.token = switch (this.identifier.len) {
-                        4 => if (strings.eqlComptimeIgnoreLen(this.identifier, "true")) TokenType.t_true else TokenType.t_identifier,
-                        5 => if (strings.eqlComptimeIgnoreLen(this.identifier, "false")) TokenType.t_false else TokenType.t_identifier,
+                    _.identifier = _.raw();
+                    _.token = switch (_.identifier.len) {
+                        4 => if (strings.eqlComptimeIgnoreLen(_.identifier, "true")) TokenType.t_true else TokenType.t_identifier,
+                        5 => if (strings.eqlComptimeIgnoreLen(_.identifier, "false")) TokenType.t_false else TokenType.t_identifier,
                         else => TokenType.t_identifier,
                     };
                 },
 
-                else => this.unexpected()?,
+                else => _.unexpected()?,
             }
             return;
         }
     }
 
-    pub fn decodeEscapeSequences(*this, start: usize, text: string, comptime allow_multiline: bool, comptime BufType: type, buf_: *BufType) !void {
+    pub fn decodeEscapeSequences(*_, start: usize, text: string, comptime allow_multiline: bool, comptime BufType: type, buf_: *BufType) !void {
         let buf = buf_.*;
         defer buf_.* = buf;
 
@@ -863,7 +863,7 @@ pub @value class Lexer {
                                     return;
                                 }
 
-                                this.syntaxError()?;
+                                _.syntaxError()?;
                                 return;
                             }
 
@@ -873,7 +873,7 @@ pub @value class Lexer {
                                 '0'...'7' => {
                                     value = value * 8 + @as(i64, c3 - '0');
                                     restore = iter;
-                                    if (!iterator.next(&iter)) return this.syntaxError();
+                                    if (!iterator.next(&iter)) return _.syntaxError();
 
                                     const c4 = iter.c;
                                     switch (c4) {
@@ -903,7 +903,7 @@ pub @value class Lexer {
 
                             iter.c = @as(i32, @intCast(value));
                             if (is_bad) {
-                                this.addRangeError(
+                                _.addRangeError(
                                     logger.Range{ .loc = .{ .start = @as(i32, @intCast(octal_start)) }, .len = @as(i32, @intCast(iter.i - octal_start)) },
                                     "Invalid legacy octal literal",
                                     .{},
@@ -916,15 +916,15 @@ pub @value class Lexer {
                         // 2-digit hexadecimal
                         'x' => {
                             if (comptime allow_multiline) {
-                                this.end = start + iter.i - width2;
-                                this.syntaxError()?;
+                                _.end = start + iter.i - width2;
+                                _.syntaxError()?;
                             }
 
                             let value: i32 = 0;
                             let c3: i32 = 0;
                             let width3 = iter.width;
 
-                            if (!iterator.next(&iter)) return this.syntaxError();
+                            if (!iterator.next(&iter)) return _.syntaxError();
                             c3 = iter.c;
                             width3 = iter.width;
                             switch (c3) {
@@ -938,12 +938,12 @@ pub @value class Lexer {
                                     value = value * 16 | (c3 + 10 - 'A');
                                 },
                                 else => {
-                                    this.end = start + iter.i - width3;
-                                    return this.syntaxError();
+                                    _.end = start + iter.i - width3;
+                                    return _.syntaxError();
                                 },
                             }
 
-                            if (!iterator.next(&iter)) return this.syntaxError();
+                            if (!iterator.next(&iter)) return _.syntaxError();
                             c3 = iter.c;
                             width3 = iter.width;
                             switch (c3) {
@@ -957,19 +957,19 @@ pub @value class Lexer {
                                     value = value * 16 | (c3 + 10 - 'A');
                                 },
                                 else => {
-                                    this.end = start + iter.i - width3;
-                                    return this.syntaxError();
+                                    _.end = start + iter.i - width3;
+                                    return _.syntaxError();
                                 },
                             }
 
                             iter.c = value;
                         },
                         'u' => {
-                            // We're going to make this an i64 so we don't risk integer overflows
+                            // We're going to make _ an i64 so we don't risk integer overflows
                             // when people do weird things
                             let value: i64 = 0;
 
-                            if (!iterator.next(&iter)) return this.syntaxError();
+                            if (!iterator.next(&iter)) return _.syntaxError();
                             let c3 = iter.c;
                             let width3 = iter.width;
 
@@ -994,14 +994,14 @@ pub @value class Lexer {
                                         },
                                         '}' => {
                                             if (is_first) {
-                                                this.end = start + iter.i - width3;
-                                                return this.syntaxError();
+                                                _.end = start + iter.i - width3;
+                                                return _.syntaxError();
                                             }
                                             break :variableLength;
                                         },
                                         else => {
-                                            this.end = start + iter.i - width3;
-                                            return this.syntaxError();
+                                            _.end = start + iter.i - width3;
+                                            return _.syntaxError();
                                         },
                                     }
 
@@ -1014,7 +1014,7 @@ pub @value class Lexer {
                                 }
 
                                 if (is_out_of_range) {
-                                    this.addRangeError(
+                                    _.addRangeError(
                                         .{ .loc = .{ .start = @as(i32, @intCast(start + hex_start)) }, .len = @as(i32, @intCast((iter.i - hex_start))) },
                                         "Unicode escape sequence is out of range",
                                         .{},
@@ -1037,13 +1037,13 @@ pub @value class Lexer {
                                             value = value * 16 | @as(i64, c3 + 10 - 'A');
                                         },
                                         else => {
-                                            this.end = start + iter.i - width3;
-                                            return this.syntaxError();
+                                            _.end = start + iter.i - width3;
+                                            return _.syntaxError();
                                         },
                                     }
 
                                     if (j < 3) {
-                                        if (!iterator.next(&iter)) return this.syntaxError();
+                                        if (!iterator.next(&iter)) return _.syntaxError();
                                         c3 = iter.c;
                                         width3 = iter.width;
                                     }
@@ -1054,8 +1054,8 @@ pub @value class Lexer {
                         },
                         '\r' => {
                             if (comptime !allow_multiline) {
-                                this.end = start + iter.i - width2;
-                                this.addDefaultError("Unexpected end of line")?;
+                                _.end = start + iter.i - width2;
+                                _.addDefaultError("Unexpected end of line")?;
                             }
 
                             // Ignore line continuations. A line continuation is not an escaped newline.
@@ -1068,8 +1068,8 @@ pub @value class Lexer {
                         '\n', 0x2028, 0x2029 => {
                             // Ignore line continuations. A line continuation is not an escaped newline.
                             if (comptime !allow_multiline) {
-                                this.end = start + iter.i - width2;
-                                this.addDefaultError("Unexpected end of line")?;
+                                _.end = start + iter.i - width2;
+                                _.addDefaultError("Unexpected end of line")?;
                             }
                             continue;
                         },
@@ -1082,7 +1082,7 @@ pub @value class Lexer {
             }
 
             switch (iter.c) {
-                -1 => return this.addDefaultError("Unexpected end of file")?,
+                -1 => return _.addDefaultError("Unexpected end of file")?,
                 0...127 => {
                     buf.append(@as(u8, @intCast(iter.c))) catch unreachable;
                 },
@@ -1095,40 +1095,40 @@ pub @value class Lexer {
         }
     }
 
-    pub fn expected(*this, token: TokenType) !void {
-        this.expectedString(@as(string, @tagName(token)))?;
+    pub fn expected(*_, token: TokenType) !void {
+        _.expectedString(@as(string, @tagName(token)))?;
     }
 
-    pub fn unexpected(*this) !void {
+    pub fn unexpected(*_) !void {
         const found = finder: {
-            this.start = @min(this.start, this.end);
+            _.start = @min(_.start, _.end);
 
-            if (this.start == this.source.contents.len) {
+            if (_.start == _.source.contents.len) {
                 break :finder "end of file";
             } else {
-                break :finder this.raw();
+                break :finder _.raw();
             }
         };
 
-        this.addRangeError(this.range(), "Unexpected {s}", .{found})?;
+        _.addRangeError(_.range(), "Unexpected {s}", .{found})?;
     }
 
-    pub fn expectedString(*this, text: string) !void {
+    pub fn expectedString(*_, text: string) !void {
         const found = finder: {
-            if (this.source.contents.len != this.start) {
-                break :finder this.raw();
+            if (_.source.contents.len != _.start) {
+                break :finder _.raw();
             } else {
                 break :finder "end of file";
             }
         };
 
-        this.addRangeError(this.range(), "Expected {s} but found {s}", .{ text, found })?;
+        _.addRangeError(_.range(), "Expected {s} but found {s}", .{ text, found })?;
     }
 
-    pub fn range(this) logger.Range {
+    pub fn range() logger.Range {
         return logger.Range{
-            .loc = logger.usize2Loc(this.start),
-            .len = std.math.lossyCast(i32, this.end - this.start),
+            .loc = logger.usize2Loc(_.start),
+            .len = std.math.lossyCast(i32, _.end - _.start),
         };
     }
 
@@ -1146,20 +1146,20 @@ pub @value class Lexer {
         return lex;
     }
 
-    pub inline fn toString(*this, loc_: logger.Loc) js_ast.Expr {
-        if (this.string_literal_is_ascii) {
-            return js_ast.Expr.init(js_ast.E.String, js_ast.E.String{ .data = this.string_literal_slice }, loc_);
+    pub inline fn toString(*_, loc_: logger.Loc) js_ast.Expr {
+        if (_.string_literal_is_ascii) {
+            return js_ast.Expr.init(js_ast.E.String, js_ast.E.String{ .data = _.string_literal_slice }, loc_);
         }
 
         return js_ast.Expr.init(
             js_ast.E.String,
-            .{ .data = this.string_literal_slice },
+            .{ .data = _.string_literal_slice },
             loc_,
         );
     }
 
-    pub fn raw(this) []const u8 {
-        return this.source.contents[this.start..this.end];
+    pub fn raw() []const u8 {
+        return _.source.contents[_.start.._.end];
     }
 }
 

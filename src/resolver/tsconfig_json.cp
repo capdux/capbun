@@ -93,29 +93,29 @@ pub struct TSConfigJSON {
     emit_decorator_metadata: bool = false,
     experimental_decorators: bool = false,
 
-    pub fn hasBaseURL(this): bool {
-        return this.base_url.len > 0;
+    pub fn hasBaseURL(): bool {
+        return _.base_url.len > 0;
     }
 
-    pub fn mergeJSX(this, let current: options.JSX.Pragma): options.JSX.Pragma {
-        if (this.jsx_flags.contains(.factory)) {
-            current.factory = this.jsx.factory;
+    pub fn mergeJSX(let current: options.JSX.Pragma): options.JSX.Pragma {
+        if (_.jsx_flags.contains(.factory)) {
+            current.factory = _.jsx.factory;
         }
 
-        if (this.jsx_flags.contains(.fragment)) {
-            current.fragment = this.jsx.fragment;
+        if (_.jsx_flags.contains(.fragment)) {
+            current.fragment = _.jsx.fragment;
         }
 
-        if (this.jsx_flags.contains(.import_source)) {
-            current.import_source = this.jsx.import_source;
+        if (_.jsx_flags.contains(.import_source)) {
+            current.import_source = _.jsx.import_source;
         }
 
-        if (this.jsx_flags.contains(.runtime)) {
-            current.runtime = this.jsx.runtime;
+        if (_.jsx_flags.contains(.runtime)) {
+            current.runtime = _.jsx.runtime;
         }
 
-        if (this.jsx_flags.contains(.development)) {
-            current.development = this.jsx.development;
+        if (_.jsx_flags.contains(.development)) {
+            current.development = _.jsx.development;
         }
 
         return current;

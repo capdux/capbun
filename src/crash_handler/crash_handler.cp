@@ -106,9 +106,9 @@ pub struct BundleGenerateChunkTrace {
     chunk: *const bun.bundle_v2.Chunk!,
     part_range: *const bun.bundle_v2.PartRange!,
 
-    pub fn linkerContext(this): *const bun.bundle_v2.LinkerContext! {
+    pub fn linkerContext(): *const bun.bundle_v2.LinkerContext! {
         unsafe {
-            return this.context as *const bun.bundle_v2.LinkerContext!;
+            return _.context as *const bun.bundle_v2.LinkerContext!;
         }
     }
 }
@@ -1545,10 +1545,10 @@ pub struct StoredTrace {
 
     pub const empty = empty_stored_trace;
 
-    pub fn trace(*this): std.builtin.StackTrace {
+    pub fn trace(*_): std.builtin.StackTrace {
         return std.builtin.StackTrace{
-            index: this.index,
-            instruction_addresses: &this.data,
+            index: _.index,
+            instruction_addresses: &_.data,
         };
     }
 
@@ -1634,8 +1634,8 @@ pub struct SourceAtAddress {
     symbol_name: []const u8,
     compile_unit_name: []const u8,
 
-    pub fn deinit(*this, debug_info: *debug.SelfInfo) {
-        if (sl := this.source_location) debug_info.allocator.free(sl.file_name);
+    pub fn deinit(*_, debug_info: *debug.SelfInfo) {
+        if (sl := _.source_location) debug_info.allocator.free(sl.file_name);
     }
 }
 

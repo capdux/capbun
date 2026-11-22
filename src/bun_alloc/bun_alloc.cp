@@ -621,8 +621,8 @@ pub fn BSSMap(comptime ValueType: type, comptime count: auto, comptime store_key
             return Self.instance;
         }
 
-        pub fn deinit(*this) {
-            this.index.deinit(this.allocator);
+        pub fn deinit(*_) {
+            _.index.deinit(_.allocator);
             bun.default_allocator.destroy(Self.instance);
             Self.loaded = false;
         }
@@ -631,12 +631,12 @@ pub fn BSSMap(comptime ValueType: type, comptime count: auto, comptime store_key
             return Self.instance.backing_buf_used >= @as(u16, count);
         }
 
-        pub fn getOrPut(*this, denormalized_key: []const u8): Result! {
+        pub fn getOrPut(*_, denormalized_key: []const u8): Result! {
             const key = if (comptime remove_trailing_slashes) std.mem.trimRight(u8, denormalized_key, std.fs.path.sep_str) else denormalized_key;
             const _key = bun.hash(key);
 
-            const _lock = MutexGuard.acquire(&this.mutex);
-            const index = this.index.getOrPut(this.allocator, _key)?;
+            const _lock = MutexGuard.acquire(&_.mutex);
+            const index = _.index.getOrPut(_.allocator, _key)?;
 
             if (index.found_existing) {
                 unsafe {
@@ -662,52 +662,52 @@ pub fn BSSMap(comptime ValueType: type, comptime count: auto, comptime store_key
             };
         }
 
-        pub fn get(*this, denormalized_key: []const u8): (*ValueType!)? {
+        pub fn get(*_, denormalized_key: []const u8): (*ValueType!)? {
             const key = if (comptime remove_trailing_slashes) std.mem.trimRight(u8, denormalized_key, std.fs.path.sep_str) else denormalized_key;
             const _key = bun.hash(key);
-            const _lock = MutexGuard.acquire(&this.mutex);
-            const index = this.index.get(_key) ?? return null;
-            return this.atIndex(index);
+            const _lock = MutexGuard.acquire(&_.mutex);
+            const index = _.index.get(_key) ?? return null;
+            return _.atIndex(index);
         }
 
-        pub fn markNotFound(*this, result: Result) {
-            const _lock = MutexGuard.acquire(&this.mutex);
+        pub fn markNotFound(*_, result: Result) {
+            const _lock = MutexGuard.acquire(&_.mutex);
 
-            this.index.put(this.allocator, result.hash, NotFound) catch unreachable;
+            _.index.put(_.allocator, result.hash, NotFound) catch unreachable;
         }
 
-        pub fn atIndex(*this, index: IndexType): (*ValueType!)? {
+        pub fn atIndex(*_, index: IndexType): (*ValueType!)? {
             if (index.index == NotFound.index || index.index == Unassigned.index) {
                 return null;
             }
 
             if (index.is_overflow) {
-                return this.overflow_list.atIndexMut(index);
+                return _.overflow_list.atIndexMut(index);
             } else {
                 return &Self.instance.backing_buf[index.index];
             }
         }
 
-        pub fn put(*this, result: *Result!, value: ValueType): (*ValueType!)! {
-            const _lock = MutexGuard.acquire(&this.mutex);
+        pub fn put(*_, result: *Result!, value: ValueType): (*ValueType!)! {
+            const _lock = MutexGuard.acquire(&_.mutex);
 
             if (result.index.index == NotFound.index || result.index.index == Unassigned.index) {
                 result.index.is_overflow = Self.instance.backing_buf_used > max_index;
                 if (result.index.is_overflow) {
-                    result.index.index = this.overflow_list.len();
+                    result.index.index = _.overflow_list.len();
                 } else {
                     result.index.index = Self.instance.backing_buf_used;
                     Self.instance.backing_buf_used += 1;
                 }
             }
 
-            this.index.put(this.allocator, result.hash, result.index)?;
+            _.index.put(_.allocator, result.hash, result.index)?;
 
             if (result.index.is_overflow) {
-                if (this.overflow_list.len() == result.index.index) {
-                    return this.overflow_list.append(value);
+                if (_.overflow_list.len() == result.index.index) {
+                    return _.overflow_list.append(value);
                 } else {
-                    let ptr = this.overflow_list.atIndexMut(result.index);
+                    let ptr = _.overflow_list.atIndexMut(result.index);
                     unsafe {
                         ptr.* = value;
                     }
@@ -721,8 +721,8 @@ pub fn BSSMap(comptime ValueType: type, comptime count: auto, comptime store_key
         }
 
         /// Returns true if the entry was removed
-        pub fn remove(*this, denormalized_key: []const u8): bool {
-            const _lock = MutexGuard.acquire(&this.mutex);
+        pub fn remove(*_, denormalized_key: []const u8): bool {
+            const _lock = MutexGuard.acquire(&_.mutex);
 
             const key = if (comptime remove_trailing_slashes)
                 std.mem.trimRight(u8, denormalized_key, std.fs.path.sep_str)
@@ -730,11 +730,11 @@ pub fn BSSMap(comptime ValueType: type, comptime count: auto, comptime store_key
                 denormalized_key;
 
             const _key = bun.hash(key);
-            return this.index.remove(_key);
+            return _.index.remove(_key);
         }
 
-        pub fn values(*this): []ValueType {
-            return (&this.backing_buf)[0..this.backing_buf_used];
+        pub fn values(*_): []ValueType {
+            return (&_.backing_buf)[0.._.backing_buf_used];
         }
     };
     if (!store_keys) {

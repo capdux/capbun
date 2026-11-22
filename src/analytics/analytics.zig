@@ -99,7 +99,7 @@ pub const EventName = enum(u8) {
 pub const FeaturesFormatter = struct {
 
 pub fn format(self: FeaturesFormatter, writer: *std.Io.Writer) !void {
-        _ = self;
+            _ = self;
             const fields = (comptime brk: {
             const info: std.builtin.Type = @typeInfo(Features);
             var buffer: [info . @"struct" . decls . len][]const u8 = @as([info.@"struct".decls.len][]const u8, @splat(@as([]const u8, "")));

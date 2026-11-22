@@ -27,8 +27,8 @@ pub struct SemverStringAscSorter {
     lhs_buf: []const u8,
     rhs_buf: []const u8,
 
-    pub fn lessThan(this, lhs: SemverString, rhs: SemverString): bool {
-        return SemverString.order(&lhs, &rhs, this.lhs_buf, this.rhs_buf) == .lt;
+    pub fn lessThan(lhs: SemverString, rhs: SemverString): bool {
+        return SemverString.order(&lhs, &rhs, _.lhs_buf, _.rhs_buf) == .lt;
     }
 }
 
@@ -36,8 +36,8 @@ pub struct SemverStringDescSorter {
     lhs_buf: []const u8,
     rhs_buf: []const u8,
 
-    pub fn lessThan(this, lhs: SemverString, rhs: SemverString): bool {
-        return SemverString.order(&lhs, &rhs, this.lhs_buf, this.rhs_buf) == .gt;
+    pub fn lessThan(lhs: SemverString, rhs: SemverString): bool {
+        return SemverString.order(&lhs, &rhs, _.lhs_buf, _.rhs_buf) == .gt;
     }
 }
 
@@ -54,38 +54,38 @@ pub struct SemverStringBuf {
         };
     }
 
-    pub fn append(*this, str: string): SemverString ! OOM {
+    pub fn append(*_, str: string): SemverString ! OOM {
         if (SemverString.canInline(str)) {
             return SemverString.initInline(str);
         }
 
         const hash = SemverStringBuilder.stringHash(str);
-        const entry = this.pool.getOrPut(hash)?;
+        const entry = _.pool.getOrPut(hash)?;
         if (entry.found_existing) {
             unsafe { return entry.value_ptr.*; }
         }
 
-        const new_str = SemverString.initAppend(this.allocator, this.bytes, str)?;
+        const new_str = SemverString.initAppend(_.allocator, _.bytes, str)?;
         unsafe { entry.value_ptr.* = new_str; }
         return new_str;
     }
 
-    pub fn appendWithHash(*this, str: string, hash: u64): SemverString ! OOM {
+    pub fn appendWithHash(*_, str: string, hash: u64): SemverString ! OOM {
         if (SemverString.canInline(str)) {
             return SemverString.initInline(str);
         }
 
-        const entry = this.pool.getOrPut(hash)?;
+        const entry = _.pool.getOrPut(hash)?;
         if (entry.found_existing) {
             unsafe { return entry.value_ptr.*; }
         }
 
-        const new_str = SemverString.initAppend(this.allocator, this.bytes, str)?;
+        const new_str = SemverString.initAppend(_.allocator, _.bytes, str)?;
         unsafe { entry.value_ptr.* = new_str; }
         return new_str;
     }
 
-    pub fn appendExternal(*this, str: string): ExternalString ! OOM {
+    pub fn appendExternal(*_, str: string): ExternalString ! OOM {
         const hash = SemverStringBuilder.stringHash(str);
 
         if (SemverString.canInline(str)) {
@@ -95,7 +95,7 @@ pub struct SemverStringBuf {
             };
         }
 
-        const entry = this.pool.getOrPut(hash)?;
+        const entry = _.pool.getOrPut(hash)?;
         if (entry.found_existing) {
             unsafe {
                 return ExternalString{
@@ -105,7 +105,7 @@ pub struct SemverStringBuf {
             }
         }
 
-        const new_str = SemverString.initAppend(this.allocator, this.bytes, str)?;
+        const new_str = SemverString.initAppend(_.allocator, _.bytes, str)?;
         unsafe { entry.value_ptr.* = new_str; }
         return ExternalString{
             value: new_str,
@@ -113,7 +113,7 @@ pub struct SemverStringBuf {
         };
     }
 
-    pub fn appendExternalWithHash(*this, str: string, hash: u64): ExternalString ! OOM {
+    pub fn appendExternalWithHash(*_, str: string, hash: u64): ExternalString ! OOM {
         if (SemverString.canInline(str)) {
             return ExternalString{
                 value: SemverString.initInline(str),
@@ -121,7 +121,7 @@ pub struct SemverStringBuf {
             };
         }
 
-        const entry = this.pool.getOrPut(hash)?;
+        const entry = _.pool.getOrPut(hash)?;
         if (entry.found_existing) {
             unsafe {
                 return ExternalString{
@@ -131,7 +131,7 @@ pub struct SemverStringBuf {
             }
         }
 
-        const new_str = SemverString.initAppend(this.allocator, this.bytes, str)?;
+        const new_str = SemverString.initAppend(_.allocator, _.bytes, str)?;
         unsafe { entry.value_ptr.* = new_str; }
         return ExternalString{
             value: new_str,
@@ -144,8 +144,8 @@ pub struct SemverStringFormatter {
     str: &SemverString,
     buf: string,
 
-    pub fn format(this, writer: *std.Io.Writer): void ! std.Io.Writer.Error {
-        writer.writeAll(strSlice(this.str, this.buf))?;
+    pub fn format(writer: *std.Io.Writer): void ! std.Io.Writer.Error {
+        writer.writeAll(strSlice(_.str, _.buf))?;
     }
 }
 
@@ -160,8 +160,8 @@ pub struct SemverStringJsonFormatter {
 
     pub const Options = SemverStringJsonFormatterOptions;
 
-    pub fn format(this, writer: *std.Io.Writer): void ! std.Io.Writer.Error {
-        writer.print("{f}", [bun.fmt.formatJSONStringUTF8(strSlice(this.str, this.buf), { quote: this.opts.quote })])?;
+    pub fn format(writer: *std.Io.Writer): void ! std.Io.Writer.Error {
+        writer.print("{f}", [bun.fmt.formatJSONStringUTF8(strSlice(_.str, _.buf), { quote: _.opts.quote })])?;
     }
 }
 
@@ -169,8 +169,8 @@ pub struct SemverStringStorePathFormatter {
     str: &SemverString,
     buf: string,
 
-    pub fn format(this, writer: *std.Io.Writer): void ! std.Io.Writer.Error {
-        for (c of strSlice(this.str, this.buf)) {
+    pub fn format(writer: *std.Io.Writer): void ! std.Io.Writer.Error {
+        for (c of strSlice(_.str, _.buf)) {
             const n: u8 = switch (c) {
                 '/' | '\\' | ':' | '#' => u8('+'),
                 else => c,
@@ -184,12 +184,12 @@ pub struct SemverStringHashContext {
     arg_buf: []const u8,
     existing_buf: []const u8,
 
-    pub fn eql(this, arg: SemverString, existing: SemverString): bool {
-        return arg.eql(existing, this.arg_buf, this.existing_buf);
+    pub fn eql(arg: SemverString, existing: SemverString): bool {
+        return arg.eql(existing, _.arg_buf, _.existing_buf);
     }
 
-    pub fn hash(this, arg: SemverString): u64 {
-        const str = strSlice(&arg, this.arg_buf);
+    pub fn hash(arg: SemverString): u64 {
+        const str = strSlice(&arg, _.arg_buf);
         return bun.hash(str);
     }
 }
@@ -198,12 +198,12 @@ pub struct SemverStringArrayHashContext {
     arg_buf: []const u8,
     existing_buf: []const u8,
 
-    pub fn eql(this, arg: SemverString, existing: SemverString, _idx: usize): bool {
-        return arg.eql(existing, this.arg_buf, this.existing_buf);
+    pub fn eql(arg: SemverString, existing: SemverString, _idx: usize): bool {
+        return arg.eql(existing, _.arg_buf, _.existing_buf);
     }
 
-    pub fn hash(this, arg: SemverString): u32 {
-        const str = strSlice(&arg, this.arg_buf);
+    pub fn hash(arg: SemverString): u32 {
+        const str = strSlice(&arg, _.arg_buf);
         return bun.hash(str) as u32;
     }
 }
@@ -236,119 +236,119 @@ pub struct SemverStringBuilder {
         return bun.Wyhash11.hash(0, buf);
     }
 
-    @inline pub fn count(*this, slice_: string) {
-        this.countWithHash(slice_, if (slice_.len >= SemverString.max_inline_len) stringHash(slice_) else std.math.maxInt(u64));
+    @inline pub fn count(*_, slice_: string) {
+        _.countWithHash(slice_, if (slice_.len >= SemverString.max_inline_len) stringHash(slice_) else std.math.maxInt(u64));
     }
 
-    @inline pub fn countWithHash(*this, slice_: string, hash: u64) {
+    @inline pub fn countWithHash(*_, slice_: string, hash: u64) {
         if (slice_.len <= SemverString.max_inline_len) return;
-        if (!this.string_pool.contains(hash)) {
-            this.cap += slice_.len;
+        if (!_.string_pool.contains(hash)) {
+            _.cap += slice_.len;
         }
     }
 
-    @inline pub fn allocatedSlice(*this): []u8 {
-        if (this.cap > 0) {
-            unsafe { return this.ptr.?[0..this.cap]; }
+    @inline pub fn allocatedSlice(*_): []u8 {
+        if (_.cap > 0) {
+            unsafe { return _.ptr.?[0.._.cap]; }
         }
         return [];
     }
 
-    pub fn allocate(*this, allocator: Allocator)! {
-        const ptr_ = allocator.alloc(u8, this.cap)?;
-        this.ptr = ptr_.ptr;
+    pub fn allocate(*_, allocator: Allocator)! {
+        const ptr_ = allocator.alloc(u8, _.cap)?;
+        _.ptr = ptr_.ptr;
     }
 
-    pub fn append(*this, comptime Type: type, slice_: string): Type {
-        return this.appendWithHash(Type, slice_, stringHash(slice_));
+    pub fn append(*_, comptime Type: type, slice_: string): Type {
+        return _.appendWithHash(Type, slice_, stringHash(slice_));
     }
 
-    pub fn appendUTF8WithoutPool(*this, comptime Type: type, slice_: string, hash: u64): Type {
+    pub fn appendUTF8WithoutPool(*_, comptime Type: type, slice_: string, hash: u64): Type {
         if (slice_.len <= SemverString.max_inline_len) {
             if (strings.isAllASCII(slice_)) {
                 switch (Type) {
-                    SemverString => return SemverString.init(this.allocatedSlice(), slice_),
-                    ExternalString => return ExternalString.init(this.allocatedSlice(), slice_, hash),
+                    SemverString => return SemverString.init(_.allocatedSlice(), slice_),
+                    ExternalString => return ExternalString.init(_.allocatedSlice(), slice_, hash),
                     else => @compileError("Invalid type passed to StringBuilder"),
                 }
             }
         }
 
         if (comptime Environment.allow_assert) {
-            assert(this.len <= this.cap);
-            assert(this.ptr != null);
+            assert(_.len <= _.cap);
+            assert(_.ptr != null);
         }
 
         const final_slice: []u8 = unsafe {
-            bun.copy(u8, this.ptr.?[this.len..this.cap], slice_);
-            this.ptr.?[this.len..this.cap][0..slice_.len]
+            bun.copy(u8, _.ptr.?[_.len.._.cap], slice_);
+            _.ptr.?[_.len.._.cap][0..slice_.len]
         };
-        this.len += slice_.len;
+        _.len += slice_.len;
 
-        if (comptime Environment.allow_assert) assert(this.len <= this.cap);
+        if (comptime Environment.allow_assert) assert(_.len <= _.cap);
 
         switch (Type) {
-            SemverString => return SemverString.init(this.allocatedSlice(), final_slice),
-            ExternalString => return ExternalString.init(this.allocatedSlice(), final_slice, hash),
+            SemverString => return SemverString.init(_.allocatedSlice(), final_slice),
+            ExternalString => return ExternalString.init(_.allocatedSlice(), final_slice, hash),
             else => @compileError("Invalid type passed to StringBuilder"),
         }
     }
 
-    pub fn appendWithoutPool(*this, comptime Type: type, slice_: string, hash: u64): Type {
+    pub fn appendWithoutPool(*_, comptime Type: type, slice_: string, hash: u64): Type {
         if (slice_.len <= SemverString.max_inline_len) {
             switch (Type) {
-                SemverString => return SemverString.init(this.allocatedSlice(), slice_),
-                ExternalString => return ExternalString.init(this.allocatedSlice(), slice_, hash),
+                SemverString => return SemverString.init(_.allocatedSlice(), slice_),
+                ExternalString => return ExternalString.init(_.allocatedSlice(), slice_, hash),
                 else => @compileError("Invalid type passed to StringBuilder"),
             }
         }
 
         if (comptime Environment.allow_assert) {
-            assert(this.len <= this.cap);
-            assert(this.ptr != null);
+            assert(_.len <= _.cap);
+            assert(_.ptr != null);
         }
 
         const final_slice: []u8 = unsafe {
-            bun.copy(u8, this.ptr.?[this.len..this.cap], slice_);
-            this.ptr.?[this.len..this.cap][0..slice_.len]
+            bun.copy(u8, _.ptr.?[_.len.._.cap], slice_);
+            _.ptr.?[_.len.._.cap][0..slice_.len]
         };
-        this.len += slice_.len;
+        _.len += slice_.len;
 
-        if (comptime Environment.allow_assert) assert(this.len <= this.cap);
+        if (comptime Environment.allow_assert) assert(_.len <= _.cap);
 
         switch (Type) {
-            SemverString => return SemverString.init(this.allocatedSlice(), final_slice),
-            ExternalString => return ExternalString.init(this.allocatedSlice(), final_slice, hash),
+            SemverString => return SemverString.init(_.allocatedSlice(), final_slice),
+            ExternalString => return ExternalString.init(_.allocatedSlice(), final_slice, hash),
             else => @compileError("Invalid type passed to StringBuilder"),
         }
     }
 
-    pub fn appendWithHash(*this, comptime Type: type, slice_: string, hash: u64): Type {
+    pub fn appendWithHash(*_, comptime Type: type, slice_: string, hash: u64): Type {
         if (slice_.len <= SemverString.max_inline_len) {
             switch (Type) {
-                SemverString => return SemverString.init(this.allocatedSlice(), slice_),
-                ExternalString => return ExternalString.init(this.allocatedSlice(), slice_, hash),
+                SemverString => return SemverString.init(_.allocatedSlice(), slice_),
+                ExternalString => return ExternalString.init(_.allocatedSlice(), slice_, hash),
                 else => @compileError("Invalid type passed to StringBuilder"),
             }
         }
 
         if (comptime Environment.allow_assert) {
-            assert(this.len <= this.cap);
-            assert(this.ptr != null);
+            assert(_.len <= _.cap);
+            assert(_.ptr != null);
         }
 
-        const string_entry = this.string_pool.getOrPut(hash) catch unreachable;
+        const string_entry = _.string_pool.getOrPut(hash) catch unreachable;
         if (!string_entry.found_existing) {
             const final_slice: []u8 = unsafe {
-                bun.copy(u8, this.ptr.?[this.len..this.cap], slice_);
-                this.ptr.?[this.len..this.cap][0..slice_.len]
+                bun.copy(u8, _.ptr.?[_.len.._.cap], slice_);
+                _.ptr.?[_.len.._.cap][0..slice_.len]
             };
-            this.len += slice_.len;
+            _.len += slice_.len;
 
-            unsafe { string_entry.value_ptr.* = SemverString.init(this.allocatedSlice(), final_slice); }
+            unsafe { string_entry.value_ptr.* = SemverString.init(_.allocatedSlice(), final_slice); }
         }
 
-        if (comptime Environment.allow_assert) assert(this.len <= this.cap);
+        if (comptime Environment.allow_assert) assert(_.len <= _.cap);
 
         const val = unsafe { string_entry.value_ptr.* };
         switch (Type) {
@@ -512,40 +512,40 @@ pub struct SemverStringBuilder {
     }
 
     pub fn eql(that: SemverString, this_buf: []const u8, that_buf: []const u8): bool {
-        if (this.isInline() && that.isInline()) {
-            return @as(u64, @bitCast(this.bytes)) == @as(u64, @bitCast(that.bytes));
-        } else if (this.isInline() != that.isInline()) {
+        if (_.isInline() && that.isInline()) {
+            return @as(u64, @bitCast(_.bytes)) == @as(u64, @bitCast(that.bytes));
+        } else if (_.isInline() != that.isInline()) {
             return false;
         } else {
-            const a = this.ptr();
+            const a = _.ptr();
             const b = that.ptr();
             return strings.eql(this_buf[a.off..][0..a.len], that_buf[b.off..][0..b.len]);
         }
     }
 
     @inline pub fn isEmpty(): bool {
-        return @as(u64, @bitCast(this.bytes)) == 0;
+        return @as(u64, @bitCast(_.bytes)) == 0;
     }
 
     pub fn len(): usize {
-        switch (this.bytes[7] & 128) {
+        switch (_.bytes[7] & 128) {
             0 => {
-                if (this.bytes[0] == 0) return 0;
+                if (_.bytes[0] == 0) return 0;
                 let i: usize = 0;
                 while (i < 8) : (i += 1) {
-                    if (this.bytes[i] == 0) return i;
+                    if (_.bytes[i] == 0) return i;
                 }
                 return 8;
             },
             else => {
-                const ptr_ = this.ptr();
+                const ptr_ = _.ptr();
                 return ptr_.len;
             },
         }
     }
 
     @inline pub fn ptr(): Pointer {
-        return @as(Pointer, @bitCast(@as(u64, @bitCast(this)) & 0x7fffffffffffffff));
+        return @as(Pointer, @bitCast(@as(u64, @bitCast(_)) & 0x7fffffffffffffff));
     }
 
     pub static fn slice(str: &SemverString, buf: string): string {

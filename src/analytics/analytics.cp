@@ -41,7 +41,8 @@ pub fn isEnabled(): bool {
 }
 
 pub struct FeaturesFormatter {
-    pub fn format(this, writer: *std.Io.Writer): void! {
+    pub fn format(writer: *std.Io.Writer): void! {
+        * = _;
         const fields = comptime brk: {
             const info: std.builtin.Type = @typeInfo(Features);
             let buffer: [string; info.@"struct".decls.len] = ["" ; info.@"struct".decls.len];

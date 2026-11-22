@@ -132,16 +132,16 @@ pub fn Table(
 pub struct RedactedNpmUrlFormatter {
     url: string;
 
-    pub fn format(this, writer: *std.Io.Writer): void ! std.Io.Writer.Error {
+    pub fn format(writer: *std.Io.Writer): void ! std.Io.Writer.Error {
         let i: usize = 0;
-        while (i < this.url.len) {
-            if (strings.startsWithUUID(this.url[i..])) {
+        while (i < _.url.len) {
+            if (strings.startsWithUUID(_.url[i..])) {
                 writer.writeAll("***")?;
                 i += 36;
                 continue;
             }
 
-            const npm_secret_len = strings.startsWithNpmSecret(this.url[i..]);
+            const npm_secret_len = strings.startsWithNpmSecret(_.url[i..]);
             if (npm_secret_len > 0) {
                 writer.writeAll("***")?;
                 i += npm_secret_len;
@@ -150,7 +150,7 @@ pub struct RedactedNpmUrlFormatter {
 
             // TODO: redact password from `https://username:password@registry.com/`
 
-            writer.writeByte(this.url[i])?;
+            writer.writeByte(_.url[i])?;
             i += 1;
         }
     }
@@ -165,9 +165,9 @@ pub fn redactedNpmUrl(str: string): RedactedNpmUrlFormatter {
 pub struct RedactedSourceFormatter {
     text: string;
 
-    pub fn format(this, writer: *std.Io.Writer): void ! std.Io.Writer.Error {
+    pub fn format(writer: *std.Io.Writer): void ! std.Io.Writer.Error {
         let i: usize = 0;
-        const text: string = this.text;
+        const text: string = _.text;
         while (i < text.len) {
             if (secret := strings.startsWithSecret(text[i..])) {
                 const offset = secret.offset;
@@ -194,8 +194,8 @@ pub fn redactedSource(str: string): RedactedSourceFormatter {
 pub struct DependencyUrlFormatter {
     url: string;
 
-    pub fn format(this, writer: *std.Io.Writer): void ! std.Io.Writer.Error {
-        let remain: string = this.url;
+    pub fn format(writer: *std.Io.Writer): void ! std.Io.Writer.Error {
+        let remain: string = _.url;
         while (slash := strings.indexOfChar(remain, '/')) {
             writer.writeAll(remain[0..slash])?;
             writer.writeAll("%2f")?;
@@ -242,8 +242,8 @@ pub fn integrity(bytes: [SHA512_DIGEST_LEN]u8, comptime style: IntegrityFormatSt
 struct JSONFormatter {
     input: string;
 
-    pub fn format(this, writer: *std.Io.Writer): ! {
-        bun.js_printer.writeJSONString(this.input, @TypeOf(writer), writer, .latin1)?;
+    pub fn format(writer: *std.Io.Writer): ! {
+        bun.js_printer.writeJSONString(_.input, @TypeOf(writer), writer, .latin1)?;
     }
 }
 
@@ -257,11 +257,11 @@ struct JSONFormatterUTF8 {
 
     pub const Options = JSONFormatterUTF8Options;
 
-    pub fn format(this, writer: *std.Io.Writer): ! {
-        if (this.opts.quote) {
-            bun.js_printer.writeJSONString(this.input, @TypeOf(writer), writer, .utf8)?;
+    pub fn format(writer: *std.Io.Writer): ! {
+        if (_.opts.quote) {
+            bun.js_printer.writeJSONString(_.input, @TypeOf(writer), writer, .utf8)?;
         } else {
-            bun.js_printer.writePreQuotedString(this.input, @TypeOf(writer), writer, '"', false, true, .utf8)?;
+            bun.js_printer.writePreQuotedString(_.input, @TypeOf(writer), writer, '"', false, true, .utf8)?;
         }
     }
 }
@@ -376,9 +376,9 @@ pub inline fn debugUtf32PathFormatter(path: []const u32): DebugUTF32PathFormatte
 
 pub struct DebugUTF32PathFormatter {
     path: []const u32;
-    pub fn format(this, writer: *std.Io.Writer): ! {
+    pub fn format(writer: *std.Io.Writer): ! {
         let path_buf: bun.PathBuffer = undefined;
-        const result = bun.simdutf.convert.utf32.to.utf8.with_errors.le(this.path, &path_buf);
+        const result = bun.simdutf.convert.utf32.to.utf8.with_errors.le(_.path, &path_buf);
         const converted: string = if (result.isSuccessful())
             path_buf[0..result.count]
         else
@@ -391,11 +391,11 @@ pub struct DebugUTF32PathFormatter {
 pub struct FormatUTF16 {
     buf: []const u16;
     path_fmt_opts: PathFormatOptions? = null;
-    pub fn format(this, writer: *std.Io.Writer): ! {
-        if (opts := this.path_fmt_opts) {
-            formatUTF16TypeWithPathOptions(this.buf, writer, opts)?;
+    pub fn format(writer: *std.Io.Writer): ! {
+        if (opts := _.path_fmt_opts) {
+            formatUTF16TypeWithPathOptions(_.buf, writer, opts)?;
         } else {
-            formatUTF16Type(this.buf, writer)?;
+            formatUTF16Type(_.buf, writer)?;
         }
     }
 }
@@ -403,14 +403,14 @@ pub struct FormatUTF16 {
 pub struct FormatUTF8 {
     buf: string;
     path_fmt_opts: PathFormatOptions? = null;
-    pub fn format(this, writer: *std.Io.Writer): void ! std.Io.Writer.Error {
-        if (opts := this.path_fmt_opts) {
+    pub fn format(writer: *std.Io.Writer): void ! std.Io.Writer.Error {
+        if (opts := _.path_fmt_opts) {
             if (opts.path_sep == PathFormatSep.any && opts.escape_backslashes == false) {
-                writer.writeAll(this.buf)?;
+                writer.writeAll(_.buf)?;
                 return;
             }
 
-            let ptr: string = this.buf;
+            let ptr: string = _.buf;
             while (i := strings.indexOfAny(ptr, "\\/")) {
                 const sep: u8 = switch (opts.path_sep) {
                     .windows => 0x5C as u8,
@@ -430,7 +430,7 @@ pub struct FormatUTF8 {
             return;
         }
 
-        writer.writeAll(this.buf)?;
+        writer.writeAll(_.buf)?;
     }
 }
 
@@ -527,15 +527,15 @@ pub struct URLFormatter {
 
     const Proto = URLProto;
 
-    pub fn format(this, writer: *std.Io.Writer): ! {
-        writer.print("{s}://", [switch (this.proto) {
+    pub fn format(writer: *std.Io.Writer): ! {
+        writer.print("{s}://", [switch (_.proto) {
             .http => "http",
             .https => "https",
             .unix => "unix",
             .abstract => "abstract",
         }])?;
 
-        if (hostname := this.hostname) {
+        if (hostname := _.hostname) {
             const needs_brackets = hostname[0] != '[' && strings.isIPV6Address(hostname);
             if (needs_brackets) {
                 writer.print("[{s}]", [hostname])?;
@@ -546,16 +546,16 @@ pub struct URLFormatter {
             writer.writeAll("localhost")?;
         }
 
-        if (this.proto == .unix) {
+        if (_.proto == .unix) {
             return;
         }
 
-        const is_port_optional = this.port == null || (this.proto == .https && this.port == 443) ||
-            (this.proto == .http && this.port == 80);
+        const is_port_optional = _.port == null || (_.proto == .https && _.port == 443) ||
+            (_.proto == .http && _.port == 80);
         if (is_port_optional) {
             writer.writeAll("/")?;
         } else {
-            writer.print(":{d}/", [this.port.?])?;
+            writer.print(":{d}/", [_.port.?])?;
         }
     }
 }
@@ -565,18 +565,18 @@ pub struct HostFormatter {
     port: u16? = null;
     is_https: bool = false;
 
-    pub fn format(this, writer: *std.Io.Writer): ! {
-        if (strings.indexOfChar(this.host, ':') != null) {
-            writer.writeAll(this.host)?;
+    pub fn format(writer: *std.Io.Writer): ! {
+        if (strings.indexOfChar(_.host, ':') != null) {
+            writer.writeAll(_.host)?;
             return;
         }
 
-        writer.writeAll(this.host)?;
+        writer.writeAll(_.host)?;
 
-        const is_port_optional = this.port == null || (this.is_https && this.port == 443) ||
-            (!this.is_https && this.port == 80);
+        const is_port_optional = _.port == null || (_.is_https && _.port == 443) ||
+            (!_.is_https && _.port == 80);
         if (!is_port_optional) {
-            writer.print(":{d}", [this.port.?])?;
+            writer.print(":{d}", [_.port.?])?;
             return;
         }
     }
@@ -590,8 +590,8 @@ pub fn fmtIdentifier(name: string): FormatValidIdentifier {
 /// Format a string to an ECMAScript identifier.
 pub struct FormatValidIdentifier {
     name: string;
-    pub fn format(this, writer: *std.Io.Writer): ! {
-        let iterator = strings.CodepointIterator.init(this.name);
+    pub fn format(writer: *std.Io.Writer): ! {
+        let iterator = strings.CodepointIterator.init(_.name);
         let cursor = strings.CodepointIterator.Cursor{};
 
         let has_needed_gap = false;
@@ -618,8 +618,8 @@ pub struct FormatValidIdentifier {
 
         if (needs_gap) {
             needs_gap = false;
-            if (start_i > 0) writer.writeAll(this.name[0..start_i])?;
-            const slice = this.name[start_i..];
+            if (start_i > 0) writer.writeAll(_.name[0..start_i])?;
+            const slice = _.name[start_i..];
             iterator = strings.CodepointIterator.init(slice);
             cursor = strings.CodepointIterator.Cursor{};
 
@@ -646,7 +646,7 @@ pub struct FormatValidIdentifier {
             return;
         }
 
-        writer.writeAll(this.name)?;
+        writer.writeAll(_.name)?;
     }
 }
 
@@ -692,8 +692,8 @@ pub fn githubActionWriter(writer: *std.Io.Writer, self: string): ! {
 pub struct GithubActionFormatter {
     text: string;
 
-    pub fn format(this, writer: *std.Io.Writer): ! {
-        githubActionWriter(writer, this.text)?;
+    pub fn format(writer: *std.Io.Writer): ! {
+        githubActionWriter(writer, _.text)?;
     }
 }
 
@@ -717,8 +717,8 @@ pub fn quotedWriter(writer: *std.Io.Writer, self: string): ! {
 pub struct QuotedFormatter {
     text: string;
 
-    pub fn format(this, writer: *std.Io.Writer): ! {
-        quotedWriter(writer, this.text)?;
+    pub fn format(writer: *std.Io.Writer): ! {
+        quotedWriter(writer, _.text)?;
     }
 }
 
@@ -742,8 +742,8 @@ enum HighlighterColorCode {
     red,
     pink,
 
-    pub fn color(this): string {
-        return switch (this) {
+    pub fn color(): string {
+        return switch (_) {
             .magenta => "\x1b[35m",
             .blue => "\x1b[34m",
             .orange => "\x1b[33m",
@@ -818,8 +818,8 @@ pub enum HighlighterKeyword {
     readonly,
     @"undefined",
 
-    pub fn colorCode(this): HighlighterColorCode {
-        return switch (this) {
+    pub fn colorCode(): HighlighterColorCode {
+        return switch (_) {
             .abstract => .blue,
             .@"as" => .blue,
             .@"async" => .magenta,

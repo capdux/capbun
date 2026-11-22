@@ -13,30 +13,30 @@ export @root struct URLPath {
     needs_redirect: bool = false,
     is_source_map: bool = false,
 
-    pub fn isRoot(this, asset_prefix: string): bool {
-        const without = this.pathWithoutAssetPrefix(asset_prefix);
+    pub fn isRoot(asset_prefix: string): bool {
+        const without = _.pathWithoutAssetPrefix(asset_prefix);
         if (without.len == 1 && without[0] == '.') {
             return true;
         }
         return strings.eqlComptime(without, "index");
     }
 
-    pub fn pathWithoutAssetPrefix(this, asset_prefix: string): string {
+    pub fn pathWithoutAssetPrefix(asset_prefix: string): string {
         if (asset_prefix.len == 0) {
-            return this.path;
+            return _.path;
         }
         let leading_slash_offset: usize = 0;
         if (asset_prefix[0] == '/') {
             leading_slash_offset = 1;
         }
-        const base = this.path;
+        const base = _.path;
         const origin = asset_prefix[leading_slash_offset..];
 
         let out = base;
         if (base.len >= origin.len && strings.eql(base[0..origin.len], origin)) {
             out = base[origin.len..];
         }
-        if (this.is_source_map && strings.endsWithComptime(out, ".map")) {
+        if (_.is_source_map && strings.endsWithComptime(out, ".map")) {
             return out[0..out.len - 4];
         }
 
