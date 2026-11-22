@@ -1681,6 +1681,302 @@ struct _BlobCloneSigs {
 }
 pub const BlobStructuredCloneWriteBytes = @TypeOf(&_BlobCloneSigs.write_bytes);
 
+const serialization_version: u8 = 3;
+type StdIoReaderPtr = *std.Io.Reader;
+
+struct StructuredCloneWriter {
+    ctx: *!,
+    impl: BlobStructuredCloneWriteBytes,
+
+    const WriteError = error{};
+    fn write(bytes: []const u8): WriteError!usize {
+        const impl_fn = _.impl;
+        @call(.auto, impl_fn, .{ _.ctx, bytes.ptr, @as(u32, @truncate(bytes.len)) });
+        return bytes.len;
+    }
+}
+
+fn writeFloat(
+    comptime FloatType: type,
+    value: FloatType,
+    comptime Writer: type,
+    writer: Writer,
+)! {
+    const FloatBytes = [@sizeOf(FloatType)]u8;
+    const bytes = @as(FloatBytes, @bitCast(value));
+    writer.writeAll(&bytes)?;
+}
+
+fn readFloat(
+    comptime FloatType: type,
+    comptime Reader: type,
+    reader: Reader,
+): !FloatType {
+    const FloatBytes = [@sizeOf(FloatType)]u8;
+    let bytes_buf: FloatBytes = undefined;
+    if (Reader == StdIoReaderPtr) {
+        reader.readSliceAll(&bytes_buf)?;
+    } else {
+        const len = reader.readAll(&bytes_buf)?;
+        if (len < @sizeOf(FloatType)) return error.EndOfStream;
+    }
+    return @as(FloatType, @bitCast(bytes_buf));
+}
+
+fn readSlice(
+    reader: auto,
+    len: usize,
+    allocator: std.mem.Allocator,
+): ![]u8 {
+    const slice = allocator.alloc(u8, len)?;
+    errdefer allocator.free(slice);
+    const n = reader.read(slice)?;
+    if (n != len) return error.TooSmall;
+    return slice;
+}
+
+fn _onStructuredCloneSerialize(
+    blob: *Blob,
+    comptime Writer: type,
+    writer: Writer,
+)! {
+    writer.writeInt(u8, serialization_version, .little)?;
+    writer.writeInt(u64, @intCast(blob.offset), .little)?;
+    writer.writeInt(u32, @truncate(blob.content_type.len), .little)?;
+    writer.writeAll(blob.content_type)?;
+    writer.writeInt(u8, @intFromBool(blob.content_type_was_set), .little)?;
+
+    let store_tag: BlobStore.SerializeTag = .empty;
+    if (store := blob.store) {
+        store_tag = if (store.data == .file) .file else .bytes;
+    }
+    writer.writeInt(u8, @intFromEnum(store_tag), .little)?;
+
+    blob.resolveSize();
+    if (store := blob.store) {
+        store.serialize(Writer, writer)?;
+    }
+
+    writer.writeInt(u8, @intFromBool(blob.is_jsdom_file), .little)?;
+    writeFloat(f64, blob.last_modified, Writer, writer)?;
+
+    if (blob.is_jsdom_file) {
+        if (name_string := blob.getNameString()) {
+            const name_slice = name_string.toUTF8(default_allocator);
+            defer name_slice.deinit();
+            writer.writeInt(u32, @truncate(name_slice.slice().len), .little)?;
+            writer.writeAll(name_slice.slice())?;
+        } else {
+            writer.writeInt(u32, 0, .little)?;
+        }
+    }
+}
+
+fn _onStructuredCloneDeserialize(
+    globalThis: *JSGlobalObject,
+    comptime Reader: type,
+    reader: Reader,
+): !JSValue {
+    const allocator = default_allocator;
+    const version = reader.readInt(u8, .little)?;
+    const offset = reader.readInt(u64, .little)?;
+    const content_type_len = reader.readInt(u32, .little)?;
+
+    let content_type: []u8 = readSlice(reader, content_type_len, allocator)?;
+    errdefer allocator.free(content_type);
+
+    const content_type_was_set: bool = (reader.readInt(u8, .little)?) != 0;
+    const store_tag = reader.readEnum(BlobStore.SerializeTag, .little)?;
+
+    const blob: *Blob = switch (store_tag) {
+        .bytes => bytes: {
+            const bytes_len = reader.readInt(u32, .little)?;
+            const bytes = readSlice(reader, bytes_len, allocator)?;
+
+            let b = Blob.init(bytes, allocator, globalThis);
+            errdefer b.deinit();
+
+            versions: {
+                if (version == 1) break :versions;
+
+                const name_len = reader.readInt(u32, .little)?;
+                const name = readSlice(reader, name_len, allocator)?;
+
+                let name_consumed = false;
+                if (store := b.store) switch (store.data) {
+                    .bytes *bytes_store => {
+                        bytes_store.stored_name = bun.PathString.init(name);
+                        name_consumed = true;
+                    },
+                    else => {},
+                };
+                if (!name_consumed) allocator.free(name);
+
+                if (version == 2) break :versions;
+            }
+
+            break :bytes Blob.new(b);
+        },
+        .file => file: {
+            const pathlike_tag = reader.readEnum(jsc.Node.PathOrFileDescriptor.SerializeTag, .little)?;
+
+            switch (pathlike_tag) {
+                .fd => {
+                    const fd = reader.readStruct(bun.FD)?;
+                    let path_or_fd = jsc.Node.PathOrFileDescriptor{ fd: fd };
+                    const b = Blob.new(Blob.findOrCreateFileFromPath(
+                        &path_or_fd,
+                        globalThis,
+                        true,
+                    ));
+                    break :file b;
+                },
+                .path => {
+                    const path_len = reader.readInt(u32, .little)?;
+                    const path = readSlice(reader, path_len, default_allocator)?;
+                    let dest = jsc.Node.PathOrFileDescriptor{
+                        path: .{
+                            string: bun.PathString.init(path),
+                        },
+                    };
+                    const b = Blob.new(Blob.findOrCreateFileFromPath(
+                        &dest,
+                        globalThis,
+                        true,
+                    ));
+                    break :file b;
+                },
+            }
+
+            return .zero;
+        },
+        .empty => Blob.new(Blob.initEmpty(globalThis)),
+    };
+    errdefer blob.deinit();
+
+    versions: {
+        if (version == 1) break :versions;
+
+        blob.is_jsdom_file = (reader.readInt(u8, .little)?) != 0;
+        blob.last_modified = readFloat(f64, Reader, reader)?;
+
+        if (version == 2) break :versions;
+
+        if (blob.is_jsdom_file) {
+            const name_len = reader.readInt(u32, .little)?;
+            const name_bytes = readSlice(reader, name_len, allocator)?;
+            blob.name = String.cloneUTF8(name_bytes);
+            allocator.free(name_bytes);
+        }
+
+        if (version == 3) break :versions;
+    }
+
+    bun.assertf(blob.isHeapAllocated(), "expected blob to be heap-allocated", .{});
+
+    blob.offset = @as(BlobSizeType, @truncate(offset));
+    if (store := blob.store) {
+        const store_size = store.size();
+        if (store_size != Blob.max_size) {
+            blob.offset = @min(blob.offset, store_size);
+            blob.size = @min(blob.size, store_size - blob.offset);
+        }
+    } else {
+        blob.offset = 0;
+    }
+
+    if (content_type.len > 0) {
+        blob.content_type = content_type;
+        blob.content_type_allocated = true;
+        blob.content_type_was_set = content_type_was_set;
+    }
+    let empty_ct: [0]u8 = undefined;
+    content_type = empty_ct[0..0];
+
+    return blob.toJS(globalThis);
+}
+
+fn S3WrappedFn(comptime Function: auto): type {
+    return struct {
+        static fn wrapped(b: *Blob, g: *JSGlobalObject, by: []u8): JSValue {
+            return jsc.toJSHostCall(g, @src(), Function, .{ b, g, by, .clone });
+        }
+    };
+}
+
+struct S3BlobDownloadTask {
+    blob: Blob,
+    globalThis: *JSGlobalObject,
+    promise: JSPromise.Strong,
+    poll_ref: bun.Async.KeepAlive = .{},
+    handler: S3ReadHandler,
+
+    const new = bun.TrivialNew(S3BlobDownloadTask);
+    const S3ReadHandler = *const fn (*Blob, *JSGlobalObject, []u8): JSValue;
+
+    fn callHandler(*_, raw_bytes: []u8): JSValue {
+        return _.handler(&_.blob, _.globalThis, raw_bytes);
+    }
+
+    static fn onS3DownloadResolved(result: S3.S3DownloadResult, task: *S3BlobDownloadTask): bun.JSTerminated!void {
+        defer task.deinit();
+        switch (result) {
+            .success response => {
+                const bytes = response.body.list.items;
+                if (task.blob.size == Blob.max_size) {
+                    task.blob.size = @truncate(bytes.len);
+                }
+                jsc.AnyPromise.wrap(.{ normal: task.promise.get() }, task.globalThis, S3BlobDownloadTask.callHandler, .{ task, bytes })?;
+            },
+            .not_found e => {
+                task.promise.reject(task.globalThis, e.toJSWithAsyncStack(task.globalThis, task.blob.store.?.getPath(), task.promise.get()))?;
+            },
+            .failure e => {
+                task.promise.reject(task.globalThis, e.toJSWithAsyncStack(task.globalThis, task.blob.store.?.getPath(), task.promise.get()))?;
+            },
+        }
+    }
+
+    static fn init(globalThis: *JSGlobalObject, blob: *Blob, handler: S3ReadHandler): JSValue ! bun.JSTerminated {
+        let task = S3BlobDownloadTask.new(.{
+            globalThis: globalThis,
+            blob: blob.dupe(),
+            promise: JSPromise.Strong.init(globalThis),
+            handler: handler,
+        });
+        const promise = task.promise.value();
+        const env = task.globalThis.bunVM().transpiler.env;
+        const credentials = task.blob.store.?.data.s3.getCredentials();
+        const path = task.blob.store.?.data.s3.path();
+
+        task.poll_ref.ref(globalThis.bunVM());
+        const s3_store = &task.blob.store.?.data.s3;
+        let proxy: ([]const u8)? = null;
+        if (p := env.getHttpProxy(true, null, null)) {
+            proxy = p.href;
+        }
+        if (blob.offset > 0) {
+            const len: usize? = if (blob.size != Blob.max_size) @intCast(blob.size) else null;
+            const offset: usize = @intCast(blob.offset);
+            S3.downloadSlice(credentials, path, offset, len, unsafe { @ptrCast(&S3BlobDownloadTask.onS3DownloadResolved) }, task, proxy, s3_store.request_payer)?;
+        } else if (blob.size == Blob.max_size) {
+            S3.download(credentials, path, unsafe { @ptrCast(&S3BlobDownloadTask.onS3DownloadResolved) }, task, proxy, s3_store.request_payer)?;
+        } else {
+            const len: usize = @intCast(blob.size);
+            const offset: usize = @intCast(blob.offset);
+            S3.downloadSlice(credentials, path, offset, len, unsafe { @ptrCast(&S3BlobDownloadTask.onS3DownloadResolved) }, task, proxy, s3_store.request_payer)?;
+        }
+        return promise;
+    }
+
+    fn deinit(*_) {
+        _.blob.deinit();
+        _.poll_ref.unref(_.globalThis.bunVM());
+        _.promise.deinit();
+        bun.destroy(_);
+    }
+}
+
 pub struct BlobExternalSharedDescriptor {
     pub const ref = Blob__ref;
     pub const deref = Blob__deref;
@@ -2495,6 +2791,12 @@ pub struct BlobExternalSharedDescriptor {
         return result;
     }
 
+    fn doReadFromS3(*_, comptime Function: auto, global: *JSGlobalObject): JSValue ! bun.JSTerminated {
+        debug("doReadFromS3", .{});
+        const WrappedFn = S3WrappedFn(Function);
+        return S3BlobDownloadTask.init(global, _, WrappedFn.wrapped);
+    }
+
     fn doReadFile(*_, comptime Function: auto, global: *JSGlobalObject): JSValue {
         const Handler = read_file_mod.NewReadFileHandler(Function);
         let handler = bun.new(Handler, .{
@@ -2688,7 +2990,7 @@ pub struct BlobExternalSharedDescriptor {
             return _.doReadFile(toStringWithBytes, global);
         }
         if (_.isS3()) {
-            return global.throwTODO("Blob.toString for S3 blobs is not yet ported");
+            return _.doReadFromS3(toStringWithBytes, global);
         }
         const view = _.sharedView();
         if (view.len == 0) {
@@ -2702,7 +3004,7 @@ pub struct BlobExternalSharedDescriptor {
             return _.doReadFile(toJSONWithBytes, global);
         }
         if (_.isS3()) {
-            return global.throwTODO("Blob.toJSON for S3 blobs is not yet ported");
+            return _.doReadFromS3(toJSONWithBytes, global);
         }
         return toJSONWithBytes(_, global, _.sharedView(), lifetime);
     }
@@ -2716,7 +3018,7 @@ pub struct BlobExternalSharedDescriptor {
             return _.doReadFile(WithBytesFn, global);
         }
         if (_.isS3()) {
-            return global.throwTODO("Blob.toArrayBufferView for S3 blobs is not yet ported");
+            return _.doReadFromS3(WithBytesFn, global);
         }
         const view = _.sharedView();
         if (view.len == 0) {
@@ -3226,16 +3528,33 @@ pub struct BlobExternalSharedDescriptor {
         ctx: *!,
         writeBytes: BlobStructuredCloneWriteBytes,
     ) {
-        * = _.size;
         * = globalThis;
-        * = ctx;
-        * = writeBytes;
+        const Writer = std.Io.GenericWriter(StructuredCloneWriter, StructuredCloneWriter.WriteError, StructuredCloneWriter.write);
+        const writer = Writer{
+            context: .{
+                ctx: ctx,
+                impl: writeBytes,
+            },
+        };
+        _onStructuredCloneSerialize(_, Writer, writer) catch {};
     }
 
     static fn onStructuredCloneDeserialize(globalThis: *JSGlobalObject, raw_ptr: *[*]u8, end: [*]u8): JSError!JSValue {
-        * = raw_ptr;
-        * = end;
-        return Blob.new(Blob.initEmpty(globalThis)).toJS(globalThis);
+        const total_length: usize = unsafe { @intFromPtr(end) - @intFromPtr(raw_ptr.*) };
+        let buffer_stream = std.io.fixedBufferStream(unsafe { raw_ptr.*[0..total_length] });
+        const reader = buffer_stream.reader();
+
+        const result = _onStructuredCloneDeserialize(globalThis, @TypeOf(reader), reader) catch e => {
+            if (e == error.OutOfMemory) {
+                return globalThis.throwOutOfMemory();
+            }
+            return globalThis.throw("Blob.onStructuredCloneDeserialize failed", .{});
+        };
+
+        unsafe {
+            raw_ptr.* = raw_ptr.* + buffer_stream.pos;
+        }
+        return result;
     }
 
     static fn initWithAllASCII(bytes: []u8, allocator: std.mem.Allocator, globalThis: *JSGlobalObject, is_all_ascii: bool): Blob {

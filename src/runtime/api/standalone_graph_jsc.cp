@@ -4,7 +4,9 @@
 
 pub fn fileBlob(client: *File, globalObject: *bun.jsc.JSGlobalObject): *bun.webcore.Blob {
     if (client.cached_blob == null) {
-        const store = bun.webcore.Blob.Store.init(@constCast(client.contents), bun.default_allocator);
+        const store = unsafe {
+            bun.webcore.Blob.Store.init(@constCast(client.contents), bun.default_allocator)
+        };
         // make it never free
         store.ref();
 

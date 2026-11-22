@@ -46,7 +46,9 @@ pub fn arrayBufferToString(
     switch (array_buffer.typed_array_type) {
         .Uint16Array, .Int16Array => {
             let zig_str = ZigString.init("");
-            zig_str._unsafe_ptr_do_not_use = @ptrCast(array_buffer.ptr);
+            unsafe {
+                zig_str._unsafe_ptr_do_not_use = @ptrCast(array_buffer.ptr);
+            }
             zig_str.len = array_buffer.len;
             zig_str.markUTF16();
             return zig_str.toJS(globalThis);

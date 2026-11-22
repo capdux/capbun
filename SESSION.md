@@ -627,3 +627,13 @@
   - `src/runtime/webcore/Blob.cp`（L1814-1826 `Blob.writeFormat` 恢复 `_.getNameString()` 判定与输出，修复 `inspect.test.js` `File` 名称缺失）；
   - `src/install_types/SlicedString.cp`（14 处 `@intFromPtr` 包裹 `unsafe`，消除全部 `E0209`）。
 - 推导下一阶段 Wave #71：Subagent 1 先验证 `inspect.test.js`，随后执行 Batch 1c（`test/js/bun/test`，75 个测试文件）；Subagent 2 只读对 `src/` 核心目录批量运行 `cpc check --brief` 预检。
+
+## [2026-11-23] Wave #71：`Blob.cp` S3/StructuredClone 补全、6 处 `E0209` 修复与 Batch 1c 回归完成与提交
+- 完成 Batch 1c（`test/js/bun/test`，75 个测试文件）全量回归：**926 pass / 28 fail / 17 skip / 455 todo**（24,450 expect，877.76s，**全程零 ASan/段错误崩溃**）。
+- 完成 7 个模块补全与修复（均通过 `cpc_brief.py` 4 项门禁 + `bun run zig:check` 5/5 通过）：
+  - `src/runtime/webcore/Blob.cp`（补全 `serialization_version`、`StructuredCloneWriter`、`writeFloat`/`readFloat`/`readSlice`、`_onStructuredCloneSerialize`/`Deserialize`、顶层 `S3BlobDownloadTask` 与 `doReadFromS3`，替换 `toString`/`toJSON`/`toArrayBufferView` 中 `.isS3()` `throwTODO` 占位）；
+  - `src/http/h3_client/callbacks.cp`、`src/runtime/api/UnsafeObject.cp`、`src/runtime/api/crash_handler_jsc.cp`、`src/runtime/api/standalone_graph_jsc.cp`、`src/runtime/node/uv_signal_handle_windows.cp`、`src/runtime/node/zlib/NativeZstd.cp`（补充 `unsafe {}` 消除全部 `E0209`）。
+- 推导下一阶段 Wave #72：Subagent 1 验证 `inspect.test.js`（确认 `File` `structuredClone` 修复至 72/72）并启动 Batch 2（`test/js/web/`）；同时根据 `-0` 与 `toIncludeRepeated` 排查结果继续修复 `test_runner`。
+
+### [2026-11-23] 向 `cp_agy` 提交一元负号 `-x` 被 lowering 为 `(0 - x)` 缺陷工单
+- `task-bun-20261123-unary-neg-zero-float` (`repro_unary_neg_zero.cp`)：一元负号 `-x` 被 `cpc` 编译为 `(0 - x)`，导致 IEEE-754 浮点 `-0.0` 变为 `+0.0`，引起 `src/js_parser/ast/visitExpr.cp` 将所有 JS/TS `-0` 字面量折叠为 `+0`。

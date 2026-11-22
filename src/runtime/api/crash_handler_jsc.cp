@@ -27,10 +27,12 @@ pub struct js_bindings {
         if (!bun.Environment.isMac) return jsc.JSValue.js_undefined;
 
         const header = std.c._dyld_get_image_header(0) ?? return jsc.JSValue.js_undefined;
-        const base_address = @intFromPtr(header);
-        const vmaddr_slide = std.c._dyld_get_image_vmaddr_slide(0);
+        unsafe {
+            const base_address = @intFromPtr(header);
+            const vmaddr_slide = std.c._dyld_get_image_vmaddr_slide(0);
 
-        return JSValue.jsNumber(base_address - vmaddr_slide);
+            return JSValue.jsNumber(base_address - vmaddr_slide);
+        }
     }
 
     static fn jsSegfault(_: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!jsc.JSValue {

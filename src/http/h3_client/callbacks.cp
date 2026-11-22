@@ -133,7 +133,9 @@ export fn register(qctx: *quic.Context) {
 @c pub fn onStreamData(s: *quic.Stream, data: [*]u8, len: u32, fin: i32) {
     if (stream := s.ext(Stream).*) {
         if (len > 0) {
-            bun.handleOom(stream.body_buffer.appendSlice(bun.default_allocator, data[0..len]));
+            unsafe {
+                bun.handleOom(stream.body_buffer.appendSlice(bun.default_allocator, data[0..len]));
+            }
         }
         stream.session.deliver(stream, fin != 0);
     }

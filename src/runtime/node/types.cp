@@ -1000,7 +1000,7 @@ pub union(_PathOrFileDescriptorTag) PathOrFileDescriptor {
     path: PathLike,
 
     const Tag = _PathOrFileDescriptorTag;
-    const SerializeTag = _PathOrFileDescriptorSerializeTag;
+    pub const SerializeTag = _PathOrFileDescriptorSerializeTag;
 
     /// This will unref() the path string if it is a PathLike.
     /// Does nothing for file descriptors, **does not** close file descriptors.

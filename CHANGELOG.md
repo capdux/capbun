@@ -2160,3 +2160,6 @@
 
 ### [2026-11-23] Wave #70（Batch 1b `util` 回归与 `Blob.cp`/`SlicedString.cp` 修复）
 - 修复 `Blob.cp`（`writeFormat` 恢复 `_.getNameString()`）与 `SlicedString.cp`（14 处 `@intFromPtr` `unsafe`），通过 `bun run zig:check`（5/5）；完成 `test/js/bun/util` 53 文件全量回归（1,318 pass / 48 fail / 19 skip，零崩溃）。
+
+### [2026-11-23] Wave #71（补全 `Blob.cp` S3/StructuredClone、修复 6 处 `E0209` 与 Batch 1c `test` 回归）
+- 补全 `Blob.cp`（`onStructuredCloneSerialize`/`Deserialize`、`doReadFromS3` 与 `S3BlobDownloadTask`），修复 `h3_client/callbacks.cp`、`UnsafeObject.cp`、`crash_handler_jsc.cp`、`standalone_graph_jsc.cp`、`uv_signal_handle_windows.cp`、`NativeZstd.cp` 的 `E0209` `unsafe`，通过 `bun run zig:check`（5/5）；完成 `test/js/bun/test` 75 文件回归（926 pass / 28 fail / 17 skip / 455 todo，零崩溃）。

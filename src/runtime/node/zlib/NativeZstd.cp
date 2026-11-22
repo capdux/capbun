@@ -26,7 +26,9 @@ pub struct Context {
                 _.pledged_src_size = pledged_src_size;
                 const state = c.ZSTD_createCCtx();
                 if (state == null) return .init(@constCast("Could not initialize zstd instance"), -1, @constCast("ERR_ZLIB_INITIALIZATION_FAILED"));
-                _.state = @ptrCast(state.?);
+                unsafe {
+                    _.state = @ptrCast(state.?);
+                }
                 const result = c.ZSTD_CCtx_setPledgedSrcSize(state, pledged_src_size);
                 if (c.ZSTD_isError(result) > 0) {
                     * = c.ZSTD_freeCCtx(state);
@@ -38,7 +40,9 @@ pub struct Context {
             .ZSTD_DECOMPRESS => {
                 const state = c.ZSTD_createDCtx();
                 if (state == null) return .init(@constCast("Could not initialize zstd instance"), -1, @constCast("ERR_ZLIB_INITIALIZATION_FAILED"));
-                _.state = @ptrCast(state.?);
+                unsafe {
+                    _.state = @ptrCast(state.?);
+                }
                 return .ok;
             },
             else => @panic("unreachable"),
@@ -48,12 +52,12 @@ pub struct Context {
     pub fn setParams(*_, key: c_uint, value: u32): Error {
         switch (_.mode) {
             .ZSTD_COMPRESS => {
-                const result = c.ZSTD_CCtx_setParameter(@ptrCast(_.state), key, @bitCast(value));
+                const result = unsafe { c.ZSTD_CCtx_setParameter(@ptrCast(_.state), key, @bitCast(value)) };
                 if (c.ZSTD_isError(result) > 0) return .init(@constCast("Setting parameter failed"), -1, @constCast("ERR_ZSTD_PARAM_SET_FAILED"));
                 return .ok;
             },
             .ZSTD_DECOMPRESS => {
-                const result = c.ZSTD_DCtx_setParameter(@ptrCast(_.state), key, @bitCast(value));
+                const result = unsafe { c.ZSTD_DCtx_setParameter(@ptrCast(_.state), key, @bitCast(value)) };
                 if (c.ZSTD_isError(result) > 0) return .init(@constCast("Setting parameter failed"), -1, @constCast("ERR_ZSTD_PARAM_SET_FAILED"));
                 return .ok;
             },
@@ -69,11 +73,13 @@ pub struct Context {
     }
 
     fn deinitState(*_) {
-        * = switch (_.mode) {
-            .ZSTD_COMPRESS => c.ZSTD_freeCCtx(@ptrCast(_.state)),
-            .ZSTD_DECOMPRESS => c.ZSTD_freeDCtx(@ptrCast(_.state)),
-            else => unreachable,
-        };
+        unsafe {
+            * = switch (_.mode) {
+                .ZSTD_COMPRESS => c.ZSTD_freeCCtx(@ptrCast(_.state)),
+                .ZSTD_DECOMPRESS => c.ZSTD_freeDCtx(@ptrCast(_.state)),
+                else => unreachable,
+            };
+        }
         _.state = null;
     }
 
@@ -81,13 +87,17 @@ pub struct Context {
         let in_ptr: (*const void)? = null;
         let in_len: usize = 0;
         if (p := in_buf) {
-            in_ptr = @ptrCast(p.ptr);
+            unsafe {
+                in_ptr = @ptrCast(p.ptr);
+            }
             in_len = p.len;
         }
         let out_ptr: (*void)? = null;
         let out_len: usize = 0;
         if (p := out_buf) {
-            out_ptr = @ptrCast(p.ptr);
+            unsafe {
+                out_ptr = @ptrCast(p.ptr);
+            }
             out_len = p.len;
         }
         _.input.src = in_ptr;
@@ -103,11 +113,13 @@ pub struct Context {
     }
 
     pub fn doWork(*_) {
-        _.remaining = switch (_.mode) {
-            .ZSTD_COMPRESS => c.ZSTD_compressStream2(@ptrCast(_.state), &_.output, &_.input, @intCast(_.flush)),
-            .ZSTD_DECOMPRESS => c.ZSTD_decompressStream(@ptrCast(_.state), &_.output, &_.input),
-            else => @panic("unreachable"),
-        };
+        unsafe {
+            _.remaining = switch (_.mode) {
+                .ZSTD_COMPRESS => c.ZSTD_compressStream2(@ptrCast(_.state), &_.output, &_.input, @intCast(_.flush)),
+                .ZSTD_DECOMPRESS => c.ZSTD_decompressStream(@ptrCast(_.state), &_.output, &_.input),
+                else => @panic("unreachable"),
+            };
+        }
     }
 
     pub fn updateWriteResult(*_, avail_in: *u32, avail_out: *u32) {
@@ -160,11 +172,13 @@ pub struct Context {
     }
 
     pub fn close(*_) {
-        * = switch (_.mode) {
-            .ZSTD_COMPRESS => c.ZSTD_CCtx_reset(@ptrCast(_.state), c.ZSTD_reset_session_and_parameters),
-            .ZSTD_DECOMPRESS => c.ZSTD_DCtx_reset(@ptrCast(_.state), c.ZSTD_reset_session_and_parameters),
-            else => unreachable,
-        };
+        unsafe {
+            * = switch (_.mode) {
+                .ZSTD_COMPRESS => c.ZSTD_CCtx_reset(@ptrCast(_.state), c.ZSTD_reset_session_and_parameters),
+                .ZSTD_DECOMPRESS => c.ZSTD_DCtx_reset(@ptrCast(_.state), c.ZSTD_reset_session_and_parameters),
+                else => unreachable,
+            };
+        }
         _.deinitState();
         _.mode = .NONE;
     }

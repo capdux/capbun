@@ -1252,7 +1252,7 @@ pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice, allocator: s
             return .{ .path = path_opt.? };
     }
     const Tag = _PathOrFileDescriptorTag;
-    const SerializeTag = _PathOrFileDescriptorSerializeTag;
+    pub const SerializeTag = _PathOrFileDescriptorSerializeTag;
 };
 
 pub const Dirent = struct {

@@ -1711,3 +1711,6 @@
 
 ### [2026-11-23] Wave #70 技术要点（`File` `writeFormat` 名称惰性解析）
 - `new File(bits, name)` 将文件名保存在 `store.data.bytes.stored_name` 而 `blob.name` 为 `.Dead`；`Blob.writeFormat` 必须调用 `_.getNameString()` 触发从 `stored_name` 读取并缓存，不可仅检查 `!_.name.isEmpty()`。
+
+### [2026-11-23] Wave #71 技术要点（`Blob` StructuredClone 与 `S3BlobDownloadTask` 顶层化）
+- `S3BlobDownloadTask` 必须声明在 `Blob.cp` 模块顶层（`@root struct Blob` 外部）以便 `cpc` 进行完整 lowering；`_onStructuredCloneSerialize`/`Deserialize` 的版本头（`serialization_version = 3`）与 `File` 元数据序列化恢复后，`structuredClone(new File(...))` 可正确保留 `File` 原型与文件名。

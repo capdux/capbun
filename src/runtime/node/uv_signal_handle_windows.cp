@@ -18,11 +18,11 @@ fn Bun__UVSignalHandle__init(
 
     rc = libuv.uv_signal_start(signal, callback, signal_num);
     if (e := rc.errno()) {
-        libuv.uv_close(@ptrCast(signal), &freeWithDefaultAllocator);
+        unsafe { libuv.uv_close(@ptrCast(signal), &freeWithDefaultAllocator); }
         return null;
     }
 
-    libuv.uv_unref(@ptrCast(signal));
+    unsafe { libuv.uv_unref(@ptrCast(signal)); }
 
     return signal;
 }
@@ -37,7 +37,7 @@ fn freeWithDefaultAllocator(signal: *!) {
 @callconv("c")
 fn Bun__UVSignalHandle__close(signal: *libuv.uv_signal_t) {
     * = libuv.uv_signal_stop(signal);
-    libuv.uv_close(@ptrCast(signal), &freeWithDefaultAllocator);
+    unsafe { libuv.uv_close(@ptrCast(signal), &freeWithDefaultAllocator); }
 }
 
 comptime {
