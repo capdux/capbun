@@ -1714,3 +1714,7 @@
 
 ### [2026-11-23] Wave #71 技术要点（`Blob` StructuredClone 与 `S3BlobDownloadTask` 顶层化）
 - `S3BlobDownloadTask` 必须声明在 `Blob.cp` 模块顶层（`@root struct Blob` 外部）以便 `cpc` 进行完整 lowering；`_onStructuredCloneSerialize`/`Deserialize` 的版本头（`serialization_version = 3`）与 `File` 元数据序列化恢复后，`structuredClone(new File(...))` 可正确保留 `File` 原型与文件名。
+
+### [2026-11-23] Wave #72 技术要点（全仓 `cpc check` 收官）
+- `cpc` 新增 `Expr::Neg` 原生输出 `(-x)` 后，重编 `visitExpr.cp` 与 `toBeCloseTo.cp` 即可让 JS/TS `-0` 字面量保留 IEEE-754 负号位。
+- 经分批只读扫描（170 mtime 滞后 + 340 `runtime/http/bundler/install` + 955 其余目录），全仓所有 `.cp` 模块的 `E0209` 已全部补全 `unsafe {}` 清零。

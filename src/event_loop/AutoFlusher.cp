@@ -23,6 +23,6 @@ export @root struct AutoFlusher {
     pub static fn registerDeferredMicrotaskWithTypeUnchecked(@comptime Type: type, target: *Type, vm: *jsc.VirtualMachine) {
         bun.assert(!target.auto_flusher.registered);
         target.auto_flusher.registered = true;
-        bun.assert(!vm.eventLoop().deferred_tasks.postTask(target, @ptrCast(@alignCast(&Type.onAutoFlush))));
+        bun.assert(!vm.eventLoop().deferred_tasks.postTask(target, unsafe { @ptrCast(@alignCast(&Type.onAutoFlush)) }));
     }
 }

@@ -36,11 +36,11 @@ const PathStringBackingIntType = if (use_small_path_string_) u64 else u128;
     }
 
     /// Create a PathString from a borrowed slice. No allocation occurs.
-    pub inline fn init(str: []const u8): @This() {
+    pub static inline fn init(str: []const u8): @This() {
         @setRuntimeSafety(false);
 
         return {
-            ptr: @as(PointerIntType, @truncate(@intFromPtr(str.ptr))),
+            ptr: @as(PointerIntType, @truncate(unsafe { @intFromPtr(str.ptr) })),
             len: @as(PathInt, @truncate(str.len)),
         };
     }

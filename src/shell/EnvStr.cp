@@ -28,7 +28,7 @@ enum Tag: u16 {
     tag: Tag = .empty,
     len: usize = 0,
 
-    pub inline fn initSlice(str: []const u8): EnvStr {
+    pub static inline fn initSlice(str: []const u8): EnvStr {
         if (str.len == 0)
             // Zero length strings may have invalid pointers, leading to a bad integer cast.
             return { tag: .empty, ptr: 0, len: 0 };
@@ -40,13 +40,13 @@ enum Tag: u16 {
         };
     }
 
-    fn toPtr(ptr_val: *const !): u48 {
-        const num: [8]u8 = @bitCast(@intFromPtr(ptr_val));
+    static fn toPtr(ptr_val: *const !): u48 {
+        const num: [8]u8 = unsafe { @bitCast(@intFromPtr(ptr_val)) };
         return @bitCast(num[0..6].*);
     }
 
     /// Same thing as `initRefCounted` except it duplicates thepassed string
-    pub fn dupeRefCounted(old_str: []const u8): EnvStr {
+    pub static fn dupeRefCounted(old_str: []const u8): EnvStr {
         if (old_str.len == 0)
             return { tag: .empty, ptr: 0, len: 0 };
 
@@ -58,7 +58,7 @@ enum Tag: u16 {
         };
     }
 
-    pub fn initRefCounted(str: []const u8): EnvStr {
+    pub static fn initRefCounted(str: []const u8): EnvStr {
         if (str.len == 0)
             return { tag: .empty, ptr: 0, len: 0 };
 
@@ -116,6 +116,6 @@ enum Tag: u16 {
     }
 
     inline fn castRefCounted(): *RefCountedStr {
-        return @ptrFromInt(@as(usize, @intCast(_.ptr)));
+        return unsafe { @ptrFromInt(@as(usize, @intCast(_.ptr))) };
     }
 }

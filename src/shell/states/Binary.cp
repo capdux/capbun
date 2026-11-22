@@ -67,7 +67,7 @@ pub const ParentPtr = StatePtrUnion(.{
     }
 
     fn start(*_): Yield {
-        log("binary start {x} ({s})", .{@intFromPtr(_), @tagName(_.node.op)});
+        log("binary start {x} ({s})", .{unsafe { @intFromPtr(_) }, @tagName(_.node.op)});
         if (comptime bun.Environment.allow_assert) {
             assert(_.left == null);
             assert(_.right == null);
@@ -140,7 +140,7 @@ pub const ParentPtr = StatePtrUnion(.{
             assert(_.left == null || _.right == null);
             assert(_.currently_executing != null);
         }
-        log("binary child done {x} ({s}) {s}", .{@intFromPtr(_), @tagName(_.node.op), if (_.left == null) "left" else "right"});
+        log("binary child done {x} ({s}) {s}", .{unsafe { @intFromPtr(_) }, @tagName(_.node.op), if (_.left == null) "left" else "right"});
 
         child.deinit();
         _.currently_executing = null;

@@ -66,10 +66,10 @@ pub static struct TestingAPIs {
         bun.sys.sigaction(posix.SIG.USR2, null, &readback);
         bun.sys.sigaction(posix.SIG.USR2, &prev, null);
 
-        const h_inst: f64 = @floatFromInt(@intFromPtr(&sentryHandler));
+        const h_inst: f64 = @floatFromInt(unsafe { @intFromPtr(&sentryHandler) });
         const f_inst: f64 = @floatFromInt(act.flags & posix.SA.RESTART);
         const inst_obj = jsc.JSObject.create({ handler: h_inst, flags: f_inst }, globalThis)?;
-        const h_rb: f64 = @floatFromInt(@intFromPtr(readback.handler.handler));
+        const h_rb: f64 = @floatFromInt(unsafe { @intFromPtr(readback.handler.handler) });
         const f_rb: f64 = @floatFromInt(readback.flags & posix.SA.RESTART);
         const rb_obj = jsc.JSObject.create({ handler: h_rb, flags: f_rb }, globalThis)?;
         const sz: f64 = @floatFromInt(@sizeOf(bun.sys.Sigaction));

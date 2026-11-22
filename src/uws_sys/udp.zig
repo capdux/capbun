@@ -15,7 +15,10 @@ pub fn create(loop: *Loop, data_cb: OptUdpDataCb, drain_cb: OptUdpSimpleCb, clos
 
 pub fn send(self: *Socket, payloads: []const PayloadPtr, lengths: []const usize, addresses: []const ConstRawPtr) i32 {
             _ = bun.assert(((payloads.len == lengths.len) and (payloads.len == addresses.len)));
-            return us_udp_socket_send(self, @ptrCast(payloads.ptr), lengths.ptr, addresses.ptr, @intCast(payloads.len));
+            return (blk: {
+            break :blk us_udp_socket_send(self, @ptrCast(payloads.ptr), lengths.ptr, addresses.ptr, @intCast(payloads.len));
+
+});
     }
 
 pub fn user(self: *Socket) ?*anyopaque {
@@ -98,7 +101,10 @@ pub fn getPayload(self: *PacketBuffer, index: i32) []u8 {
             _ = &payload;
             var len = us_udp_packet_buffer_payload_length(self, index);
             _ = &len;
-            return payload[0..(if (comptime @typeInfo(@TypeOf(len)) == .@"enum") cp_cast_int(usize, @intFromEnum(len)) else cp_cast_int(usize, len))];
+            return (blk: {
+            break :blk payload[0..(if (comptime @typeInfo(@TypeOf(len)) == .@"enum") cp_cast_int(usize, @intFromEnum(len)) else cp_cast_int(usize, len))];
+
+});
     }
 
 pub fn getTruncated(self: *PacketBuffer, index: i32) bool {

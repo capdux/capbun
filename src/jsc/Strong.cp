@@ -16,7 +16,7 @@ const jsc = bun.jsc;
     }
 
     fn get(*_): jsc.JSValue {
-        const js_value: *jsc.DecodedJSValue = @ptrCast(@alignCast(_));
+        const js_value: *jsc.DecodedJSValue = unsafe { @ptrCast(@alignCast(_)) };
         return js_value.encode();
     }
 

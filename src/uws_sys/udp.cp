@@ -42,7 +42,7 @@ export @opaque class Socket {
 
     pub fn send(*_, payloads: []const PayloadPtr, lengths: []const usize, addresses: []const ConstRawPtr): i32 {
         bun.assert(payloads.len == lengths.len && payloads.len == addresses.len);
-        return us_udp_socket_send(this, @ptrCast(payloads.ptr), lengths.ptr, addresses.ptr, @intCast(payloads.len));
+        return unsafe { us_udp_socket_send(this, @ptrCast(payloads.ptr), lengths.ptr, addresses.ptr, @intCast(payloads.len)) };
     }
 
     pub fn user(*_): *!? {
@@ -118,7 +118,7 @@ export @opaque class PacketBuffer {
     pub fn getPayload(*_, index: i32): u8[] {
         let payload = us_udp_packet_buffer_payload(this, index);
         let len = us_udp_packet_buffer_payload_length(this, index);
-        return payload[0..(len as usize)];
+        return unsafe { payload[0..(len as usize)] };
     }
 
     pub fn getTruncated(*_, index: i32): bool {

@@ -218,7 +218,10 @@ pub fn alloc(ptr: *anyopaque, len: usize, _: std.mem.Alignment, _: usize) ?[*]u8
                 return null;
             }
             _ = inst.ref();
-            return @constCast(inst.m_ptr.latin1);
+            return (blk: {
+            break :blk @constCast(inst.m_ptr.latin1);
+
+});
     }
 
 pub fn free(ptr: *anyopaque, buf: []u8, _: std.mem.Alignment, _: usize) void {

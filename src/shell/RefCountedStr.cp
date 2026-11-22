@@ -18,31 +18,31 @@ static fn init(slice: []const u8): *RefCountedStr {
     return res;
 }
 
-pub fn byteSlice(client: *RefCountedStr): []const u8 {
-    if (client.len == 0) return "";
-    return client.ptr[0..client.len];
+pub fn byteSlice(): []const u8 {
+    if (_.len == 0) return "";
+    return unsafe { _.ptr[0.._.len] };
 }
 
-pub fn ref(client: *RefCountedStr) {
-    client.refcount += 1;
+pub fn ref(*_) {
+    _.refcount += 1;
 }
 
-pub fn deref(client: *RefCountedStr) {
-    client.refcount -= 1;
-    if (client.refcount == 0) {
-        client.deinit();
+pub fn deref(*_) {
+    _.refcount -= 1;
+    if (_.refcount == 0) {
+        _.deinit();
     }
 }
 
-fn deinit(client: *RefCountedStr) {
-    debug("deinit: {s}", .{client.byteSlice()});
-    client.freeStr();
-    bun.default_allocator.destroy(client);
+fn deinit(*_) {
+    debug("deinit: {s}", .{_.byteSlice()});
+    _.freeStr();
+    bun.default_allocator.destroy(_);
 }
 
-fn freeStr(client: *RefCountedStr) {
-    if (client.len == 0) return;
-    bun.default_allocator.free(client.ptr[0..client.len]);
+fn freeStr(*_) {
+    if (_.len == 0) return;
+    bun.default_allocator.free(unsafe { _.ptr[0.._.len] });
 }
 
 

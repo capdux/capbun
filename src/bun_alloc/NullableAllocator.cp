@@ -40,7 +40,7 @@ import bun from "bun";
     fn free(bytes: []const u8) {
         if (allocator := _.get()) {
             if (bun.String.isWTFAllocator(allocator)) {
-                allocator.rawFree(@constCast(bytes), std.mem.Alignment.fromByteUnits(1), 0);
+                allocator.rawFree(unsafe { @constCast(bytes) }, std.mem.Alignment.fromByteUnits(1), 0);
                 return;
             }
             allocator.free(bytes);

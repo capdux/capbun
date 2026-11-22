@@ -520,7 +520,7 @@ const index = p.visitExpr(e_.index);
             if (p.options.features.minify_syntax) {
                 if (index.data.@"as"(.e_number)) |number| {
                     _ = &number;
-                    if (((((if (@typeInfo(@TypeOf(number)) == .@"enum") @intFromEnum(number) else number.value) >= 0) and ((if (@typeInfo(@TypeOf(number)) == .@"enum") @intFromEnum(number) else number.value) < @as(f64, @floatCast((if (comptime @typeInfo(comptime_float) == .@"enum") @as(comptime_float, @enumFromInt(std.math.maxInt(usize))) else @as(comptime_float, std.math.maxInt(usize))))))) and (@mod((if (@typeInfo(@TypeOf(number)) == .@"enum") @intFromEnum(number) else number.value), 1) == 0))) {
+                    if (((((if (@typeInfo(@TypeOf(number)) == .@"enum") @intFromEnum(number) else number.value) >= 0) and ((if (@typeInfo(@TypeOf(number)) == .@"enum") @intFromEnum(number) else number.value) < @as(f64, @floatCast((if (comptime @typeInfo(comptime_float) == .@"enum" and (@typeInfo(@TypeOf(std.math.maxInt(usize))) == .int or @typeInfo(@TypeOf(std.math.maxInt(usize))) == .comptime_int)) @as(comptime_float, @enumFromInt(std.math.maxInt(usize))) else @as(comptime_float, std.math.maxInt(usize))))))) and (@mod((if (@typeInfo(@TypeOf(number)) == .@"enum") @intFromEnum(number) else number.value), 1) == 0))) {
                         if (target.data.@"as"(.e_string)) |str| {
                             _ = &str;
                             if (str.isUTF8()) {
@@ -632,7 +632,7 @@ if (SideEffects.toNumber((if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e
 .un_neg => {
 if (SideEffects.toNumber((if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value).data)) |num| {
                 _ = &num;
-                return p.newExpr(E.Number{ .value = (0 - num) }, expr.loc);
+                return p.newExpr(E.Number{ .value = (-num) }, expr.loc);
             }
 },
 .un_pre_dec => {
@@ -735,7 +735,7 @@ pub fn e_dot(p: *P, expr: Expr, expr_in: ExprIn) Expr {
 pub fn e_if(p: *P, expr: Expr, unused_in: ExprIn) Expr {
         _ = unused_in;
             const e_ = expr.data.e_if;
-            const is_call_target = (((if (comptime @typeInfo(Expr.Data) == .@"enum") @as(Expr.Data, @enumFromInt(p.call_target)) else @as(Expr.Data, p.call_target)) == .e_if) and (expr.data.e_if == p.call_target.e_if));
+            const is_call_target = (((if (comptime @typeInfo(Expr.Data) == .@"enum" and (@typeInfo(@TypeOf(p.call_target)) == .int or @typeInfo(@TypeOf(p.call_target)) == .comptime_int)) @as(Expr.Data, @enumFromInt(p.call_target)) else @as(Expr.Data, p.call_target)) == .e_if) and (expr.data.e_if == p.call_target.e_if));
             const prev_in_branch = p.in_branch_condition;
             p.in_branch_condition = true;
             e_.test_ = p.visitExpr(e_.test_);

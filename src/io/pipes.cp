@@ -56,7 +56,7 @@ pub enum PollOrFd {
                 }
             }
             if (comptime (@TypeOf(onCloseFn) != void && @TypeOf(onCloseFn) != @TypeOf(.{}))) {
-                onCloseFn(@ptrCast(@alignCast(ctx.?)));
+                onCloseFn(unsafe { @ptrCast(@alignCast(ctx.?)) });
             }
         } else {
             this.* = .closed;

@@ -241,7 +241,7 @@ export struct StringImplAllocator {
 
         inst.ref();
 
-        return @constCast(inst.m_ptr.latin1);
+        return unsafe { @constCast(inst.m_ptr.latin1) };
     }
 
     pub static fn free(

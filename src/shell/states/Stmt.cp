@@ -63,7 +63,7 @@ pub const ChildPtr = StatePtrUnion(.{
         script.last_exit_code = null;
         script.currently_executing = null;
         script.io = io;
-        log("Stmt(0x{x}) init", .{@intFromPtr(script)});
+        log("Stmt(0x{x}) init", .{unsafe { @intFromPtr(script) }});
         return script;
     }
 
@@ -134,7 +134,7 @@ pub const ChildPtr = StatePtrUnion(.{
 
     fn childDone(*_, child: ChildPtr, exit_code: ExitCode): Yield {
         const data = child.ptr.repr.data;
-        log("child done Stmt {x} child({s})={x} exit={d}", .{@intFromPtr(_), child.tagName(), @as(usize, @intCast(child.ptr.repr._ptr)), exit_code});
+        log("child done Stmt {x} child({s})={x} exit={d}", .{unsafe { @intFromPtr(_) }, child.tagName(), @as(usize, @intCast(child.ptr.repr._ptr)), exit_code});
         _.last_exit_code = exit_code;
         _.idx += 1;
         const data2 = child.ptr.repr.data;
@@ -145,7 +145,7 @@ pub const ChildPtr = StatePtrUnion(.{
     }
 
     fn deinit(*_) {
-        log("Stmt(0x{x}) deinit", .{@intFromPtr(_)});
+        log("Stmt(0x{x}) deinit", .{unsafe { @intFromPtr(_) }});
         _.io.deinit();
         if (child := _.currently_executing) {
             child.deinit();

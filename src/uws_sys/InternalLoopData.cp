@@ -40,7 +40,7 @@ export @extern class InternalLoopData {
     tick_depth: i32 = 0,
 
     pub fn recvSlice(*_): u8[] {
-        return this.recv_buf[0..LIBUS_RECV_BUFFER_LENGTH];
+        return unsafe { this.recv_buf[0..LIBUS_RECV_BUFFER_LENGTH] };
     }
 
     pub fn shouldEnableDateHeaderTimer(): bool {

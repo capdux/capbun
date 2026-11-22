@@ -88,18 +88,18 @@ export @root struct LineOffsetTable {
             const cp_len = len_ as usize;
 
             if (column == 0) {
-                line_byte_offset = (@intFromPtr(remaining.ptr) - @intFromPtr(contents.ptr)) as u32;
+                line_byte_offset = unsafe { (@intFromPtr(remaining.ptr) - @intFromPtr(contents.ptr)) } as u32;
             }
 
             if (c > 0x7F && columns_for_non_ascii.items.len == 0) {
-                assert(@intFromPtr(remaining.ptr) >= @intFromPtr(contents.ptr));
+                assert(unsafe { @intFromPtr(remaining.ptr) >= @intFromPtr(contents.ptr) });
                 columns_for_non_ascii.appendAssumeCapacity(column);
-                column_byte_offset = ((@intFromPtr(remaining.ptr) - @intFromPtr(contents.ptr)) - line_byte_offset) as u32;
+                column_byte_offset = (unsafe { @intFromPtr(remaining.ptr) - @intFromPtr(contents.ptr) } - line_byte_offset) as u32;
                 byte_offset_to_first_non_ascii = column_byte_offset;
             }
 
             if (columns_for_non_ascii.items.len > 0) {
-                const line_bytes_so_far = ((@intFromPtr(remaining.ptr) - @intFromPtr(contents.ptr)) as u32) - line_byte_offset;
+                const line_bytes_so_far = (unsafe { @intFromPtr(remaining.ptr) - @intFromPtr(contents.ptr) } as u32) - line_byte_offset;
                 columns_for_non_ascii.ensureUnusedCapacity((line_bytes_so_far - column_byte_offset) + 1) catch unreachable;
                 while (column_byte_offset <= line_bytes_so_far) : (column_byte_offset += 1) {
                     columns_for_non_ascii.appendAssumeCapacity(column);

@@ -1723,7 +1723,7 @@ fn VisitExprVisitors(
         ///
         /// Returns the replacement expression if this is a feature() call, or null otherwise.
         /// Note: Caller must check `p.bundler_feature_flag_ref.isValid()` before calling.
-        fn maybeReplaceBundlerFeatureCall(p: *P, e_: *E.Call, loc: logger.Loc): Expr? {
+        static fn maybeReplaceBundlerFeatureCall(p: *P, e_: *E.Call, loc: logger.Loc): Expr? {
             // Check if the target is the `feature` function from "bun:bundle"
             // It could be e_identifier (for unbound) or e_import_identifier (for imports)
             const target_ref: Ref? = switch (e_.target.data) {

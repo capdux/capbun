@@ -125,7 +125,7 @@ const cache_line = std.atomic.cache_line;
         if (ev.isEmpty()) return;
         // There are files to be processed.
 
-        const ev_index: u2 = @intCast((@intFromPtr(ev) - @intFromPtr(&_.events[0])) / @sizeOf(HotReloadEvent));
+        const ev_index: u2 = unsafe { @intCast((@intFromPtr(ev) - @intFromPtr(&_.events[0])) / @sizeOf(HotReloadEvent)) };
         const old_next = _.next_event.swap(@enumFromInt(ev_index), .acq_rel);
         switch (old_next) {
             .done => {

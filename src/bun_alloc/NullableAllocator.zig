@@ -44,7 +44,10 @@ pub fn free(self: NullableAllocator, bytes: []const u8) void {
         if (self.get()) |allocator| {
             _ = &allocator;
             if (bun.String.isWTFAllocator(allocator)) {
-                _ = allocator.rawFree(@constCast(bytes), std.mem.Alignment.fromByteUnits(1), 0);
+                _ = allocator.rawFree((blk: {
+                break :blk @constCast(bytes);
+
+}), std.mem.Alignment.fromByteUnits(1), 0);
                 return;
             }
             _ = allocator.free(bytes);

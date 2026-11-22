@@ -19,34 +19,40 @@ pub fn init(slice: []const u8) *RefCountedStr {
         return res;
 }
 
-pub fn byteSlice(client: *RefCountedStr) []const u8 {
-        if ((client.len == 0)) {
+pub fn byteSlice(self: *const RefCountedStr) []const u8 {
+        if ((self.len == 0)) {
             return "";
         }
-        return client.ptr[0..client.len];
+        return (blk: {
+        break :blk self.ptr[0..self.len];
+
+});
 }
 
-pub fn ref(client: *RefCountedStr) void {
-        client.refcount = (client.refcount + 1);
+pub fn ref(self: *RefCountedStr) void {
+        self.refcount = (self.refcount + 1);
 }
 
-pub fn deref(client: *RefCountedStr) void {
-        client.refcount = (client.refcount - 1);
-        if ((client.refcount == 0)) {
-            _ = client.deinit();
+pub fn deref(self: *RefCountedStr) void {
+        self.refcount = (self.refcount - 1);
+        if ((self.refcount == 0)) {
+            _ = self.deinit();
         }
 }
 
-pub fn deinit(client: *RefCountedStr) void {
-        _ = debug("deinit: {s}", .{ client.byteSlice() });
-        _ = client.freeStr();
-        _ = bun.default_allocator.destroy(client);
+pub fn deinit(self: *RefCountedStr) void {
+        _ = debug("deinit: {s}", .{ self.byteSlice() });
+        _ = self.freeStr();
+        _ = bun.default_allocator.destroy(self);
 }
 
-pub fn freeStr(client: *RefCountedStr) void {
-        if ((client.len == 0)) {
+pub fn freeStr(self: *RefCountedStr) void {
+        if ((self.len == 0)) {
             return;
         }
-        _ = bun.default_allocator.free(client.ptr[0..client.len]);
+        _ = bun.default_allocator.free((blk: {
+        break :blk self.ptr[0..self.len];
+
+}));
 }
 const debug = bun.Output.scoped(.RefCountedEnvStr, .hidden);

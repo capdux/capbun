@@ -45,7 +45,7 @@ pub struct DecodeResult {
         jsc.markBinding(@src());
         let len: usize = 0;
         const name = Bun__getCanonicalEncodingName(encoding.ptr, encoding.len, &len) ?? return null;
-        return name[0..len];
+        return unsafe { name[0..len] };
     }
 }
 

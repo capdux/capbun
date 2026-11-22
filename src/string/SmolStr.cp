@@ -19,7 +19,7 @@ const SmolStrNegatedTag: usize = ~SmolStrTag;
 
     /// ## Errors
     /// if `str` is longer than `max_len`
-    pub fn init(str: []const u8): !SmolStrInlined {
+    pub static fn init(str: []const u8): !SmolStrInlined {
         if (str.len > inlined_max_len) {
             @branchHint(.unlikely);
             return err.StringTooLong;
@@ -79,13 +79,13 @@ const smol_inlined_empty = SmolStrInlined{
         writer.write(this.slice())?;
     }
 
-    pub fn empty(): SmolStr {
+    pub static fn empty(): SmolStr {
         return SmolStr.fromInlined(Inlined.empty);
     }
 
     pub fn len(_: *const SmolStr): u32 {
         if (this.isInlined()) {
-            return @intCast((@intFromPtr(this.__ptr) >> 56) & 0b01111111);
+            return @intCast((unsafe { @intFromPtr(this.__ptr) } >> 56) & 0b01111111);
         }
 
         return this.__len;
@@ -108,7 +108,7 @@ const smol_inlined_empty = SmolStrInlined{
     }
 
     pub fn isInlined(_: *const SmolStr): bool {
-        return (@as(usize, @intFromPtr(this.__ptr)) & SmolStrTag) != 0;
+        return (@as(usize, unsafe { @intFromPtr(this.__ptr) }) & SmolStrTag) != 0;
     }
 
     /// ## Panics
@@ -120,7 +120,7 @@ const smol_inlined_empty = SmolStrInlined{
         return inlined;
     }
 
-    pub fn fromBabyList(baby_list: BabyList(u8)): SmolStr {
+    pub static fn fromBabyList(baby_list: BabyList(u8)): SmolStr {
         let smol_str: SmolStr = {
             __len: baby_list.len,
             cap: baby_list.cap,
@@ -130,13 +130,13 @@ const smol_inlined_empty = SmolStrInlined{
         return smol_str;
     }
 
-    pub fn fromInlined(inlined: Inlined): SmolStr {
+    pub static fn fromInlined(inlined: Inlined): SmolStr {
         let smol_str: SmolStr = @bitCast(inlined);
         smol_str.markInlined();
         return smol_str;
     }
 
-    pub fn fromChar(char: u8): SmolStr {
+    pub static fn fromChar(char: u8): SmolStr {
         let inlined = Inlined{
             data: 0,
             __len: 1,
@@ -155,7 +155,7 @@ const smol_inlined_empty = SmolStrInlined{
         }
     }
 
-    pub fn fromSlice(allocator: Allocator, values: []const u8): Allocator.Error!SmolStr {
+    pub static fn fromSlice(allocator: Allocator, values: []const u8): Allocator.Error!SmolStr {
         if (values.len > Inlined.max_len) {
             let baby_list = BabyList(u8).initCapacity(allocator, values.len)?;
             baby_list.appendSliceAssumeCapacity(values);

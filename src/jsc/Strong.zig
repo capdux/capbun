@@ -14,7 +14,10 @@ pub fn init(global: *jsc.JSGlobalObject, value: jsc.JSValue) *Impl {
     }
 
 pub fn get(self: *Impl) jsc.JSValue {
-            const js_value: *jsc.DecodedJSValue = @ptrCast(@alignCast(self));
+            const js_value: *jsc.DecodedJSValue = (blk: {
+            break :blk @ptrCast(@alignCast(self));
+
+});
             return js_value.encode();
     }
 

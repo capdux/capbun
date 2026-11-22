@@ -19,42 +19,42 @@ onBeforeDeinit: Callback? = null,
 pub const Hash = u32;
 pub const Map = std.HashMap(Hash, *RefString, bun.IdentityContext(Hash), 80);
 
-pub fn toJS(client: *RefString, global: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
-    return bun.String.init(client.@"impl").toJS(global);
+pub fn toJS(*_, global: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
+    return bun.String.init(_.@"impl").toJS(global);
 }
 
 pub const Callback = fn (ctx: *!, str: *RefString) void;
 
-pub fn computeHash(input: []const u8): u32 {
+pub static fn computeHash(input: []const u8): u32 {
     return std.hash.XxHash32.hash(0, input);
 }
 
-pub fn slice(client: *RefString): []const u8 {
-    client.ref();
+pub fn slice(*_): []const u8 {
+    _.ref();
 
-    return client.leak();
+    return _.leak();
 }
 
-pub fn ref(client: *RefString) {
-    client.@"impl".ref();
+pub fn ref(*_) {
+    _.@"impl".ref();
 }
 
-pub fn leak(client: RefString): []const u8 {
+pub fn leak(): []const u8 {
     @setRuntimeSafety(false);
-    return client.ptr[0..client.len];
+    return unsafe { _.ptr[0.._.len] };
 }
 
-pub fn deref(client: *RefString) {
-    client.@"impl".deref();
+pub fn deref(*_) {
+    _.@"impl".deref();
 }
 
-pub fn deinit(client: *RefString) {
-    if (onBeforeDeinit := client.onBeforeDeinit) {
-        onBeforeDeinit(client.ctx.?, client);
+pub fn deinit(*_) {
+    if (onBeforeDeinit := _.onBeforeDeinit) {
+        onBeforeDeinit(_.ctx.?, _);
     }
 
-    client.allocator.free(client.leak());
-    client.allocator.destroy(client);
+    _.allocator.free(_.leak());
+    _.allocator.destroy(_);
 }
 
 

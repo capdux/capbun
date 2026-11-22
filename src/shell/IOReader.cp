@@ -70,11 +70,11 @@ pub struct AsyncDeinitReader {
     }
 
     fn reader(*_): *IOReader {
-        return @alignCast(@fieldParentPtr("async_deinit", _));
+        return unsafe { @alignCast(@fieldParentPtr("async_deinit", _)) };
     }
 
     fn runFromMainThread(*_) {
-        const ioreader: *IOReader = @alignCast(@fieldParentPtr("async_deinit", _));
+        const ioreader: *IOReader = unsafe { @alignCast(@fieldParentPtr("async_deinit", _)) };
         ioreader.asyncDeinitCallback();
     }
 
@@ -105,27 +105,27 @@ started: bool = false,
 pub const ChildPtr = IOReaderChildPtr;
 pub const ReaderImpl = bun.io.BufferedReader;
 
-pub fn dupeRef(client: *IOReader): *IOReader {
-    client.ref();
-    return client;
+pub fn dupeRef(*_): *IOReader {
+    _.ref();
+    return _;
 }
 
-pub fn memoryCost(client: *const IOReader): usize {
+pub fn memoryCost(): usize {
     let size: usize = @sizeOf(IOReader);
-    size += client.buf.allocatedSlice().len;
-    size += client.readers.memoryCost();
+    size += _.buf.allocatedSlice().len;
+    size += _.readers.memoryCost();
     return size;
 }
 
-pub fn eventLoop(client: *IOReader): jsc.EventLoopHandle {
-    return client.evtloop;
+pub fn eventLoop(*_): jsc.EventLoopHandle {
+    return _.evtloop;
 }
 
-pub fn loop(client: *IOReader): *bun.Async.Loop {
+pub fn loop(*_): *bun.Async.Loop {
     if (comptime bun.Environment.isWindows) {
-        return client.evtloop.loop().uv_loop;
+        return _.evtloop.loop().uv_loop;
     } else {
-        return client.evtloop.loop();
+        return _.evtloop.loop();
     }
 }
 
@@ -138,7 +138,7 @@ static fn init(fd: bun.FD, evtloop: jsc.EventLoopHandle): *IOReader {
         concurrent_task: jsc.EventLoopTask.fromEventLoop(evtloop),
         async_deinit: {},
     });
-    log("IOReader(0x{x}, fd={f}) create", .{ @intFromPtr(reader), fd });
+    log("IOReader(0x{x}, fd={f}) create", .{ unsafe { @intFromPtr(reader) }, fd });
 
     if (bun.Environment.isPosix) {
         reader.reader.flags.close_handle = false;
@@ -153,61 +153,61 @@ static fn init(fd: bun.FD, evtloop: jsc.EventLoopHandle): *IOReader {
 }
 
 /// Idempotent function to start the reading
-pub fn start(client: *IOReader): Yield {
-    client.started = true;
+pub fn start(*_): Yield {
+    _.started = true;
     if (bun.Environment.isPosix) {
-        if (client.reader.handle == .closed || !client.reader.handle.poll.isRegistered()) {
-            if (e := client.reader.start(client.fd, true).asErr()) {
-                client.onReaderError(e);
+        if (_.reader.handle == .closed || !_.reader.handle.poll.isRegistered()) {
+            if (e := _.reader.start(_.fd, true).asErr()) {
+                _.onReaderError(e);
             }
         }
         return .suspended;
     }
 
-    if (client.is_reading) return .suspended;
-    client.is_reading = true;
-    if (e := client.reader.startWithCurrentPipe().asErr()) {
-        client.onReaderError(e);
+    if (_.is_reading) return .suspended;
+    _.is_reading = true;
+    if (e := _.reader.startWithCurrentPipe().asErr()) {
+        _.onReaderError(e);
         return .failed;
     }
     return .suspended;
 }
 
 /// Only does things on windows
-pub inline fn setReading(client: *IOReader, reading: bool) {
+pub inline fn setReading(*_, reading: bool) {
     if (bun.Environment.isWindows) {
-        log("IOReader(0x{x}) setReading({})", .{ @intFromPtr(client), reading });
-        client.is_reading = reading;
+        log("IOReader(0x{x}) setReading({})", .{ unsafe { @intFromPtr(_) }, reading });
+        _.is_reading = reading;
     }
 }
 
-pub fn addReader(client: *IOReader, reader_: auto) {
+pub fn addReader(*_, reader_: auto) {
     const reader: ChildPtr = if (@TypeOf(reader_) == ChildPtr) reader_ else ChildPtr.init(reader_);
 
-    const slice = client.readers.slice();
-    const usize_ptr: [*]const usize = @ptrCast(@alignCast(slice.ptr));
+    const slice = _.readers.slice();
+    const usize_ptr: [*]const usize = unsafe { @ptrCast(@alignCast(slice.ptr)) };
     const usize_slice = unsafe { usize_ptr[0..slice.len] };
-    const ptr_usize: usize = @intFromPtr(reader.ptr.ptr());
+    const ptr_usize: usize = unsafe { @intFromPtr(reader.ptr.ptr()) };
     // Only add if it hasn't been added yet
     if (std.mem.indexOfScalar(usize, usize_slice, ptr_usize) == null) {
-        client.readers.append(reader);
+        _.readers.append(reader);
     }
 }
 
-pub fn removeReader(client: *IOReader, reader_: auto) {
+pub fn removeReader(*_, reader_: auto) {
     const reader = if (@TypeOf(reader_) == ChildPtr) reader_ else ChildPtr.init(reader_);
-    const slice = client.readers.slice();
-    const usize_ptr: [*]const usize = @ptrCast(@alignCast(slice.ptr));
+    const slice = _.readers.slice();
+    const usize_ptr: [*]const usize = unsafe { @ptrCast(@alignCast(slice.ptr)) };
     const usize_slice = unsafe { usize_ptr[0..slice.len] };
-    const ptr_usize: usize = @intFromPtr(reader.ptr.ptr());
+    const ptr_usize: usize = unsafe { @intFromPtr(reader.ptr.ptr()) };
     if (idx := std.mem.indexOfScalar(usize, usize_slice, ptr_usize)) {
-        client.readers.swapRemove(idx);
+        _.readers.swapRemove(idx);
     }
 }
 
-pub fn onReadChunk(ptr: *!, chunk: []const u8, has_more: bun.io.ReadState): bool {
-    let client: *IOReader = @ptrCast(@alignCast(ptr));
-    log("IOReader(0x{x}, fd={f}) onReadChunk(chunk_len={d}, has_more={s})", .{ @intFromPtr(client), client.fd, chunk.len, @tagName(has_more) });
+pub static fn onReadChunk(ptr: *!, chunk: []const u8, has_more: bun.io.ReadState): bool {
+    let client: *IOReader = unsafe { @ptrCast(@alignCast(ptr)) };
+    log("IOReader(0x{x}, fd={f}) onReadChunk(chunk_len={d}, has_more={s})", .{ unsafe { @intFromPtr(client) }, client.fd, chunk.len, @tagName(has_more) });
     client.setReading(false);
 
     let i: usize = 0;
@@ -242,14 +242,14 @@ pub fn onReadChunk(ptr: *!, chunk: []const u8, has_more: bun.io.ReadState): bool
     return should_continue;
 }
 
-pub fn onReaderError(client: *IOReader, e: bun.sys.Error) {
-    log("IOReader(0x{x}.onReaderError({f}) ", .{ @intFromPtr(client), e });
-    client.setReading(false);
-    client.e = e.toShellSystemError();
-    for (r of client.readers.slice()) {
+pub fn onReaderError(*_, e: bun.sys.Error) {
+    log("IOReader(0x{x}.onReaderError({f}) ", .{ unsafe { @intFromPtr(_) }, e });
+    _.setReading(false);
+    _.e = e.toShellSystemError();
+    for (r of _.readers.slice()) {
         let err_copy: jsc.SystemError? = null;
-        if (client.e != null) {
-            let ev = client.e.?;
+        if (_.e != null) {
+            let ev = _.e.?;
             ev.ref();
             err_copy = ev;
         }
@@ -258,13 +258,13 @@ pub fn onReaderError(client: *IOReader, e: bun.sys.Error) {
     }
 }
 
-pub fn onReaderDone(client: *IOReader) {
-    log("IOReader(0x{x}) done", .{@intFromPtr(client)});
-    client.setReading(false);
-    for (r of client.readers.slice()) {
+pub fn onReaderDone(*_) {
+    log("IOReader(0x{x}) done", .{unsafe { @intFromPtr(_) }});
+    _.setReading(false);
+    for (r of _.readers.slice()) {
         let err_copy: jsc.SystemError? = null;
-        if (client.e != null) {
-            let ev = client.e.?;
+        if (_.e != null) {
+            let ev = _.e.?;
             ev.ref();
             err_copy = ev;
         }
@@ -274,7 +274,7 @@ pub fn onReaderDone(client: *IOReader) {
 }
 
 fn asyncDeinit(*_) {
-    log("IOReader(0x{x}) asyncDeinit", .{@intFromPtr(_)});
+    log("IOReader(0x{x}) asyncDeinit", .{unsafe { @intFromPtr(_) }});
     // The async hop guards against being deref'd from inside a read callback while
     // BufferedReader is still iterating. If we never started reading, no callback can be
     // in flight, so close synchronously to avoid holding the fd until the next tick.
@@ -299,7 +299,7 @@ fn asyncDeinitCallback(*_) {
             if (_.reader.handle == .poll) {
                 _.reader.handle.closeImpl(null, {}, false);
             }
-            log("IOReader(0x{x}) __deinit fd={f}", .{ @intFromPtr(_), _.fd });
+            log("IOReader(0x{x}) __deinit fd={f}", .{ unsafe { @intFromPtr(_) }, _.fd });
             _.fd.close();
         }
     }

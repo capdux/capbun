@@ -2163,3 +2163,6 @@
 
 ### [2026-11-23] Wave #71（补全 `Blob.cp` S3/StructuredClone、修复 6 处 `E0209` 与 Batch 1c `test` 回归）
 - 补全 `Blob.cp`（`onStructuredCloneSerialize`/`Deserialize`、`doReadFromS3` 与 `S3BlobDownloadTask`），修复 `h3_client/callbacks.cp`、`UnsafeObject.cp`、`crash_handler_jsc.cp`、`standalone_graph_jsc.cp`、`uv_signal_handle_windows.cp`、`NativeZstd.cp` 的 `E0209` `unsafe`，通过 `bun run zig:check`（5/5）；完成 `test/js/bun/test` 75 文件回归（926 pass / 28 fail / 17 skip / 455 todo，零崩溃）。
+
+### [2026-11-23] Wave #72（全仓 `cpc check` 100% 清零 21 处 `E0209` 与重编 `visitExpr`/`toBeCloseTo` 保留 `-0.0`）
+- 用新版 `cpc` 重编 `visitExpr.cp` 与 `toBeCloseTo.cp`（保留 `-0.0`），并修复全仓最后 21 个 `E0209` `unsafe {}` 文件（全仓 1,295 个 `.cp` 实现 100% `cpc check` 通过），通过 `bun run zig:check`（5/5）与 `inspect.test.js`（72/72 全绿）。

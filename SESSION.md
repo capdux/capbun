@@ -637,3 +637,13 @@
 
 ### [2026-11-23] 向 `cp_agy` 提交一元负号 `-x` 被 lowering 为 `(0 - x)` 缺陷工单
 - `task-bun-20261123-unary-neg-zero-float` (`repro_unary_neg_zero.cp`)：一元负号 `-x` 被 `cpc` 编译为 `(0 - x)`，导致 IEEE-754 浮点 `-0.0` 变为 `+0.0`，引起 `src/js_parser/ast/visitExpr.cp` 将所有 JS/TS `-0` 字面量折叠为 `+0`。
+
+### [2026-11-23] 收到 `cp_agy` 结单验收通知（`task-bun-20261123-unary-neg-zero-float`）
+- 根因为 `parser/primary.rs` 将一元负号 `-x` 降低为 `BinExpr(0 - x)`；现已在 parser/sema/codegen 全链路新增 `Expr::Neg` 原生生成 `(-x)`（保留 IEEE-754 `-0.0` 符号位），已验证通过并执行 `ack`（待当前测试路返回后立即重编 `visitExpr.cp` 与 `toBeCloseTo.cp`）。
+
+## [2026-11-23] Wave #72：`inspect.test.js` 全绿、全仓 `cpc check` 100% 清零（21 处 `E0209`）与 `-0.0` 重编完成与提交
+- 完成全仓剩余 955 个 `.cp` 模块 `cpc check --brief` 预检（全仓 1,295 个 `.cp` 覆盖完毕），并完成 23 个模块修复与重编（均通过 `cpc_brief.py` 4 项门禁 + `bun run zig:check` 5/5 通过）：
+  - 重编保留 `-0.0` 符号位：`src/js_parser/ast/visitExpr.cp`、`src/test_runner/expect/toBeCloseTo.cp`；
+  - 补充 `unsafe {}` 消除全仓最后 21 个 `E0209`：`WatcherAtomics.cp`、`NullableAllocator.cp`、`output_file_jsc.cp`、`AnyEventLoop.cp`、`AutoFlusher.cp`、`pipes.cp`、`RefString.cp`、`Strong.cp`、`TextCodec.cp`、`EnvStr.cp`、`IOReader.cp`、`RefCountedStr.cp`、`Binary.cp`、`Stmt.cp`、`LineOffsetTable.cp`、`PathString.cp`、`SmolStr.cp`、`wtf.cp`、`error_jsc.cp`、`InternalLoopData.cp`、`udp.cp`。
+- 验证：`inspect.test.js` **72/72 全绿通过**；Batch 2a（`test/js/web/fetch` 46 文件）9,820 pass / 255 fail（`fetch.test.ts` `AbortAfterFinish` 处触发 `StructureID::decode` `decontaminate()` SIGABRT）；`bun run zig:check` 5/5 通过（29s）。
+- 推导下一阶段 Wave #73：Subagent 1 验证 `-0.0` 修复（`expect.test.js` / `test-test.test.ts` / `moremore.test.ts` / `jest-extended.test.js`）及 `fetch.test.ts` 独立复现；Subagent 2 只读排查 `fetch.test.ts` `decontaminate()` SIGABRT 与 `fetch.stream.test.ts` 108 超时的根因。

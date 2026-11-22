@@ -111,7 +111,7 @@ pub fn toJS(
             break :brk build_output.toJS(globalObject);
         },
         .buffer => |buffer| brk: {
-            let blob = jsc.WebCore.Blob.init(@constCast(buffer.bytes), buffer.allocator, globalObject);
+            let blob = jsc.WebCore.Blob.init(unsafe { @constCast(buffer.bytes) }, buffer.allocator, globalObject);
             if (blob.store != null) {
                 blob.store.?.mime_type = out.loader.toMimeType(&[owned_pathname ?? ""]);
                 blob.content_type = blob.store.?.mime_type.value;
@@ -194,7 +194,7 @@ pub fn toBlob(
             break :brk jsc.WebCore.Blob.initWithStore(file_blob, globalThis);
         },
         .buffer => |buffer| brk: {
-            let blob = jsc.WebCore.Blob.init(@constCast(buffer.bytes), buffer.allocator, globalThis);
+            let blob = jsc.WebCore.Blob.init(unsafe { @constCast(buffer.bytes) }, buffer.allocator, globalThis);
             if (blob.store != null) {
                 blob.store.?.mime_type = out.loader.toMimeType(&[out.dest_path, out.src_path.text]);
                 blob.content_type = blob.store.?.mime_type.value;

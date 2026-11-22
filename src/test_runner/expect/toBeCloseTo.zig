@@ -102,15 +102,15 @@ pub fn toBeCloseTo(client: *Expect, globalThis: *JSGlobalObject, callFrame: *Cal
         var received = received_.asNumber();
         _ = &received;
         if (std.math.isNegativeInf(expected)) {
-            expected = (0 - expected);
+            expected = (-expected);
         }
         if (std.math.isNegativeInf(received)) {
-            received = (0 - received);
+            received = (-received);
         }
         if ((std.math.isPositiveInf(expected) and std.math.isPositiveInf(received))) {
             return JSValue.js_undefined;
         }
-        const expected_diff = (bun.pow(10, (0 - precision)) / 2);
+        const expected_diff = (bun.pow(10, (-precision)) / 2);
         const actual_diff = @abs((received - expected));
         var pass = (actual_diff < expected_diff);
         _ = &pass;

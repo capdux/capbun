@@ -76,7 +76,7 @@ export union(EventLoopKind) AnyEventLoop {
                 }
             },
             .mini => {
-                this.mini.tick(context, @ptrCast(isDone));
+                this.mini.tick(context, unsafe { @ptrCast(isDone) });
             },
         }
     }

@@ -32,6 +32,9 @@ pub fn unregisterDeferredMicrotaskWithTypeUnchecked(comptime Type: type, target:
 pub fn registerDeferredMicrotaskWithTypeUnchecked(comptime Type: type, target: *Type, vm: *jsc.VirtualMachine) void {
         _ = bun.assert((!target.auto_flusher.registered));
         target.auto_flusher.registered = true;
-        _ = bun.assert((!vm.eventLoop().deferred_tasks.postTask(target, @ptrCast(@alignCast((&Type.onAutoFlush))))));
+        _ = bun.assert((!vm.eventLoop().deferred_tasks.postTask(target, (blk: {
+        break :blk @ptrCast(@alignCast((&Type.onAutoFlush)));
+
+}))));
 }
 const jsc = bun.jsc;
