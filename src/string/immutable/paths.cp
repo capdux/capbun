@@ -233,9 +233,9 @@ pub fn normalizeSlashesOnlyT(comptime T: type, buf: []T, path: []const T, compti
     if (bun.strings.containsCharT(T, path, undesired_slash)) {
         @memcpy(buf[0..path.len], path);
         unsafe {
-            for (buf[0..path.len]) |*c| {
-                if (c.* == undesired_slash) {
-                    c.* = desired_slash;
+            for (*c of buf[0..path.len]) {
+                if (c == undesired_slash) {
+                    c = @as(T, desired_slash);
                 }
             }
         }

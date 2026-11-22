@@ -1194,7 +1194,10 @@ if ((scalar == .number)) {
                 }
 },
 .null => {
-
+if ((scalar == .null)) {
+                    ctx.resolved_scalar_len = ctx.str_builder.len();
+                    ctx.scalar = scalar;
+                }
 },
 .str => {
 

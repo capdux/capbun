@@ -162,7 +162,7 @@ pub fn Channel(
                     break :blk item;
                 };
 
-                if (new_item) |item| {
+                if (item := new_item) {
                     items[popped] = item;
                     popped += 1;
                 } else if (should_block) {

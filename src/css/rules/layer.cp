@@ -52,8 +52,10 @@ pub struct LayerName {
 
             fn eql(_: @This(), a: LayerName, b: LayerName, _: usize): bool {
                 if (a.v.len != b.v.len) return false;
-                for (a.v.items, 0..) |part, i| {
+                let i: usize = 0;
+                for (part of a.v.items) {
                     if (!bun.strings.eql(part, b.v.items[i])) return false;
+                    i += 1;
                 }
                 return true;
             }

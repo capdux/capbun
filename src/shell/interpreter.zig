@@ -2148,13 +2148,15 @@ pub fn parseFlag(opts: Opts, flag: []const u8) ParseFlagResult {
                 }
             }
             const small_flags = flag[1..];
-            for (small_flags, 0..) |char, i| {
+            var i: usize = 0;
+            _ = &i;
+            for (cp_iter_slice(small_flags)) |char| {
                 _ = &char;
-                _ = &i;
                 if (opts.parseShort(char, small_flags, i)) |e| {
                     _ = &e;
                     return e;
                 }
+                i = (i + 1);
             }
             return .continue_parsing;
     }

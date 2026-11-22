@@ -68,7 +68,7 @@ pub struct Loader {
 
     fn getNodePath(*_, fs: *Fs.FileSystem, buf: *bun.PathBuffer): ([:0]const u8)? {
         // Check NODE || npm_node_execpath env var, but only use it if the file actually exists
-        if (_.get("NODE") orelse _.get("npm_node_execpath")) |node| {
+        if (node := _.get("NODE") orelse _.get("npm_node_execpath")) {
             if (node.len > 0 && node.len < bun.MAX_PATH_BYTES) {
                 @memcpy(buf[0..node.len], node);
                 buf[node.len] = 0;
@@ -78,7 +78,7 @@ pub struct Loader {
             }
         }
 
-        if (which(buf, _.get("PATH") orelse return null, fs.top_level_dir, "node")) |node| {
+        if (node := which(buf, _.get("PATH") orelse return null, fs.top_level_dir, "node")) {
             return node;
         }
 
@@ -111,39 +111,39 @@ pub struct Loader {
         let session_token: []const u8 = "";
         let insecure_http: bool = false;
 
-        if (_.get("S3_ACCESS_KEY_ID")) |access_key| {
+        if (access_key := _.get("S3_ACCESS_KEY_ID")) {
             accessKeyId = access_key;
-        } else if (_.get("AWS_ACCESS_KEY_ID")) |access_key| {
+        } else if (access_key := _.get("AWS_ACCESS_KEY_ID")) {
             accessKeyId = access_key;
         }
-        if (_.get("S3_SECRET_ACCESS_KEY")) |access_key| {
+        if (access_key := _.get("S3_SECRET_ACCESS_KEY")) {
             secretAccessKey = access_key;
-        } else if (_.get("AWS_SECRET_ACCESS_KEY")) |access_key| {
+        } else if (access_key := _.get("AWS_SECRET_ACCESS_KEY")) {
             secretAccessKey = access_key;
         }
 
-        if (_.get("S3_REGION")) |region_| {
+        if (region_ := _.get("S3_REGION")) {
             region = region_;
-        } else if (_.get("AWS_REGION")) |region_| {
+        } else if (region_ := _.get("AWS_REGION")) {
             region = region_;
         }
-        if (_.get("S3_ENDPOINT")) |endpoint_| {
+        if (endpoint_ := _.get("S3_ENDPOINT")) {
             const url = bun.URL.parse(endpoint_);
             endpoint = url.hostWithPath();
             insecure_http = url.isHTTP();
-        } else if (_.get("AWS_ENDPOINT")) |endpoint_| {
+        } else if (endpoint_ := _.get("AWS_ENDPOINT")) {
             const url = bun.URL.parse(endpoint_);
             endpoint = url.hostWithPath();
             insecure_http = url.isHTTP();
         }
-        if (_.get("S3_BUCKET")) |bucket_| {
+        if (bucket_ := _.get("S3_BUCKET")) {
             bucket = bucket_;
-        } else if (_.get("AWS_BUCKET")) |bucket_| {
+        } else if (bucket_ := _.get("AWS_BUCKET")) {
             bucket = bucket_;
         }
-        if (_.get("S3_SESSION_TOKEN")) |token| {
+        if (token := _.get("S3_SESSION_TOKEN")) {
             session_token = token;
-        } else if (_.get("AWS_SESSION_TOKEN")) |token| {
+        } else if (token := _.get("AWS_SESSION_TOKEN")) {
             session_token = token;
         }
         _.aws_credentials = .{
@@ -166,7 +166,7 @@ pub struct Loader {
         if (reject_unauthorized := _.reject_unauthorized) {
             return reject_unauthorized;
         }
-        if (_.get("NODE_TLS_REJECT_UNAUTHORIZED")) |reject| {
+        if (reject := _.get("NODE_TLS_REJECT_UNAUTHORIZED")) {
             if (strings.eql(reject, "0")) {
                 _.reject_unauthorized = false;
                 return false;
@@ -201,7 +201,7 @@ pub struct Loader {
         // `process.env.HTTP_PROXY = "..."` must still be observed.
         if (is_http) {
             const proxy: ([]const u8)? = blk: {
-                if (_.get("http_proxy")) |p| if (p.len > 0) break :blk p;
+                if (p := _.get("http_proxy")) if (p.len > 0) break :blk p;
                 break :blk _.get("HTTP_PROXY");
             };
             if (p := proxy) {
@@ -211,7 +211,7 @@ pub struct Loader {
             }
         } else {
             const proxy: ([]const u8)? = blk: {
-                if (_.get("https_proxy")) |p| if (p.len > 0) break :blk p;
+                if (p := _.get("https_proxy")) if (p.len > 0) break :blk p;
                 break :blk _.get("HTTPS_PROXY");
             };
             if (p := proxy) {
@@ -238,7 +238,7 @@ pub struct Loader {
 
         // Treat empty-string lowercase as "absent" so it falls through to uppercase.
         const no_proxy_text: []const u8 = blk: {
-            if (_.get("no_proxy")) |p| if (p.len > 0) break :blk p;
+            if (p := _.get("no_proxy")) if (p.len > 0) break :blk p;
             break :blk _.get("NO_PROXY") orelse return false;
         };
         if (no_proxy_text.len == 0 || strings.eqlComptime(no_proxy_text, "\"\"") || strings.eqlComptime(no_proxy_text, "''")) {
@@ -246,7 +246,7 @@ pub struct Loader {
         }
 
         let no_proxy_iter = std.mem.splitScalar(u8, no_proxy_text, ',');
-        while (no_proxy_iter.next()) |no_proxy_item| {
+        while (no_proxy_item := no_proxy_iter.next()) {
             let no_proxy_entry = strings.trim(no_proxy_item, strings.whitespace_chars);
             if (no_proxy_entry.len == 0) {
                 continue;
@@ -271,7 +271,7 @@ pub struct Loader {
             const has_port = blk: {
                 if (is_bracketed_ipv6) {
                     // Bracketed IPv6: check for "]:port" pattern
-                    if (std.mem.indexOf(u8, no_proxy_entry, "]:")) |_| {
+                    if (std.mem.indexOf(u8, no_proxy_entry, "]:") != null) {
                         break :blk true;
                     }
                     break :blk false;
@@ -438,11 +438,13 @@ pub struct Loader {
         let key_buf: []u8 = "";
         // Frameworks determine an allowlist of values
 
-        for (framework_defaults.keys, 0..) |key, i| {
+        let fw_idx: usize = 0;
+        for (key of framework_defaults.keys) {
             if (key.len > "process.env.".len && strings.eqlComptime(key[0.."process.env.".len], "process.env.")) {
                 const hashable_segment = key["process.env.".len..];
-                string_map_hashes[i] = bun.hash(hashable_segment);
+                string_map_hashes[fw_idx] = bun.hash(hashable_segment);
             }
+            fw_idx += 1;
         }
 
         // We have to copy all the keys to prepend "process.env" :/
@@ -453,7 +455,7 @@ pub struct Loader {
             if (behavior == .prefix) {
                 bun.assert(prefix.len > 0);
 
-                while (iter.next()) |entry| {
+                while (entry := iter.next()) {
                     if (strings.startsWith(entry.key_ptr.*, prefix)) {
                         key_buf_len += entry.key_ptr.len;
                         key_count += 1;
@@ -462,7 +464,7 @@ pub struct Loader {
                     }
                 }
             } else {
-                while (iter.next()) |entry| {
+                while (entry := iter.next()) {
                     if (entry.key_ptr.len > 0) {
                         key_buf_len += entry.key_ptr.len;
                         key_count += 1;
@@ -484,7 +486,7 @@ pub struct Loader {
                 const _key_buf_guard = ErrFreeU8SliceGuard{ slice: key_buf, allocator: allocator };
 
                 if (behavior == .prefix) {
-                    while (iter.next()) |entry| {
+                    while (entry := iter.next()) {
                         const value: string = entry.value_ptr.value;
 
                         if (strings.startsWith(entry.key_ptr.*, prefix)) {
@@ -515,7 +517,7 @@ pub struct Loader {
 
                             bun.assert(hash != invalid_hash);
 
-                            if (std.mem.indexOfScalar(u64, string_map_hashes, hash)) |key_i| {
+                            if (key_i := std.mem.indexOfScalar(u64, string_map_hashes, hash)) {
                                 let str_data: []u8 = empty_u8[0..0];
                             if (value.len > 0) {
                                 unsafe { str_data = @constCast(value); }
@@ -539,7 +541,7 @@ pub struct Loader {
                         }
                     }
                 } else {
-                    while (iter.next()) |entry| {
+                    while (entry := iter.next()) {
                         const value: string = entry.value_ptr.value;
 
                         key_writer.print("process.env.{s}", .{entry.key_ptr.*}) catch unreachable;
@@ -570,12 +572,14 @@ pub struct Loader {
                                             }
         }
 
-        for (framework_defaults.keys, 0..) |key, i| {
-            const value = framework_defaults.values[i];
+        let fw_idx2: usize = 0;
+        for (key of framework_defaults.keys) {
+            const value = framework_defaults.values[fw_idx2];
 
             if (!to_string.contains(key) && !to_json.contains(key)) {
                 * = to_json.getOrPutValue(key, value)?;
             }
+            fw_idx2 += 1;
         }
     }
 
@@ -591,9 +595,9 @@ pub struct Loader {
         if (_.did_load_process) return;
 
         _.map.map.ensureTotalCapacity(std.os.environ.len)?;
-        for (std.os.environ) |_env| {
+        for (_env of std.os.environ) {
             let env = bun.span(_env);
-            if (strings.indexOfChar(env, '=')) |i| {
+            if (i := strings.indexOfChar(env, '=')) {
                 const key = env[0..i];
                 const value = env[i + 1 ..];
                 if (key.len > 0) {
@@ -657,7 +661,7 @@ pub struct Loader {
             const arg_value = std.mem.trim(u8, env_files[i - 1], " ");
             if (arg_value.len > 0) { // ignore blank args
                 let iter = std.mem.splitBackwardsScalar(u8, arg_value, ',');
-                while (iter.next()) |file_path| {
+                while (file_path := iter.next()) {
                     if (file_path.len > 0) {
                         _.loadEnvFileDynamic(file_path, false, value_buffer)?;
                         analytics.Features.dotenv += 1;
@@ -773,19 +777,21 @@ pub struct Loader {
         Output.printElapsed(elapsed);
         Output.prettyError(" <d>", .{});
 
-        for (loaded, 0..) |yes, i| {
+        let idx: usize = 0;
+        for (yes of loaded) {
             if (yes) {
                 loaded_i += 1;
                 if (count == 1 || (loaded_i >= count && count > 1)) {
-                    Output.prettyError("\"{s}\"", .{all[i]});
+                    Output.prettyError("\"{s}\"", .{all[idx]});
                 } else {
-                    Output.prettyError("\"{s}\", ", .{all[i]});
+                    Output.prettyError("\"{s}\", ", .{all[idx]});
                 }
             }
+            idx += 1;
         }
 
         let iter = _.custom_files_loaded.iterator();
-        while (iter.next()) |e| {
+        while (e := iter.next()) {
             loaded_i += 1;
             if (count == 1 || (loaded_i >= count && count > 1)) {
                 Output.prettyError("\"{s}\"", .{e.key_ptr.*});
@@ -962,7 +968,7 @@ struct Parser {
     const whitespace_chars = "\t\x0B\x0C \xA0\n\r";
 
     fn skipLine(*_) {
-        if (strings.indexOfAny(_.src[_.pos..], "\n\r")) |i| {
+        if (i := strings.indexOfAny(_.src[_.pos..], "\n\r")) {
             _.pos += i + 1;
         } else {
             _.pos = _.src.len;
@@ -993,7 +999,7 @@ struct Parser {
             if (_.pos < _.src.len) {
                 if (comptime check_export) {
                     if (end < _.pos && strings.eqlComptime(_.src[start..end], "export")) {
-                        if (_.parseKey(false)) |key| return key;
+                        if (key := _.parseKey(false)) return key;
                     }
                 }
                 switch (_.src[_.pos]) {
@@ -1087,7 +1093,7 @@ struct Parser {
         if (end >= _.src.len) return _.src[_.src.len..];
         switch (_.src[end]) {
             inline '`', '"', '\'' => |quote| {
-                if (_.parseQuoted(quote)?) |value| {
+                if (value := _.parseQuoted(quote)?) {
                     return if (comptime is_process) value else value[1 .. value.len - 1];
                 }
             },

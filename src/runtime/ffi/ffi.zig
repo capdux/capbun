@@ -189,13 +189,15 @@ pub fn paramTypenameLabel(self: FFIABIType) []const u8 {
     pub const map_to_js_object = brk: {
             var count: usize = 2;
             _ = &count;
-            for (map, 0..) |item, i| {
+            var i: usize = 0;
+            _ = &i;
+            for (cp_iter_slice(map)) |item| {
                 _ = &item;
-                _ = &i;
                 const fmt = EnumMapFormatter{ .name = item[0], .entry = item[1] };
                 _ = &fmt;
                 count = (count + std.fmt.count("{}", .{ fmt }));
                 count = (count + @intFromBool((i > 0)));
+                i = (i + 1);
             }
             var buf: [count]u8 = undefined;
             _ = &buf;
@@ -203,16 +205,18 @@ pub fn paramTypenameLabel(self: FFIABIType) []const u8 {
             buf[cp_cast_int(usize, (buf.len - 1))] = 125;
             var end: usize = 1;
             _ = &end;
-            for (map, 0..) |item, i| {
+            var j: usize = 0;
+            _ = &j;
+            for (cp_iter_slice(map)) |item| {
                 _ = &item;
-                _ = &i;
                 const fmt = EnumMapFormatter{ .name = item[0], .entry = item[1] };
                 _ = &fmt;
-                if ((i > 0)) {
+                if ((j > 0)) {
                     buf[cp_cast_int(usize, end)] = 44;
                     end = (end + 1);
                 }
                 end = (end + ((std.fmt.bufPrint(buf[end..], "{}", .{ fmt })) catch unreachable).len);
+                j = (j + 1);
             }
             break :brk buf;
     };

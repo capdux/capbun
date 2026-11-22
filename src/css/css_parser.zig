@@ -3472,8 +3472,8 @@ pub fn eql(lhs: *const Num, rhs: *const Num) bool {
             return implementEql(Num, lhs, rhs);
     }
 
-pub fn hash(self: *const @This(), hasher: *std.hash.Wyhash) void {
-            return implementHash(@This(), self, hasher);
+pub fn hash(v: *const @This(), hasher: *std.hash.Wyhash) void {
+            return implementHash(@This(), v, hasher);
     }
 };
 
@@ -3485,8 +3485,8 @@ pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
             return implementEql(@This(), lhs, rhs);
     }
 
-pub fn hash(self: *const @This(), hasher: *std.hash.Wyhash) void {
-            return implementHash(@This(), self, hasher);
+pub fn hash(v: *const @This(), hasher: *std.hash.Wyhash) void {
+            return implementHash(@This(), v, hasher);
     }
 };
 
@@ -3593,9 +3593,10 @@ pub const serializer = struct {
 pub fn serializeName(value: []const u8, writer: anytype) !void {
             var chunk_start: usize = 0;
             _ = &chunk_start;
-            for (value, 0..) |b, i| {
-                _ = &b;
-                _ = &i;
+            var i: usize = 0;
+            _ = &i;
+            while ((i < value.len)) : (i = (i + 1)) {
+                const b = value[@as(usize, @intCast(i))];
                 const escaped: ?[]const u8 = (switch (b) {
 48...57, 65...90, 97...122, '_', '-' => continue,
 0 => bun.strings.encodeUTF8Comptime(4093),
@@ -3675,9 +3676,10 @@ pub fn serializeIdentifier(value: []const u8, writer: anytype) !void {
 pub fn serializeUnquotedUrl(value: []const u8, writer: anytype) !void {
             var chunk_start: usize = 0;
             _ = &chunk_start;
-            for (value, 0..) |b, i| {
-                _ = &b;
-                _ = &i;
+            var i: usize = 0;
+            _ = &i;
+            while ((i < value.len)) : (i = (i + 1)) {
+                const b = value[@as(usize, @intCast(i))];
                 const hex = (switch (b) {
 0...32, 127 => true,
 '(', ')', '"', '\'', '\\' => false,
@@ -3759,9 +3761,10 @@ pub fn new(inner: W) @This() {
 pub fn writeStr(self: *@This(), str: []const u8) !void {
             var chunk_start: usize = 0;
             _ = &chunk_start;
-            for (str, 0..) |b, i| {
-                _ = &b;
-                _ = &i;
+            var i: usize = 0;
+            _ = &i;
+            while ((i < str.len)) : (i = (i + 1)) {
+                const b = str[@as(usize, @intCast(i))];
                 const escaped = (switch (b) {
 '"' => "\\\"",
 '\\' => "\\\\",
@@ -4180,9 +4183,10 @@ pub fn parse(input: *Parser) Result(T) {
                 _ = &p_count;
                 var v_count: usize = 0;
                 _ = &v_count;
-                for (tyinfo.@"union".fields, 0..) |field, i| {
+                var i: usize = 0;
+                _ = &i;
+                for (cp_iter_slice(tyinfo.@"union".fields)) |field| {
                     _ = &field;
-                    _ = &i;
                     if ((field.@"type" == void)) {
                         v_count = (v_count + 1);
                         if ((f_void_idx == null)) {
@@ -4194,6 +4198,7 @@ pub fn parse(input: *Parser) Result(T) {
                             f_payload_idx = i;
                         }
                     }
+                    i = (i + 1);
                 }
                 if ((f_payload_idx == null)) {
                     _ = @compileError("Type defined as `union(enum)` but no variant carries a payload. Make it an `enum` instead.");
@@ -4499,10 +4504,12 @@ pub fn DeriveValueType(comptime T: type, comptime ValueTypeMap: anytype) type {
         const fields_len = fields.len;
         var mapping: [fields_len]media_query.MediaFeatureType = undefined;
         _ = &mapping;
-        for (fields, 0..) |field, i| {
+        var i: usize = 0;
+        _ = &i;
+        for (cp_iter_slice(fields)) |field| {
             _ = &field;
-            _ = &i;
             mapping[cp_cast_int(usize, i)] = @field(ValueTypeMap, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name));
+            i = (i + 1);
         }
         const mapping_final = mapping;
         break :field_values mapping_final[0..];
@@ -5735,9 +5742,9 @@ else => null,
 }
 
 pub fn fillPropertyBitSet(allocator: Allocator, bitset: *PropertyBitset, block: *const DeclarationBlock, custom_properties: *bun.BabyList(string)) void {
-        for (block.declarations.items) |*prop| {
+        for (block.declarations.items) |prop| {
             _ = &prop;
-            const tag = (switch (prop.*) {
+            const tag = (switch (prop) {
 .custom => {
 {
                 _ = bun.handleOom(custom_properties.append(allocator, (if (@typeInfo(@TypeOf(prop.custom)) == .@"enum" or @typeInfo(@TypeOf(prop.custom)) == .@"union") @tagName(prop.custom) else prop.custom.name).asStr()));
@@ -5746,14 +5753,14 @@ pub fn fillPropertyBitSet(allocator: Allocator, bitset: *PropertyBitset, block: 
 },
 .unparsed => |u| std.meta.activeTag(u.property_id),
 .composes => continue,
-else => std.meta.activeTag(prop.*),
+else => std.meta.activeTag(prop),
 });
             const int: u16 = @intFromEnum(tag);
             _ = bitset.set(int);
         }
-        for (block.important_declarations.items) |*prop| {
+        for (block.important_declarations.items) |prop| {
             _ = &prop;
-            const tag = (switch (prop.*) {
+            const tag = (switch (prop) {
 .custom => {
 {
                 _ = bun.handleOom(custom_properties.append(allocator, (if (@typeInfo(@TypeOf(prop.custom)) == .@"enum" or @typeInfo(@TypeOf(prop.custom)) == .@"union") @tagName(prop.custom) else prop.custom.name).asStr()));
@@ -5762,7 +5769,7 @@ else => std.meta.activeTag(prop.*),
 },
 .unparsed => |u| std.meta.activeTag(u.property_id),
 .composes => continue,
-else => std.meta.activeTag(prop.*),
+else => std.meta.activeTag(prop),
 });
             const int: u16 = @intFromEnum(tag);
             _ = bitset.set(int);
@@ -5802,9 +5809,9 @@ pub fn minify(self: *@This(), allocator: Allocator, options: MinifyOptions, extr
             var custom_media: ?CustomMediaMap = (if ((self.options.flags.custom_media and options.targets.shouldCompileSame(.custom_media_queries))) brk: {
             var custom_media = CustomMediaMap{  };
             _ = &custom_media;
-            for (self.rules.v.items) |*rule| {
+            for (self.rules.v.items) |rule| {
                 _ = &rule;
-                if ((rule.* == .custom_media)) {
+                if ((rule == .custom_media)) {
                     _ = bun.handleOom(custom_media.put(allocator, (if (@typeInfo(@TypeOf(rule.custom_media)) == .@"enum" or @typeInfo(@TypeOf(rule.custom_media)) == .@"union") @tagName(rule.custom_media) else rule.custom_media.name).v, rule.custom_media.deepClone(allocator)));
                 }
             }
@@ -5953,7 +5960,7 @@ pub fn debugLayerRuleSanityCheck(self: *const @This()) void {
             _ = &actual_layer_rules_len;
             for (self.rules.v.items) |*rule| {
                 _ = &rule;
-                switch (rule.*) {
+                switch ((rule.*).*) {
 .layer_block => {
 actual_layer_rules_len = (actual_layer_rules_len + 1);
 },
@@ -5969,7 +5976,7 @@ pub fn containsTailwindDirectives(self: *const @This()) bool {
             _ = &found_import;
             for (self.rules.v.items) |*rule| {
                 _ = &rule;
-                switch (rule.*) {
+                switch ((rule.*).*) {
 .custom => {
 return true;
 },
@@ -6014,7 +6021,7 @@ pub fn pluckImports(self: *const @This(), allocator: Allocator, out: *CssRuleLis
                 _ = &saw_imports;
                 for (self.rules.v.items) |*rule| {
                     _ = &rule;
-                    switch (rule.*) {
+                    switch ((rule.*).*) {
 .layer_block => {
 
 },
@@ -6027,17 +6034,17 @@ if ((!saw_imports)) {
 count = (count + 1);
 },
 .exec => {
-const import_rule = (&rule.import);
-                    _ = out.v.appendAssumeCapacity(rule.*);
+const import_rule = (&(rule.*).import);
+                    _ = out.v.appendAssumeCapacity((rule.*).*);
                     const import_record_idx = new_import_records.len;
                     import_rule.import_record_idx = import_record_idx;
                     _ = (blk_catch_3: { break :blk_catch_3 ((new_import_records.append(allocator, ImportRecord{ .path = bun.fs.Path.init(import_rule.url), .kind = (if ((import_rule.supports != null)) .at_conditional else .at), .range = bun.logger.Range.None })) catch |e| { _ = &e; break :blk_catch_3 bun.handleOom(e); }); });
-                    rule.* = .ignored;
+                    (rule.*).* = .ignored;
 },
 }
 },
 .unknown => {
-if (bun.strings.eqlComptime((if (@typeInfo(@TypeOf(rule.unknown)) == .@"enum" or @typeInfo(@TypeOf(rule.unknown)) == .@"union") @tagName(rule.unknown) else rule.unknown.name), "tailwind")) {
+if (bun.strings.eqlComptime((if (@typeInfo(@TypeOf((rule.*).unknown)) == .@"enum" or @typeInfo(@TypeOf((rule.*).unknown)) == .@"union") @tagName((rule.*).unknown) else (rule.*).unknown.name), "tailwind")) {
                         continue;
                     }
 },
@@ -6254,8 +6261,8 @@ else => null,
         {
             var i: i32 = 1;
             _ = &i;
-            const __end_6 = len;
-            while (i < __end_6) : (i += 1) {
+            const __end_9 = len;
+            while (i < __end_9) : (i += 1) {
                 if ((buf[@as(usize, @intCast(i))] == 46)) {
                     _ = bun.debugAssert((_pos_dot == null));
                     _pos_dot = @intCast(i);
@@ -6313,8 +6320,8 @@ else => null,
             {
                 var i: i32 = new_coeff_end;
                 _ = &i;
-                const __end_7 = pos_dot;
-                while (i < __end_7) : (i += 1) {
+                const __end_10 = pos_dot;
+                while (i < __end_10) : (i += 1) {
                     buf[cp_cast_int(usize, i)] = 48;
                 }
             }
@@ -6344,8 +6351,8 @@ else => null,
                 {
                     var i: i32 = 0;
                     _ = &i;
-                    const __end_8 = exp_len;
-                    while (i < __end_8) : (i += 1) {
+                    const __end_11 = exp_len;
+                    while (i < __end_11) : (i += 1) {
                         buf[cp_cast_int(usize, (new_coeff_end + i))] = buf[@as(usize, @intCast((posexp + i)))];
                     }
                 }

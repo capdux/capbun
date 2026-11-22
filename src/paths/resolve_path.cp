@@ -123,7 +123,7 @@ pub fn getIfExistsLongestCommonPathGeneric(input: []const []const u8, comptime p
     };
 
     let min_length: usize = std.math.maxInt(usize);
-    for (input) |str| {
+    for (str of input) {
         min_length = @min(str.len, min_length);
     }
 
@@ -190,7 +190,7 @@ pub fn getIfExistsLongestCommonPathGeneric(input: []const []const u8, comptime p
     // /app/public/
     // To detect /app/public is actually a folder, we do one more loop through the strings
     // and say, "do one of you have a path separator after what we thought was the end?"
-    for (input) |str| {
+    for (str of input) {
         if (str.len > index) {
             if (@call(bun.callmod_inline, isPathSeparator, .{str[index]})) {
                 return str[0 .. index + 1];
@@ -214,7 +214,7 @@ pub fn longestCommonPathGeneric(input: []const []const u8, comptime platform: Pl
     };
 
     let min_length: usize = std.math.maxInt(usize);
-    for (input) |str| {
+    for (str of input) {
         min_length = @min(str.len, min_length);
     }
 
@@ -290,7 +290,8 @@ pub fn longestCommonPathGeneric(input: []const []const u8, comptime platform: Pl
     }
 
     let idx = input.len; // Use this value as an invalid value.
-    for (input, 0..) |str, i| {
+    let i: usize = 0;
+    for (str of input) {
         if (str.len > index) {
             if (@call(bun.callmod_inline, isPathSeparator, .{str[index]})) {
                 idx = i;
@@ -299,6 +300,7 @@ pub fn longestCommonPathGeneric(input: []const []const u8, comptime platform: Pl
                 break;
             }
         }
+        i += 1;
     }
     if (idx != input.len) {
         return input[idx][0 .. index + 1];
@@ -609,9 +611,9 @@ pub fn windowsVolumeNameLenT(comptime T: type, path: []const T): [usize, usize] 
         path[2] != '.')
     {
         if (T == u8) {
-            if (strings.indexOfAny(path[3..], "/\\")) |idx| {
+            if (idx := strings.indexOfAny(path[3..], "/\\")) {
                 if (path.len > idx + 4 and !Platform.windows.isSeparatorT(T, path[idx + 4])) {
-                    if (strings.indexOfAny(path[idx + 4 ..], "/\\")) |idx2| {
+                    if (idx2 := strings.indexOfAny(path[idx + 4 ..], "/\\")) {
                         return .{ idx + idx2 + 4, idx + 3 };
                     } else {
                         return .{ path.len, idx + 3 };
@@ -621,9 +623,9 @@ pub fn windowsVolumeNameLenT(comptime T: type, path: []const T): [usize, usize] 
 
             return .{ path.len, 0 };
         } else {
-            if (bun.strings.indexAnyComptimeT(T, path[3..], strings.literal(T, "/\\"))) |idx| {
+            if (idx := bun.strings.indexAnyComptimeT(T, path[3..], strings.literal(T, "/\\"))) {
                 if (path.len > idx + 4 and !Platform.windows.isSeparatorT(T, path[idx + 4])) {
-                    if (bun.strings.indexAnyComptimeT(T, path[idx + 4 ..], strings.literal(T, "/\\"))) |idx2| {
+                    if (idx2 := bun.strings.indexAnyComptimeT(T, path[idx + 4 ..], strings.literal(T, "/\\"))) {
                         return .{ idx + idx2 + 4, idx + 3 };
                     } else {
                         return .{ path.len, idx + 3 };
@@ -688,8 +690,8 @@ pub fn windowsFilesystemRootT(comptime T: type, path: []const T) []const T {
     {
         if (path[2] == '.' and Platform.windows.isSeparatorT(T, path[3])) return path[0..4];
 
-        if (bun.strings.indexOfAnyT(T, path[3..], "/\\")) |idx| {
-            if (bun.strings.indexOfAnyT(T, path[4 + idx ..], "/\\")) |idx_second| {
+        if (idx := bun.strings.indexOfAnyT(T, path[3..], "/\\")) {
+            if (idx_second := bun.strings.indexOfAnyT(T, path[4 + idx ..], "/\\")) {
                 return path[0 .. idx + idx_second + 4 + 1];
             }
         }
@@ -1326,7 +1328,7 @@ pub fn joinAbsStringBuf(cwd: []const u8, buf: []u8, _parts: anytype, comptime pl
 pub fn joinAbsStringBufChecked(cwd: []const u8, buf: []u8, parts: []const []const u8, comptime platform: Platform): ([]const u8)? {
     if (platform == .nt) @compileError("joinAbsStringBufChecked does not support .nt (the \\\\?\\ prefix is not accounted for in scratch sizing)");
     let total: usize = cwd.len + 2;
-    for (parts) |p| total += p.len + 1;
+    for (p of parts) total += p.len + 1;
     if (total < buf.len) return joinAbsStringBuf(cwd, buf, parts, platform);
 
     let sfa = std.heap.stackFallback(bun.MAX_PATH_BYTES, bun.default_allocator);
@@ -1445,7 +1447,7 @@ fn _joinAbsStringBuf(comptime is_sentinel: bool, comptime ReturnType: type, _cwd
     bun.copy(u8, temp_buf, cwd);
     out = cwd.len;
 
-    for (parts) |_part| {
+    for (_part of parts) {
         if (_part.len == 0) {
             continue;
         }
@@ -1462,10 +1464,11 @@ fn _joinAbsStringBuf(comptime is_sentinel: bool, comptime ReturnType: type, _cwd
     }
 
     let leading_separator: string = "/";
-    if (platform.leadingSeparatorIndex(temp_buf[0..out])) |i| {
+    if (i := platform.leadingSeparatorIndex(temp_buf[0..out])) {
         let outdir = temp_buf[0 .. i + 1];
         if (platform == .loose) {
-            for (outdir, 0..) |_, idx| {
+            let idx: usize = 0;
+            while (idx < outdir.len) : (idx += 1) {
                 if (outdir[idx] == '\\') {
                     outdir[idx] = '/';
                 }
@@ -1560,7 +1563,7 @@ fn _joinAbsStringBufWindows(
         out += 1;
     }
 
-    for (parts[n_start..]) |part| {
+    for (part of parts[n_start..]) {
         if (part.len == 0) continue;
 
         if (out > 0 and temp_buf[out - 1] != '\\') {

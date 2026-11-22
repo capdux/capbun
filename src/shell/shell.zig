@@ -713,8 +713,7 @@ pub inline fn throw(self: GlobalMini, comptime fmt: []const u8, args: anytype) S
             return .{ .custom = str };
     }
 
-pub inline fn actuallyThrow(self: GlobalMini, shellerr: ShellErr) void {
-        _ = self;
+pub inline fn actuallyThrow(shellerr: ShellErr) void {
             _ = shellerr.throwMini();
     }
 
@@ -2957,51 +2956,6 @@ pub fn #atomsMemoryCost(self: *const @This()) usize {
             cost = (cost + (atom.*).memoryCost());
         }
         return cost;
-}
-
-pub fn asHumanReadable(self: Token, strpool: []const u8) []const u8 {
-        const varargv_strings = blk: {
-        var res: [10][2]u8 = undefined;
-        _ = &res;
-        for (&res, 0..) |*item, i| {
-            _ = &item;
-            _ = &i;
-            item[cp_cast_int(usize, 0)] = 36;
-            item[cp_cast_int(usize, 1)] = (@as(u8, @intCast(i)) + 48);
-        }
-        break :blk res;
-};
-        return (switch (self) {
-.Pipe => "`|`",
-.DoublePipe => "`||`",
-.Ampersand => "`&`",
-.DoubleAmpersand => "`&&`",
-.Redirect => "`>`",
-.Dollar => "`$`",
-.Asterisk => "`*`",
-.DoubleAsterisk => "`**`",
-.Eq => "`=`",
-.Semicolon => "`;`",
-.Newline => "`\\n`",
-.BraceBegin => "`{`",
-.Comma => "`,`",
-.BraceEnd => "`}`",
-.CmdSubstBegin => "`$(`",
-.CmdSubstQuoted => "CmdSubstQuoted",
-.CmdSubstEnd => "`)`",
-.OpenParen => "`(`",
-.CloseParen => "`)",
-.Var => strpool[self.Var.start..self.Var.end],
-.VarArgv => (&varargv_strings[@as(usize, @intCast(self.VarArgv))]),
-.Text => strpool[self.Text.start..self.Text.end],
-.SingleQuotedText => strpool[self.SingleQuotedText.start..self.SingleQuotedText.end],
-.DoubleQuotedText => strpool[self.DoubleQuotedText.start..self.DoubleQuotedText.end],
-.JSObjRef => "JSObjRef",
-.DoubleBracketOpen => "[[",
-.DoubleBracketClose => "]]",
-.Delimit => "Delimit",
-.Eof => "EOF",
-});
 }
 
 pub fn NewLexerBacktrackSnapshot(comptime Chars: type) type {

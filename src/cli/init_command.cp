@@ -184,13 +184,15 @@ pub struct InitCommand {
                 let expected_value = 0;
                 const n_choices = choices_fields.len;
                 let choices: [n_choices][]const u8 = undefined;
-                for (choices_fields, 0..) |field, i| {
+                let i: usize = 0;
+                for (field of choices_fields) {
                     if (field.value != expected_value) {
                         @compileError("Choices must be an enum type with consecutive values starting from 0");
                     }
                     const e: Choices = @enumFromInt(field.value);
                     choices[i] = Output.prettyFmt(e.fmt(), colors_comptime);
                     expected_value += 1;
+                    i += 1;
                 }
                 break :choices choices;
             },
@@ -229,7 +231,9 @@ pub struct InitCommand {
             initial_draw = false;
 
             // Print options vertically
-            inline for (choices, 0..) |option, i| {
+            let i: usize = 0;
+            for (option of choices) {
+                defer i += 1;
                 if (i == @intFromEnum(selected)) {
                     if (colors) {
                         Output.pretty("<r><cyan>❯<r>   ", .{});

@@ -1035,10 +1035,10 @@ pub fn copyCP1252IntoUTF16(buf_: []u16, latin1_: []const u8) EncodeIntoResult {
 
 pub fn copyLatin1IntoUTF16(comptime Buffer: type, buf_: Buffer, latin1_: []const u8) EncodeIntoResult {
         const len = @min(buf_.len, latin1_.len);
-        for (buf_[0..len], latin1_[0..len]) |*out, @"in"| {
-            _ = &out;
-            _ = &@"in";
-            out.* = @"in";
+        var i: usize = 0;
+        _ = &i;
+        while ((i < len)) : (i = (i + 1)) {
+            buf_[cp_cast_int(usize, i)] = latin1_[@as(usize, @intCast(i))];
         }
         return .{ .read = @as(u32, @truncate(len)), .written = @as(u32, @truncate(len)) };
 }

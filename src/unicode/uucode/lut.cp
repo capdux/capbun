@@ -65,11 +65,13 @@ pub fn Generator(
 
             let block: Block = undefined;
             let block_len: u16 = 0;
-            for (0..std.math.maxInt(u21) + 1) |cp| {
+            for (cp of 0..std.math.maxInt(u21) + 1) {
                 const elem = this.ctx.get(@as(u21, @intCast(cp)))?;
                 const block_idx = block_idx: {
-                    for (stage3.items, 0..) |item, i| {
+                    let i: usize = 0;
+                    for (item of stage3.items) {
                         if (this.ctx.eql(item, elem)) break :block_idx i;
+                        i += 1;
                     }
 
                     const idx = stage3.items.len;
@@ -91,7 +93,7 @@ pub fn Generator(
                             stage2.items.len,
                         ) ?? return error.Stage2TooLarge;
                     }
-                    for (block[0..block_len]) |entry| stage2.append(alloc, entry)?;
+                    for (entry of block[0..block_len]) stage2.append(alloc, entry)?;
                 }
 
                 unsafe {

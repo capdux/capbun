@@ -697,9 +697,9 @@ pub struct GithubActionFormatter {
     }
 }
 
-pub fn githubAction(self: string): strings.GithubActionFormatter {
+pub fn githubAction(text: string): strings.GithubActionFormatter {
     return GithubActionFormatter{
-        text: self,
+        text: text,
     };
 }
 

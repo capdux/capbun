@@ -891,7 +891,10 @@ pub fn copyCP1252IntoUTF16(buf_: []u16, latin1_: []const u8): EncodeIntoResult {
 
 pub fn copyLatin1IntoUTF16(comptime Buffer: type, buf_: Buffer, latin1_: []const u8): EncodeIntoResult {
     const len = @min(buf_.len, latin1_.len);
-    for (buf_[0..len], latin1_[0..len]) |*out, @"in"| out.* = @"in";
+    let i: usize = 0;
+    while (i < len) : (i += 1) {
+        buf_[i] = latin1_[i];
+    }
     return { read: @as(u32, @truncate(len)), written: @as(u32, @truncate(len)) };
 }
 

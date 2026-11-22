@@ -243,7 +243,7 @@ pub fn deinitDiffList(allocator: Allocator, diffs: *DiffList) void {
 
 pub fn freeRangeDiffList(allocator: Allocator, diffs: *DiffList, start: usize, len: usize) void {
             const range = diffs.items[start..][0..len];
-            for (range) |d| {
+            for (cp_iter_slice(range)) |d| {
                 _ = &d;
                 _ = allocator.free(d.text);
             }
@@ -300,11 +300,10 @@ pub fn diffInternal(dmp: DiffMatchPatch, allocator: std.mem.Allocator, before: [
 
 pub fn indexOfDiff(comptime T: type, a: []const T, b: []const T) ?usize {
             const shortest = @min(a.len, b.len);
-            for (a[0..shortest], b[0..shortest], 0..) |a_char, b_char, index| {
-                _ = &a_char;
-                _ = &b_char;
-                _ = &index;
-                if ((a_char != b_char)) {
+            var index: usize = 0;
+            _ = &index;
+            while ((index < shortest)) : (index = (index + 1)) {
+                if ((a[@as(usize, @intCast(index))] != b[@as(usize, @intCast(index))])) {
                     return index;
                 }
             }
@@ -966,10 +965,10 @@ pub fn diffCharsToLines(allocator: std.mem.Allocator, char_diffs: *const DMPUsiz
                 _ = &d;
                 var j: usize = 0;
                 _ = &j;
-                while ((j < d.text.len)) : (j = (j + 1)) {
-                    _ = try text.appendSlice(allocator, line_array[@as(usize, @intCast(d.text[@as(usize, @intCast(j))]))]);
+                while ((j < (d.*).text.len)) : (j = (j + 1)) {
+                    _ = try text.appendSlice(allocator, line_array[@as(usize, @intCast((d.*).text[@as(usize, @intCast(j))]))]);
                 }
-                _ = diffs.appendAssumeCapacity(.{ .operation = d.operation, .text = try text.toOwnedSlice(allocator) });
+                _ = diffs.appendAssumeCapacity(.{ .operation = (d.*).operation, .text = try text.toOwnedSlice(allocator) });
             }
             _guard_diffs.list = null;
             return diffs;
@@ -1541,7 +1540,7 @@ pub fn testDiffCharsToLines(allocator: std.mem.Allocator, params: struct {
             _ = &_guard_char_diffs;
             var ___guard_char_diffs_moved = false; _ = &___guard_char_diffs_moved;
             defer if (!___guard_char_diffs_moved) { ___guard_char_diffs_moved = true; const __T = @TypeOf(_guard_char_diffs); if (@typeInfo(__T) == .optional) { if (_guard_char_diffs) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_char_diffs.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_char_diffs; _drop_val.__cp_deinit(); } };
-            for (params.diffs) |item| {
+            for (cp_iter_slice(params.diffs)) |item| {
                 _ = &item;
                 _ = char_diffs.appendAssumeCapacity(.{ .operation = item.operation, .text = try allocator.dupe(Unit, item.text) });
             }
@@ -1570,7 +1569,7 @@ pub fn testDiffCleanupMerge(allocator: std.mem.Allocator, params: struct {
             _ = &_guard_diffs;
             var ___guard_diffs_moved = false; _ = &___guard_diffs_moved;
             defer if (!___guard_diffs_moved) { ___guard_diffs_moved = true; const __T = @TypeOf(_guard_diffs); if (@typeInfo(__T) == .optional) { if (_guard_diffs) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_diffs.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_diffs; _drop_val.__cp_deinit(); } };
-            for (params.input) |item| {
+            for (cp_iter_slice(params.input)) |item| {
                 _ = &item;
                 _ = diffs.appendAssumeCapacity(.{ .operation = item.operation, .text = try allocator.dupe(Unit, item.text) });
             }
@@ -1591,7 +1590,7 @@ pub fn testDiffCleanupSemanticLossless(allocator: std.mem.Allocator, params: str
             _ = &_guard_diffs;
             var ___guard_diffs_moved = false; _ = &___guard_diffs_moved;
             defer if (!___guard_diffs_moved) { ___guard_diffs_moved = true; const __T = @TypeOf(_guard_diffs); if (@typeInfo(__T) == .optional) { if (_guard_diffs) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_diffs.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_diffs; _drop_val.__cp_deinit(); } };
-            for (params.input) |item| {
+            for (cp_iter_slice(params.input)) |item| {
                 _ = &item;
                 _ = diffs.appendAssumeCapacity(.{ .operation = item.operation, .text = try allocator.dupe(Unit, item.text) });
             }
@@ -1610,7 +1609,7 @@ pub fn sliceToDiffList(allocator: Allocator, diff_slice: []const Diff) DiffList!
             var ___guard_diff_list_moved = false; _ = &___guard_diff_list_moved;
             defer if (!___guard_diff_list_moved) { ___guard_diff_list_moved = true; const __T = @TypeOf(_guard_diff_list); if (@typeInfo(__T) == .optional) { if (_guard_diff_list) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_diff_list.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_diff_list; _drop_val.__cp_deinit(); } };
             _ = try diff_list.ensureTotalCapacity(allocator, diff_slice.len);
-            for (diff_slice) |d| {
+            for (cp_iter_slice(diff_slice)) |d| {
                 _ = &d;
                 _ = diff_list.appendAssumeCapacity(.{ .operation = d.operation, .text = try allocator.dupe(Unit, d.text) });
             }
@@ -1762,7 +1761,7 @@ pub fn testDiffCleanupSemantic(allocator: std.mem.Allocator, params: struct {
             _ = &_guard_diffs;
             var ___guard_diffs_moved = false; _ = &___guard_diffs_moved;
             defer if (!___guard_diffs_moved) { ___guard_diffs_moved = true; const __T = @TypeOf(_guard_diffs); if (@typeInfo(__T) == .optional) { if (_guard_diffs) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_diffs.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_diffs; _drop_val.__cp_deinit(); } };
-            for (params.input) |item| {
+            for (cp_iter_slice(params.input)) |item| {
                 _ = &item;
                 _ = diffs.appendAssumeCapacity(.{ .operation = item.operation, .text = try allocator.dupe(Unit, item.text) });
             }
@@ -1783,7 +1782,7 @@ pub fn testDiffCleanupEfficiency(allocator: Allocator, dmp: DiffMatchPatch, para
             _ = &_guard_diffs;
             var ___guard_diffs_moved = false; _ = &___guard_diffs_moved;
             defer if (!___guard_diffs_moved) { ___guard_diffs_moved = true; const __T = @TypeOf(_guard_diffs); if (@typeInfo(__T) == .optional) { if (_guard_diffs) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_diffs.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_diffs; _drop_val.__cp_deinit(); } };
-            for (params.input) |item| {
+            for (cp_iter_slice(params.input)) |item| {
                 _ = &item;
                 _ = diffs.appendAssumeCapacity(.{ .operation = item.operation, .text = try allocator.dupe(Unit, item.text) });
             }
@@ -1819,10 +1818,12 @@ _ = @compileError("Return type must be !void");
             const extra_args_tuple_info = @typeInfo(ArgsTuple);
             var extra_args_fields = (extra_args_tuple_info.@"struct".fields[1..]).*;
             _ = &extra_args_fields;
-            for (&extra_args_fields, 0..) |*extra_field, i| {
+            var i: usize = 0;
+            _ = &i;
+            for (cp_mut_slice(&(&extra_args_fields))) |*extra_field| {
                 _ = &extra_field;
-                _ = &i;
-                (if (@typeInfo(@TypeOf(extra_field)) == .@"enum" or @typeInfo(@TypeOf(extra_field)) == .@"union") @tagName(extra_field) else extra_field.name) = (if (@typeInfo(@TypeOf(fn_args_fields[@as(usize, @intCast(i))])) == .@"enum" or @typeInfo(@TypeOf(fn_args_fields[@as(usize, @intCast(i))])) == .@"union") @tagName(fn_args_fields[@as(usize, @intCast(i))]) else fn_args_fields[@as(usize, @intCast(i))].name);
+                (if (@typeInfo(@TypeOf((extra_field.*))) == .@"enum" or @typeInfo(@TypeOf((extra_field.*))) == .@"union") @tagName((extra_field.*)) else (extra_field.*).name) = (if (@typeInfo(@TypeOf(fn_args_fields[@as(usize, @intCast(i))])) == .@"enum" or @typeInfo(@TypeOf(fn_args_fields[@as(usize, @intCast(i))])) == .@"union") @tagName(fn_args_fields[@as(usize, @intCast(i))]) else fn_args_fields[@as(usize, @intCast(i))].name);
+                i = (i + 1);
             }
             extra_args_tuple_info.@"struct".fields = (&extra_args_fields);
             const ExtraArgsTuple = @Type(extra_args_tuple_info);

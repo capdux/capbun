@@ -674,7 +674,8 @@ pub fn DeriveParse(comptime T: type): type {
                     let f_payload_idx: usize? = null;
                     let p_count: usize = 0;
                     let v_count: usize = 0;
-                    for (tyinfo.@"union".fields, 0..) |field, i| {
+                    let i: usize = 0;
+                    for (field of tyinfo.@"union".fields) {
                         if (field.@"type" == void) {
                             v_count += 1;
                             if (f_void_idx == null) f_void_idx = i;
@@ -682,6 +683,7 @@ pub fn DeriveParse(comptime T: type): type {
                             p_count += 1;
                             if (f_payload_idx == null) f_payload_idx = i;
                         }
+                        i += 1;
                     }
                     if (f_payload_idx == null) {
                         @compileError("Type defined as `union(enum)` but no variant carries a payload. Make it an `enum` instead.");
@@ -1030,9 +1032,11 @@ pub fn DeriveValueType(comptime T: type, comptime ValueTypeMap: auto): type {
         const fields = std.@"meta".fields(T);
         const fields_len = fields.len;
         let mapping: [fields_len]media_query.MediaFeatureType = undefined;
-        for (fields, 0..) |field, i| {
+        let i: usize = 0;
+        for (field of fields) {
             // Check that it exists in the type map
             mapping[i] = @field(ValueTypeMap, field.name);
+            i += 1;
         }
         const mapping_final = mapping;
         break :field_values mapping_final[0..];
@@ -2857,7 +2861,7 @@ pub fn NestedRuleParser(comptime T: type): type {
             if (parse_declarations) {
                 if (errors.items.len > 0) {
                     if (this.options.error_recovery) {
-                        for (errors.items) |e| {
+                        for (e of errors.items) {
                             this.options.warn(e);
                         }
                     } else {
@@ -2963,7 +2967,7 @@ pub fn StyleSheetParser(comptime P: type): type {
                     else => null,
                 };
 
-                if (at_keyword) |name| {
+                if (name := at_keyword) {
                     const first_stylesheet_rule = !this.any_rule_so_far;
                     this.any_rule_so_far = true;
 
@@ -3130,28 +3134,28 @@ pub struct PropertyUsage {
 
 pub const PropertyBitset = std.bit_set.ArrayBitSet(usize, std.math.ceilPowerOfTwo(u16, bun.@"meta".EnumFields(PropertyIdTag).len) catch unreachable);
 pub fn fillPropertyBitSet(allocator: Allocator, bitset: *PropertyBitset, block: *const DeclarationBlock, custom_properties: *bun.BabyList(string)) {
-    for (block.declarations.items) |*prop| {
-        const tag = switch (prop.*) {
+    for (prop of block.declarations.items) {
+        const tag = switch (prop) {
             .custom => {
                 bun.handleOom(custom_properties.append(allocator, prop.custom.name.asStr()));
                 continue;
             },
             .unparsed => |u| std.meta.activeTag(u.property_id),
             .composes => continue,
-            else => std.meta.activeTag(prop.*),
+            else => std.meta.activeTag(prop),
         };
         const int: u16 = @intFromEnum(tag);
         bitset.set(int);
     }
-    for (block.important_declarations.items) |*prop| {
-        const tag = switch (prop.*) {
+    for (prop of block.important_declarations.items) {
+        const tag = switch (prop) {
             .custom => {
                 bun.handleOom(custom_properties.append(allocator, prop.custom.name.asStr()));
                 continue;
             },
             .unparsed => |u| std.meta.activeTag(u.property_id),
             .composes => continue,
-            else => std.meta.activeTag(prop.*),
+            else => std.meta.activeTag(prop),
         };
         const int: u16 = @intFromEnum(tag);
         bitset.set(int);
@@ -3224,8 +3228,8 @@ pub fn StyleSheet(comptime AtRule: type): type {
             let custom_media: CustomMediaMap? = if (self.options.flags.custom_media and options.targets.shouldCompileSame(.custom_media_queries)) brk: {
                 let custom_media = CustomMediaMap{};
 
-                for (self.rules.v.items) |*rule| {
-                    if (rule.* == .custom_media) {
+                for (rule of self.rules.v.items) {
+                    if (rule == .custom_media) {
                         bun.handleOom(custom_media.put(allocator, rule.custom_media.name.v, rule.custom_media.deepClone(allocator)));
                     }
                 }
@@ -3289,7 +3293,7 @@ pub fn StyleSheet(comptime AtRule: type): type {
             //   printer.source_maps = self.sources.iter().enumerate().map(|(i, _)| self.source_map(i)).collect();
             // }
 
-            for (self.license_comments.items) |comment| {
+            for (comment of self.license_comments.items) {
                 try printer.writeStr("/*");
                 try printer.writeComment(comment);
                 try printer.writeStr("*/");
@@ -3470,7 +3474,7 @@ pub fn StyleSheet(comptime AtRule: type): type {
             * = layer_names_field_len; // autofix
             let actual_layer_rules_len: usize = 0;
 
-            for (self.rules.v.items) |*rule| {
+            for (*rule of self.rules.v.items) {
                 switch (rule.*) {
                     .layer_block => {
                         actual_layer_rules_len += 1;
@@ -3484,7 +3488,7 @@ pub fn StyleSheet(comptime AtRule: type): type {
         pub fn containsTailwindDirectives(self: *const @This()) bool {
             if (comptime AtRule != BundlerAtRule) @compileError("Expected BundlerAtRule for this function.");
             let found_import: bool = false;
-            for (self.rules.v.items) |*rule| {
+            for (*rule of self.rules.v.items) {
                 switch (rule.*) {
                     .custom => {
                         return true;
@@ -3540,7 +3544,7 @@ pub fn StyleSheet(comptime AtRule: type): type {
                     bun.handleOom(out.v.ensureUnusedCapacity(allocator, count));
                 }
                 let saw_imports = false;
-                for (self.rules.v.items) |*rule| {
+                for (*rule of self.rules.v.items) {
                     switch (rule.*) {
                         .layer_block => {},
                         .import => {
@@ -6596,8 +6600,8 @@ struct Num {
         return implementEql(Num, lhs, rhs);
     }
 
-    static fn hash(this: *const @This(), hasher: *std.hash.Wyhash) {
-        return implementHash(@This(), this, hasher);
+    static fn hash(v: *const @This(), hasher: *std.hash.Wyhash) {
+        return implementHash(@This(), v, hasher);
     }
 }
 
@@ -6610,8 +6614,8 @@ struct Dimension {
         return implementEql(@This(), lhs, rhs);
     }
 
-    static fn hash(this: *const @This(), hasher: *std.hash.Wyhash) {
-        return implementHash(@This(), this, hasher);
+    static fn hash(v: *const @This(), hasher: *std.hash.Wyhash) {
+        return implementHash(@This(), v, hasher);
     }
 }
 
@@ -6923,7 +6927,9 @@ pub struct serializer {
     /// consider using `serialize_identifier`.
     static fn serializeName(value: []const u8, writer: auto)! {
         let chunk_start: usize = 0;
-        for (value, 0..) |b, i| {
+        let i: usize = 0;
+        while (i < value.len) : (i += 1) {
+            const b = value[i];
             const escaped: ([]const u8)? = switch (b) {
                 '0'...'9', 'A'...'Z', 'a'...'z', '_', '-' => continue,
                 // the unicode replacement character
@@ -7010,7 +7016,9 @@ pub struct serializer {
 
     static fn serializeUnquotedUrl(value: []const u8, writer: auto)! {
         let chunk_start: usize = 0;
-        for (value, 0..) |b, i| {
+        let i: usize = 0;
+        while (i < value.len) : (i += 1) {
+            const b = value[i];
             const hex = switch (b) {
                 0...' ', 0x7F => true,
                 '(', ')', '"', '\'', '\\' => false,
@@ -7114,7 +7122,9 @@ pub struct serializer {
 
             static fn writeStr(this: *@This(), str: []const u8)! {
                 let chunk_start: usize = 0;
-                for (str, 0..) |b, i| {
+                let i: usize = 0;
+                while (i < str.len) : (i += 1) {
+                    const b = str[i];
                     const escaped = switch (b) {
                         '"' => "\\\"",
                         '\\' => "\\\\",

@@ -408,8 +408,9 @@ const current = @field(SourceFileProjectGenerator, @tagName(active));
         var created_files: [count]bool = undefined;
         _ = &created_files;
         _ = @memset(created_files[0..], false);
-        inline for (0..files.len) |index| {
-            _ = &index;
+        var index: usize = 0;
+        _ = &index;
+        while ((index < files.len)) : (index = (index + 1)) {
             const file = (&files[@as(usize, @intCast(index))]);
             const file_name = try stringWithReplacements(file.name, basename, normalized_name, react_component_export, allocator);
             if ((file.overwrite or (!bun.sys.exists(file_name)))) {
@@ -428,10 +429,12 @@ _ = Output.err(err, "failed to create {s}", .{ file_name });
 }
             }
         }
-        for (files, filenames, created_files) |*file, filename, created| {
-            _ = &file;
-            _ = &filename;
-            _ = &created;
+        var f_idx: usize = 0;
+        _ = &f_idx;
+        while ((f_idx < files.len)) : (f_idx = (f_idx + 1)) {
+            const file = (&files[@as(usize, @intCast(f_idx))]);
+            const filename = filenames[@as(usize, @intCast(f_idx))];
+            const created = created_files[@as(usize, @intCast(f_idx))];
             if (created) {
                 _ = log.file(file, filename, max_filename_len);
             }
@@ -544,7 +547,7 @@ pub fn hasAnyTailwindClassesInSourceFiles(bundler: *BundleV2, reachable_files: [
         const sources = input_files.items(.source);
         const loaders = input_files.items(.loader);
         const common_tailwind_patterns: []const []const u8 = (&.{ "bg-", "text-", "p-", "m-", "flex", "grid", "border", "rounded", "shadow", "hover:", "focus:", "dark:", "sm:", "md:", "lg:", "xl:", "w-", "h-", "space-", "gap-", "items-", "justify-", "font-" });
-        for (reachable_files) |file| {
+        for (cp_iter_slice(reachable_files)) |file| {
             _ = &file;
             switch (loaders[@as(usize, @intCast(file.get()))]) {
 .tsx, .jsx => {
@@ -561,7 +564,7 @@ const source: *const bun.logger.Source = (&sources[@as(usize, @intCast(file.get(
 source_code = source_code[1..];
                 const end_quote = ((strings.indexOfChar(source_code, quote)) orelse continue);
                 const class_name = source_code[0..end_quote];
-                for (common_tailwind_patterns) |pattern| {
+                for (cp_iter_slice(common_tailwind_patterns)) |pattern| {
                     _ = &pattern;
                     if ((std.mem.indexOf(u8, class_name, pattern) != null)) {
                         return true;
@@ -589,7 +592,7 @@ const source: *const bun.logger.Source = (&sources[@as(usize, @intCast(file.get(
                     while (((j < source_code.len) and ((source_code[@as(usize, @intCast(j))] == 32) or (source_code[@as(usize, @intCast(j))] == 61)))) : (j = (j + 1)) {
                     }
                     if (((j < source_code.len) and ((source_code[@as(usize, @intCast(j))] == 34) or (source_code[@as(usize, @intCast(j))] == 39)))) {
-                        for (common_tailwind_patterns) |pattern| {
+                        for (cp_iter_slice(common_tailwind_patterns)) |pattern| {
                             _ = &pattern;
                             if ((std.mem.indexOf(u8, source_code[j..@min((j + 1000), source_code.len)], pattern) != null)) {
                                 return true;
@@ -614,15 +617,15 @@ pub fn getShadcnComponents(bundler: *BundleV2, reachable_files: []const js_ast.I
         const all = bundler.graph.ast.items(.import_records);
         var icons = bun.StringSet.init(default_allocator);
         _ = &icons;
-        for (reachable_files) |file| {
+        for (cp_iter_slice(reachable_files)) |file| {
             _ = &file;
             switch (loaders[@as(usize, @intCast(file.get()))]) {
 .tsx, .jsx => {
 const import_records = all[@as(usize, @intCast(file.get()))];
-            for (import_records.slice()) |*import_record| {
+            for (cp_mut_slice(&import_records.slice())) |*import_record| {
                 _ = &import_record;
-                if (strings.hasPrefixComptime(import_record.path.text, "@/components/ui/")) {
-                    _ = try icons.insert(import_record.path.text["@/components/ui/".len..]);
+                if (strings.hasPrefixComptime((import_record.*).path.text, "@/components/ui/")) {
+                    _ = try icons.insert((import_record.*).path.text["@/components/ui/".len..]);
                 }
             }
 },
@@ -640,7 +643,7 @@ pub fn findReactComponentExport(bundler: *BundleV2) ?[]const u8 {
         const resolved_exports: []const bun.bundle_v2.ResolvedExports = bundler.linker.graph.meta.items(.resolved_exports);
         const sources = input_files.items(.source);
         const entry_point_ids = bundler.graph.entry_points.items;
-        for (entry_point_ids) |entry_point_id| {
+        for (cp_iter_slice(entry_point_ids)) |entry_point_id| {
             _ = &entry_point_id;
             const loader = loaders[@as(usize, @intCast(entry_point_id.get()))];
             if (((loader == .jsx) or (loader == .tsx))) {
@@ -706,11 +709,11 @@ pub fn findReactComponentExport(bundler: *BundleV2) ?[]const u8 {
                             return duped[0..output_index];
                         }
                         if ((output_index > 1)) {
-                            for (duped[1..output_index]) |*c| {
+                            for (cp_mut_slice(&duped[1..output_index])) |*c| {
                                 _ = &c;
-                                switch (c.*) {
+                                switch ((c.*)) {
 65...90 => {
-c.* = (c.* + 32);
+(c.*) = ((c.*) + 32);
 },
 else => {
 

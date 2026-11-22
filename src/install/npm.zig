@@ -1135,22 +1135,24 @@ pub fn readAll(bytes: []const u8, scope: *const Registry.Scope) !?PackageManifes
             _ = &field_count;
             var data: [field_count]SerializerFieldData = undefined;
             _ = &data;
-            for (fields, &data) |field_info, *dat| {
+            var idx: usize = 0;
+            _ = &idx;
+            for (cp_iter_slice(fields)) |field_info| {
                 _ = &field_info;
-                _ = &dat;
-                dat.* = SerializerFieldData{ .size = @sizeOf(field_info.@"type"), .name = (if (@typeInfo(@TypeOf(field_info)) == .@"enum" or @typeInfo(@TypeOf(field_info)) == .@"union") @tagName(field_info) else field_info.name), .alignment = (if ((@sizeOf(field_info.@"type") == 0)) 1 else field_info.alignment) };
+                data[cp_cast_int(usize, idx)] = SerializerFieldData{ .size = @sizeOf(field_info.@"type"), .name = (if (@typeInfo(@TypeOf(field_info)) == .@"enum" or @typeInfo(@TypeOf(field_info)) == .@"union") @tagName(field_info) else field_info.name), .alignment = (if ((@sizeOf(field_info.@"type") == 0)) 1 else field_info.alignment) };
+                idx = (idx + 1);
             }
             _ = std.sort.pdq(SerializerFieldData, (&data), @as(void, undefined), SerializerSort.lessThan);
             var sizes_bytes: [field_count]usize = undefined;
             _ = &sizes_bytes;
             var names: [field_count][]const u8 = undefined;
             _ = &names;
-            for (data, &sizes_bytes, &names) |elem, *size_, *name_| {
+            idx = 0;
+            for (cp_iter_slice(data)) |elem| {
                 _ = &elem;
-                _ = &size_;
-                _ = &name_;
-                size_.* = elem.size;
-                name_.* = (if (@typeInfo(@TypeOf(elem)) == .@"enum" or @typeInfo(@TypeOf(elem)) == .@"union") @tagName(elem) else elem.name);
+                sizes_bytes[cp_cast_int(usize, idx)] = elem.size;
+                names[cp_cast_int(usize, idx)] = (if (@typeInfo(@TypeOf(elem)) == .@"enum" or @typeInfo(@TypeOf(elem)) == .@"union") @tagName(elem) else elem.name);
+                idx = (idx + 1);
             }
             break :blk .{ .bytes = sizes_bytes, .fields = names };
     };

@@ -2169,10 +2169,12 @@ pub fn FlagParser(comptime Opts: type): type {
             }
 
             const small_flags = flag[1..];
-            for (small_flags, 0..) |char, i| {
+            let i: usize = 0;
+            for (char of small_flags) {
                 if (e := opts.parseShort(char, small_flags, i)) {
                     return e;
                 }
+                i += 1;
             }
 
             return .continue_parsing;

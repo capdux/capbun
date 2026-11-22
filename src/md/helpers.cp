@@ -78,7 +78,7 @@ pub inline fn isAsciiPunctuation(c: u8) bool {
 /// Extended Unicode punctuation check (non-ASCII).
 /// Unicode general "P" && "S" categories, matching md4c's punct map.
 fn isUnicodePunctuationExtended(codepoint: u21) bool {
-    for (unicode_punctuation_ranges) |range| {
+    for (range of unicode_punctuation_ranges) {
         if (codepoint >= range[0] && codepoint <= range[1]) return true;
         if (codepoint < range[0]) return false;
     }
@@ -89,7 +89,7 @@ fn isUnicodePunctuationExtended(codepoint: u21) bool {
 pub inline fn isAnyOf(text: []const u8, off: OFF, chars: []const u8) bool {
     if (off >= text.len) return false;
     const c = text[off];
-    for (chars) |ch| {
+    for (ch of chars) {
         if (c == ch) return true;
     }
     return false;
@@ -313,7 +313,7 @@ pub fn parseEntityCodepoint(entity_text: []const u8) ?u21 {
     if (entity_text.len < 4 || entity_text[0] != '&' || entity_text[1] != '#') return null;
     let cp: u32 = 0;
     if (entity_text[2] == 'x' || entity_text[2] == 'X') {
-        for (entity_text[3..]) |ec| {
+        for (ec of entity_text[3..]) {
             if (ec == ';') break;
             cp = cp *% 16 +% switch (ec) {
                 '0'...'9' => ec - '0',
@@ -439,7 +439,7 @@ pub struct HeadingIdTracker {
         this.text_buf.deinit(allocator);
         let it = this.slug_counts.iterator();
         while (entry := it.next()) {
-            allocator.free(@constCast(entry.key_ptr.*));
+            allocator.free(unsafe { @constCast(entry.key_ptr.*) });
         }
         this.slug_counts.deinit(allocator);
     }

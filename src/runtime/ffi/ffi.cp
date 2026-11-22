@@ -1431,23 +1431,27 @@ pub struct FFIFunction {
         const label = bun.ComptimeStringMap(FFIABIType, map);
         const map_to_js_object = brk: {
             let count: usize = 2;
-            for (map, 0..) |item, i| {
+            let i: usize = 0;
+            for (item of map) {
                 const fmt = EnumMapFormatter{ name: item[0], entry: item[1] };
                 count += std.fmt.count("{}", .{fmt});
                 count += @intFromBool(i > 0);
+                i += 1;
             }
 
             let buf: [count]u8 = undefined;
             buf[0] = '{';
             buf[buf.len - 1] = '}';
             let end: usize = 1;
-            for (map, 0..) |item, i| {
+            let j: usize = 0;
+            for (item of map) {
                 const fmt = EnumMapFormatter{ name: item[0], entry: item[1] };
-                if (i > 0) {
+                if (j > 0) {
                     buf[end] = ',';
                     end += 1;
                 }
                 end += (std.fmt.bufPrint(buf[end..], "{}", .{fmt}) catch unreachable).len;
+                j += 1;
             }
 
             break :brk buf;

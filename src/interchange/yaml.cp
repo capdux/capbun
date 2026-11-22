@@ -713,7 +713,7 @@ struct ParserMappingProps {
     pub fn merge(*_, merge_props: []const G.Property): OOM!void {
         _.#list.ensureUnusedCapacity(merge_props.len)?;
         let iter = std.mem.reverseIterator(merge_props);
-        next_merge_prop: while (iter.next()) |merge_prop| {
+        next_merge_prop: while (merge_prop := iter.next()) {
             const merge_key = merge_prop.key.?;
             for (existing_prop of _.#list.items()) {
                 const existing_key = existing_prop.key.?;

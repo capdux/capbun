@@ -122,13 +122,15 @@ pub struct PackageSerializer<PackageType, List> {
     pub const sizes = blk: {
         const fields = std.@"meta".fields(PackageType);
         let data: [fields.len]PackageSerializerData = undefined;
-        for (fields, &data, 0..) |field_info, *elem, i| {
-            elem.* = .{
+        let field_i: usize = 0;
+        for (field_info of fields) {
+            data[field_i] = .{
                 .size = @sizeOf(field_info.type),
-                .size_index = i,
+                .size_index = field_i,
                 .Type = field_info.type,
                 .alignment = if (@sizeOf(field_info.type) == 0) 1 else field_info.alignment,
             };
+            field_i += 1;
         }
         std.sort.insertionContext(0, fields.len, PackageSerializerSortContext{
             .data = &data,
@@ -136,10 +138,12 @@ pub struct PackageSerializer<PackageType, List> {
         let sizes_bytes: [fields.len]usize = undefined;
         let field_indexes: [fields.len]usize = undefined;
         let Types: [fields.len]type = undefined;
-        for (data, &sizes_bytes, &field_indexes, &Types) |elem, *size, *index, *Type| {
-            size.* = elem.size;
-            index.* = elem.size_index;
-            Type.* = elem.Type;
+        let data_i: usize = 0;
+        for (elem of data) {
+            sizes_bytes[data_i] = elem.size;
+            field_indexes[data_i] = elem.size_index;
+            Types[data_i] = elem.Type;
+            data_i += 1;
         }
         break :blk .{
             .bytes = sizes_bytes,
@@ -445,13 +449,15 @@ pub fn Package(comptime SemverIntType: type): type {
                 cloner.manager.preinstall_state.items[new_package.@"meta".id] = cloner.old_preinstall_state.items[_.@"meta".id];
             }
 
-            for (old_dependencies, dependencies) |old_dep, *new_dep| {
-                new_dep.* = try old_dep.clone(
+            let dep_i: usize = 0;
+            for (old_dep of old_dependencies) {
+                dependencies[dep_i] = try old_dep.clone(
                     pm,
                     old_string_buf,
                     *Lockfile.StringBuilder,
                     builder,
                 );
+                dep_i += 1;
             }
 
             builder.clamp();
@@ -636,7 +642,10 @@ pub fn Package(comptime SemverIntType: type): type {
 
                     if (comptime Environment.isDebug) assert(keys.len == version_strings.len);
 
-                    for (keys, version_strings) |key, ver| {
+                    let k_i: usize = 0;
+                    for (key of keys) {
+                        const ver = version_strings[k_i];
+                        k_i += 1;
                         string_builder.count(key.slice(manifest.string_buf));
                         string_builder.count(ver.slice(manifest.string_buf));
                     }
@@ -692,12 +701,16 @@ pub fn Package(comptime SemverIntType: type): type {
                     if (comptime Environment.isDebug) assert(keys.len == version_strings.len);
                     const is_peer = comptime strings.eqlComptime(group.field, "peer_dependencies");
 
-                    list: for (keys, version_strings, 0..) |key, version_string_, i| {
+                    let i: usize = 0;
+                    list: for (key of keys) {
+                        const version_string_ = version_strings[i];
+                        defer i += 1;
                         // Duplicate peer & dev dependencies are promoted to whichever appeared first
                         // In practice, npm validates this so it shouldn't happen
                         let duplicate_at: usize? = null;
                         if (comptime group.behavior.isPeer() || group.behavior.isDev() || group.behavior.isOptional()) {
-                            for (dependencies[0..total_dependencies_count], 0..) |dependency, j| {
+                            let j: usize = 0;
+                            for (dependency of dependencies[0..total_dependencies_count]) {
                                 if (dependency.name_hash == key.hash) {
                                     if (comptime group.behavior.isOptional()) {
                                         duplicate_at = j;
@@ -706,6 +719,7 @@ pub fn Package(comptime SemverIntType: type): type {
 
                                     continue :list;
                                 }
+                                j += 1;
                             }
                         }
 
@@ -1026,7 +1040,9 @@ pub fn Package(comptime SemverIntType: type): type {
                     break :patched_dependencies_changed false;
                 };
 
-                for (from_deps, 0..) |*from_dep, i| {
+                let i: usize = 0;
+                for (*from_dep of from_deps) {
+                    defer i += 1;
                     found: {
                         const prev_i = to_i;
 
@@ -1073,7 +1089,7 @@ pub fn Package(comptime SemverIntType: type): type {
                     }
                     defer to_i += 1;
 
-                    if (to_deps[to_i].eql(from_dep, to_lockfile.buffers.string_bytes.items, from_lockfile.buffers.string_bytes.items)) {
+                    if (to_deps[to_i].eql(&from_dep, to_lockfile.buffers.string_bytes.items, from_lockfile.buffers.string_bytes.items)) {
                         if (updates := update_requests) {
                             if (updates.len == 0 || brk: {
                                 for (request of updates) {
@@ -2021,7 +2037,11 @@ pub fn Package(comptime SemverIntType: type): type {
                 if (group.behavior.isWorkspace()) {
                     let seen_workspace_names = TrustedDependenciesSet{};
                     const seen_ws_guard = DeinitWithAllocGuard<TrustedDependenciesSet>{ ptr: &seen_workspace_names, alloc: allocator };
-                    for (workspace_names.values(), workspace_names.keys()) |entry, path| {
+                    const ws_keys = workspace_names.keys();
+                    let ws_idx: usize = 0;
+                    for (entry of workspace_names.values()) {
+                        const path = ws_keys[ws_idx];
+                        defer ws_idx += 1;
 
                         // workspace names from their package jsons. duplicates not allowed
                         const gop = seen_workspace_names.getOrPut(allocator, @truncate(String.Builder.stringHash(entry.name)))?;
@@ -2043,7 +2063,10 @@ pub fn Package(comptime SemverIntType: type): type {
                             const notes = notes: {
                                 let notes = allocator.alloc(logger.Data, num_notes)?;
                                 let i: usize = 0;
-                                for (workspace_names.values(), workspace_names.keys()) |value, note_path| {
+                                let note_idx: usize = 0;
+                                for (value of workspace_names.values()) {
+                                    const note_path = ws_keys[note_idx];
+                                    defer note_idx += 1;
                                     if (note_path.ptr == path.ptr) continue;
                                     if (strings.eqlLong(value.name, entry.name, true)) {
                                         const note_abs_path = bun.handleOom(allocator.dupeZ(u8, Path.joinAbsStringZ(cwd, [ note_path, "package.json" ], .auto)));

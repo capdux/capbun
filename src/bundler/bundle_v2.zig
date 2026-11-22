@@ -2145,16 +2145,24 @@ pub fn finishFromBakeDevServer(self: *BundleV2, dev_server: *bake.DevServer) bun
             break :blk @as([]Index.Int, @ptrCast(js_reachable_files));
 
 }), .parts_in_chunk_in_order = js_part_ranges } }, .output_source_map = SourceMap.SourceMapPieces.init(self.allocator()) };
-            for (chunks[1..][0..start.css_entry_points.count()], start.css_entry_points.keys()) |*chunk, entry_point| {
-                _ = &chunk;
-                _ = &entry_point;
+            const css_chunks = chunks[1..][0..start.css_entry_points.count()];
+            const css_keys = start.css_entry_points.keys();
+            var css_i: usize = 0;
+            _ = &css_i;
+            while ((css_i < css_chunks.len)) : (css_i = (css_i + 1)) {
+                const chunk = (&css_chunks[@as(usize, @intCast(css_i))]);
+                const entry_point = css_keys[@as(usize, @intCast(css_i))];
                 const eps: [1]Index = .{ entry_point };
                 const order = self.linker.findImportedFilesInCSSOrder(self.allocator(), (&eps));
                 chunk.* = .{ .entry_point = .{ .entry_point_id = @intCast(entry_point.get()), .source_index = entry_point.get(), .is_entry_point = false }, .content = .{ .css = .{ .imports_in_chunk_in_order = order, .asts = try self.allocator().alloc(bun.css.BundlerStyleSheet, order.len) } }, .output_source_map = SourceMap.SourceMapPieces.init(self.allocator()) };
             }
-            for (html_files.keys(), chunks[1 + start.css_entry_points.count() ..]) |source_index, *chunk| {
-                _ = &source_index;
-                _ = &chunk;
+            const html_keys = html_files.keys();
+            const html_chunks = chunks[(1 + start.css_entry_points.count())..];
+            var html_i: usize = 0;
+            _ = &html_i;
+            while ((html_i < html_keys.len)) : (html_i = (html_i + 1)) {
+                const source_index = html_keys[@as(usize, @intCast(html_i))];
+                const chunk = (&html_chunks[@as(usize, @intCast(html_i))]);
                 chunk.* = .{ .entry_point = .{ .entry_point_id = @intCast(source_index.get()), .source_index = source_index.get(), .is_entry_point = false }, .content = .html, .output_source_map = SourceMap.SourceMapPieces.init(self.allocator()) };
             }
             _ = self.graph.heap.helpCatchMemoryIssues();
@@ -2309,13 +2317,17 @@ pub fn resolveImportRecords(self: *BundleV2, ctx: ResolveImportRecordCtx) Resolv
             _ = bun.handleOom(resolve_queue.ensureTotalCapacity(@intCast(estimated_resolve_queue_count)));
             var last_error: ?anyerror = null;
             _ = &last_error;
-            outer: for (ctx.import_records.slice(), 0..) |*import_record, i| {
+            var i: usize = 0;
+            _ = &i;
+            outer: for (cp_mut_slice(&ctx.import_records.slice())) |*import_record| {
                 _ = &import_record;
-                _ = &i;
-                if ((import_record.original_path.len == 0)) {
-                    import_record.original_path = import_record.path.text;
+                defer {
+                i = (i + 1);
                 }
-                if (((import_record.flags.is_unused or import_record.flags.is_internal) or import_record.source_index.isValid())) {
+                if (((import_record.*).original_path.len == 0)) {
+                    (import_record.*).original_path = (import_record.*).path.text;
+                }
+                if ((((import_record.*).flags.is_unused or (import_record.*).flags.is_internal) or (import_record.*).source_index.isValid())) {
                     continue;
                 }
                 if (self.framework) |fw| {
@@ -2324,18 +2336,18 @@ pub fn resolveImportRecords(self: *BundleV2, ctx: ResolveImportRecordCtx) Resolv
                         switch (ctx.target.isServerSide()) {
 inline else => |is_server| {
 const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_source);
-                        if (strings.eqlComptime(import_record.path.text, src.path.pretty)) {
+                        if (strings.eqlComptime((import_record.*).path.text, src.path.pretty)) {
                             if ((self.transpiler.options.dev_server != null)) {
-                                import_record.flags.is_external_without_side_effects = true;
-                                import_record.source_index = Index.invalid;
+                                (import_record.*).flags.is_external_without_side_effects = true;
+                                (import_record.*).source_index = Index.invalid;
                             } else {
                                 if (is_server) {
                                     self.graph.kit_referenced_server_data = true;
                                 } else {
                                     self.graph.kit_referenced_client_data = true;
                                 }
-                                import_record.path.namespace = "bun";
-                                import_record.source_index = src.index;
+                                (import_record.*).path.namespace = "bun";
+                                (import_record.*).source_index = src.index;
                             }
                             continue;
                         }
@@ -2343,38 +2355,38 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
 }
                     }
                 }
-                if (strings.eqlComptime(import_record.path.text, "bun:wrap")) {
-                    import_record.path.namespace = "bun";
-                    import_record.tag = .runtime;
-                    import_record.path.text = "wrap";
-                    import_record.source_index = .runtime;
+                if (strings.eqlComptime((import_record.*).path.text, "bun:wrap")) {
+                    (import_record.*).path.namespace = "bun";
+                    (import_record.*).tag = .runtime;
+                    (import_record.*).path.text = "wrap";
+                    (import_record.*).source_index = .runtime;
                     continue;
                 }
                 if (ctx.target.isBun()) {
-                    if (jsc.ModuleLoader.HardcodedModule.Alias.get(import_record.path.text, .bun, .{ .rewrite_jest_for_tests = self.transpiler.options.rewrite_jest_for_tests })) |replacement| {
+                    if (jsc.ModuleLoader.HardcodedModule.Alias.get((import_record.*).path.text, .bun, .{ .rewrite_jest_for_tests = self.transpiler.options.rewrite_jest_for_tests })) |replacement| {
                         _ = &replacement;
-                        import_record.path.text = (if ((replacement.node_builtin and (!replacement.node_only_prefix))) replacement.path[5..] else replacement.path);
-                        import_record.tag = replacement.tag;
-                        import_record.source_index = Index.invalid;
-                        import_record.flags.is_external_without_side_effects = true;
+                        (import_record.*).path.text = (if ((replacement.node_builtin and (!replacement.node_only_prefix))) replacement.path[5..] else replacement.path);
+                        (import_record.*).tag = replacement.tag;
+                        (import_record.*).source_index = Index.invalid;
+                        (import_record.*).flags.is_external_without_side_effects = true;
                         continue;
                     }
-                    if (strings.hasPrefixComptime(import_record.path.text, "bun:")) {
-                        import_record.path = Fs.Path.init(import_record.path.text["bun:".len..]);
-                        import_record.path.namespace = "bun";
-                        import_record.source_index = Index.invalid;
-                        import_record.flags.is_external_without_side_effects = true;
+                    if (strings.hasPrefixComptime((import_record.*).path.text, "bun:")) {
+                        (import_record.*).path = Fs.Path.init((import_record.*).path.text["bun:".len..]);
+                        (import_record.*).path.namespace = "bun";
+                        (import_record.*).source_index = Index.invalid;
+                        (import_record.*).flags.is_external_without_side_effects = true;
                         continue;
                     }
                 }
-                if (((import_record.loader != null) and (import_record.loader.? == .sqlite))) {
-                    import_record.flags.is_external_without_side_effects = true;
+                if ((((import_record.*).loader != null) and ((import_record.*).loader.? == .sqlite))) {
+                    (import_record.*).flags.is_external_without_side_effects = true;
                     continue;
                 }
-                if (((import_record.loader != null) and (import_record.loader.? == .sqlite_embedded))) {
-                    import_record.flags.is_external_without_side_effects = true;
+                if ((((import_record.*).loader != null) and ((import_record.*).loader.? == .sqlite_embedded))) {
+                    (import_record.*).flags.is_external_without_side_effects = true;
                 }
-                if (self.enqueueOnResolvePluginIfNeeded(source.index.get(), import_record, source.path.text, @as(u32, @truncate(i)), ctx.target)) {
+                if (self.enqueueOnResolvePluginIfNeeded(source.index.get(), (&(import_record.*)), source.path.text, @as(u32, @truncate(i)), ctx.target)) {
                     continue;
                 }
                 var transpiler: *Transpiler = undefined;
@@ -2383,14 +2395,14 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                 _ = &bake_graph;
                 var target: options.Target = undefined;
                 _ = &target;
-                if ((import_record.tag == .bake_resolve_to_ssr_graph)) {
+                if (((import_record.*).tag == .bake_resolve_to_ssr_graph)) {
                     if ((self.framework == null)) {
-                        _ = (blk_catch_55: { break :blk_catch_55 ((self.logForResolutionFailures(source.path.text, .ssr).addErrorFmt(source, import_record.range.loc, self.allocator(), "The 'bunBakeGraph' import attribute cannot be used outside of a Bun Bake bundle", .{})) catch |__ce_55| { _ = &__ce_55; @panic("unexpected log error"); }); });
+                        _ = (blk_catch_55: { break :blk_catch_55 ((self.logForResolutionFailures(source.path.text, .ssr).addErrorFmt(source, (import_record.*).range.loc, self.allocator(), "The 'bunBakeGraph' import attribute cannot be used outside of a Bun Bake bundle", .{})) catch |__ce_55| { _ = &__ce_55; @panic("unexpected log error"); }); });
                         continue;
                     }
                     const is_supported = ((self.framework.?.server_components != null) and self.framework.?.server_components.?.separate_ssr_graph);
                     if ((!is_supported)) {
-                        _ = (blk_catch_56: { break :blk_catch_56 ((self.logForResolutionFailures(source.path.text, .ssr).addErrorFmt(source, import_record.range.loc, self.allocator(), "Framework does not have a separate SSR graph to put this import into", .{})) catch |__ce_56| { _ = &__ce_56; @panic("unexpected log error"); }); });
+                        _ = (blk_catch_56: { break :blk_catch_56 ((self.logForResolutionFailures(source.path.text, .ssr).addErrorFmt(source, (import_record.*).range.loc, self.allocator(), "Framework does not have a separate SSR graph to put this import into", .{})) catch |__ce_56| { _ = &__ce_56; @panic("unexpected log error"); }); });
                         continue;
                     }
                     transpiler = (blk: {
@@ -2409,26 +2421,26 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                 }
                 if (self.file_map) |file_map| {
                     _ = &file_map;
-                    if (file_map.resolve(source.path.text, import_record.path.text)) |_file_map_result| {
+                    if (file_map.resolve(source.path.text, (import_record.*).path.text)) |_file_map_result| {
                         _ = &_file_map_result;
                         var file_map_result = _file_map_result;
                         _ = &file_map_result;
                         var path_primary = file_map_result.path_pair.primary;
                         _ = &path_primary;
-                        const import_record_loader = ((import_record.loader) orelse (((Fs.Path.init(path_primary.text).loader((&transpiler.options.loaders))) orelse (.file))));
-                        import_record.loader = import_record_loader;
+                        const import_record_loader = (((import_record.*).loader) orelse (((Fs.Path.init(path_primary.text).loader((&transpiler.options.loaders))) orelse (.file))));
+                        (import_record.*).loader = import_record_loader;
                         if (self.pathToSourceIndexMap(target).get(path_primary.text)) |id| {
                             _ = &id;
-                            import_record.source_index = .init(id);
+                            (import_record.*).source_index = .init(id);
                             continue;
                         }
                         const resolve_entry = (blk_catch_57: { break :blk_catch_57 ((resolve_queue.getOrPut(path_primary.text)) catch |oom_err| { _ = &oom_err; break :blk_catch_57 bun.handleOom(oom_err); }); });
                         if (resolve_entry.found_existing) {
-                            import_record.path = resolve_entry.value_ptr.*.path;
+                            (import_record.*).path = resolve_entry.value_ptr.*.path;
                             continue;
                         }
                         path_primary.pretty = bun.handleOom(self.allocator().dupe(u8, path_primary.text));
-                        import_record.path = path_primary;
+                        (import_record.*).path = path_primary;
                         resolve_entry.key_ptr.* = path_primary.text;
                         _ = debug("created ParseTask from FileMap: {s}", .{ path_primary.text });
                         const resolve_task = bun.handleOom(bun.default_allocator.create(ParseTask));
@@ -2456,38 +2468,38 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                 _ = &resolve_result;
                 const dummy_resolve_result: _resolver.Result = undefined;
                 inner: while (true) {
-                    resolve_result = (blk_catch_58: { break :blk_catch_58 ((transpiler.resolver.resolveWithFramework(source_dir, import_record.path.text, import_record.kind)) catch |e| { _ = &e; break :blk_catch_58 blk_res: {
+                    resolve_result = (blk_catch_58: { break :blk_catch_58 ((transpiler.resolver.resolveWithFramework(source_dir, (import_record.*).path.text, (import_record.*).kind)) catch |e| { _ = &e; break :blk_catch_58 blk_res: {
                     const log = self.logForResolutionFailures(source.path.text, bake_graph);
                     if ((e == error.ModuleNotFound)) {
                         if ((self.bun_watcher != null)) {
                             if ((!had_busted_dir_cache)) {
-                                _ = bun.Output.scoped(.watcher, .visible)("busting dir cache {s} -> {s}", .{ source.path.text, import_record.path.text });
-                                if (transpiler.resolver.bustDirCacheFromSpecifier(source.path.text, import_record.path.text)) {
+                                _ = bun.Output.scoped(.watcher, .visible)("busting dir cache {s} -> {s}", .{ source.path.text, (import_record.*).path.text });
+                                if (transpiler.resolver.bustDirCacheFromSpecifier(source.path.text, (import_record.*).path.text)) {
                                     had_busted_dir_cache = true;
                                     continue :inner;
                                 }
                             }
                             if (self.transpiler.options.dev_server) |dev| {
                                 _ = &dev;
-                                _ = (blk_catch_59: { break :blk_catch_59 ((dev.directory_watchers.trackResolutionFailure(source.path.text, import_record.path.text, ctx.target.bakeGraph(), loader)) catch |oom_err| { _ = &oom_err; break :blk_catch_59 bun.handleOom(oom_err); }); });
+                                _ = (blk_catch_59: { break :blk_catch_59 ((dev.directory_watchers.trackResolutionFailure(source.path.text, (import_record.*).path.text, ctx.target.bakeGraph(), loader)) catch |oom_err| { _ = &oom_err; break :blk_catch_59 bun.handleOom(oom_err); }); });
                             }
                         }
                     }
-                    import_record.path.is_disabled = true;
-                    __sw_blk_30: { const __disc_30 = e; _ = &__disc_30; if ((!cp_has_ok_val(__disc_30) and !cp_is_null_val(__disc_30))) { const __err_v_30 = cp_unwrap_err_val(__disc_30); _ = &__err_v_30; if (cp_match_tag(__err_v_30, .ModuleNotFound)) {  const addError = Logger.Log.addResolveErrorWithTextDupe;
-                    if (((!import_record.flags.handles_import_errors) and (!self.transpiler.options.ignore_module_resolution_errors))) {
+                    (import_record.*).path.is_disabled = true;
+                    __sw_blk_31: { const __disc_31 = e; _ = &__disc_31; if ((!cp_has_ok_val(__disc_31) and !cp_is_null_val(__disc_31))) { const __err_v_31 = cp_unwrap_err_val(__disc_31); _ = &__err_v_31; if (cp_match_tag(__err_v_31, .ModuleNotFound)) {  const addError = Logger.Log.addResolveErrorWithTextDupe;
+                    if (((!(import_record.*).flags.handles_import_errors) and (!self.transpiler.options.ignore_module_resolution_errors))) {
                         last_error = e;
-                        if (isPackagePath(import_record.path.text)) {
-                            if (((ctx.target == .browser) and options.ExternalModules.isNodeBuiltin(import_record.path.text))) {
-                                _ = (blk_catch_60: { break :blk_catch_60 ((addError(log, source, import_record.range, self.allocator(), "Browser build cannot {s} Node.js builtin: \"{s}\"{s}", .{ import_record.kind.errorLabel(), import_record.path.text, (if ((self.transpiler.options.dev_server == null)) ". To use Node.js builtins, set target to 'node' or 'bun'" else "") }, import_record.kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_60 bun.handleOom(oom_err); }); });
+                        if (isPackagePath((import_record.*).path.text)) {
+                            if (((ctx.target == .browser) and options.ExternalModules.isNodeBuiltin((import_record.*).path.text))) {
+                                _ = (blk_catch_60: { break :blk_catch_60 ((addError(log, source, (import_record.*).range, self.allocator(), "Browser build cannot {s} Node.js builtin: \"{s}\"{s}", .{ (import_record.*).kind.errorLabel(), (import_record.*).path.text, (if ((self.transpiler.options.dev_server == null)) ". To use Node.js builtins, set target to 'node' or 'bun'" else "") }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_60 bun.handleOom(oom_err); }); });
                             } else {
-                                if (((!ctx.target.isBun()) and strings.eqlComptime(import_record.path.text, "bun"))) {
-                                    _ = (blk_catch_61: { break :blk_catch_61 ((addError(log, source, import_record.range, self.allocator(), "Browser build cannot {s} Bun builtin: \"{s}\"{s}", .{ import_record.kind.errorLabel(), import_record.path.text, (if ((self.transpiler.options.dev_server == null)) ". When bundling for Bun, set target to 'bun'" else "") }, import_record.kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_61 bun.handleOom(oom_err); }); });
+                                if (((!ctx.target.isBun()) and strings.eqlComptime((import_record.*).path.text, "bun"))) {
+                                    _ = (blk_catch_61: { break :blk_catch_61 ((addError(log, source, (import_record.*).range, self.allocator(), "Browser build cannot {s} Bun builtin: \"{s}\"{s}", .{ (import_record.*).kind.errorLabel(), (import_record.*).path.text, (if ((self.transpiler.options.dev_server == null)) ". When bundling for Bun, set target to 'bun'" else "") }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_61 bun.handleOom(oom_err); }); });
                                 } else {
-                                    if (((!ctx.target.isBun()) and strings.hasPrefixComptime(import_record.path.text, "bun:"))) {
-                                        _ = (blk_catch_62: { break :blk_catch_62 ((addError(log, source, import_record.range, self.allocator(), "Browser build cannot {s} Bun builtin: \"{s}\"{s}", .{ import_record.kind.errorLabel(), import_record.path.text, (if ((self.transpiler.options.dev_server == null)) ". When bundling for Bun, set target to 'bun'" else "") }, import_record.kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_62 bun.handleOom(oom_err); }); });
+                                    if (((!ctx.target.isBun()) and strings.hasPrefixComptime((import_record.*).path.text, "bun:"))) {
+                                        _ = (blk_catch_62: { break :blk_catch_62 ((addError(log, source, (import_record.*).range, self.allocator(), "Browser build cannot {s} Bun builtin: \"{s}\"{s}", .{ (import_record.*).kind.errorLabel(), (import_record.*).path.text, (if ((self.transpiler.options.dev_server == null)) ". When bundling for Bun, set target to 'bun'" else "") }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_62 bun.handleOom(oom_err); }); });
                                     } else {
-                                        _ = (blk_catch_63: { break :blk_catch_63 ((addError(log, source, import_record.range, self.allocator(), "Could not resolve: \"{s}\". Maybe you need to \"bun install\"?", .{ import_record.path.text }, import_record.kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_63 bun.handleOom(oom_err); }); });
+                                        _ = (blk_catch_63: { break :blk_catch_63 ((addError(log, source, (import_record.*).range, self.allocator(), "Could not resolve: \"{s}\". Maybe you need to \"bun install\"?", .{ (import_record.*).path.text }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_63 bun.handleOom(oom_err); }); });
                                     }
                                 }
                             }
@@ -2497,16 +2509,16 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                             _ = &_guard_buf;
                             var ___guard_buf_moved = false; _ = &___guard_buf_moved;
                             defer if (!___guard_buf_moved) { ___guard_buf_moved = true; const __T = @TypeOf(_guard_buf); if (@typeInfo(__T) == .optional) { if (_guard_buf) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_buf.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_buf; _drop_val.__cp_deinit(); } };
-                            const specifier_to_use = (if (((loader == .html) and bun.strings.hasPrefix(import_record.path.text, bun.fs.FileSystem.instance.top_level_dir))) brk: {
-                            const specifier_to_use = import_record.path.text[bun.fs.FileSystem.instance.top_level_dir.len..];
+                            const specifier_to_use = (if (((loader == .html) and bun.strings.hasPrefix((import_record.*).path.text, bun.fs.FileSystem.instance.top_level_dir))) brk: {
+                            const specifier_to_use = (import_record.*).path.text[bun.fs.FileSystem.instance.top_level_dir.len..];
                             if (Environment.isWindows) {
                                 break :brk bun.path.pathToPosixBuf(u8, specifier_to_use, buf);
                             }
                             break :brk specifier_to_use;
-} else import_record.path.text);
-                            _ = (blk_catch_64: { break :blk_catch_64 ((addError(log, source, import_record.range, self.allocator(), "Could not resolve: \"{s}\"", .{ specifier_to_use }, import_record.kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_64 bun.handleOom(oom_err); }); });
+} else (import_record.*).path.text);
+                            _ = (blk_catch_64: { break :blk_catch_64 ((addError(log, source, (import_record.*).range, self.allocator(), "Could not resolve: \"{s}\"", .{ specifier_to_use }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_64 bun.handleOom(oom_err); }); });
                         }
-                    } break :__sw_blk_30; } } {  last_error = e; break :__sw_blk_30; }  }
+                    } break :__sw_blk_31; } } {  last_error = e; break :__sw_blk_31; }  }
                     had_resolve_error = true;
                     break :blk_res dummy_resolve_result;
 }; }); });
@@ -2519,45 +2531,45 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                     continue;
                 }
                 if ((resolve_result.path() == null)) {
-                    import_record.path.is_disabled = true;
-                    import_record.source_index = Index.invalid;
+                    (import_record.*).path.is_disabled = true;
+                    (import_record.*).source_index = Index.invalid;
                     continue;
                 }
                 const path: *Fs.Path = (resolve_result.path()).?;
                 if (resolve_result.flags.is_external) {
-                    if ((resolve_result.flags.is_external_and_rewrite_import_path and (!strings.eqlLong(resolve_result.path_pair.primary.text, import_record.path.text, true)))) {
-                        import_record.path = resolve_result.path_pair.primary;
+                    if ((resolve_result.flags.is_external_and_rewrite_import_path and (!strings.eqlLong(resolve_result.path_pair.primary.text, (import_record.*).path.text, true)))) {
+                        (import_record.*).path = resolve_result.path_pair.primary;
                     }
-                    import_record.flags.is_external_without_side_effects = (resolve_result.primary_side_effects_data != .has_side_effects);
+                    (import_record.*).flags.is_external_without_side_effects = (resolve_result.primary_side_effects_data != .has_side_effects);
                     continue;
                 }
                 if (self.transpiler.options.dev_server) |dev_server| {
                     _ = &dev_server;
                     _ = brk: {
-                    if (((path.loader((&self.transpiler.options.loaders)) == .html) and ((import_record.loader == null) or (import_record.loader.? == .html)))) {
+                    if (((path.loader((&self.transpiler.options.loaders)) == .html) and (((import_record.*).loader == null) or ((import_record.*).loader.? == .html)))) {
                         const log = self.logForResolutionFailures(source.path.text, bake_graph);
-                        _ = (blk_catch_65: { break :blk_catch_65 ((log.addRangeErrorFmt(source, import_record.range, self.allocator(), "Browser builds cannot import HTML files.", .{})) catch |oom_err| { _ = &oom_err; break :blk_catch_65 bun.handleOom(oom_err); }); });
+                        _ = (blk_catch_65: { break :blk_catch_65 ((log.addRangeErrorFmt(source, (import_record.*).range, self.allocator(), "Browser builds cannot import HTML files.", .{})) catch |oom_err| { _ = &oom_err; break :blk_catch_65 bun.handleOom(oom_err); }); });
                         continue;
                     }
                     if ((loader == .css)) {
                         break :brk;
                     }
-                    import_record.source_index = Index.invalid;
+                    (import_record.*).source_index = Index.invalid;
                     if (dev_server.isFileCached(path.text, bake_graph)) |entry| {
                         _ = &entry;
                         const rel = bun.path.relativePlatform(self.transpiler.fs.top_level_dir, path.text, .loose, false);
                         if (((loader == .html) and (entry.kind == .asset))) {
                             const hash = ((dev_server.assets.getHash(path.text)) orelse (@panic("cached asset not found")));
-                            import_record.path.text = path.text;
-                            import_record.path.namespace = "file";
-                            import_record.path.pretty = (blk_catch_66: { break :blk_catch_66 ((std.fmt.allocPrint(self.allocator(), (bun.bake.DevServer.asset_prefix ++ "/{s}{s}"), .{ (&std.fmt.bytesToHex(std.mem.asBytes((&hash)), .lower)), std.fs.path.extension(path.text) })) catch |oom_err| { _ = &oom_err; break :blk_catch_66 bun.handleOom(oom_err); }); });
-                            import_record.path.is_disabled = false;
+                            (import_record.*).path.text = path.text;
+                            (import_record.*).path.namespace = "file";
+                            (import_record.*).path.pretty = (blk_catch_66: { break :blk_catch_66 ((std.fmt.allocPrint(self.allocator(), (bun.bake.DevServer.asset_prefix ++ "/{s}{s}"), .{ (&std.fmt.bytesToHex(std.mem.asBytes((&hash)), .lower)), std.fs.path.extension(path.text) })) catch |oom_err| { _ = &oom_err; break :blk_catch_66 bun.handleOom(oom_err); }); });
+                            (import_record.*).path.is_disabled = false;
                         } else {
-                            import_record.path.text = path.text;
-                            import_record.path.pretty = rel;
-                            import_record.path = bun.handleOom(self.pathWithPrettyInitialized(path.*, target));
+                            (import_record.*).path.text = path.text;
+                            (import_record.*).path.pretty = rel;
+                            (import_record.*).path = bun.handleOom(self.pathWithPrettyInitialized(path.*, target));
                             if (((loader == .html) or (entry.kind == .css))) {
-                                import_record.path.is_disabled = true;
+                                (import_record.*).path.is_disabled = true;
                             }
                         }
                         continue;
@@ -2565,38 +2577,38 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
 };
                 }
                 const import_record_loader = brk: {
-                const resolved_loader = ((import_record.loader) orelse (((path.loader((&transpiler.options.loaders))) orelse (.file))));
-                if (((((((loader == .html) and (import_record.kind == .url)) and (!resolved_loader.shouldCopyForBundling())) and (!resolved_loader.isJavaScriptLike())) and (!resolved_loader.isCSS())) and (resolved_loader != .html))) {
+                const resolved_loader = (((import_record.*).loader) orelse (((path.loader((&transpiler.options.loaders))) orelse (.file))));
+                if (((((((loader == .html) and ((import_record.*).kind == .url)) and (!resolved_loader.shouldCopyForBundling())) and (!resolved_loader.isJavaScriptLike())) and (!resolved_loader.isCSS())) and (resolved_loader != .html))) {
                     break :brk Loader.file;
                 }
                 break :brk resolved_loader;
 };
-                import_record.loader = import_record_loader;
+                (import_record.*).loader = import_record_loader;
                 const is_html_entrypoint = (((import_record_loader == .html) and target.isServerSide()) and (self.transpiler.options.dev_server == null));
                 if (self.pathToSourceIndexMap(target).get(path.text)) |id| {
                     _ = &id;
                     if (((self.transpiler.options.dev_server != null) and (loader != .html))) {
-                        import_record.path = self.graph.input_files.items(.source)[@as(usize, @intCast(id))].path;
+                        (import_record.*).path = self.graph.input_files.items(.source)[@as(usize, @intCast(id))].path;
                     } else {
-                        import_record.source_index = .init(id);
+                        (import_record.*).source_index = .init(id);
                     }
                     continue;
                 }
                 if (is_html_entrypoint) {
-                    import_record.kind = .html_manifest;
+                    (import_record.*).kind = .html_manifest;
                 }
                 const resolve_entry = (blk_catch_67: { break :blk_catch_67 ((resolve_queue.getOrPut(path.text)) catch |oom_err| { _ = &oom_err; break :blk_catch_67 bun.handleOom(oom_err); }); });
                 if (resolve_entry.found_existing) {
-                    import_record.path = resolve_entry.value_ptr.*.path;
+                    (import_record.*).path = resolve_entry.value_ptr.*.path;
                     continue;
                 }
                 path.* = bun.handleOom(self.pathWithPrettyInitialized(path.*, target));
-                import_record.path = path.*;
+                (import_record.*).path = path.*;
                 resolve_entry.key_ptr.* = path.text;
                 _ = debug("created ParseTask: {s}", .{ path.text });
                 const resolve_task = bun.handleOom(bun.default_allocator.create(ParseTask));
                 resolve_task.* = ParseTask.init((&resolve_result), Index.invalid, self);
-                resolve_task.known_target = (if ((import_record.kind == .html_manifest)) .browser else target);
+                resolve_task.known_target = (if (((import_record.*).kind == .html_manifest)) .browser else target);
                 resolve_task.jsx = resolve_result.jsx;
                 resolve_task.jsx.development = (switch (transpiler.options.force_node_env) {
 .development => true,
@@ -2613,7 +2625,7 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                     }
                 }
                 if (is_html_entrypoint) {
-                    _ = ((self.generateServerHTMLModule(path, target, import_record, path.text)) catch unreachable);
+                    _ = ((self.generateServerHTMLModule(path, target, (&(import_record.*)), path.text)) catch unreachable);
                 }
             }
             return .{ .resolve_queue = resolve_queue, .last_error = last_error };
@@ -2710,8 +2722,8 @@ pub fn patchImportRecordSourceIndices(self: *BundleV2, import_records: *ImportRe
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_32 = records_slice.len;
-                while (i < __end_32) : (i += 1) {
+                const __end_33 = records_slice.len;
+                while (i < __end_33) : (i += 1) {
                     var record = (&records_slice[@as(usize, @intCast(i))]);
                     _ = &record;
                     if (path_to_source_index_map.getPath((&record.path))) |source_index| {
@@ -3079,9 +3091,11 @@ pub fn sortedCrossChunkImports(list: *List, chunks: []Chunk, imports_from_other_
             _ = try result.ensureTotalCapacity(imports_from_other_chunks.count());
             const import_items_list = imports_from_other_chunks.values();
             const chunk_indices = imports_from_other_chunks.keys();
-            for (chunk_indices, import_items_list) |chunk_index, import_items| {
-                _ = &chunk_index;
-                _ = &import_items;
+            var chunk_i: usize = 0;
+            _ = &chunk_i;
+            while ((chunk_i < chunk_indices.len)) : (chunk_i = (chunk_i + 1)) {
+                const chunk_index = chunk_indices[@as(usize, @intCast(chunk_i))];
+                const import_items = import_items_list[@as(usize, @intCast(chunk_i))];
                 var chunk = (&chunks[@as(usize, @intCast(chunk_index))]);
                 _ = &chunk;
                 const exports_to_other_chunks = (&chunk.content.javascript.exports_to_other_chunks);

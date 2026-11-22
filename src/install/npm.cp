@@ -1131,19 +1131,23 @@ pub struct PackageManifestSerializer {
         const field_count = fields.len;
 
         let data: [field_count]SerializerFieldData = undefined;
-        for (fields, &data) |field_info, *dat| {
-            dat.* = SerializerFieldData{
+        let idx: usize = 0;
+        for (field_info of fields) {
+            data[idx] = SerializerFieldData{
                 size: @sizeOf(field_info.@"type"),
                 name: field_info.name,
                 alignment: if (@sizeOf(field_info.@"type") == 0) 1 else field_info.alignment,
             };
+            idx += 1;
         }
         std.sort.pdq(SerializerFieldData, &data, @as(void, undefined), SerializerSort.lessThan);
         let sizes_bytes: [field_count]usize = undefined;
         let names: [field_count]string = undefined;
-        for (data, &sizes_bytes, &names) |elem, *size_, *name_| {
-            size_.* = elem.size;
-            name_.* = elem.name;
+        idx = 0;
+        for (elem of data) {
+            sizes_bytes[idx] = elem.size;
+            names[idx] = elem.name;
+            idx += 1;
         }
         break :blk .{
             .bytes = sizes_bytes,

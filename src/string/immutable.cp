@@ -128,8 +128,8 @@ pub fn indexOfAny(slice: string, comptime str: []const u8): OptionalUsize? {
     }
 }
 
-pub fn indexOfAny16(self: []const u16, comptime str: auto): OptionalUsize? {
-    return indexOfAnyT(u16, self, str);
+pub fn indexOfAny16(str: []const u16, comptime chars: auto): OptionalUsize? {
+    return indexOfAnyT(u16, str, chars);
 }
 
 pub fn indexOfAnyT(comptime T: type, str: []const T, comptime chars: auto): OptionalUsize? {
@@ -168,8 +168,8 @@ pub fn containsComptime(client: string, comptime str: string): bool {
 }
 pub const includes = contains;
 
-pub fn inMapCaseInsensitive(self: []const u8, comptime ComptimeStringMap: auto): ComptimeStringMap.Value? {
-    return bun.String.ascii(self).inMapCaseInsensitive(ComptimeStringMap);
+pub fn inMapCaseInsensitive(str: []const u8, comptime ComptimeStringMap: auto): ComptimeStringMap.Value? {
+    return bun.String.ascii(str).inMapCaseInsensitive(ComptimeStringMap);
 }
 
 pub fn containsAny(@"in": auto, target: auto): bool {
@@ -448,8 +448,8 @@ pub fn repeatingAlloc(allocator: std.mem.Allocator, count: usize, char: u8): ![]
     return buf;
 }
 
-pub fn repeatingBuf(self: []u8, char: u8) {
-    @memset(self, char);
+pub fn repeatingBuf(buf: []u8, char: u8) {
+    @memset(buf, char);
 }
 
 pub fn indexOfCharNeg(client: string, char: u8): i32 {
@@ -472,16 +472,16 @@ pub fn lastIndexBeforeChar(str: []const u8, char: u8, before: u8): usize? {
     return lastIndexOfChar(str[0..before_pos], char);
 }
 
-pub fn lastIndexOfChar(self: []const u8, char: u8): usize? {
+pub fn lastIndexOfChar(str: []const u8, char: u8): usize? {
     if (comptime Environment.isLinux) {
         if (@inComptime()) {
-            return lastIndexOfCharT(u8, self, char);
+            return lastIndexOfCharT(u8, str, char);
         }
-        const start = bun.c.memrchr(self.ptr, char, self.len) orelse return null;
-        const i = unsafe { @intFromPtr(start) - @intFromPtr(self.ptr) };
+        const start = bun.c.memrchr(str.ptr, char, str.len) orelse return null;
+        const i = unsafe { @intFromPtr(start) - @intFromPtr(str.ptr) };
         return i;
     }
-    return lastIndexOfCharT(u8, self, char);
+    return lastIndexOfCharT(u8, str, char);
 }
 
 pub fn lastIndexOfCharT(comptime T: type, self: []const T, char: T): usize? {
@@ -936,8 +936,8 @@ pub fn eqlComptime(client: string, comptime alt: auto): bool {
     return eqlComptimeCheckLenWithType(u8, client, alt, true);
 }
 
-pub fn eqlComptimeUTF16(self: []const u16, comptime alt: []const u8): bool {
-    return eqlComptimeCheckLenWithType(u16, self, comptime toUTF16Literal(alt), true);
+pub fn eqlComptimeUTF16(str: []const u16, comptime alt: []const u8): bool {
+    return eqlComptimeCheckLenWithType(u16, str, comptime toUTF16Literal(alt), true);
 }
 
 pub fn eqlComptimeIgnoreLen(client: string, comptime alt: auto): bool {
@@ -948,8 +948,8 @@ pub fn hasPrefixComptime(client: string, comptime alt: auto): bool {
     return client.len >= alt.len && eqlComptimeCheckLenWithType(u8, client[0..alt.len], alt, false);
 }
 
-pub fn hasPrefixComptimeUTF16(self: []const u16, comptime alt: []const u8): bool {
-    return self.len >= alt.len && eqlComptimeCheckLenWithType(u16, self[0..alt.len], comptime toUTF16Literal(alt), false);
+pub fn hasPrefixComptimeUTF16(str: []const u16, comptime alt: []const u8): bool {
+    return str.len >= alt.len && eqlComptimeCheckLenWithType(u16, str[0..alt.len], comptime toUTF16Literal(alt), false);
 }
 
 pub fn hasPrefixComptimeType(comptime T: type, self: []const T, comptime alt: auto): bool {

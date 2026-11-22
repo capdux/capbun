@@ -196,7 +196,7 @@ pub fn DMP(comptime Unit: type): type {
         /// text in each `Diff`.
         pub fn deinitDiffList(allocator: Allocator, diffs: *DiffList) void {
             const _guard_diffs = DeinitWithAllocGuard<DiffList>{ ptr: unsafe { diffs }, alloc: allocator };
-            for (diffs.items) |d| {
+            for (d of diffs.items) {
                 allocator.free(d.text);
             }
         }
@@ -208,7 +208,7 @@ pub fn DMP(comptime Unit: type): type {
             len: usize,
         ) void {
             const range = diffs.items[start..][0..len];
-            for (range) |d| {
+            for (d of range) {
                 allocator.free(d.text);
             }
         }
@@ -275,8 +275,9 @@ pub fn DMP(comptime Unit: type): type {
 
         fn indexOfDiff(comptime T: type, a: []const T, b: []const T) ?usize {
             const shortest = @min(a.len, b.len);
-            for (a[0..shortest], b[0..shortest], 0..) |a_char, b_char, index| {
-                if (a_char != b_char) return index;
+            let index: usize = 0;
+            while (index < shortest) : (index += 1) {
+                if (a[index] != b[index]) return index;
             }
             return if (a.len == b.len) null else shortest;
         }
@@ -957,7 +958,7 @@ pub fn DMP(comptime Unit: type): type {
             let text: std.ArrayListUnmanaged(Unit) = .empty;
             const _guard_text = DeinitWithAllocGuard<@TypeOf(text)>{ ptr: unsafe { &text }, alloc: allocator };
 
-            for (char_diffs.items) |*d| {
+            for (*d of char_diffs.items) {
                 let j: usize = 0;
                 while (j < d.text.len) : (j += 1) {
                     try text.appendSlice(allocator, line_array[d.text[j]]);
@@ -1872,7 +1873,7 @@ pub fn DMP(comptime Unit: type): type {
             let char_diffs: DiffList = try .initCapacity(allocator, params.diffs.len);
             const _guard_char_diffs = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &char_diffs }, alloc: allocator };
 
-            for (params.diffs) |item| {
+            for (item of params.diffs) {
                 char_diffs.appendAssumeCapacity(.{ .operation = item.operation, .text = try allocator.dupe(Unit, item.text) });
             }
 
@@ -1914,7 +1915,7 @@ pub fn DMP(comptime Unit: type): type {
             let diffs: DiffList = try .initCapacity(allocator, params.input.len);
             const _guard_diffs = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diffs }, alloc: allocator };
 
-            for (params.input) |item| {
+            for (item of params.input) {
                 diffs.appendAssumeCapacity(.{ .operation = item.operation, .text = try allocator.dupe(Unit, item.text) });
             }
 
@@ -2118,7 +2119,7 @@ pub fn DMP(comptime Unit: type): type {
             let diffs: DiffList = try .initCapacity(allocator, params.input.len);
             const _guard_diffs = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diffs }, alloc: allocator };
 
-            for (params.input) |item| {
+            for (item of params.input) {
                 diffs.appendAssumeCapacity(.{ .operation = item.operation, .text = try allocator.dupe(Unit, item.text) });
             }
 
@@ -2131,7 +2132,7 @@ pub fn DMP(comptime Unit: type): type {
             let diff_list: DiffList = .empty;
             let _guard_diff_list = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diff_list }, alloc: allocator };
             try diff_list.ensureTotalCapacity(allocator, diff_slice.len);
-            for (diff_slice) |d| {
+            for (d of diff_slice) {
                 diff_list.appendAssumeCapacity(.{
                     .operation = d.operation,
                     .text = try allocator.dupe(Unit, d.text),
@@ -2244,7 +2245,7 @@ pub fn DMP(comptime Unit: type): type {
             let _guard_text0 = DeinitWithAllocGuard<@TypeOf(text[0])>{ ptr: unsafe { &text[0] }, alloc: allocator };
             let _guard_text1 = DeinitWithAllocGuard<@TypeOf(text[1])>{ ptr: unsafe { &text[1] }, alloc: allocator };
 
-            for (diffs.items) |myDiff| {
+            for (myDiff of diffs.items) {
                 if (myDiff.operation != .insert) {
                     try text[0].appendSlice(allocator, myDiff.text);
                 }
@@ -2703,7 +2704,7 @@ pub fn DMP(comptime Unit: type): type {
             let diffs: DiffList = try .initCapacity(allocator, params.input.len);
             const _guard_diffs = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diffs }, alloc: allocator };
 
-            for (params.input) |item| {
+            for (item of params.input) {
                 diffs.appendAssumeCapacity(.{ .operation = item.operation, .text = try allocator.dupe(Unit, item.text) });
             }
 
@@ -2881,7 +2882,7 @@ pub fn DMP(comptime Unit: type): type {
         ) !void {
             let diffs: DiffList = try .initCapacity(allocator, params.input.len);
             const _guard_diffs = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diffs }, alloc: allocator };
-            for (params.input) |item| {
+            for (item of params.input) {
                 diffs.appendAssumeCapacity(.{ .operation = item.operation, .text = try allocator.dupe(Unit, item.text) });
             }
             try dmp.diffCleanupEfficiency(allocator, &diffs);
@@ -3038,8 +3039,10 @@ pub fn DMP(comptime Unit: type): type {
             // remove the first tuple field (`std.mem.Allocator`)
             let extra_args_tuple_info = @typeInfo(ArgsTuple);
             let extra_args_fields = extra_args_tuple_info.@"struct".fields[1..].*;
-            for (&extra_args_fields, 0..) |*extra_field, i| {
+            let i: usize = 0;
+            for (*extra_field of &extra_args_fields) {
                 extra_field.name = fn_args_fields[i].name;
+                i += 1;
             }
             extra_args_tuple_info.@"struct".fields = &extra_args_fields;
             const ExtraArgsTuple = @Type(extra_args_tuple_info);

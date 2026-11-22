@@ -324,11 +324,12 @@ pub fn loadFields(stream: *Stream, end_at: u64, comptime ListType: type, list: *
                     _ = &fields;
                     var data: [fields.len]PackageSerializerData = undefined;
                     _ = &data;
-                    for (fields, &data, 0..) |field_info, *elem, i| {
+                    var field_i: usize = 0;
+                    _ = &field_i;
+                    for (cp_iter_slice(fields)) |field_info| {
                         _ = &field_info;
-                        _ = &elem;
-                        _ = &i;
-                        elem.* = .{ .size = @sizeOf(field_info.type), .size_index = i, .Type = field_info.type, .alignment = (if ((@sizeOf(field_info.type) == 0)) 1 else field_info.alignment) };
+                        data[cp_cast_int(usize, field_i)] = .{ .size = @sizeOf(field_info.type), .size_index = field_i, .Type = field_info.type, .alignment = (if ((@sizeOf(field_info.type) == 0)) 1 else field_info.alignment) };
+                        field_i = (field_i + 1);
                     }
                     _ = std.sort.insertionContext(0, fields.len, PackageSerializerSortContext{ .data = (&data) });
                     var sizes_bytes: [fields.len]usize = undefined;
@@ -337,14 +338,14 @@ pub fn loadFields(stream: *Stream, end_at: u64, comptime ListType: type, list: *
                     _ = &field_indexes;
                     var Types: [fields.len]type = undefined;
                     _ = &Types;
-                    for (data, &sizes_bytes, &field_indexes, &Types) |elem, *size, *index, *Type| {
+                    var data_i: usize = 0;
+                    _ = &data_i;
+                    for (cp_iter_slice(data)) |elem| {
                         _ = &elem;
-                        _ = &size;
-                        _ = &index;
-                        _ = &Type;
-                        size.* = elem.size;
-                        index.* = elem.size_index;
-                        Type.* = elem.Type;
+                        sizes_bytes[cp_cast_int(usize, data_i)] = elem.size;
+                        field_indexes[cp_cast_int(usize, data_i)] = elem.size_index;
+                        Types[cp_cast_int(usize, data_i)] = elem.Type;
+                        data_i = (data_i + 1);
                     }
                     break :blk .{ .bytes = sizes_bytes, .fields = field_indexes, .Types = Types };
         };
@@ -471,10 +472,12 @@ pub fn clone(self: @This(), pm: *PackageManager, old: *Lockfile, new_lockfile: *
             if ((cloner.manager.preinstall_state.items.len > 0)) {
                 cloner.manager.preinstall_state.items[cp_cast_int(usize, new_package.@"meta".id)] = cloner.old_preinstall_state.items[@as(usize, @intCast(self.@"meta".id))];
             }
-            for (old_dependencies, dependencies) |old_dep, *new_dep| {
+            var dep_i: usize = 0;
+            _ = &dep_i;
+            for (cp_iter_slice(old_dependencies)) |old_dep| {
                 _ = &old_dep;
-                _ = &new_dep;
-                new_dep.* = try old_dep.clone(pm, old_string_buf, *Lockfile.StringBuilder, builder);
+                dependencies[cp_cast_int(usize, dep_i)] = try old_dep.clone(pm, old_string_buf, *Lockfile.StringBuilder, builder);
+                dep_i = (dep_i + 1);
             }
             _ = builder.clamp();
             cloner.trees_count = (cloner.trees_count + (if (comptime @typeInfo(@TypeOf(@intFromBool((old_resolutions.len > 0)))) == .@"enum") cp_cast_int(u32, @intFromEnum(@intFromBool((old_resolutions.len > 0)))) else cp_cast_int(u32, @intFromBool((old_resolutions.len > 0)))));
@@ -612,9 +615,12 @@ pub fn fromNPM(pm: *PackageManager, allocator: Allocator, lockfile: *Lockfile, l
                     if (comptime Environment.isDebug) {
                         _ = assert((keys.len == version_strings.len));
                     }
-                    for (keys, version_strings) |key, ver| {
+                    var k_i: usize = 0;
+                    _ = &k_i;
+                    for (cp_iter_slice(keys)) |key| {
                         _ = &key;
-                        _ = &ver;
+                        const ver = version_strings[@as(usize, @intCast(k_i))];
+                        k_i = (k_i + 1);
                         _ = string_builder.count(key.slice(manifest.string_buf));
                         _ = string_builder.count(ver.slice(manifest.string_buf));
                     }
@@ -659,16 +665,21 @@ pub fn fromNPM(pm: *PackageManager, allocator: Allocator, lockfile: *Lockfile, l
                         _ = assert((keys.len == version_strings.len));
                     }
                     const is_peer = (comptime strings.eqlComptime(group.field, "peer_dependencies"));
-                    list: for (keys, version_strings, 0..) |key, version_string_, i| {
+                    var i: usize = 0;
+                    _ = &i;
+                    list: for (cp_iter_slice(keys)) |key| {
                         _ = &key;
-                        _ = &version_string_;
-                        _ = &i;
+                        const version_string_ = version_strings[@as(usize, @intCast(i))];
+                        defer {
+                        i = (i + 1);
+                        }
                         var duplicate_at: ?usize = null;
                         _ = &duplicate_at;
                         if (comptime ((group.behavior.isPeer() or group.behavior.isDev()) or group.behavior.isOptional())) {
-                            for (dependencies[0..total_dependencies_count], 0..) |dependency, j| {
+                            var j: usize = 0;
+                            _ = &j;
+                            for (cp_iter_slice(dependencies[0..total_dependencies_count])) |dependency| {
                                 _ = &dependency;
-                                _ = &j;
                                 if ((dependency.name_hash == key.hash)) {
                                     if (comptime group.behavior.isOptional()) {
                                         duplicate_at = j;
@@ -676,6 +687,7 @@ pub fn fromNPM(pm: *PackageManager, allocator: Allocator, lockfile: *Lockfile, l
                                     }
                                     continue :list;
                                 }
+                                j = (j + 1);
                             }
                         }
                         const name: ExternalString = string_builder.appendWithHash(ExternalString, key.slice(manifest.string_buf), key.hash);
@@ -792,10 +804,10 @@ else => {
             if (((trimmed.len != 1) or (((trimmed[0] != 42) and (trimmed[0] != 94)) and (trimmed[0] != 126)))) {
                 const at = ((strings.lastIndexOfChar(input, 64)) orelse (0));
                 if ((at > 0)) {
-                    workspace_range = (blk_catch_2: { break :blk_catch_2 ((Semver.Query.parse(allocator, input[(at + 1)..], sliced)) catch |e| { _ = &e; break :blk_catch_2 (__sw_blk_5: { const __disc_5 = e; _ = &__disc_5; if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .OutOfMemory)) {  break :__sw_blk_5 cp_val(bun.outOfMemory()); } }  unreachable; }); }); });
+                    workspace_range = (blk_catch_2: { break :blk_catch_2 ((Semver.Query.parse(allocator, input[(at + 1)..], sliced)) catch |e| { _ = &e; break :blk_catch_2 (__sw_blk_9: { const __disc_9 = e; _ = &__disc_9; if ((!cp_has_ok_val(__disc_9) and !cp_is_null_val(__disc_9))) { const __err_v_9 = cp_unwrap_err_val(__disc_9); _ = &__err_v_9; if (cp_match_tag(__err_v_9, .OutOfMemory)) {  break :__sw_blk_9 cp_val(bun.outOfMemory()); } }  unreachable; }); }); });
                     break :brk String.Builder.stringHash(input[0..at]);
                 }
-                workspace_range = (blk_catch_3: { break :blk_catch_3 ((Semver.Query.parse(allocator, input, sliced)) catch |e| { _ = &e; break :blk_catch_3 (__sw_blk_6: { const __disc_6 = e; _ = &__disc_6; if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .OutOfMemory)) {  break :__sw_blk_6 cp_val(bun.outOfMemory()); } }  unreachable; }); }); });
+                workspace_range = (blk_catch_3: { break :blk_catch_3 ((Semver.Query.parse(allocator, input, sliced)) catch |e| { _ = &e; break :blk_catch_3 (__sw_blk_10: { const __disc_10 = e; _ = &__disc_10; if ((!cp_has_ok_val(__disc_10) and !cp_is_null_val(__disc_10))) { const __err_v_10 = cp_unwrap_err_val(__disc_10); _ = &__err_v_10; if (cp_match_tag(__err_v_10, .OutOfMemory)) {  break :__sw_blk_10 cp_val(bun.outOfMemory()); } }  unreachable; }); }); });
             }
             break :brk external_alias.hash;
 } else external_alias.hash),
@@ -1369,9 +1381,15 @@ else => {
                     _ = &seen_ws_guard;
                     var __seen_ws_guard_moved = false; _ = &__seen_ws_guard_moved;
                     defer if (!__seen_ws_guard_moved) { __seen_ws_guard_moved = true; const __T = @TypeOf(seen_ws_guard); if (@typeInfo(__T) == .optional) { if (seen_ws_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { seen_ws_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = seen_ws_guard; _drop_val.__cp_deinit(); } };
-                    for (workspace_names.values(), workspace_names.keys()) |entry, path| {
+                    const ws_keys = workspace_names.keys();
+                    var ws_idx: usize = 0;
+                    _ = &ws_idx;
+                    for (workspace_names.values()) |entry| {
                         _ = &entry;
-                        _ = &path;
+                        const path = ws_keys[@as(usize, @intCast(ws_idx))];
+                        defer {
+                        ws_idx = (ws_idx + 1);
+                        }
                         const gop = try seen_workspace_names.getOrPut(allocator, @truncate(String.Builder.stringHash((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name))));
                         if (gop.found_existing) {
                             var cwd_buf: bun.PathBuffer = undefined;
@@ -1393,9 +1411,14 @@ else => {
                             _ = &notes;
                             var i: usize = 0;
                             _ = &i;
-                            for (workspace_names.values(), workspace_names.keys()) |value, note_path| {
+                            var note_idx: usize = 0;
+                            _ = &note_idx;
+                            for (workspace_names.values()) |value| {
                                 _ = &value;
-                                _ = &note_path;
+                                const note_path = ws_keys[@as(usize, @intCast(note_idx))];
+                                defer {
+                                note_idx = (note_idx + 1);
+                                }
                                 if ((note_path.ptr == path.ptr)) {
                                     continue;
                                 }
@@ -1748,14 +1771,18 @@ else => .init(.uninitialized),
                 }
                 break :patched_dependencies_changed false;
     };
-                for (from_deps, 0..) |*from_dep, i| {
+                var i: usize = 0;
+                _ = &i;
+                for (cp_mut_slice(&from_deps)) |*from_dep| {
                     _ = &from_dep;
-                    _ = &i;
+                    defer {
+                    i = (i + 1);
+                    }
                     _ = found: {
                     const prev_i = to_i;
                     while ((to_i < to_deps.len)) {
-                        if ((from_dep.name_hash == to_deps[@as(usize, @intCast(to_i))].name_hash)) {
-                            const from_behavior = from_dep.behavior;
+                        if (((from_dep.*).name_hash == to_deps[@as(usize, @intCast(to_i))].name_hash)) {
+                            const from_behavior = (from_dep.*).behavior;
                             const to_behavior = to_deps[@as(usize, @intCast(to_i))].behavior;
                             if ((from_behavior != to_behavior)) {
                                 to_i = (to_i + 1);
@@ -1767,8 +1794,8 @@ else => .init(.uninitialized),
                     }
                     to_i = 0;
                     while ((to_i < prev_i)) {
-                        if ((from_dep.name_hash == to_deps[@as(usize, @intCast(to_i))].name_hash)) {
-                            const from_behavior = from_dep.behavior;
+                        if (((from_dep.*).name_hash == to_deps[@as(usize, @intCast(to_i))].name_hash)) {
+                            const from_behavior = (from_dep.*).behavior;
                             const to_behavior = to_deps[@as(usize, @intCast(to_i))].behavior;
                             if ((from_behavior != to_behavior)) {
                                 to_i = (to_i + 1);
@@ -1784,13 +1811,13 @@ else => .init(.uninitialized),
                     defer {
                     to_i = (to_i + 1);
                     }
-                    if (to_deps[@as(usize, @intCast(to_i))].eql(from_dep, to_lockfile.buffers.string_bytes.items, from_lockfile.buffers.string_bytes.items)) {
+                    if (to_deps[@as(usize, @intCast(to_i))].eql((&(from_dep.*)), to_lockfile.buffers.string_bytes.items, from_lockfile.buffers.string_bytes.items)) {
                         if (update_requests) |updates| {
                             _ = &updates;
                             if (((updates.len == 0) or brk: {
                             for (cp_iter_slice(updates)) |request| {
                                 _ = &request;
-                                if ((from_dep.name_hash == request.name_hash)) {
+                                if (((from_dep.*).name_hash == request.name_hash)) {
                                     break :brk true;
                                 }
                             }
@@ -1803,10 +1830,10 @@ else => .init(.uninitialized),
                         if (id_mapping) |mapping| {
                             _ = &mapping;
                             const update_mapping = update_mapping: {
-                            if (((!is_root) or (!from_dep.behavior.isWorkspace()))) {
+                            if (((!is_root) or (!(from_dep.*).behavior.isWorkspace()))) {
                                 break :update_mapping true;
                             }
-                            const workspace_path = ((to_lockfile.workspace_paths.getPtr(from_dep.name_hash)) orelse {
+                            const workspace_path = ((to_lockfile.workspace_paths.getPtr((from_dep.*).name_hash)) orelse {
                             break :update_mapping false;
     });
                             var package_json_path: bun.AbsPath(.{ .sep = .auto }) = .initTopLevelDir();

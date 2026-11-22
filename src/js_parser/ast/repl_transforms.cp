@@ -271,8 +271,10 @@ pub fn ReplTransforms(comptime P: type): type {
             // Final output: hoisted declarations + IIFE call
             const final_stmts_count = hoisted_stmts.items.len + 1;
             let final_stmts = bun.handleOom(allocator.alloc(Stmt, final_stmts_count));
-            for (hoisted_stmts.items, 0..) |stmt, j| {
+            let j: usize = 0;
+            for (stmt of hoisted_stmts.items) {
                 final_stmts[j] = stmt;
+                j += 1;
             }
             final_stmts[hoisted_stmts.items.len] = p.s(S.SExpr{ value: iife }, logger.Loc.Empty);
 
@@ -445,7 +447,8 @@ pub fn ReplTransforms(comptime P: type): type {
                 },
                 .b_array arr => {
                     let items = bun.handleOom(allocator.alloc(Expr, arr.items.len));
-                    for (arr.items, 0..) |item, i| {
+                    let i: usize = 0;
+                    for (item of arr.items) {
                         const expr = convertBindingToExpr(p, item.binding, allocator);
                         // Check for spread pattern: if has_spread and this is the last element
                         if (arr.has_spread && i == arr.items.len - 1) {
@@ -459,6 +462,7 @@ pub fn ReplTransforms(comptime P: type): type {
                         } else {
                             items[i] = expr;
                         }
+                        i += 1;
                     }
                     return p.newExpr(E.Array{
                         items: ExprNodeList.fromOwnedSlice(items),
@@ -467,7 +471,8 @@ pub fn ReplTransforms(comptime P: type): type {
                 },
                 .b_object obj => {
                     let properties = bun.handleOom(allocator.alloc(G.Property, obj.properties.len));
-                    for (obj.properties, 0..) |prop, i| {
+                    let i: usize = 0;
+                    for (prop of obj.properties) {
                         properties[i] = G.Property{
                             flags: prop.flags,
                             key: prop.key,
@@ -476,6 +481,7 @@ pub fn ReplTransforms(comptime P: type): type {
                             value: convertBindingToExpr(p, prop.value, allocator),
                             initializer: prop.default_value,
                         };
+                        i += 1;
                     }
                     return p.newExpr(E.Object{
                         properties: G.Property.List.fromOwnedSlice(properties),

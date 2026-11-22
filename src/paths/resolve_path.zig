@@ -482,7 +482,7 @@ else => nqlAtIndex,
 });
         var min_length: usize = std.math.maxInt(usize);
         _ = &min_length;
-        for (input) |str| {
+        for (cp_iter_slice(input)) |str| {
             _ = &str;
             min_length = @min(str.len, min_length);
         }
@@ -546,7 +546,7 @@ var string_index: usize = 1;
         if ((last_common_separator == null)) {
             return (&.{ 46 });
         }
-        for (input) |str| {
+        for (cp_iter_slice(input)) |str| {
             _ = &str;
             if ((str.len > index)) {
                 if (@call(bun.callmod_inline, isPathSeparator, .{ str[@as(usize, @intCast(index))] })) {
@@ -566,7 +566,7 @@ else => nqlAtIndex,
 });
         var min_length: usize = std.math.maxInt(usize);
         _ = &min_length;
-        for (input) |str| {
+        for (cp_iter_slice(input)) |str| {
             _ = &str;
             min_length = @min(str.len, min_length);
         }
@@ -642,9 +642,10 @@ if ((platform == .windows)) {
         }
         var idx = input.len;
         _ = &idx;
-        for (input, 0..) |str, i| {
+        var i: usize = 0;
+        _ = &i;
+        for (cp_iter_slice(input)) |str| {
             _ = &str;
-            _ = &i;
             if ((str.len > index)) {
                 if (@call(bun.callmod_inline, isPathSeparator, .{ str[@as(usize, @intCast(index))] })) {
                     idx = i;
@@ -653,6 +654,7 @@ if ((platform == .windows)) {
                     break;
                 }
             }
+            i = (i + 1);
         }
         if ((idx != input.len)) {
             return input[@as(usize, @intCast(idx))][0..(index + 1)];
@@ -1460,7 +1462,7 @@ pub fn joinAbsStringBufChecked(cwd: []const u8, buf: []u8, parts: []const []cons
         }
         var total: usize = (cwd.len + 2);
         _ = &total;
-        for (parts) |p| {
+        for (cp_iter_slice(parts)) |p| {
             _ = &p;
             total = (total + (p.len + 1));
         }
@@ -1585,7 +1587,7 @@ pub fn _joinAbsStringBuf(comptime is_sentinel: bool, comptime ReturnType: type, 
         defer if (!___scratch_guard_moved) { ___scratch_guard_moved = true; const __T = @TypeOf(_scratch_guard); if (@typeInfo(__T) == .optional) { if (_scratch_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _scratch_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _scratch_guard; _drop_val.__cp_deinit(); } };
         _ = bun.copy(u8, temp_buf, cwd);
         out = cwd.len;
-        for (parts) |_part| {
+        for (cp_iter_slice(parts)) |_part| {
             _ = &_part;
             if ((_part.len == 0)) {
                 continue;
@@ -1605,8 +1607,9 @@ pub fn _joinAbsStringBuf(comptime is_sentinel: bool, comptime ReturnType: type, 
             var outdir = temp_buf[0..(i + 1)];
             _ = &outdir;
             if ((platform == .loose)) {
-                for (outdir, 0..) |_, idx| {
-                    _ = &idx;
+                var idx: usize = 0;
+                _ = &idx;
+                while ((idx < outdir.len)) : (idx = (idx + 1)) {
                     if ((outdir[@as(usize, @intCast(idx))] == 92)) {
                         outdir[cp_cast_int(usize, idx)] = 47;
                     }
@@ -1689,7 +1692,7 @@ pub fn _joinAbsStringBufWindows(comptime is_sentinel: bool, comptime ReturnType:
             temp_buf[cp_cast_int(usize, out)] = 92;
             out = (out + 1);
         }
-        for (parts[n_start..]) |part| {
+        for (cp_iter_slice(parts[n_start..])) |part| {
             _ = &part;
             if ((part.len == 0)) {
                 continue;

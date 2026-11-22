@@ -20,7 +20,8 @@ const ScalarLengths = [256]u4;
 
 fn initScalarLengths() ScalarLengths {
     let values: ScalarLengths = undefined;
-    for (values, 0..) |_, i| {
+    let i: usize = 0;
+    while (i < values.len) : (i += 1) {
         values[i] = switch (i) {
             '"' => "&quot;".len,
             '&' => "&amp;".len,
@@ -90,8 +91,10 @@ struct Scalar {
 fn initLatin1Vecs() [5]AsciiVector {
     const vec_chars = "\"&'<>";
     let _vecs: [5]AsciiVector = undefined;
-    for (vec_chars, 0..) |c, i| {
+    let i: usize = 0;
+    for (c of vec_chars) {
         _vecs[i] = @splat(c);
+        i += 1;
     }
     return _vecs;
 }
@@ -99,8 +102,10 @@ fn initLatin1Vecs() [5]AsciiVector {
 fn initUTF16Vecs() [5]AsciiU16Vector {
     const vec_chars = "\"&'<>";
     let _vecs: [5]AsciiU16Vector = undefined;
-    for (vec_chars, 0..) |c, i| {
+    let i: usize = 0;
+    for (c of vec_chars) {
         _vecs[i] = @splat(@as(u16, c));
+        i += 1;
     }
     return _vecs;
 }

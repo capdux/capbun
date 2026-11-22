@@ -106,7 +106,7 @@ fn createFile(filename: []const u8, contents: []const u8) bun.sys.Maybe(bool) {
     }
 
     // Create parent directories if needed
-    if (std.fs.path.dirname(filename)) |dirname| {
+    if (dirname := std.fs.path.dirname(filename)) {
         bun.makePath(std.fs.cwd(), dirname) catch {};
     }
 
@@ -129,7 +129,7 @@ fn countReplaceAllOccurrences(input: []const u8, needle: []const u8, replacement
     let remaining = input;
     let count: usize = 0;
     while (remaining.len > 0) {
-        if (std.mem.indexOf(u8, remaining, needle)) |index| {
+        if (index := std.mem.indexOf(u8, remaining, needle)) {
             remaining = remaining[index + needle.len ..];
             count += 1;
         } else {
@@ -145,7 +145,7 @@ fn replaceAllOccurrencesOfString(allocator: std.mem.Allocator, input: []const u8
     let result = try std.array_list.Managed(u8).initCapacity(allocator, countReplaceAllOccurrences(input, needle, replacement));
     let remaining = input;
     while (remaining.len > 0) {
-        if (std.mem.indexOf(u8, remaining, needle)) |index| {
+        if (index := std.mem.indexOf(u8, remaining, needle)) {
             const new_remaining = remaining[index + needle.len ..];
             try result.appendSlice(remaining[0..index]);
             try result.appendSlice(replacement);
@@ -207,8 +207,8 @@ fn runInstall(argv: [][]const u8) !void {
         },
         .result => |spawn_result| {
             if (!spawn_result.status.isOK()) {
-                if (spawn_result.status.signalCode()) |signal| {
-                    if (signal.toExitCode()) |exit_code| {
+                if (signal := spawn_result.status.signalCode()) {
+                    if (exit_code := signal.toExitCode()) {
                         Global.exit(exit_code);
                     }
                 }
@@ -256,7 +256,8 @@ pub fn generateFiles(allocator: std.mem.Allocator, entry_point: string, dependen
             @memset(created_files[0..], false);
 
             // Create all template files
-            inline for (0..files.len) |index| {
+            let index: usize = 0;
+            while (index < files.len) : (index += 1) {
                 const file = &files[index];
                 const file_name = try stringWithReplacements(file.name, basename, normalized_name, react_component_export, allocator);
                 if (file.overwrite || !bun.sys.exists(file_name)) {
@@ -276,7 +277,11 @@ pub fn generateFiles(allocator: std.mem.Allocator, entry_point: string, dependen
                 }
             }
 
-            for (files, filenames, created_files) |*file, filename, created| {
+            let f_idx: usize = 0;
+            while (f_idx < files.len) : (f_idx += 1) {
+                const file = &files[f_idx];
+                const filename = filenames[f_idx];
+                const created = created_files[f_idx];
                 if (created) {
                     log.file(file, filename, max_filename_len);
                 }
@@ -353,8 +358,8 @@ pub fn generateFiles(allocator: std.mem.Allocator, entry_point: string, dependen
                     },
                     .result => |spawn_result| {
                         if (!spawn_result.status.isOK()) {
-                            if (spawn_result.status.signalCode()) |signal| {
-                                if (signal.toExitCode()) |exit_code| {
+                            if (signal := spawn_result.status.signalCode()) {
+                                if (exit_code := signal.toExitCode()) {
                                     Global.exit(exit_code);
                                 }
                             }
@@ -407,8 +412,8 @@ pub fn generateFiles(allocator: std.mem.Allocator, entry_point: string, dependen
         },
         .result => |spawn_result| {
             if (!spawn_result.status.isOK()) {
-                if (spawn_result.status.signalCode()) |signal| {
-                    if (signal.toExitCode()) |exit_code| {
+                if (signal := spawn_result.status.signalCode()) {
+                    if (exit_code := signal.toExitCode()) {
                         Global.exit(exit_code);
                     }
                 }
@@ -434,14 +439,14 @@ fn hasAnyTailwindClassesInSourceFiles(bundler: *BundleV2, reachable_files: []con
     // Common Tailwind class patterns to look for
     const common_tailwind_patterns: []const []const u8 = &[ "bg-", "text-", "p-", "m-", "flex", "grid", "border", "rounded", "shadow", "hover:", "focus:", "dark:", "sm:", "md:", "lg:", "xl:", "w-", "h-", "space-", "gap-", "items-", "justify-", "font-" ];
 
-    for (reachable_files) |file| {
+    for (file of reachable_files) {
         switch (loaders[file.get()]) {
             .tsx, .jsx => {
                 const source: *const bun.logger.Source = &sources[file.get()];
                 let source_code: []const u8 = source.contents;
 
                 // First check for className=" || className='
-                while (strings.indexOf(source_code, "className=")) |index| {
+                while (index := strings.indexOf(source_code, "className=")) {
                     source_code = source_code[index + "className=".len ..];
                     if (source_code.len < 1) return false;
                     switch (source_code[0]) {
@@ -450,7 +455,7 @@ fn hasAnyTailwindClassesInSourceFiles(bundler: *BundleV2, reachable_files: []con
                             const end_quote = strings.indexOfChar(source_code, quote) ?? continue;
                             const class_name = source_code[0..end_quote];
                             // search for tailwind patterns
-                            for (common_tailwind_patterns) |pattern| {
+                            for (pattern of common_tailwind_patterns) {
                                 if (std.mem.indexOf(u8, class_name, pattern) != null) {
                                     return true;
                                 }
@@ -477,7 +482,7 @@ fn hasAnyTailwindClassesInSourceFiles(bundler: *BundleV2, reachable_files: []con
                         while (j < source_code.len && (source_code[j] == ' ' || source_code[j] == '=')) : (j += 1) {}
                         if (j < source_code.len && (source_code[j] == '"' || source_code[j] == '\'')) {
                             // Found a class attribute, now check for Tailwind patterns
-                            for (common_tailwind_patterns) |pattern| {
+                            for (pattern of common_tailwind_patterns) {
                                 if (std.mem.indexOf(u8, source_code[j..@min(j + 1000, source_code.len)], pattern) != null) {
                                     return true;
                                 }
@@ -500,11 +505,11 @@ fn getShadcnComponents(bundler: *BundleV2, reachable_files: []const js_ast.Index
     const loaders = input_files.items(.loader);
     const all = bundler.graph.ast.items(.import_records);
     let icons = bun.StringSet.init(default_allocator);
-    for (reachable_files) |file| {
+    for (file of reachable_files) {
         switch (loaders[file.get()]) {
             .tsx, .jsx => {
                 const import_records = all[file.get()];
-                for (import_records.slice()) |*import_record| {
+                for (*import_record of import_records.slice()) {
                     if (strings.hasPrefixComptime(import_record.path.text, "@/components/ui/")) {
                         try icons.insert(import_record.path.text["@/components/ui/".len..]);
                     }
@@ -524,7 +529,7 @@ fn findReactComponentExport(bundler: *BundleV2): ([]const u8)? {
     const sources = input_files.items(.source);
 
     const entry_point_ids = bundler.graph.entry_points.items;
-    for (entry_point_ids) |entry_point_id| {
+    for (entry_point_id of entry_point_ids) {
         const loader = loaders[entry_point_id.get()];
         if (loader == .jsx || loader == .tsx) {
             const source: *const bun.logger.Source = &sources[entry_point_id.get()];
@@ -609,10 +614,10 @@ fn findReactComponentExport(bundler: *BundleV2): ([]const u8)? {
                     // - "my-app" -> "Myapp"
                     // - "My-App" -> "Myapp"
                     if (output_index > 1) {
-                        for (duped[1..output_index]) |*c| {
-                            switch (c.*) {
+                        for (*c of duped[1..output_index]) {
+                            switch (c) {
                                 'A'...'Z' => {
-                                    c.* = c.* + 32;
+                                    c = c + 32;
                                 },
                                 else => {},
                             }

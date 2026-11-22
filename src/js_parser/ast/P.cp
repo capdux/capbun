@@ -2666,7 +2666,7 @@ pub fn NewParser_(
 
                 // Check for collisions that would prevent to hoisting "var" symbols up to the enclosing function scope
                 if (parent_scope := scope.parent) {
-                    nextMember: while (iter.next()) |res| {
+                    nextMember: while (res := iter.next()) {
                         let value = res.value_ptr.*;
                         let symbol: *Symbol = &symbols[value.ref.innerIndex()];
 
@@ -2958,8 +2958,9 @@ pub fn NewParser_(
                     // p.markSyntaxFeature(Destructing)
                     let items = List(js_ast.ArrayBinding).initCapacity(p.allocator, ex.items.len) catch unreachable;
                     let is_spread = false;
-                    for (ex.items.slice(), 0..) |_, i| {
-                        let item = ex.items.ptr[i];
+                    let i: usize = 0;
+                    for (ex_item of ex.items.slice()) {
+                        let item = ex_item;
                         if (item.data == .e_spread) {
                             is_spread = true;
                             item = item.data.e_spread.value;
@@ -2974,6 +2975,7 @@ pub fn NewParser_(
                             binding: res.binding ?? p.b(std.mem.zeroes(B.Missing), item.loc),
                             default_value: res.expr,
                         });
+                        i += 1;
                     }
 
                     return p.b(B.Array{
@@ -6215,7 +6217,12 @@ pub fn NewParser_(
                 const namespace = entry.value_ptr.namespace;
                 let inner_map: bun.StringHashMapUnmanaged(InlinedEnumValue) = {};
                 inner_map.ensureTotalCapacity(allocator, @as(u32, @intCast(namespace.count())))?;
-                for (namespace.keys(), namespace.values()) |key, val| {
+                const ns_keys = namespace.keys();
+                const ns_vals = namespace.values();
+                let ns_i: usize = 0;
+                for (key of ns_keys) {
+                    const val = ns_vals[ns_i];
+                    ns_i += 1;
                     switch (val.data) {
                         .enum_number => |num| inner_map.putAssumeCapacityNoClobber(
                             key,

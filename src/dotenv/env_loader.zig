@@ -335,7 +335,7 @@ pub fn isNoProxy(self: Loader, hostname: ?[]const u8, host: ?[]const u8) bool {
                 const is_bracketed_ipv6 = strings.startsWithChar(no_proxy_entry, 91);
                 const has_port = blk: {
                 if (is_bracketed_ipv6) {
-                    if (std.mem.indexOf(u8, no_proxy_entry, "]:")) |_| {
+                    if ((std.mem.indexOf(u8, no_proxy_entry, "]:") != null)) {
                         break :blk true;
                     }
                     break :blk false;
@@ -477,13 +477,15 @@ pub fn copyForDefine(self: *Loader, comptime JSONStore: type, to_json: *JSONStor
             _ = @memset(string_map_hashes, invalid_hash);
             var key_buf: []u8 = "";
             _ = &key_buf;
-            for (framework_defaults.keys, 0..) |key, i| {
+            var fw_idx: usize = 0;
+            _ = &fw_idx;
+            for (cp_iter_slice(framework_defaults.keys)) |key| {
                 _ = &key;
-                _ = &i;
                 if (((key.len > "process.env.".len) and strings.eqlComptime(key[0.."process.env.".len], "process.env."))) {
                     const hashable_segment = key["process.env.".len..];
-                    string_map_hashes[cp_cast_int(usize, i)] = bun.hash(hashable_segment);
+                    string_map_hashes[cp_cast_int(usize, fw_idx)] = bun.hash(hashable_segment);
                 }
+                fw_idx = (fw_idx + 1);
             }
             var key_buf_len: usize = 0;
             _ = &key_buf_len;
@@ -584,13 +586,15 @@ pub fn copyForDefine(self: *Loader, comptime JSONStore: type, to_json: *JSONStor
                     }
                 }
             }
-            for (framework_defaults.keys, 0..) |key, i| {
+            var fw_idx2: usize = 0;
+            _ = &fw_idx2;
+            for (cp_iter_slice(framework_defaults.keys)) |key| {
                 _ = &key;
-                _ = &i;
-                const value = framework_defaults.values[@as(usize, @intCast(i))];
+                const value = framework_defaults.values[@as(usize, @intCast(fw_idx2))];
                 if (((!to_string.contains(key)) and (!to_json.contains(key)))) {
                     _ = try to_json.getOrPutValue(key, value);
                 }
+                fw_idx2 = (fw_idx2 + 1);
             }
     }
 
@@ -603,7 +607,7 @@ pub fn loadProcess(self: *Loader) !void {
                 return;
             }
             _ = try self.map.map.ensureTotalCapacity(std.os.environ.len);
-            for (std.os.environ) |_env| {
+            for (cp_iter_slice(std.os.environ)) |_env| {
                 _ = &_env;
                 var env = bun.span(_env);
                 _ = &env;
@@ -741,17 +745,19 @@ pub fn printLoaded(self: *Loader, start: i128) void {
             _ = &loaded_i;
             _ = Output.printElapsed(elapsed);
             _ = Output.prettyError(" <d>", .{});
-            for (loaded, 0..) |yes, i| {
+            var idx: usize = 0;
+            _ = &idx;
+            for (cp_iter_slice(loaded)) |yes| {
                 _ = &yes;
-                _ = &i;
                 if (yes) {
                     loaded_i = (loaded_i + 1);
                     if (((count == 1) or ((loaded_i >= count) and (count > 1)))) {
-                        _ = Output.prettyError("\"{s}\"", .{ all[@as(usize, @intCast(i))] });
+                        _ = Output.prettyError("\"{s}\"", .{ all[@as(usize, @intCast(idx))] });
                     } else {
-                        _ = Output.prettyError("\"{s}\", ", .{ all[@as(usize, @intCast(i))] });
+                        _ = Output.prettyError("\"{s}\", ", .{ all[@as(usize, @intCast(idx))] });
                     }
                 }
+                idx = (idx + 1);
             }
             var iter = self.custom_files_loaded.iterator();
             _ = &iter;

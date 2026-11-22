@@ -334,7 +334,7 @@ if (isFirst) {
                         _ = &bytes;
                         var i: usize = 0;
                         _ = &i;
-                        for (text) |char| {
+                        for (cp_iter_slice(text)) |char| {
                             _ = &char;
                             if ((char != 95)) {
                                 bytes[cp_cast_int(usize, i)] = char;
@@ -440,7 +440,7 @@ break;
                     var bytes = (blk_catch_4: { break :blk_catch_4 ((self.allocator.alloc(u8, (text.len - underscoreCount))) catch |__ce_4| { _ = &__ce_4; _ = try self.addSyntaxError(self.start, "Out of Memory Wah Wah Wah", .{});
                     return; }); });
                     _ = &bytes;
-                    for (text) |char| {
+                    for (cp_iter_slice(text)) |char| {
                         _ = &char;
                         if ((char != 95)) {
                             bytes[cp_cast_int(usize, i)] = char;
@@ -452,7 +452,7 @@ break;
                 if (((!hasDotOrExponent) and ((self.end - self.start) < 10))) {
                     var parsed_num: u32 = 0;
                     _ = &parsed_num;
-                    for (text) |c| {
+                    for (cp_iter_slice(text)) |c| {
                         _ = &c;
                         parsed_num = ((parsed_num * 10) + @as(u32, @intCast((c - 48))));
                     }
@@ -1153,7 +1153,7 @@ return false;
 },
 }
         if ((name.len > 0)) {
-            for (name[1..]) |c| {
+            for (cp_iter_slice(name[1..])) |c| {
                 _ = &c;
                 switch (c) {
 48...57, 97...122, 65...90, '$', '_', '-' => {

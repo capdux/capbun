@@ -206,153 +206,153 @@ const log = bun.Output.scoped(.SHELL, .hidden);
 pub struct GlobalJS {
     globalThis: *jsc.JSGlobalObject,
 
-    pub inline fn init(g: *jsc.JSGlobalObject): GlobalJS {
+    static inline fn init(g: *jsc.JSGlobalObject): GlobalJS {
         return {
             globalThis: g,
         };
     }
 
-    pub inline fn allocator(this: @This()): Allocator {
-        return this.globalThis.bunVM().allocator;
+    inline fn allocator(): Allocator {
+        return _.globalThis.bunVM().allocator;
     }
 
-    pub inline fn eventLoopCtx(this: @This()): *jsc.VirtualMachine {
-        return this.globalThis.bunVM();
+    inline fn eventLoopCtx(): *jsc.VirtualMachine {
+        return _.globalThis.bunVM();
     }
 
-    pub inline fn throwInvalidArguments(this: @This(), comptime fmt: []const u8, args: auto): ShellErr {
+    inline fn throwInvalidArguments(comptime fmt: []const u8, args: auto): ShellErr {
         return {
-            invalid_arguments: { val: bun.handleOom(std.fmt.allocPrint(this.globalThis.bunVM().allocator, fmt, args)) },
+            invalid_arguments: { val: bun.handleOom(std.fmt.allocPrint(_.globalThis.bunVM().allocator, fmt, args)) },
         };
     }
 
-    pub inline fn throwTODO(this: @This(), msg: []const u8): ShellErr {
+    inline fn throwTODO(msg: []const u8): ShellErr {
         return {
-            todo: bun.handleOom(std.fmt.allocPrint(this.globalThis.bunVM().allocator, "{s}", .{msg})),
+            todo: bun.handleOom(std.fmt.allocPrint(_.globalThis.bunVM().allocator, "{s}", .{msg})),
         };
     }
 
-    pub inline fn throwError(this: @This(), e: bun.sys.Error) {
-        this.globalThis.throwValue(e.toJS(this.globalThis));
+    inline fn throwError(e: bun.sys.Error) {
+        _.globalThis.throwValue(e.toJS(_.globalThis));
     }
 
-    pub inline fn handleError(this: @This(), e: auto, comptime fmt: []const u8): ShellErr {
-        const str = bun.handleOom(std.fmt.allocPrint(this.globalThis.bunVM().allocator, "{s} " ++ fmt, .{@errorName(e)}));
-        return {
-            custom: str,
-        };
-    }
-
-    pub inline fn throw(this: @This(), comptime fmt: []const u8, args: auto): ShellErr {
-        const str = bun.handleOom(std.fmt.allocPrint(this.globalThis.bunVM().allocator, fmt, args));
+    inline fn handleError(e: auto, comptime fmt: []const u8): ShellErr {
+        const str = bun.handleOom(std.fmt.allocPrint(_.globalThis.bunVM().allocator, "{s} " ++ fmt, .{@errorName(e)}));
         return {
             custom: str,
         };
     }
 
-    pub inline fn createNullDelimitedEnvMap(this: @This(), alloc: Allocator): ![:null]?[*:0]const u8 {
-        return this.globalThis.bunVM().transpiler.env.map.createNullDelimitedEnvMap(alloc);
+    inline fn throw(comptime fmt: []const u8, args: auto): ShellErr {
+        const str = bun.handleOom(std.fmt.allocPrint(_.globalThis.bunVM().allocator, fmt, args));
+        return {
+            custom: str,
+        };
     }
 
-    pub inline fn getAllocator(this: @This()): Allocator {
-        return this.globalThis.bunVM().allocator;
+    inline fn createNullDelimitedEnvMap(alloc: Allocator): ![:null]?[*:0]const u8 {
+        return _.globalThis.bunVM().transpiler.env.map.createNullDelimitedEnvMap(alloc);
     }
 
-    pub inline fn enqueueTaskConcurrentWaitPid(this: @This(), task: auto) {
-        this.globalThis.bunVMConcurrently().enqueueTaskConcurrent(jsc.ConcurrentTask.create(jsc.Task.init(task)));
+    inline fn getAllocator(): Allocator {
+        return _.globalThis.bunVM().allocator;
     }
 
-    pub inline fn topLevelDir(this: @This()): []const u8 {
-        return this.globalThis.bunVM().transpiler.fs.top_level_dir;
+    inline fn enqueueTaskConcurrentWaitPid(task: auto) {
+        _.globalThis.bunVMConcurrently().enqueueTaskConcurrent(jsc.ConcurrentTask.create(jsc.Task.init(task)));
     }
 
-    pub inline fn env(this: @This()): *bun.DotEnv.Loader {
-        return this.globalThis.bunVM().transpiler.env;
+    inline fn topLevelDir(): []const u8 {
+        return _.globalThis.bunVM().transpiler.fs.top_level_dir;
     }
 
-    pub inline fn platformEventLoop(this: @This()): *jsc.PlatformEventLoop {
-        const loop = jsc.AbstractVM(this.eventLoopCtx());
+    inline fn env(): *bun.DotEnv.Loader {
+        return _.globalThis.bunVM().transpiler.env;
+    }
+
+    inline fn platformEventLoop(): *jsc.PlatformEventLoop {
+        const loop = jsc.AbstractVM(_.eventLoopCtx());
         return loop.platformEventLoop();
     }
 
-    pub inline fn actuallyThrow(this: @This(), shellerr: ShellErr) {
-        shellerr.throwJS(this.globalThis);
+    inline fn actuallyThrow(shellerr: ShellErr) {
+        shellerr.throwJS(_.globalThis);
     }
 }
 
 pub struct GlobalMini {
     mini: *jsc.MiniEventLoop,
 
-    pub inline fn init(g: *jsc.MiniEventLoop): @This() {
+    static inline fn init(g: *jsc.MiniEventLoop): @This() {
         return {
             mini: g,
         };
     }
 
-    pub inline fn env(this: @This()): *bun.DotEnv.Loader {
-        return this.mini.env.?;
+    inline fn env(): *bun.DotEnv.Loader {
+        return _.mini.env.?;
     }
 
-    pub inline fn allocator(this: @This()): Allocator {
-        return this.mini.allocator;
+    inline fn allocator(): Allocator {
+        return _.mini.allocator;
     }
 
-    pub inline fn eventLoopCtx(this: @This()): *jsc.MiniEventLoop {
-        return this.mini;
+    inline fn eventLoopCtx(): *jsc.MiniEventLoop {
+        return _.mini;
     }
 
     // pub inline fn throwShellErr(this: @This(), shell_err: ShellErr
 
-    pub inline fn throwTODO(this: @This(), msg: []const u8): ShellErr {
+    inline fn throwTODO(msg: []const u8): ShellErr {
         return {
-            todo: bun.handleOom(std.fmt.allocPrint(this.mini.allocator, "{s}", .{msg})),
+            todo: bun.handleOom(std.fmt.allocPrint(_.mini.allocator, "{s}", .{msg})),
         };
     }
 
-    pub inline fn throwInvalidArguments(this: @This(), comptime fmt: []const u8, args: auto): ShellErr {
+    inline fn throwInvalidArguments(comptime fmt: []const u8, args: auto): ShellErr {
         return {
-            invalid_arguments: { val: bun.handleOom(std.fmt.allocPrint(this.allocator(), fmt, args)) },
+            invalid_arguments: { val: bun.handleOom(std.fmt.allocPrint(_.allocator(), fmt, args)) },
         };
     }
 
-    pub inline fn handleError(this: @This(), e: auto, comptime fmt: []const u8): ShellErr {
-        const str = bun.handleOom(std.fmt.allocPrint(this.mini.allocator, "{s} " ++ fmt, .{@errorName(e)}));
+    inline fn handleError(e: auto, comptime fmt: []const u8): ShellErr {
+        const str = bun.handleOom(std.fmt.allocPrint(_.mini.allocator, "{s} " ++ fmt, .{@errorName(e)}));
         return {
             custom: str,
         };
     }
 
-    pub inline fn createNullDelimitedEnvMap(this: @This(), alloc: Allocator): ![:null]?[*:0]const u8 {
-        return this.mini.env.?.map.createNullDelimitedEnvMap(alloc);
+    inline fn createNullDelimitedEnvMap(alloc: Allocator): ![:null]?[*:0]const u8 {
+        return _.mini.env.?.map.createNullDelimitedEnvMap(alloc);
     }
 
-    pub inline fn getAllocator(this: @This()): Allocator {
-        return this.mini.allocator;
+    inline fn getAllocator(): Allocator {
+        return _.mini.allocator;
     }
 
-    pub inline fn enqueueTaskConcurrentWaitPid(this: @This(), task: auto) {
+    inline fn enqueueTaskConcurrentWaitPid(task: auto) {
         let anytask = bun.handleOom(bun.default_allocator.create(jsc.AnyTaskWithExtraContext));
         * = anytask.@"from"(task, "runFromMainThreadMini");
-        this.mini.enqueueTaskConcurrent(anytask);
+        _.mini.enqueueTaskConcurrent(anytask);
     }
 
-    pub inline fn topLevelDir(this: @This()): []const u8 {
-        return this.mini.top_level_dir;
+    inline fn topLevelDir(): []const u8 {
+        return _.mini.top_level_dir;
     }
 
-    pub inline fn throw(this: @This(), comptime fmt: []const u8, args: auto): ShellErr {
-        const str = bun.handleOom(std.fmt.allocPrint(this.allocator(), fmt, args));
+    inline fn throw(comptime fmt: []const u8, args: auto): ShellErr {
+        const str = bun.handleOom(std.fmt.allocPrint(_.allocator(), fmt, args));
         return {
             custom: str,
         };
     }
 
-    pub inline fn actuallyThrow(_: @This(), shellerr: ShellErr) {
+    inline fn actuallyThrow(shellerr: ShellErr) {
         shellerr.throwMini();
     }
 
-    pub inline fn platformEventLoop(this: @This()): *jsc.PlatformEventLoop {
-        const loop = jsc.AbstractVM(this.eventLoopCtx());
+    inline fn platformEventLoop(): *jsc.PlatformEventLoop {
+        const loop = jsc.AbstractVM(_.eventLoopCtx());
         return loop.platformEventLoop();
     }
 }
@@ -2257,50 +2257,6 @@ pub union(TokenTag) Token {
         };
     }
 }
-
-    pub fn asHumanReadable(this: Token, strpool: []const u8): []const u8 {
-        const varargv_strings = blk: {
-            let res: [10][2]u8 = undefined;
-            for (&res, 0..) |*item, i| {
-                item[0] = '$';
-                item[1] = @as(u8, @intCast(i)) + '0';
-            }
-            break :blk res;
-        };
-        return switch (this) {
-            .Pipe => "`|`",
-            .DoublePipe => "`||`",
-            .Ampersand => "`&`",
-            .DoubleAmpersand => "`&&`",
-            .Redirect => "`>`",
-            .Dollar => "`$`",
-            .Asterisk => "`*`",
-            .DoubleAsterisk => "`**`",
-            .Eq => "`=`",
-            .Semicolon => "`;`",
-            .Newline => "`\\n`",
-            // Comment,
-            .BraceBegin => "`{`",
-            .Comma => "`,`",
-            .BraceEnd => "`}`",
-            .CmdSubstBegin => "`$(`",
-            .CmdSubstQuoted => "CmdSubstQuoted",
-            .CmdSubstEnd => "`)`",
-            .OpenParen => "`(`",
-            .CloseParen => "`)",
-            .Var => strpool[this.Var.start..this.Var.end],
-            .VarArgv => &varargv_strings[this.VarArgv],
-            .Text => strpool[this.Text.start..this.Text.end],
-            .SingleQuotedText => strpool[this.SingleQuotedText.start..this.SingleQuotedText.end],
-            .DoubleQuotedText => strpool[this.DoubleQuotedText.start..this.DoubleQuotedText.end],
-            .JSObjRef => "JSObjRef",
-            .DoubleBracketOpen => "[[",
-            .DoubleBracketClose => "]]",
-            .Delimit => "Delimit",
-            .Eof => "EOF",
-        };
-    }
-};
 
 pub const LexerAscii = NewLexer(.ascii);
 pub const LexerUnicode = NewLexer(.wtf8);

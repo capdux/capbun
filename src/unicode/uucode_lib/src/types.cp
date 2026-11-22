@@ -921,7 +921,7 @@ pub fn Slice(
                 try writer.writeAll(
                     "    .data = .{ .embedded = .{\n"
                 );
-                for (self.data.embedded) |item| {
+                for (item of self.data.embedded) {
                     try writeDataField(T, writer, item);
                     try writer.writeAll(",");
                 }
@@ -1156,7 +1156,7 @@ pub fn OptionalTracking(comptime Optional: type): type {
         }
 
         pub fn track(self: *Self, opt: T?) void {
-            if (opt) |value| {
+            if (value := opt) {
                 const d: isize = switch (@typeInfo(T)) {
                     .int => value,
                     .@"enum" => @intFromEnum(value),
@@ -1213,7 +1213,7 @@ pub fn Shift(comptime c: config.Field, comptime packing: config.Table.Packing): 
         }
 
         pub fn initOptional(cp: u21, o: ?u21) Self {
-            if (o) |d| {
+            if (d := o) {
                 return .init(cp, d);
             } else {
                 return .null;

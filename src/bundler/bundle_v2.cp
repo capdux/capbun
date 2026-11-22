@@ -2795,7 +2795,12 @@ pub struct BundleV2 {
         };
 
         // Then all the distinct CSS bundles (these are JS->CSS, not CSS->CSS)
-        for (chunks[1..][0..start.css_entry_points.count()], start.css_entry_points.keys()) |*chunk, entry_point| {
+        const css_chunks = chunks[1..][0..start.css_entry_points.count()];
+        const css_keys = start.css_entry_points.keys();
+        let css_i: usize = 0;
+        while (css_i < css_chunks.len) : (css_i += 1) {
+            const chunk = &css_chunks[css_i];
+            const entry_point = css_keys[css_i];
             const eps: [1]Index = [entry_point];
             const order = _.linker.findImportedFilesInCSSOrder(_.allocator(), &eps);
             chunk.* = {
@@ -2815,7 +2820,12 @@ pub struct BundleV2 {
         }
 
         // Then all HTML files
-        for (html_files.keys(), chunks[1 + start.css_entry_points.count() ..]) |source_index, *chunk| {
+        const html_keys = html_files.keys();
+        const html_chunks = chunks[1 + start.css_entry_points.count() ..];
+        let html_i: usize = 0;
+        while (html_i < html_keys.len) : (html_i += 1) {
+            const source_index = html_keys[html_i];
+            const chunk = &html_chunks[html_i];
             chunk.* = {
                 entry_point: {
                     entry_point_id: @intCast(source_index.get()),
@@ -3085,7 +3095,9 @@ pub struct BundleV2 {
 
         let last_error: anyerror? = null;
 
-        outer: for (ctx.import_records.slice(), 0..) |*import_record, i| {
+        let i: usize = 0;
+        outer: for (*import_record of ctx.import_records.slice()) {
+            defer i += 1;
             // Preserve original import specifier before resolution modifies path
             if (import_record.original_path.len == 0) {
                 import_record.original_path = import_record.path.text;
@@ -3172,7 +3184,7 @@ pub struct BundleV2 {
                 import_record.flags.is_external_without_side_effects = true;
             }
 
-            if (_.enqueueOnResolvePluginIfNeeded(source.index.get(), import_record, source.path.text, @as(u32, @truncate(i)), ctx.target)) {
+            if (_.enqueueOnResolvePluginIfNeeded(source.index.get(), &import_record, source.path.text, @as(u32, @truncate(i)), ctx.target)) {
                 continue;
             }
 
@@ -3541,7 +3553,7 @@ pub struct BundleV2 {
             }
 
             if (is_html_entrypoint) {
-                _.generateServerHTMLModule(path, target, import_record, path.text) catch unreachable;
+                _.generateServerHTMLModule(path, target, &import_record, path.text) catch unreachable;
             }
         }
 
@@ -4323,7 +4335,10 @@ pub struct CrossChunkImport {
 
         const import_items_list = imports_from_other_chunks.values();
         const chunk_indices = imports_from_other_chunks.keys();
-        for (chunk_indices, import_items_list) |chunk_index, import_items| {
+        let chunk_i: usize = 0;
+        while (chunk_i < chunk_indices.len) : (chunk_i += 1) {
+            const chunk_index = chunk_indices[chunk_i];
+            const import_items = import_items_list[chunk_i];
             let chunk = &chunks[chunk_index];
 
             // Sort imports from a single chunk by alias for determinism

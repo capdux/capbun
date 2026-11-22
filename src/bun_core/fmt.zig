@@ -1487,8 +1487,8 @@ pub fn githubActionWriter(writer: *std.Io.Writer, self: []const u8) !void {
         }
 }
 
-pub fn githubAction(self: []const u8) strings.GithubActionFormatter {
-        return GithubActionFormatter{ .text = self };
+pub fn githubAction(text: []const u8) strings.GithubActionFormatter {
+        return GithubActionFormatter{ .text = text };
 }
 
 pub fn quotedWriter(writer: *std.Io.Writer, self: []const u8) !void {

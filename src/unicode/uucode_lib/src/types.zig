@@ -954,7 +954,7 @@ pub fn write(self: @This(), writer: *std.Io.Writer) !void {
                     _ = try writer.print("    .data = .{{ .offset = {} }},\n\n", .{ self.data.offset });
                 } else {
                     _ = try writer.writeAll("    .data = .{ .embedded = .{\n");
-                    for (self.data.embedded) |item| {
+                    for (cp_iter_slice(self.data.embedded)) |item| {
                         _ = &item;
                         _ = try writeDataField(T, writer, item);
                         _ = try writer.writeAll(",");

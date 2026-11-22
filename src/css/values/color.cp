@@ -857,8 +857,8 @@ pub fn parseLab(
     const Closure = struct {
         parser: *ComponentParser,
 
-        pub fn parsefn(this: *@This(), i: *css.Parser): Result(CssColor) {
-            return this.parser.parseRelative(i, T, CssColor, @This().innerfn, {});
+        fn parsefn(*_, i: *css.Parser): Result(CssColor) {
+            return _.parser.parseRelative(i, T, CssColor, @This().innerfn, {});
         }
 
         pub fn innerfn(i: *css.Parser, p: *ComponentParser): Result(CssColor) {
@@ -913,8 +913,8 @@ pub fn parseLch(
     const Closure = struct {
         parser: *ComponentParser,
 
-        pub static fn parseNestedBlockFn(this: *@This(), i: *css.Parser): Result(CssColor) {
-            return this.parser.parseRelative(i, T, CssColor, @This().parseRelativeFn, .{this});
+        fn parseNestedBlockFn(*_, i: *css.Parser): Result(CssColor) {
+            return _.parser.parseRelative(i, T, CssColor, @This().parseRelativeFn, .{_});
         }
 
         pub static fn parseRelativeFn(i: *css.Parser, p: *ComponentParser, this: *@This()): Result(CssColor) {
@@ -989,8 +989,8 @@ pub fn parseHslHwb(
         parser: *ComponentParser,
         allows_legacy: bool,
 
-        pub static fn parseNestedBlockFn(this: *@This(), i: *css.Parser): Result(CssColor) {
-            return this.parser.parseRelative(i, T, CssColor, @This().parseRelativeFn, .{this});
+        fn parseNestedBlockFn(*_, i: *css.Parser): Result(CssColor) {
+            return _.parser.parseRelative(i, T, CssColor, @This().parseRelativeFn, .{_});
         }
 
         pub static fn parseRelativeFn(i: *css.Parser, p: *ComponentParser, this: *@This()): Result(CssColor) {

@@ -120,12 +120,14 @@ pub fn eql(self: @This(), a: LayerName, b: LayerName, _: usize) bool {
             if ((a.v.len != b.v.len)) {
                 return false;
             }
-            for (a.v.items, 0..) |part, i| {
+            var i: usize = 0;
+            _ = &i;
+            for (a.v.items) |part| {
                 _ = &part;
-                _ = &i;
                 if ((!bun.strings.eql(part, b.v.items[@as(usize, @intCast(i))]))) {
                     return false;
                 }
+                i = (i + 1);
             }
             return true;
     }

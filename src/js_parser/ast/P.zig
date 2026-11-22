@@ -2252,9 +2252,11 @@ if (ex.comma_after_spread) |spread| {
             _ = &items;
             var is_spread = false;
             _ = &is_spread;
-            for (ex.items.slice(), 0..) |_, i| {
-                _ = &i;
-                var item = ex.items.ptr[@as(usize, @intCast(i))];
+            var i: usize = 0;
+            _ = &i;
+            for (cp_iter_slice(ex.items.slice())) |ex_item| {
+                _ = &ex_item;
+                var item = ex_item;
                 _ = &item;
                 if ((item.data == .e_spread)) {
                     is_spread = true;
@@ -2262,6 +2264,7 @@ if (ex.comma_after_spread) |spread| {
                 }
                 const res = p.convertExprToBindingAndInitializer((&item), invalid_loc, is_spread);
                 _ = items.appendAssumeCapacity(js_ast.ArrayBinding{ .binding = ((res.binding) orelse (p.b(std.mem.zeroes(B.Missing), item.loc))), .default_value = res.expr });
+                i = (i + 1);
             }
             return p.b(B.Array{ .items = items.items, .has_spread = is_spread, .is_single_line = ex.is_single_line }, expr.loc);
 },
@@ -3454,8 +3457,8 @@ if ((ex.can_be_unwrapped_if_unused != .never)) {
                 {
                     var i: i32 = 0;
                     _ = &i;
-                    const __end_44 = args.len;
-                    while (i < __end_44) : (i += 1) {
+                    const __end_45 = args.len;
+                    while (i < __end_45) : (i += 1) {
                         const arg = (&args[@as(usize, @intCast(i))]);
                         if ((!(p.exprCanBeRemovedIfUnusedWithoutDCECheck(arg) or ((ex.can_be_unwrapped_if_unused == .if_unused_and_toString_safe) and arg.data.isSafeToString())))) {
                             return false;
@@ -3471,8 +3474,8 @@ if ((ex.can_be_unwrapped_if_unused != .never)) {
                 {
                     var i: i32 = 0;
                     _ = &i;
-                    const __end_45 = args.len;
-                    while (i < __end_45) : (i += 1) {
+                    const __end_46 = args.len;
+                    while (i < __end_46) : (i += 1) {
                         const arg = (&args[@as(usize, @intCast(i))]);
                         if ((!(p.exprCanBeRemovedIfUnusedWithoutDCECheck(arg) or ((ex.can_be_unwrapped_if_unused == .if_unused_and_toString_safe) and arg.data.isSafeToString())))) {
                             return false;
@@ -4454,9 +4457,14 @@ pub fn computeTsEnumsMap(p: *const P, allocator: Allocator) !js_ast.Ast.TsEnumsM
                 var inner_map: bun.StringHashMapUnmanaged(InlinedEnumValue) = .{};
                 _ = &inner_map;
                 _ = try inner_map.ensureTotalCapacity(allocator, @as(u32, @intCast(namespace.count())));
-                for (namespace.keys(), namespace.values()) |key, val| {
+                const ns_keys = namespace.keys();
+                const ns_vals = namespace.values();
+                var ns_i: usize = 0;
+                _ = &ns_i;
+                for (cp_iter_slice(ns_keys)) |key| {
                     _ = &key;
-                    _ = &val;
+                    const val = ns_vals[@as(usize, @intCast(ns_i))];
+                    ns_i = (ns_i + 1);
                     switch (val.data) {
 .enum_number => |num| {
 _ = inner_map.putAssumeCapacityNoClobber(key, InlinedEnumValue.encode(.{ .number = num }));

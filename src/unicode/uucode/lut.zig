@@ -190,43 +190,49 @@ pub fn generate(self: @This(), alloc: Allocator) !Tables(Elem) {
             _ = &block;
             var block_len: u16 = 0;
             _ = &block_len;
-            for (0..std.math.maxInt(u21) + 1) |cp| {
+            {
+                var cp: i32 = 0;
                 _ = &cp;
-                const elem = try self.ctx.get(@as(u21, @intCast(cp)));
-                const block_idx = block_idx: {
-                for (stage3.items, 0..) |item, i| {
-                    _ = &item;
+                const __end_0 = (std.math.maxInt(u21) + 1);
+                while (cp < __end_0) : (cp += 1) {
+                    const elem = try self.ctx.get(@as(u21, @intCast(cp)));
+                    const block_idx = block_idx: {
+                    var i: usize = 0;
                     _ = &i;
-                    if (self.ctx.eql(item, elem)) {
-                        break :block_idx i;
+                    for (stage3.items) |item| {
+                        _ = &item;
+                        if (self.ctx.eql(item, elem)) {
+                            break :block_idx i;
+                        }
+                        i = (i + 1);
                     }
-                }
-                const idx = stage3.items.len;
-                _ = try stage3.append(alloc, elem);
-                break :block_idx idx;
+                    const idx = stage3.items.len;
+                    _ = try stage3.append(alloc, elem);
+                    break :block_idx idx;
 };
-                block[cp_cast_int(usize, block_len)] = ((std.math.cast(u8, block_idx)) orelse { return error.BlockTooLarge; });
-                block_len = (block_len + 1);
-                if (((block_len < block_size) and (cp != std.math.maxInt(u21)))) {
-                    continue;
-                }
-                if ((block_len < block_size)) {
-                    _ = @memset(block[block_len..block_size], 0);
-                }
-                const gop = try blocks_map.getOrPut(block);
-                if ((!gop.found_existing)) {
+                    block[cp_cast_int(usize, block_len)] = ((std.math.cast(u8, block_idx)) orelse { return error.BlockTooLarge; });
+                    block_len = (block_len + 1);
+                    if (((block_len < block_size) and (cp != std.math.maxInt(u21)))) {
+                        continue;
+                    }
+                    if ((block_len < block_size)) {
+                        _ = @memset(block[block_len..block_size], 0);
+                    }
+                    const gop = try blocks_map.getOrPut(block);
+                    if ((!gop.found_existing)) {
+                        {
+                            gop.value_ptr.* = ((std.math.cast(u16, stage2.items.len)) orelse { return error.Stage2TooLarge; });
+                        }
+                        for (cp_iter_slice(block[0..block_len])) |entry| {
+                            _ = &entry;
+                            _ = try stage2.append(alloc, entry);
+                        }
+                    }
                     {
-                        gop.value_ptr.* = ((std.math.cast(u16, stage2.items.len)) orelse { return error.Stage2TooLarge; });
+                        _ = try stage1.append(alloc, gop.value_ptr.*);
                     }
-                    for (block[0..block_len]) |entry| {
-                        _ = &entry;
-                        _ = try stage2.append(alloc, entry);
-                    }
+                    block_len = 0;
                 }
-                {
-                    _ = try stage1.append(alloc, gop.value_ptr.*);
-                }
-                block_len = 0;
             }
             _ = assert((stage1.items.len <= std.math.maxInt(u16)));
             _ = assert((stage2.items.len <= std.math.maxInt(u16)));

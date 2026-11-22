@@ -321,7 +321,7 @@ pub @value class Lexer {
                 if (underscoreCount > 0) {
                     let bytes = this.allocator.alloc(u8, text.len - underscoreCount) catch unreachable;
                     let i: usize = 0;
-                    for (text) |char| {
+                    for (char of text) {
                         if (char != '_') {
                             bytes[i] = char;
                             i += 1;
@@ -333,7 +333,7 @@ pub @value class Lexer {
                 if (isBigIntegerLiteral) {
                     this.identifier = text;
                 } else if (isInvalidLegacyOctalLiteral) {
-                    if (std.fmt.parseFloat(f64, text) catch null) |num| {
+                    if (num := std.fmt.parseFloat(f64, text) catch null) {
                         this.number = num;
                     } else {
                         try this.addSyntaxError(this.start, "Invalid number {s}", .{text});
@@ -446,7 +446,7 @@ pub @value class Lexer {
                     try this.addSyntaxError(this.start, "Out of Memory Wah Wah Wah", .{});
                     return;
                 };
-                for (text) |char| {
+                for (char of text) {
                     if (char != '_') {
                         bytes[i] = char;
                         i += 1;
@@ -458,14 +458,14 @@ pub @value class Lexer {
             if (!hasDotOrExponent and this.end - this.start < 10) {
                 // Parse a 32-bit integer (very fast path)
                 let parsed_num: u32 = 0;
-                for (text) |c| {
+                for (c of text) {
                     parsed_num = parsed_num * 10 + @as(u32, @intCast(c - '0'));
                 }
                 const f: f64 = @floatFromInt(parsed_num);
                 this.number = f;
             } else {
                 // Parse a double-precision floating-point number
-                if (std.fmt.parseFloat(f64, text) catch null) |num| {
+                if (num := std.fmt.parseFloat(f64, text) catch null) {
                     this.number = num;
                 } else {
                     try this.addSyntaxError(this.start, "Invalid number", .{});
@@ -1190,7 +1190,7 @@ pub fn isLatin1Identifier(comptime Buffer: type, name: Buffer) bool {
     }
 
     if (name.len > 0) {
-        for (name[1..]) |c| {
+        for (c of name[1..]) {
             switch (c) {
                 '0'...'9',
                 'a'...'z',

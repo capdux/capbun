@@ -506,15 +506,17 @@ inline else => |colors_comptime| (comptime choices: {
             const n_choices = choices_fields.len;
             var choices: [n_choices][]const u8 = undefined;
             _ = &choices;
-            for (choices_fields, 0..) |field, i| {
+            var i: usize = 0;
+            _ = &i;
+            for (cp_iter_slice(choices_fields)) |field| {
                 _ = &field;
-                _ = &i;
                 if (((if (@typeInfo(@TypeOf(field)) == .@"enum") @intFromEnum(field) else field.value) != expected_value)) {
                     _ = @compileError("Choices must be an enum type with consecutive values starting from 0");
                 }
                 const e: Choices = @enumFromInt((if (@typeInfo(@TypeOf(field)) == .@"enum") @intFromEnum(field) else field.value));
                 choices[cp_cast_int(usize, i)] = Output.prettyFmt(e.fmt(), colors_comptime);
                 expected_value = (expected_value + 1);
+                i = (i + 1);
             }
             break :choices choices;
 }),
@@ -552,9 +554,13 @@ inline else => |colors_comptime| (comptime choices: {
                     _ = Output.up(choices.len);
                 }
                 initial_draw = false;
-                inline for (choices, 0..) |option, i| {
+                var i: usize = 0;
+                _ = &i;
+                for (cp_iter_slice(choices)) |option| {
                     _ = &option;
-                    _ = &i;
+                    defer {
+                    i = (i + 1);
+                    }
                     if ((i == @intFromEnum(selected))) {
                         if (colors) {
                             _ = Output.pretty("<r><cyan>❯<r>   ", .{});
