@@ -30,7 +30,7 @@ struct MutexGuard {
     vm: *VirtualMachine;
     run_loop_timer: *RunLoopTimer;
     event_loop_timer: EventLoopTimer;
-    imminent: *std.atomic.Value(?*WTFTimer);
+    imminent: *std.atomic.Value((*WTFTimer)?);
     repeat: bool;
     lock: bun.Mutex = .{};
     script_execution_context_id: bun.webcore.ScriptExecutionContext.Identifier;

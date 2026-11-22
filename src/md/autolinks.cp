@@ -11,7 +11,7 @@ pub struct AutolinkSpan {
     end: usize,
 }
 
-pub const AutolinkResult = ?AutolinkSpan;
+pub const AutolinkResult = AutolinkSpan?;
 
 pub struct ScanUrlResult {
     end: usize,

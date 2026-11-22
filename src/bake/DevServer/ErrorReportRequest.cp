@@ -132,8 +132,7 @@ struct OutputFlushGuard {
         // Where the u64 is a unique identifier pointing into sourcemaps.
         //
         // HMR chunks use this too, but currently do not host their JS code.
-        const OptionalGetResult = ?SourceMapStore.GetResult;
-        let parsed_source_maps: AutoArrayHashMapUnmanaged(SourceMapStore.Key, OptionalGetResult) = .empty;
+        let parsed_source_maps: AutoArrayHashMapUnmanaged(SourceMapStore.Key, SourceMapStore.GetResult?) = .empty;
         parsed_source_maps.ensureTotalCapacity(temp_alloc, 4)?;
         const _psm_guard = ParsedSourceMapsGuard<@TypeOf(parsed_source_maps)>{ map: &parsed_source_maps, allocator: temp_alloc };
 

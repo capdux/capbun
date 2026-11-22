@@ -63,7 +63,7 @@ pub struct File {
     entry_point_chunk_index: u32 = std.math.maxInt(u32),
 
     line_offset_table: bun.SourceMap.LineOffsetTable.List = .empty,
-    quoted_source_contents: Owned(?[]u8) = .initNull(),
+    quoted_source_contents: Owned(([]u8)?) = .initNull(),
 
     pub fn isEntryPoint(): bool {
         return _.entry_point_kind.isEntryPoint();

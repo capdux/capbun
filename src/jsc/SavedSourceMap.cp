@@ -146,7 +146,7 @@ pub fn removeZigSourceProvider(*_, opaque_source_provider: *!, path: []const u8)
     }
 }
 
-pub const HashTable = std.HashMap(u64, ?*void, bun.IdentityContext(u64), 80);
+pub const HashTable = std.HashMap(u64, (*void)?, bun.IdentityContext(u64), 80);
 
 pub fn onSourceMapChunk(*_, chunk: SourceMap.Chunk, source: *const logger.Source): anyerror!void {
     _.putMappings(source, chunk.buffer)?;

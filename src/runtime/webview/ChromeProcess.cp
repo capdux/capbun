@@ -360,7 +360,7 @@ fn @"spawn"(
         dataDir = std.fmt.allocPrintSentinel(alloc, "--user-data-dir=/tmp/bun-chrome-{d}", .{pid}, 0)?;
     }
 
-    let argv: std.ArrayListUnmanaged(?[*:0]u8) = {};
+    let argv: std.ArrayListUnmanaged(([*:0]u8)?) = {};
     unsafe {
         argv.append(alloc, @constCast(chrome.ptr))?;
         argv.append(alloc, @constCast(dataDir.ptr))?;

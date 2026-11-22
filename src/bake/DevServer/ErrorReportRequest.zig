@@ -256,9 +256,7 @@ pub fn runWithBody(ctx: *ErrorReportRequest, body: []const u8, r: AnyResponse) !
         }
         const runtime_name: []const u8 = "Bun HMR Runtime";
         const browser_url_origin = ((bun.jsc.URL.originFromSlice(browser_url)) orelse (browser_url));
-        const OptionalGetResult = ?SourceMapStore.GetResult;
-        _ = &OptionalGetResult;
-        var parsed_source_maps: AutoArrayHashMapUnmanaged(SourceMapStore.Key, OptionalGetResult) = .empty;
+        var parsed_source_maps: AutoArrayHashMapUnmanaged(SourceMapStore.Key, ?SourceMapStore.GetResult) = .empty;
         _ = &parsed_source_maps;
         _ = try parsed_source_maps.ensureTotalCapacity(temp_alloc, 4);
         var _psm_guard = ParsedSourceMapsGuard(@TypeOf(parsed_source_maps)){ .map = (&parsed_source_maps), .allocator = temp_alloc };

@@ -753,9 +753,9 @@ pub fn wrap(comptime Wrapped: type) SignalVTable {
             const T = Wrapped;
             return SignalVTable{ .close = SignalVTableFunctions(T).onClose, .ready = SignalVTableFunctions(T).onReady, .start = SignalVTableFunctions(T).onStart };
     }
-    pub const OnCloseFn = *const fn(*anyopaque, ?sys.Error) void;
-    pub const OnReadyFn = *const fn(*anyopaque, ?Blob.SizeType, ?Blob.SizeType) void;
-    pub const OnStartFn = *const fn(*anyopaque) void;
+    pub const OnCloseFn = SignalVTableOnCloseFn;
+    pub const OnReadyFn = SignalVTableOnReadyFn;
+    pub const OnStartFn = SignalVTableOnStartFn;
 };
 
 pub const Signal = struct {
@@ -1121,6 +1121,8 @@ const owned = (slice.ptr != buf.ptr);
 
 pub const WritableHandlerFn = *const fn (?*anyopaque, ResultWritable) void;
 pub const ResultHandlerFn = *const fn (?*anyopaque, Result) void;
+pub const OptSysError = ?sys.Error;
+pub const OptBlobSizeType = ?Blob.SizeType;
 pub const OnFirstWriteFn = *const fn (?*anyopaque) void;
 const FeatureFlags = bun.FeatureFlags;
 const Output = bun.Output;
@@ -1151,6 +1153,9 @@ pub const StreamError = ResultStreamError;
 pub const Writable = ResultWritable;
 pub const IntoArray = ResultIntoArray;
 pub const Pending = ResultPending;
+pub const SignalVTableOnCloseFn = *const fn(*anyopaque, OptSysError) void;
+pub const SignalVTableOnReadyFn = *const fn(*anyopaque, OptBlobSizeType, OptBlobSizeType) void;
+pub const SignalVTableOnStartFn = *const fn(*anyopaque) void;
 pub const HTTPSResponseSink = HTTPServerWritable(true, false);
 pub const HTTPResponseSink = HTTPServerWritable(false, false);
 pub const H3ResponseSink = HTTPServerWritable(true, true);

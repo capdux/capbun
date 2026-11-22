@@ -478,6 +478,11 @@ export class SocketHandler<const is_ssl: bool> {
         return socket_;
     }
 
+    static fn OptPtr(comptime T: type): type {
+        const x: (*T)? = null;
+        return @TypeOf(x);
+    }
+
     pub static fn connectGroup(
         g: *SocketGroup,
         kind: SocketKind,
@@ -488,7 +493,7 @@ export class SocketHandler<const is_ssl: bool> {
         allow_half_open: bool,
     ): !Self {
         const Owner = @typeInfo(@TypeOf(owner)).pointer.child;
-        const OwnerPtr = ?*Owner;
+        const OwnerPtr = OptPtr(Owner);
         const opts: c_int = if (allow_half_open) bun.uws.LIBUS_SOCKET_ALLOW_HALF_OPEN else 0;
         const host = if (raw_host.len > 1 && raw_host[0] == '[' && raw_host[raw_host.len - 1] == ']')
             raw_host[1 .. raw_host.len - 1]
@@ -524,7 +529,7 @@ export class SocketHandler<const is_ssl: bool> {
         allow_half_open: bool,
     ): !Self {
         const Owner = @typeInfo(@TypeOf(owner)).pointer.child;
-        const OwnerPtr = ?*Owner;
+        const OwnerPtr = OptPtr(Owner);
         const opts: c_int = if (allow_half_open) bun.uws.LIBUS_SOCKET_ALLOW_HALF_OPEN else 0;
         const s_opt = g.connectUnix(kind, ssl_ctx, path, opts, @sizeOf(OwnerPtr));
         if (s_opt == null) return error.FailedToOpenSocket;

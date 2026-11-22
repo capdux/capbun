@@ -2133,3 +2133,6 @@
 
 ### [2026-11-23] Wave #61（尾项清扫：非透传 `try` 与 `const X = struct/enum/union/opaque`）
 - 完成 48 个候选 `src/**/*.cp` 模块的 `try` 与 `const X = struct/enum/union/opaque` 尾项清扫及 `ConsoleObject.cp` 嵌套容器顶层提升，通过 `bun run zig:check`（5/5）及 `bun bd test`（8/8）。
+
+### [2026-11-23] Wave #62（前缀 `?T` 与 `: void` 尾项清扫）
+- 完成 31 个 `?T` 候选与 22 个 `: void` 候选 `src/**/*.cp` 模块的尾项纯化（10 个非透传模块实际改写，其余透传泛型工厂块按规范保留），通过 `bun run zig:check`（5/5）及 `bun bd test`（8/8）。

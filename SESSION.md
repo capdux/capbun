@@ -522,3 +522,8 @@
 - 完成 `temp/wave61_try_tail.txt`（26 个模块）与 `temp/wave61_const_container_tail.txt`（22 个非重叠模块）尾项清扫：`src/bun.cp`、`src/bundler/LinkerContext.cp`、`src/semver/SemverRange.cp`、`src/unicode/uucode_lib/src/types.cp`、`src/jsc/ConsoleObject.cp` 已完成纯化，其余位于 `return struct` 透传工厂块或局部 `comptime` 捕获闭包内的结构按规范保留，全部通过 `cpc_brief.py` 四项门禁。
 - 修复 `src/jsc/ConsoleObject.cp` 中 `FormatterTagUnion` 的 `@as(FormatterTag, _)` -> `std.meta.activeTag(_)` 后，`bun run zig:check` 5/5 通过（29s），`bun bd test test/regression/issue/29181.test.ts test/js/bun/util/bun-file.test.ts` 8/8 通过（460 expect）。
 - 推导下一阶段 Wave #62：前缀 `?T`（31 个候选）与非函数指针 `: void` 尾项清扫。
+
+## [2026-11-23] Wave #62：前缀 `?T` 与 `: void` 尾项清扫完成与验收
+- 完成 `temp/wave62_prefix_q_todo.txt`（31 个 `?T` 模块）与 `temp/wave62_void_todo.txt`（第 3 组 22 个 `: void` 模块；其余 46 个复核为 `void!` 错误联合或函数指针，0 残留）的清扫，全量通过 `cpc_brief.py` 四项门禁。
+- 修复 `src/bake/DevServer/ErrorReportRequest.cp`（内联 `SourceMapStore.GetResult?`）与 `src/uws_sys/socket.cp`（`OptPtr` 辅助函数类型注解 `const x: (*T)? = null; return @TypeOf(x);`）后，`bun run zig:check` 5/5 通过（26s），`bun bd test test/regression/issue/29181.test.ts test/js/bun/util/bun-file.test.ts` 8/8 通过（460 expect）。
+- 推导下一阶段 Wave #63：残余裸 `this`/`*this`/`self`/`*self` 接收者纯化（如 `analytics/schema.cp`、`brotli/brotli.cp` 等）。

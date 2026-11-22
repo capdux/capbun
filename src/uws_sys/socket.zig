@@ -795,9 +795,14 @@ pub fn fromFd(g: *SocketGroup, k: SocketKind, handle: bun.FD, comptime This: typ
                 return socket_;
         }
 
+pub fn OptPtr(comptime T: type) type {
+                const x: ?*T = null;
+                return @TypeOf(x);
+        }
+
 pub fn connectGroup(g: *SocketGroup, kind: SocketKind, ssl_ctx: ?*bun.uws.SslCtx, raw_host: []const u8, port: anytype, owner: anytype, allow_half_open: bool) !Self {
                 const Owner = @typeInfo(@TypeOf(owner)).pointer.child;
-                const OwnerPtr = ?*Owner;
+                const OwnerPtr = OptPtr(Owner);
                 const opts: c_int = (if (allow_half_open) bun.uws.LIBUS_SOCKET_ALLOW_HALF_OPEN else 0);
                 const host = (if ((((raw_host.len > 1) and (raw_host[0] == 91)) and (raw_host[@as(usize, @intCast((raw_host.len - 1)))] == 93))) raw_host[1..(raw_host.len - 1)] else raw_host);
                 var stack: [256]u8 = undefined;
@@ -826,7 +831,7 @@ pub fn connectGroup(g: *SocketGroup, kind: SocketKind, ssl_ctx: ?*bun.uws.SslCtx
 
 pub fn connectUnixGroup(g: *SocketGroup, kind: SocketKind, ssl_ctx: ?*bun.uws.SslCtx, path: []const u8, owner: anytype, allow_half_open: bool) !Self {
                 const Owner = @typeInfo(@TypeOf(owner)).pointer.child;
-                const OwnerPtr = ?*Owner;
+                const OwnerPtr = OptPtr(Owner);
                 const opts: c_int = (if (allow_half_open) bun.uws.LIBUS_SOCKET_ALLOW_HALF_OPEN else 0);
                 const s_opt = g.connectUnix(kind, ssl_ctx, path, opts, @sizeOf(OwnerPtr));
                 if ((s_opt == null)) {

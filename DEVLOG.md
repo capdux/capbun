@@ -1674,3 +1674,6 @@
 ### [2026-11-23] Wave #61 技术要点（尾项清扫）
 - 在 `union(EnumTag)` 方法中获取当前激活枚举标签时，使用 `std.meta.activeTag(_)` 替代 `@as(EnumTag, _)`，避免 `cpc` 将 `@as(EnumType, _)` 误展开为 `@enumFromInt(self)`。
 - 捕获外层 `comptime` 局部参数的闭包/包装结构体（如 `Wrapper`、`Holder`、`S`）以及 `return struct { ... }` 原生 Zig 透传泛型工厂块内部写法按规范保留原样。
+
+### [2026-11-23] Wave #62 技术要点（前缀 `?T` -> 后缀 `T?`）
+- 局部类型别名 `const Opt = T?;` 会被 `cpc` 误解析为后缀错误传播 `try T`，应将 `T?` 直接内联在泛型类型实参中，或通过 `const x: (*T)? = null; return @TypeOf(x);` 辅助函数获取类型。

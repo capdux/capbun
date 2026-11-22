@@ -616,10 +616,16 @@ struct SignalVTableFunctions<Wrapped> {
     }
 }
 
+pub type OptSysError = sys.Error?;
+pub type OptBlobSizeType = Blob.SizeType?;
+pub const SignalVTableOnCloseFn = *const fn (*!, OptSysError) void;
+pub const SignalVTableOnReadyFn = *const fn (*!, OptBlobSizeType, OptBlobSizeType) void;
+pub const SignalVTableOnStartFn = *const fn (*!) void;
+
 pub struct SignalVTable {
-    pub const OnCloseFn = *const fn (*!, ?sys.Error) void;
-    pub const OnReadyFn = *const fn (*!, ?Blob.SizeType, ?Blob.SizeType) void;
-    pub const OnStartFn = *const fn (*!) void;
+    pub const OnCloseFn = SignalVTableOnCloseFn;
+    pub const OnReadyFn = SignalVTableOnReadyFn;
+    pub const OnStartFn = SignalVTableOnStartFn;
 
     close: OnCloseFn;
     ready: OnReadyFn;

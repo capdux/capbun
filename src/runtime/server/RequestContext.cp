@@ -120,7 +120,7 @@ struct RequestHeaderResponsePair<RC> {
 struct RequestPathnameFormatter<RC> {
     ctx: *RC!,
 
-    fn format(writer: *std.Io.Writer!): void! {
+    fn format(writer: *std.Io.Writer!)! {
         let rc = _.ctx;
 
         if (!rc.pathname.isEmpty()) {
