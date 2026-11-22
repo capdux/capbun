@@ -178,7 +178,7 @@ pub struct _StaticRouteEntry {
         _.route.ref();
 
         return .{
-            .path = try bun.default_allocator.dupe(u8, _.path),
+            .path = bun.default_allocator.dupe(u8, _.path)?,
             .route = _.route,
             .method = _.method,
         };
@@ -325,7 +325,7 @@ pub const StaticRouteEntry = _StaticRouteEntry;
 
 fn normalizeStaticRoutesList(*_): !void {
     let static_routes_dedupe_list = std.array_list.Managed(u64).init(bun.default_allocator);
-    try static_routes_dedupe_list.ensureTotalCapacity(@truncate(_.static_routes.items.len));
+    static_routes_dedupe_list.ensureTotalCapacity(@truncate(_.static_routes.items.len))?;
     const _guard_dedupe = DeinitGuard<@TypeOf(static_routes_dedupe_list)>{ ptr: unsafe { &static_routes_dedupe_list } };
 
     let list = &_.static_routes;
@@ -338,7 +338,7 @@ fn normalizeStaticRoutesList(*_): !void {
                 let item = list.orderedRemove(index);
                 item.deinit();
             } else {
-                try static_routes_dedupe_list.append(hash);
+                static_routes_dedupe_list.append(hash)?;
             }
 
             if (index == 0) break;
@@ -357,17 +357,17 @@ pub fn cloneForReloadingStaticRoutes(*_): !ServerConfig {
     _.websocket = null;
     _.bake = null;
 
-    try that.normalizeStaticRoutesList();
+    that.normalizeStaticRoutesList()?;
 
     return that;
 }
 
 pub fn appendStaticRoute(*_, path: []const u8, route: AnyRoute, method: HTTP.Method.Optional): !void {
-    try _.static_routes.append(StaticRouteEntry{
-        .path = try bun.default_allocator.dupe(u8, path),
+    _.static_routes.append(StaticRouteEntry{
+        .path = bun.default_allocator.dupe(u8, path)?,
         .route = route,
         .method = method,
-    });
+    })?;
 }
 
 pub static fn applyStaticRoute(server: AnyServer, comptime ssl: bool, app: *uws.NewApp(ssl), comptime T: type, entry: T, path: []const u8, method: HTTP.Method.Optional) {
@@ -512,7 +512,7 @@ fn validateRouteName(global: *jsc.JSGlobalObject, path: []const u8): !void {
 
 fn getRoutesObject(global: *jsc.JSGlobalObject, arg: jsc.JSValue): bun.JSError!jsc.JSValue? {
     inline for (key of .{ "routes", "static" }) {
-        if (routes := try arg.get(global, key)) {
+        if (routes := arg.get(global, key)?) {
             if (routes.isArray()) {
                 return null;
             }
@@ -580,7 +580,7 @@ pub static fn fromJS(
     let port = args.address.tcp.port;
 
     if (origin := arguments.vm.transpiler.options.transform_options.origin) {
-        args.base_uri = try bun.default_allocator.dupeZ(u8, origin);
+        args.base_uri = bun.default_allocator.dupeZ(u8, origin)?;
     }
 
     const _guard_exc_ssl = ExceptionSslGuard{ global: global, args: args };
@@ -590,19 +590,19 @@ pub static fn fromJS(
             return global.throwInvalidArguments("Bun.serve expects an object", .{});
         }
 
-        if (dev := try arg.get(global, "development")) {
+        if (dev := arg.get(global, "development")?) {
             if (dev.isObject()) {
-                if (hmr := try dev.getBooleanStrict(global, "hmr")) {
+                if (hmr := dev.getBooleanStrict(global, "hmr")?) {
                     args.development = if (!hmr) .development_without_hmr else .development;
                 } else {
                     args.development = .development;
                 }
 
-                if (console := try dev.getBooleanStrict(global, "console")) {
+                if (console := dev.getBooleanStrict(global, "console")?) {
                     args.broadcast_console_log_from_browser_to_server_for_bake = console;
                 }
 
-                if (enable_chrome_devtools_automatic_workspace_folders := try dev.getBooleanStrict(global, "chromeDevToolsAutomaticWorkspaceFolders")) {
+                if (enable_chrome_devtools_automatic_workspace_folders := dev.getBooleanStrict(global, "chromeDevToolsAutomaticWorkspaceFolders")?) {
                     args.enable_chrome_devtools_automatic_workspace_folders = enable_chrome_devtools_automatic_workspace_folders;
                 }
             } else {
@@ -612,7 +612,7 @@ pub static fn fromJS(
         }
         if (global.hasException()) return error.JSError;
 
-        if (static_val := try getRoutesObject(global, arg)) {
+        if (static_val := getRoutesObject(global, arg)?) {
             const static_obj = static_val.getObject() orelse {
                 return global.throwInvalidArguments(
                     "Bun.serve() expects 'routes' to be an object shaped like:\n\n  {\n    \"/path\": {\n      GET: (req) => new Response(\"Hello\"),\n      POST: (req) => new Response(\"Hello\"),\n    },\n    \"/path2/:param\": new Response(\"Hello\"),\n    \"/path3/:param1/:param2\": (req) => new Response(\"Hello\")\n  }\n\nLearn more at https://bun.com/docs/api/http"
@@ -620,10 +620,10 @@ pub static fn fromJS(
             };
             args.had_routes_object = true;
 
-            let iter = try jsc.JSPropertyIterator(.{
+            let iter = jsc.JSPropertyIterator(.{
                 .skip_empty_name = true,
                 .include_value = true,
-            }).init(global, static_obj);
+            }).init(global, static_obj)?;
             const _guard_iter = DeinitGuard<@TypeOf(iter)>{ ptr: unsafe { &iter } };
 
             let init_ctx_: AnyRoute.ServerInitContext = .{
@@ -643,7 +643,7 @@ pub static fn fromJS(
 
             let _guard_static_routes = StaticRoutesErrGuard{ args: args };
 
-            while (key := try iter.next()) {
+            while (key := iter.next()?) {
                 const path_pair = bun.handleOom(key.toOwnedSliceReturningAllASCII(bun.default_allocator));
                 const path = path_pair[0];
                 const is_ascii = path_pair[1];
@@ -673,7 +673,7 @@ pub static fn fromJS(
                 }
 
                 if (value.isCallable()) {
-                    try validateRouteName(global, path);
+                    validateRouteName(global, path)?;
                     args.user_routes_to_build.append(.{
                         .route = .{
                             .path = bun.handleOom(bun.default_allocator.dupeZ(u8, path)),
@@ -698,9 +698,9 @@ pub static fn fromJS(
                     ];
                     let found = false;
                     inline for (method of methods) {
-                        if (function := try value.getOwn(global, @tagName(method))) {
+                        if (function := value.getOwn(global, @tagName(method))?) {
                             if (!found) {
-                                try validateRouteName(global, path);
+                                validateRouteName(global, path)?;
                             }
                             found = true;
 
@@ -712,7 +712,7 @@ pub static fn fromJS(
                                     },
                                     .callback = jsc.Strong.Optional.create(function.withAsyncContextIfNeeded(global), global),
                                 }) catch |e| bun.handleOom(e);
-                            } else if (html_route := try AnyRoute.fromJS(global, path, function, init_ctx)) {
+                            } else if (html_route := AnyRoute.fromJS(global, path, function, init_ctx)?) {
                                 let method_set = bun.http.Method.Set.initEmpty();
                                 method_set.insert(method);
 
@@ -732,7 +732,7 @@ pub static fn fromJS(
                     }
                 }
 
-                const route_opt = try AnyRoute.fromJS(global, path, value, init_ctx);
+                const route_opt = AnyRoute.fromJS(global, path, value, init_ctx)?;
                 const route = route_opt orelse {
                     return global.throwInvalidArguments(
                         "'routes' expects a Record<string, Response | HTMLBundle | {[method: string]: (req: BunRequest) => Response|Promise<Response>}>\n\nTo bundle frontend apps on-demand with Bun.serve(), import HTML files.\n\nExample:\n\n```js\nimport { serve } from \"bun\";\nimport app from \"./app.html\";\n\nserve({\n  routes: {\n    \"/index.json\": Response.json({ message: \"Hello World\" }),\n    \"/app\": app,\n    \"/path/:param\": (req) => {\n      const param = req.params.param;\n      return Response.json({ message: `Hello ${param}` });\n    },\n    \"/path\": {\n      GET(req) {\n        return Response.json({ message: \"Hello World\" });\n      },\n      POST(req) {\n        return Response.json({ message: \"Hello World\" });\n      },\n    },\n  },\n\n  fetch(request) {\n    return new Response(\"fallback response\");\n  },\n});\n```\n\nSee https://bun.com/docs/api/http for more information."
@@ -752,11 +752,11 @@ pub static fn fromJS(
             {
                 if (args.development.isHMREnabled()) {
                     const root = bun.fs.FileSystem.instance.top_level_dir;
-                    const framework = try bun.bake.Framework.auto(
+                    const framework = bun.bake.Framework.auto(
                         init_ctx.@"arena".allocator(),
                         &global.bunVM().transpiler.resolver,
                         init_ctx.framework_router_list.items,
-                    );
+                    )?;
                     args.bake = .{
                         .@"arena" = init_ctx.@"arena",
                         .allocations = init_ctx.js_string_allocations,
@@ -805,7 +805,7 @@ pub static fn fromJS(
 
         if (global.hasException()) return error.JSError;
 
-        if (value := try arg.get(global, "idleTimeout")) {
+        if (value := arg.get(global, "idleTimeout")?) {
             if (!value.isUndefinedOrNull()) {
                 if (!value.isAnyInt()) {
                     return global.throwInvalidArguments("Bun.serve expects idleTimeout to be an integer", .{});
@@ -832,19 +832,19 @@ pub static fn fromJS(
             }
 
             let _guard_ws_ssl = SslErrGuard{ args: args };
-            args.websocket = try WebSocketServerContext.onCreate(global, websocket_object);
+            args.websocket = WebSocketServerContext.onCreate(global, websocket_object)?;
             _guard_ws_ssl.armed = false;
         }
         if (global.hasException()) return error.JSError;
 
-        if (port_ := try arg.getTruthy(global, "port")) {
-            args.address.tcp.port = @as(u16, @intCast(@min(@max(0, try port_.coerce(i32, global)), std.math.maxInt(u16))));
+        if (port_ := arg.getTruthy(global, "port")?) {
+            args.address.tcp.port = @as(u16, @intCast(@min(@max(0, port_.coerce(i32, global)?), std.math.maxInt(u16))));
             port = args.address.tcp.port;
         }
         if (global.hasException()) return error.JSError;
 
-        if (baseURI := try arg.getTruthy(global, "baseURI")) {
-            let sliced = try baseURI.toSlice(global, bun.default_allocator);
+        if (baseURI := arg.getTruthy(global, "baseURI")?) {
+            let sliced = baseURI.toSlice(global, bun.default_allocator)?;
 
             if (sliced.len > 0) {
                 const _guard_sliced = DeinitGuard<@TypeOf(sliced)>{ ptr: unsafe { &sliced } };
@@ -871,7 +871,7 @@ pub static fn fromJS(
         }
         if (global.hasException()) return error.JSError;
 
-        const unix_opt = try arg.getStringish(global, "unix");
+        const unix_opt = arg.getStringish(global, "unix")?;
         if (unix_opt != null) {
             let unix = unix_opt.?;
             const _guard_unix = DerefGuard<bun.String>{ ptr: unsafe { &unix } };
@@ -887,11 +887,11 @@ pub static fn fromJS(
         }
         if (global.hasException()) return error.JSError;
 
-        if (id := try arg.get(global, "id")) {
+        if (id := arg.get(global, "id")?) {
             if (id.isUndefinedOrNull()) {
                 args.allow_hot = false;
             } else {
-                const id_str = try id.toUTF8Bytes(global, bun.default_allocator);
+                const id_str = id.toUTF8Bytes(global, bun.default_allocator)?;
                 if (id_str.len > 0) {
                     args.id = id_str;
                 } else {
@@ -902,7 +902,7 @@ pub static fn fromJS(
         if (global.hasException()) return error.JSError;
 
         if (opts.allow_bake_config) {
-            if (bake_args_js := try arg.getTruthy(global, "app")) {
+            if (bake_args_js := arg.getTruthy(global, "app")?) {
                 if (bun.FeatureFlags.bake()) {
                     if (args.bake != null) {
                         return global.throwInvalidArguments("'app' + HTML loader not supported.", .{});
@@ -912,39 +912,39 @@ pub static fn fromJS(
                         return global.throwInvalidArguments("TODO: 'development: false' in serve options with 'app'. For now, use `bun build --app` or set 'development: true'", .{});
                     }
 
-                    args.bake = try bun.bake.UserOptions.fromJS(bake_args_js, global);
+                    args.bake = bun.bake.UserOptions.fromJS(bake_args_js, global)?;
                 }
             }
         }
 
-        if (dev := try arg.get(global, "reusePort")) {
+        if (dev := arg.get(global, "reusePort")?) {
             args.reuse_port = dev.toBoolean();
         }
         if (global.hasException()) return error.JSError;
 
-        if (dev := try arg.get(global, "ipv6Only")) {
+        if (dev := arg.get(global, "ipv6Only")?) {
             args.ipv6_only = dev.toBoolean();
         }
         if (global.hasException()) return error.JSError;
 
-        if (v := try arg.get(global, "http3")) {
+        if (v := arg.get(global, "http3")?) {
             args.http3 = v.toBoolean();
         }
         if (global.hasException()) return error.JSError;
 
-        if (v := try arg.get(global, "http1")) {
+        if (v := arg.get(global, "http1")?) {
             args.http1 = v.toBoolean();
         }
         if (global.hasException()) return error.JSError;
 
-        if (max_request_body_size := try arg.getTruthy(global, "maxRequestBodySize")) {
+        if (max_request_body_size := arg.getTruthy(global, "maxRequestBodySize")?) {
             if (max_request_body_size.isNumber()) {
                 args.max_request_body_size = @as(u64, @intCast(@max(0, max_request_body_size.toInt64())));
             }
         }
         if (global.hasException()) return error.JSError;
 
-        if (onError := try arg.getTruthyComptime(global, "error")) {
+        if (onError := arg.getTruthyComptime(global, "error")?) {
             if (!onError.isCallable()) {
                 return global.throwInvalidArguments("Expected error to be a function", .{});
             }
@@ -954,7 +954,7 @@ pub static fn fromJS(
         }
         if (global.hasException()) return error.JSError;
 
-        if (onRequest_ := try arg.getTruthy(global, "onNodeHTTPRequest")) {
+        if (onRequest_ := arg.getTruthy(global, "onNodeHTTPRequest")?) {
             if (!onRequest_.isCallable()) {
                 return global.throwInvalidArguments("Expected onNodeHTTPRequest to be a function", .{});
             }
@@ -963,7 +963,7 @@ pub static fn fromJS(
             args.onNodeHTTPRequest = onRequest;
         }
 
-        if (onRequest_ := try arg.getTruthy(global, "fetch")) {
+        if (onRequest_ := arg.getTruthy(global, "fetch")?) {
             if (!onRequest_.isCallable()) {
                 return global.throwInvalidArguments("Expected fetch() to be a function", .{});
             }
@@ -979,15 +979,15 @@ pub static fn fromJS(
             if (global.hasException()) return error.JSError;
         }
 
-        if (tls := try arg.getTruthy(global, "tls")) {
+        if (tls := arg.getTruthy(global, "tls")?) {
             if (tls.isFalsey()) {
                 args.ssl_config = null;
             } else if (tls.jsType().isArray()) {
-                let value_iter = try tls.arrayIterator(global);
+                let value_iter = tls.arrayIterator(global)?;
                 if (value_iter.len == 0) {
                 } else {
-                    while (item := try value_iter.next()) {
-                        if (cfg := try SSLConfig.fromJS(vm, global, item)) {
+                    while (item := value_iter.next()?) {
+                        if (cfg := SSLConfig.fromJS(vm, global, item)?) {
                             let ssl_config = cfg;
                             if (args.ssl_config == null) {
                                 args.ssl_config = ssl_config;
@@ -1011,7 +1011,7 @@ pub static fn fromJS(
                     }
                 }
             } else {
-                if (ssl_config := try SSLConfig.fromJS(vm, global, tls)) {
+                if (ssl_config := SSLConfig.fromJS(vm, global, tls)?) {
                     args.ssl_config = ssl_config;
                 }
                 if (global.hasException()) {
@@ -1022,7 +1022,7 @@ pub static fn fromJS(
         if (global.hasException()) return error.JSError;
 
         if (args.ssl_config == null) {
-            if (ssl_config := try SSLConfig.fromJS(vm, global, arg)) {
+            if (ssl_config := SSLConfig.fromJS(vm, global, arg)?) {
                 args.ssl_config = ssl_config;
             }
             if (global.hasException()) {

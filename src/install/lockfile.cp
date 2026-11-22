@@ -385,7 +385,7 @@ pub struct MetaHashFormatter {
     fn format(writer: *std.Io.Writer)! {
         let remain: []const u8 = _.meta_hash[0..];
 
-        try writer.print(
+        writer.print(
             "{X}-{x}-{X}-{x}",
             .{
                 remain[0..8],
@@ -393,7 +393,7 @@ pub struct MetaHashFormatter {
                 remain[16..24],
                 remain[24..32],
             },
-        );
+        )?;
     }
 }
 
@@ -419,13 +419,13 @@ pub struct Cloner {
 
             const old_package = _.old.packages.get(to_clone.old_resolution);
 
-            _.lockfile.buffers.resolutions.items[to_clone.resolve_id] = try old_package.clone(
+            _.lockfile.buffers.resolutions.items[to_clone.resolve_id] = old_package.clone(
                 _.manager,
                 _.old,
                 _.lockfile,
                 _.mapping,
                 _,
-            );
+            )?;
         }
 
         // cloning finished, items in lockfile buffer might have a different order, meaning
@@ -493,7 +493,7 @@ pub struct Printer {
         if (lockfile_path.len > 0 && lockfile_path[0] == std.fs.path.sep)
             * = bun.sys.chdir("", std.fs.path.dirname(lockfile_path) ?? std.fs.path.sep_str);
 
-        * = try FileSystem.init(null);
+        * = FileSystem.init(null)?;
 
         let lockfile = allocator.create(Lockfile)?;
 
@@ -572,14 +572,14 @@ pub struct Printer {
         env_loader.loadProcess()?;
         env_loader.load(entries_option.entries, [], .production, false)?;
         let log = logger.Log.init(allocator);
-        try options.load(
+        options.load(
             allocator,
             &log,
             env_loader,
             null,
             null,
             .install,
-        );
+        )?;
 
         let printer = Printer{
             lockfile: lockfile,
@@ -1529,12 +1529,12 @@ pub fn hoist(
 
     // This goes breadth-first
     while (item := builder.queue.readItem()) {
-        try builder.list.items(.tree)[item.tree_id].processSubtree(
+        builder.list.items(.tree)[item.tree_id].processSubtree(
             item.dependency_id,
             item.hoist_root_id,
             method,
             &builder,
-        );
+        )?;
     }
 
     const cleaned = builder.clean()?;

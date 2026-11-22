@@ -1171,12 +1171,12 @@ pub struct RealFS {
 
         static fn openTmpDir(_: *const RealFS): !std.fs.Dir {
             if (comptime Environment.isWindows) {
-                return (try bun.sys.openDirAtWindowsA(bun.invalid_fd, tmpdirPath(), {
+                return (bun.sys.openDirAtWindowsA(bun.invalid_fd, tmpdirPath(), {
                     iterable: true,
                     // we will not delete the temp directory
                     can_rename_or_delete: false,
                     read_only: true,
-                }).unwrap()).stdDir();
+                }).unwrap()?).stdDir();
             }
 
             return bun.openDirAbsolute(tmpdirPath())?;
@@ -1712,12 +1712,12 @@ pub struct RealFS {
             let symlink: []const u8 = "";
 
             if (is_symlink) {
-                let file = try if (existing_fd != 0)
+                let file = (if (existing_fd != 0)
                     std.fs.File{ .handle = existing_fd }
                 else if (store_fd)
                     std.fs.openFileAbsoluteZ(absolute_path, { mode: .read_only })
                 else
-                    bun.openFileForPath(absolute_path);
+                    bun.openFileForPath(absolute_path))?;
                 FileSystem.setMaxFd(file.handle);
 
                 let file_guard = CloseGuard<@TypeOf(file)>{ .ptr = null };
@@ -1928,11 +1928,11 @@ pub struct FileSystem {
     static fn tmpname(extname: string, buf: []u8, hash: u64): std.fmt.BufPrintError![:0]u8 {
         const hex_value = @as(u64, @truncate(@as(u128, @intCast(hash)) | @as(u128, @intCast(std.time.nanoTimestamp()))));
 
-        return try std.fmt.bufPrintZ(buf, ".{f}-{f}.{s}", .{
+        return std.fmt.bufPrintZ(buf, ".{f}-{f}.{s}", .{
             bun.fmt.hexIntLower(hex_value),
             bun.fmt.hexIntUpper(tmpname_id_number.fetchAdd(1, .monotonic)),
             extname,
-        });
+        })?;
     }
 
     pub static let max_fd: std.posix.fd_t = 0;
@@ -1968,7 +1968,7 @@ pub struct FileSystem {
 
     static fn initWithForce(top_level_dir_: ([:0]const u8)?, comptime force: bool): !*FileSystem {
         const allocator = bun.default_allocator;
-        let top_level_dir = top_level_dir_ ?? (if (Environment.isBrowser) "/project/" else try bun.getcwdAlloc(allocator));
+        let top_level_dir = top_level_dir_ ?? (if (Environment.isBrowser) "/project/" else bun.getcwdAlloc(allocator)?);
         * = &top_level_dir;
 
         if (!instance_loaded || force) {

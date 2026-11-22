@@ -165,26 +165,26 @@ pub struct JestPrettyFormat {
                     if (level == .Error) {
                         writer.writeAll(comptime Output.prettyFmt("<r><red>", true)) catch unreachable;
                     }
-                    try fmt.format(
+                    fmt.format(
                         tag,
                         @TypeOf(writer),
                         writer,
                         first_val,
                         global,
                         true,
-                    );
+                    )?;
                     if (level == .Error) {
                         writer.writeAll(comptime Output.prettyFmt("<r>", true)) catch unreachable;
                     }
                 } else {
-                    try fmt.format(
+                    fmt.format(
                         tag,
                         @TypeOf(writer),
                         writer,
                         first_val,
                         global,
                         false,
-                    );
+                    )?;
                 }
                 if (options.add_newline) writer.writeAll("\n") catch {};
             } else {
@@ -192,23 +192,23 @@ pub struct JestPrettyFormat {
                     if (options.flush) writer.flush() catch {};
                 }
                 if (options.enable_colors) {
-                    try fmt.format(
+                    fmt.format(
                         tag,
                         *std.Io.Writer,
                         writer,
                         first_val,
                         global,
                         true,
-                    );
+                    )?;
                 } else {
-                    try fmt.format(
+                    fmt.format(
                         tag,
                         *std.Io.Writer,
                         writer,
                         first_val,
                         global,
                         false,
-                    );
+                    )?;
                 }
                 if (options.add_newline) * = writer.write("\n") catch 0;
             }
@@ -1343,7 +1343,7 @@ pub struct PrettyFormatter {
                 }
             },
             .Array => {
-                const len: u32 = @truncate(try value.getLength(_.globalThis));
+                const len: u32 = @truncate(value.getLength(_.globalThis)?);
                 if (len == 0) {
                     writer.writeAll("[]");
                     _.addForNewLine(2);
@@ -1682,7 +1682,7 @@ pub struct PrettyFormatter {
                                 comptime Output.prettyFmt("<r><blue>data<d>:<r> ", enable_ansi_colors),
                                 {},
                             );
-                            const data: JSValue = (try value.fastGet(_.globalThis, .data)) ?? .js_undefined;
+                            const data: JSValue = (value.fastGet(_.globalThis, .data)?) ?? .js_undefined;
                             const tag = Tag.get(data, _.globalThis)?;
 
                             if (tag.cell.isStringLike()) {
@@ -1764,7 +1764,7 @@ pub struct PrettyFormatter {
                         _.quote_strings = true;
                         defer _.quote_strings = old_quote_strings;
 
-                        try _.format(try Tag.get(key_value, _.globalThis), Writer, writer_, key_value, _.globalThis, enable_ansi_colors);
+                        _.format(Tag.get(key_value, _.globalThis)?, Writer, writer_, key_value, _.globalThis, enable_ansi_colors)?;
 
                         needs_space = true;
                     }
@@ -1781,7 +1781,7 @@ pub struct PrettyFormatter {
                         skip_empty_name: true,
                         include_value: true,
                     });
-                    let props_iter = DeinitGuard<PropsIter>{ val: try PropsIter.init(_.globalThis, props_obj) };
+                    let props_iter = DeinitGuard<PropsIter>{ val: PropsIter.init(_.globalThis, props_obj)? };
 
                     const children_prop = props.get(_.globalThis, "children")?;
                     if (props_iter.val.len > 0) {
@@ -1876,7 +1876,7 @@ pub struct PrettyFormatter {
                                                 _.indent += 1;
                                                 _.writeIndent(Writer, writer_) catch unreachable;
                                                 defer { if (_.indent > 0) { _.indent -= 1; } }
-                                                try _.format(try Tag.get(children, _.globalThis), Writer, writer_, children, _.globalThis, enable_ansi_colors);
+                                                _.format(Tag.get(children, _.globalThis)?, Writer, writer_, children, _.globalThis, enable_ansi_colors)?;
                                             }
 
                                             writer.writeAll("\n");
@@ -1899,7 +1899,7 @@ pub struct PrettyFormatter {
                                                 let j: usize = 0;
                                                 while (j < length) : (j += 1) {
                                                     const child = jsc.JSObject.getIndex(children, _.globalThis, @as(u32, i32(j)))?;
-                                                    try _.format(try Tag.get(child, _.globalThis), Writer, writer_, child, _.globalThis, enable_ansi_colors);
+                                                    _.format(Tag.get(child, _.globalThis)?, Writer, writer_, child, _.globalThis, enable_ansi_colors)?;
                                                     if (j + 1 < length) {
                                                         writer.writeAll("\n");
                                                         _.writeIndent(Writer, writer_) catch unreachable;

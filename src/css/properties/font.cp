@@ -75,8 +75,8 @@ pub union(enum) AbsoluteFontWeight {
     fn toCss(dest: *css.Printer): css.PrintErr!void {
         return switch (_) {
             .weight => |*weight| CSSNumberFns.toCss(weight, dest),
-            .normal => try dest.writeStr(if (dest.minify) "400" else "normal"),
-            .bold => try dest.writeStr(if (dest.minify) "700" else "bold"),
+            .normal => dest.writeStr(if (dest.minify) "400" else "normal")?,
+            .bold => dest.writeStr(if (dest.minify) "700" else "bold")?,
         };
     }
 
@@ -490,8 +490,8 @@ fn parseFontStyle(input: *css.Parser): css.Result(FontStyle) {
 
 fn toCssFontStyle(this_fs: *const FontStyle, dest: *Printer): PrintErr!void {
     switch (this_fs.*) {
-        .normal => try dest.writeStr("normal"),
-        .italic => try dest.writeStr("italic"),
+        .normal => dest.writeStr("normal")?,
+        .italic => dest.writeStr("italic")?,
         .oblique => |angle| {
             dest.writeStr("oblique")?;
             if (!angle.eql(&FontStyle.defaultObliqueAngle())) {

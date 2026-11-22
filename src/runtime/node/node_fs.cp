@@ -1567,12 +1567,12 @@ pub struct _ArgumentsRename {
     }
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsRename {
-        const old_path = try PathLike.fromJS(ctx, arguments) ?? {
+        const old_path = PathLike.fromJS(ctx, arguments)? ?? {
             return ctx.throwInvalidArgumentTypeValue("oldPath", "string or an instance of Buffer or URL", arguments.next() ?? .js_undefined);
         };
         let _old_path_guard = PathLikeGuard{ path: old_path };
 
-        const new_path = try PathLike.fromJS(ctx, arguments) ?? {
+        const new_path = PathLike.fromJS(ctx, arguments)? ?? {
             return ctx.throwInvalidArgumentTypeValue("newPath", "string or an instance of Buffer or URL", arguments.next() ?? .js_undefined);
         };
         let _new_path_guard = PathLikeGuard{ path: new_path };
@@ -1602,12 +1602,12 @@ pub struct _ArgumentsTruncate {
     }
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsTruncate {
-        const path = try PathOrFileDescriptor.fromJS(ctx, arguments, bun.default_allocator) ?? {
+        const path = PathOrFileDescriptor.fromJS(ctx, arguments, bun.default_allocator)? ?? {
             return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
         };
         let len: u63 = 0;
         if (len_value := arguments.next()) {
-            len = @max(0, try jsc.Node.validators.validateInteger(ctx, len_value, "len", null, null));
+            len = @max(0, jsc.Node.validators.validateInteger(ctx, len_value, "len", null, null)?);
         }
         return { path: path, len: len };
     }
@@ -1637,17 +1637,17 @@ pub struct _ArgumentsWritev {
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsWritev {
         const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
-        const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
+        const fd = bun.FD.fromJSValidated(fd_value, ctx)? ?? {
             return throwInvalidFdError(ctx, fd_value);
         };
 
-        const buffers = try jsc.Node.VectorArrayBuffer.fromJS(
+        const buffers = jsc.Node.VectorArrayBuffer.fromJS(
             ctx,
             arguments.protectEatNext() ?? {
                 return ctx.throwInvalidArguments("Expected an ArrayBufferView[]", {});
             },
             arguments.@"arena".allocator(),
-        );
+        )?;
 
         let position: u52? = null;
 
@@ -1689,17 +1689,17 @@ pub struct _ArgumentsReadv {
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsReadv {
         const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
-        const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
+        const fd = bun.FD.fromJSValidated(fd_value, ctx)? ?? {
             return throwInvalidFdError(ctx, fd_value);
         };
 
-        const buffers = try jsc.Node.VectorArrayBuffer.fromJS(
+        const buffers = jsc.Node.VectorArrayBuffer.fromJS(
             ctx,
             arguments.protectEatNext() ?? {
                 return ctx.throwInvalidArguments("Expected an ArrayBufferView[]", {});
             },
             arguments.@"arena".allocator(),
-        );
+        )?;
 
         let position: u52? = null;
 
@@ -1729,7 +1729,7 @@ pub struct _ArgumentsFTruncate {
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsFTruncate {
         const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
-        const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
+        const fd = bun.FD.fromJSValidated(fd_value, ctx)? ?? {
             return throwInvalidFdError(ctx, fd_value);
         };
 
@@ -1763,7 +1763,7 @@ pub struct _ArgumentsChown {
     }
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsChown {
-        const path = try PathLike.fromJS(ctx, arguments) ?? {
+        const path = PathLike.fromJS(ctx, arguments)? ?? {
             return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
         };
         let _path_guard = PathLikeGuard{ path: path };
@@ -1773,14 +1773,14 @@ pub struct _ArgumentsChown {
             if (v := arguments.next()) { uid_value = v; } else { return ctx.throwInvalidArguments("uid is required", {}); }
 
             arguments.eat();
-            break :brk wrapTo(uid_t, try jsc.Node.validators.validateInteger(ctx, uid_value, "uid", -1, std.math.maxInt(u32)));
+            break :brk wrapTo(uid_t, jsc.Node.validators.validateInteger(ctx, uid_value, "uid", -1, std.math.maxInt(u32))?);
         };
 
         const gid: gid_t = brk: {
             let gid_value: jsc.JSValue = undefined;
             if (v := arguments.next()) { gid_value = v; } else return ctx.throwInvalidArguments("gid is required", .{});
             arguments.eat();
-            break :brk wrapTo(gid_t, try jsc.Node.validators.validateInteger(ctx, gid_value, "gid", -1, std.math.maxInt(u32)));
+            break :brk wrapTo(gid_t, jsc.Node.validators.validateInteger(ctx, gid_value, "gid", -1, std.math.maxInt(u32))?);
         };
 
         _path_guard.armed = false;
@@ -1799,7 +1799,7 @@ pub struct _ArgumentsFchown {
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsFchown {
         const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
-        const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
+        const fd = bun.FD.fromJSValidated(fd_value, ctx)? ?? {
             return throwInvalidFdError(ctx, fd_value);
         };
 
@@ -1808,14 +1808,14 @@ pub struct _ArgumentsFchown {
             if (v := arguments.next()) { uid_value = v; } else { return ctx.throwInvalidArguments("uid is required", {}); }
 
             arguments.eat();
-            break :brk wrapTo(uid_t, try jsc.Node.validators.validateInteger(ctx, uid_value, "uid", -1, std.math.maxInt(u32)));
+            break :brk wrapTo(uid_t, jsc.Node.validators.validateInteger(ctx, uid_value, "uid", -1, std.math.maxInt(u32))?);
         };
 
         const gid: gid_t = brk: {
             let gid_value: jsc.JSValue = undefined;
             if (v := arguments.next()) { gid_value = v; } else return ctx.throwInvalidArguments("gid is required", .{});
             arguments.eat();
-            break :brk wrapTo(gid_t, try jsc.Node.validators.validateInteger(ctx, gid_value, "gid", -1, std.math.maxInt(u32)));
+            break :brk wrapTo(gid_t, jsc.Node.validators.validateInteger(ctx, gid_value, "gid", -1, std.math.maxInt(u32))?);
         };
 
         return _ArgumentsFchown{ fd: fd, uid: uid, gid: gid };
@@ -1840,22 +1840,22 @@ pub struct _ArgumentsLutimes {
     }
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsLutimes {
-        const path = try PathLike.fromJS(ctx, arguments) ?? {
+        const path = PathLike.fromJS(ctx, arguments)? ?? {
             return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
         };
         let _path_guard = PathLikeGuard{ path: path };
 
-        const atime = try jsc.Node.timeLikeFromJS(ctx, arguments.next() ?? {
+        const atime = jsc.Node.timeLikeFromJS(ctx, arguments.next() ?? {
             return ctx.throwInvalidArguments("atime is required", {});
-        }) ?? {
+        })? ?? {
             return ctx.throwInvalidArguments("atime must be a number or a Date", {});
         };
 
         arguments.eat();
 
-        const mtime = try jsc.Node.timeLikeFromJS(ctx, arguments.next() ?? {
+        const mtime = jsc.Node.timeLikeFromJS(ctx, arguments.next() ?? {
             return ctx.throwInvalidArguments("mtime is required", {});
-        }) ?? {
+        })? ?? {
             return ctx.throwInvalidArguments("mtime must be a number or a Date", {});
         };
 
@@ -1883,7 +1883,7 @@ pub struct _ArgumentsChmod {
     }
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsChmod {
-        const path = try PathLike.fromJS(ctx, arguments) ?? {
+        const path = PathLike.fromJS(ctx, arguments)? ?? {
             return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
         };
         let _path_guard = PathLikeGuard{ path: path };
@@ -1913,7 +1913,7 @@ pub struct _ArgumentsFChmod {
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsFChmod {
         const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
-        const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
+        const fd = bun.FD.fromJSValidated(fd_value, ctx)? ?? {
             return throwInvalidFdError(ctx, fd_value);
         };
 
@@ -1948,7 +1948,7 @@ pub struct _ArgumentsStatFS {
     }
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Arguments.StatFS {
-        const path = try PathLike.fromJS(ctx, arguments) ?? {
+        const path = PathLike.fromJS(ctx, arguments)? ?? {
             return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
         };
         let _path_guard = PathLikeGuard{ path: path };
@@ -1990,7 +1990,7 @@ pub struct _ArgumentsStat {
     }
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsStat {
-        const path = try PathLike.fromJS(ctx, arguments) ?? {
+        const path = PathLike.fromJS(ctx, arguments)? ?? {
             return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
         };
         let _path_guard = PathLikeGuard{ path: path };
@@ -2030,7 +2030,7 @@ pub struct _ArgumentsFstat {
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsFstat {
         const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
-        const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
+        const fd = bun.FD.fromJSValidated(fd_value, ctx)? ?? {
             return throwInvalidFdError(ctx, fd_value);
         };
 
@@ -2072,12 +2072,12 @@ pub struct _ArgumentsLink {
     }
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsLink {
-        const old_path = try PathLike.fromJS(ctx, arguments) ?? {
+        const old_path = PathLike.fromJS(ctx, arguments)? ?? {
             return ctx.throwInvalidArguments("oldPath must be a string or TypedArray", {});
         };
         let _old_path_guard = PathLikeGuard{ path: old_path };
 
-        const new_path = try PathLike.fromJS(ctx, arguments) ?? {
+        const new_path = PathLike.fromJS(ctx, arguments)? ?? {
             return ctx.throwInvalidArguments("newPath must be a string or TypedArray", {});
         };
         let _new_path_guard = PathLikeGuard{ path: new_path };
@@ -2121,12 +2121,12 @@ pub struct _ArgumentsSymlink {
     }
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsSymlink {
-        const old_path = try PathLike.fromJS(ctx, arguments) ?? {
+        const old_path = PathLike.fromJS(ctx, arguments)? ?? {
             return ctx.throwInvalidArguments("target must be a string or TypedArray", {});
         };
         let _old_path_guard = PathLikeGuard{ path: old_path };
 
-        const new_path = try PathLike.fromJS(ctx, arguments) ?? {
+        const new_path = PathLike.fromJS(ctx, arguments)? ?? {
             return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
         };
         let _new_path_guard = PathLikeGuard{ path: new_path };
@@ -2187,7 +2187,7 @@ pub struct _ArgumentsReadlink {
     }
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsReadlink {
-        const path = try PathLike.fromJS(ctx, arguments) ?? {
+        const path = PathLike.fromJS(ctx, arguments)? ?? {
             return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
         };
         let _path_guard = PathLikeGuard{ path: path };
@@ -2230,7 +2230,7 @@ pub struct _ArgumentsRealpath {
     }
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsRealpath {
-        const path = try PathLike.fromJS(ctx, arguments) ?? {
+        const path = PathLike.fromJS(ctx, arguments)? ?? {
             return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
         };
         let _path_guard = PathLikeGuard{ path: path };
@@ -2275,7 +2275,7 @@ pub struct _ArgumentsUnlink {
     }
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsUnlink {
-        const path = try PathLike.fromJS(ctx, arguments) ?? {
+        const path = PathLike.fromJS(ctx, arguments)? ?? {
             return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
         };
         let _path_guard = PathLikeGuard{ path: path };
@@ -2309,7 +2309,7 @@ pub struct _ArgumentsRmDir {
     }
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsRmDir {
-        const path = try PathLike.fromJS(ctx, arguments) ?? {
+        const path = PathLike.fromJS(ctx, arguments)? ?? {
             return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
         };
         let _path_guard = PathLikeGuard{ path: path };
@@ -2343,7 +2343,7 @@ pub struct _ArgumentsRmDir {
                 }
 
                 if (retries := val.get(ctx, "maxRetries")?) {
-                    max_retries = @intCast(try jsc.Node.validators.validateInteger(ctx, retries, "options.maxRetries", 0, std.math.maxInt(u32)));
+                    max_retries = @intCast(jsc.Node.validators.validateInteger(ctx, retries, "options.maxRetries", 0, std.math.maxInt(u32))?);
                 }
             } else if (!val.isUndefined()) {
                 return ctx.throwInvalidArguments("The \"options\" argument must be of type object.", {});
@@ -2387,7 +2387,7 @@ pub struct _ArgumentsMkdir {
     }
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsMkdir {
-        const path = try PathLike.fromJS(ctx, arguments) ?? {
+        const path = PathLike.fromJS(ctx, arguments)? ?? {
             return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
         };
         let _path_guard = PathLikeGuard{ path: path };
@@ -2438,7 +2438,7 @@ struct _ArgumentsMkdirTemp {
     }
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsMkdirTemp {
-        const prefix = try PathLike.fromJS(ctx, arguments) ?? {
+        const prefix = PathLike.fromJS(ctx, arguments)? ?? {
             return ctx.throwInvalidArgumentTypeValue("prefix", "string, Buffer, or URL", arguments.next() ?? .js_undefined);
         };
         let _prefix_guard = PathLikeGuard{ path: prefix };
@@ -2497,7 +2497,7 @@ pub struct _ArgumentsReaddir {
     }
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsReaddir {
-        const path = try PathLike.fromJS(ctx, arguments) ?? {
+        const path = PathLike.fromJS(ctx, arguments)? ?? {
             return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
         };
         let _path_guard = PathLikeGuard{ path: path };
@@ -2550,7 +2550,7 @@ pub struct _ArgumentsClose {
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsClose {
         const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
-        const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
+        const fd = bun.FD.fromJSValidated(fd_value, ctx)? ?? {
             return throwInvalidFdError(ctx, fd_value);
         };
 
@@ -2576,7 +2576,7 @@ pub struct _ArgumentsOpen {
     }
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsOpen {
-        const path = try PathLike.fromJS(ctx, arguments) ?? {
+        const path = PathLike.fromJS(ctx, arguments)? ?? {
             return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
         };
         let _path_guard = PathLikeGuard{ path: path };
@@ -2627,20 +2627,20 @@ pub struct _ArgumentsFutimes {
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsFutimes {
         const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
-        const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
+        const fd = bun.FD.fromJSValidated(fd_value, ctx)? ?? {
             return throwInvalidFdError(ctx, fd_value);
         };
 
-        const atime = try jsc.Node.timeLikeFromJS(ctx, arguments.next() ?? {
+        const atime = jsc.Node.timeLikeFromJS(ctx, arguments.next() ?? {
             return ctx.throwInvalidArguments("atime is required", {});
-        }) ?? {
+        })? ?? {
             return ctx.throwInvalidArguments("atime must be a number or a Date", {});
         };
         arguments.eat();
 
-        const mtime = try jsc.Node.timeLikeFromJS(ctx, arguments.next() ?? {
+        const mtime = jsc.Node.timeLikeFromJS(ctx, arguments.next() ?? {
             return ctx.throwInvalidArguments("mtime is required", {});
-        }) ?? {
+        })? ?? {
             return ctx.throwInvalidArguments("mtime must be a number or a Date", {});
         };
         arguments.eat();
@@ -2676,14 +2676,14 @@ pub struct _ArgumentsWrite {
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsWrite {
         const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
-        const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
+        const fd = bun.FD.fromJSValidated(fd_value, ctx)? ?? {
             return throwInvalidFdError(ctx, fd_value);
         };
 
         const buffer_value = arguments.next();
-        const buffer = try StringOrBuffer.fromJS(ctx, bun.default_allocator, buffer_value ?? {
+        const buffer = StringOrBuffer.fromJS(ctx, bun.default_allocator, buffer_value ?? {
             return ctx.throwInvalidArguments("data is required", {});
-        }) ?? {
+        })? ?? {
             return ctx.throwInvalidArgumentTypeValue("buffer", "string or TypedArray", buffer_value.?);
         };
         if (buffer_value.?.isString() && !buffer_value.?.isStringLiteral()) {
@@ -2796,7 +2796,7 @@ pub struct _ArgumentsRead {
 
         // fd = getValidatedFd(fd);
         const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
-        const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
+        const fd = bun.FD.fromJSValidated(fd_value, ctx)? ?? {
             return throwInvalidFdError(ctx, fd_value);
         };
 
@@ -2815,12 +2815,12 @@ pub struct _ArgumentsRead {
         const offset: u64 = if (offset_value.isUndefinedOrNull())
             0
         else
-            @intCast(try jsc.Node.validators.validateInteger(ctx, offset_value, "offset", 0, jsc.MAX_SAFE_INTEGER));
+            @intCast(jsc.Node.validators.validateInteger(ctx, offset_value, "offset", 0, jsc.MAX_SAFE_INTEGER)?);
 
         // length |= 0;
         let length_float: f64 = 0;
         if (arg := arguments.nextEat()) {
-            length_float = try arg.toNumber(ctx);
+            length_float = arg.toNumber(ctx)?;
         }
 
         //   if (length === 0) {
@@ -2868,7 +2868,7 @@ pub struct _ArgumentsRead {
         if (position_value.isUndefinedOrNull()) {
             position_int = -1;
         } else if (position_value.isNumber()) {
-            position_int = try jsc.Node.validators.validateInteger(ctx, position_value, "position", -1, jsc.MAX_SAFE_INTEGER);
+            position_int = jsc.Node.validators.validateInteger(ctx, position_value, "position", -1, jsc.MAX_SAFE_INTEGER)?;
         } else if (position := jsc.JSBigInt.fromJS(position_value)) {
             // const maxPosition = 2n ** 63n - 1n - BigInt(length)
             const max_position = std.math.maxInt(i64) - length_int;
@@ -2936,7 +2936,7 @@ pub struct _ArgumentsReadFile {
     }
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsReadFile {
-        const path = try PathOrFileDescriptor.fromJS(ctx, arguments, bun.default_allocator) ?? {
+        const path = PathOrFileDescriptor.fromJS(ctx, arguments, bun.default_allocator)? ?? {
             return ctx.throwInvalidArguments("path must be a string or a file descriptor", {});
         };
         let _path_guard = PathOrFDGuard{ path: path };
@@ -3029,7 +3029,7 @@ pub struct _ArgumentsWriteFile {
         }
     }
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsWriteFile {
-        const path = try PathOrFileDescriptor.fromJS(ctx, arguments, bun.default_allocator) ?? {
+        const path = PathOrFileDescriptor.fromJS(ctx, arguments, bun.default_allocator)? ?? {
             return ctx.throwInvalidArguments("path must be a string or a file descriptor", {});
         };
         let _path_guard = PathOrFDGuard{ path: path };
@@ -3091,7 +3091,7 @@ pub struct _ArgumentsWriteFile {
         const allow_string_object = false;
         // the pattern in node_fs.zig is to call toThreadSafe after Arguments.*.fromJS
         const is_async = false;
-        const data = try StringOrBuffer.fromJSWithEncodingMaybeAsync(ctx, bun.default_allocator, data_value, encoding, is_async, allow_string_object) ?? {
+        const data = StringOrBuffer.fromJSWithEncodingMaybeAsync(ctx, bun.default_allocator, data_value, encoding, is_async, allow_string_object)? ?? {
             return ctx.ERR(.INVALID_ARG_TYPE, "The \"data\" argument must be of type string or an instance of Buffer, TypedArray, or DataView", {}).throw();
         };
 
@@ -3129,7 +3129,7 @@ pub struct _ArgumentsOpenDir {
     }
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsOpenDir {
-        const path = try PathLike.fromJS(ctx, arguments) ?? {
+        const path = PathLike.fromJS(ctx, arguments)? ?? {
             return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
         };
         let _path_guard = PathLikeGuard{ path: path };
@@ -3187,7 +3187,7 @@ pub struct _ArgumentsExists {
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsExists {
         return _ArgumentsExists{
-            path: try PathLike.fromJS(ctx, arguments),
+            path: PathLike.fromJS(ctx, arguments)?,
         };
     }
 }
@@ -3209,7 +3209,7 @@ pub struct _ArgumentsAccess {
     }
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsAccess {
-        const path = try PathLike.fromJS(ctx, arguments) ?? {
+        const path = PathLike.fromJS(ctx, arguments)? ?? {
             return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
         };
         let _path_guard = PathLikeGuard{ path: path };
@@ -3237,7 +3237,7 @@ pub struct _ArgumentsFdataSync {
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsFdataSync {
         const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
-        const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
+        const fd = bun.FD.fromJSValidated(fd_value, ctx)? ?? {
             return throwInvalidFdError(ctx, fd_value);
         };
 
@@ -3266,12 +3266,12 @@ pub struct _ArgumentsCopyFile {
     }
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsCopyFile {
-        const src = try PathLike.fromJS(ctx, arguments) ?? {
+        const src = PathLike.fromJS(ctx, arguments)? ?? {
             return ctx.throwInvalidArguments("src must be a string or TypedArray", {});
         };
         let _src_guard = PathLikeGuard{ path: src };
 
-        const dest = try PathLike.fromJS(ctx, arguments) ?? {
+        const dest = PathLike.fromJS(ctx, arguments)? ?? {
             return ctx.throwInvalidArguments("dest must be a string or TypedArray", {});
         };
         let _dest_guard = PathLikeGuard{ path: dest };
@@ -3279,7 +3279,7 @@ pub struct _ArgumentsCopyFile {
         let mode: constants.Copyfile = @enumFromInt(0);
         if (arg := arguments.next()) {
             arguments.eat();
-            mode = @enumFromInt(@intFromEnum(try FileSystemFlags.fromJSNumberOnly(ctx, arg, .copy_file)));
+            mode = @enumFromInt(@intFromEnum(FileSystemFlags.fromJSNumberOnly(ctx, arg, .copy_file)?));
         }
 
         _src_guard.armed = false;
@@ -3315,12 +3315,12 @@ pub struct _ArgumentsCp {
     }
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsCp {
-        const src = try PathLike.fromJS(ctx, arguments) ?? {
+        const src = PathLike.fromJS(ctx, arguments)? ?? {
             return ctx.throwInvalidArguments("src must be a string or TypedArray", {});
         };
         let _src_guard = PathLikeGuard{ path: src };
 
-        const dest = try PathLike.fromJS(ctx, arguments) ?? {
+        const dest = PathLike.fromJS(ctx, arguments)? ?? {
             return ctx.throwInvalidArguments("dest must be a string or TypedArray", {});
         };
         let _dest_guard = PathLikeGuard{ path: dest };
@@ -3387,7 +3387,7 @@ pub struct _ArgumentsFsync {
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsFsync {
         const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
-        const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
+        const fd = bun.FD.fromJSValidated(fd_value, ctx)? ?? {
             return throwInvalidFdError(ctx, fd_value);
         };
 
@@ -3567,7 +3567,7 @@ pub union(enum) StringOrUndefined {
 
     pub fn toJS(*_, globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
         return switch (_.*) {
-            .string => try _.string.transferToJS(globalObject),
+            .string => _.string.transferToJS(globalObject)?,
             .none => .js_undefined,
         };
     }
@@ -7254,7 +7254,7 @@ struct ZigDeleteTreeStackItem {
 }
 
 pub fn zigDeleteTree(client: std.fs.Dir, sub_path: []const u8, kind_hint: std.fs.File.Kind)! {
-    let initial_iterable_dir = (try zigDeleteTreeOpenInitialSubpath(client, sub_path, kind_hint)) ?? return;
+    let initial_iterable_dir = (zigDeleteTreeOpenInitialSubpath(client, sub_path, kind_hint)?) ?? return;
 
     const StackItem = ZigDeleteTreeStackItem;
 
@@ -7438,7 +7438,7 @@ fn zigDeleteTreeOpenInitialSubpath(client: std.fs.Dir, sub_path: []const u8, kin
 
 fn zigDeleteTreeMinStackSizeWithKindHint(client: std.fs.Dir, sub_path: []const u8, kind_hint: std.fs.File.Kind)! {
     start_over: while (true) {
-        let dir = (try zigDeleteTreeOpenInitialSubpath(client, sub_path, kind_hint)) orelse return;
+        let dir = (zigDeleteTreeOpenInitialSubpath(client, sub_path, kind_hint)?) orelse return;
         let _parent_guard = StdDirOptGuard{};
         let _dir_guard = StdDirPtrGuard{ dir: unsafe { &dir } };
 
@@ -7455,7 +7455,7 @@ fn zigDeleteTreeMinStackSizeWithKindHint(client: std.fs.Dir, sub_path: []const u
 
         scan_dir: while (true) {
             let dir_it = dir.iterateAssumeFirstIteration();
-            dir_it: while (entry := try dir_it.next()) {
+            dir_it: while (entry := dir_it.next()?) {
                 let treat_as_dir = entry.kind == .directory;
                 handle_entry: while (true) {
                     if (treat_as_dir) {

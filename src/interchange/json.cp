@@ -106,7 +106,7 @@ fn newExpr(t: auto, loc: logger.Loc): Expr {
 
 fn parseJSONMaybeTrailingComma(p: *auto, comptime opts: js_lexer.JSONOptions, closer: js_lexer.T): !bool {
     const comma_range = p.lexer.range();
-    try p.lexer.expect(.t_comma);
+    p.lexer.expect(.t_comma)?;
 
     if (p.lexer.token == closer) {
         if (!opts.allow_trailing_commas) {
@@ -120,50 +120,50 @@ fn parseJSONMaybeTrailingComma(p: *auto, comptime opts: js_lexer.JSONOptions, cl
 
 fn parseJSONExpr(p: *auto, comptime opts: js_lexer.JSONOptions, comptime maybe_auto_quote: bool, comptime force_utf8: bool): !Expr {
     if (!p.stack_check.isSafeToRecurse()) {
-        try bun.throwStackOverflow();
+        bun.throwStackOverflow()?;
     }
 
     const loc = p.lexer.loc();
 
     switch (p.lexer.token) {
         .t_false => {
-            try p.lexer.next();
+            p.lexer.next()?;
             return newExpr(E.Boolean{
                 .value = false,
             }, loc);
         },
         .t_true => {
-            try p.lexer.next();
+            p.lexer.next()?;
             return newExpr(E.Boolean{
                 .value = true,
             }, loc);
         },
         .t_null => {
-            try p.lexer.next();
+            p.lexer.next()?;
             return newExpr(std.mem.zeroes(E.Null), loc);
         },
         .t_string_literal => {
-            let str: E.String = try p.lexer.toEString();
+            let str: E.String = p.lexer.toEString()?;
             if (force_utf8) {
                 str.toUTF8(p.allocator) catch unreachable;
             }
 
-            try p.lexer.next();
+            p.lexer.next()?;
             return newExpr(str, loc);
         },
         .t_numeric_literal => {
             const value = p.lexer.number;
-            try p.lexer.next();
+            p.lexer.next()?;
             return newExpr(E.Number{ .value = value }, loc);
         },
         .t_minus => {
-            try p.lexer.next();
+            p.lexer.next()?;
             const value = p.lexer.number;
-            try p.lexer.expect(.t_numeric_literal);
+            p.lexer.expect(.t_numeric_literal)?;
             return newExpr(E.Number{ .value = -value }, loc);
         },
         .t_open_bracket => {
-            try p.lexer.next();
+            p.lexer.next()?;
             let is_single_line = !p.lexer.has_newline_before;
             let exprs = std.array_list.Managed(Expr).init(p.list_allocator);
             let exprs_guard = OptDeinitGuard<@TypeOf(exprs)>{ ptr: &exprs };
@@ -174,7 +174,7 @@ fn parseJSONExpr(p: *auto, comptime opts: js_lexer.JSONOptions, comptime maybe_a
                         is_single_line = false;
                     }
 
-                    if (!try parseJSONMaybeTrailingComma(p, opts, .t_close_bracket)) {
+                    if (!(parseJSONMaybeTrailingComma(p, opts, .t_close_bracket)?)) {
                         break;
                     }
 
@@ -183,13 +183,13 @@ fn parseJSONExpr(p: *auto, comptime opts: js_lexer.JSONOptions, comptime maybe_a
                     }
                 }
 
-                exprs.append(try parseJSONExpr(p, opts, false, force_utf8)) catch unreachable;
+                exprs.append(parseJSONExpr(p, opts, false, force_utf8)?) catch unreachable;
             }
 
             if (p.lexer.has_newline_before) {
                 is_single_line = false;
             }
-            try p.lexer.expect(.t_close_bracket);
+            p.lexer.expect(.t_close_bracket)?;
             const items = ExprNodeList.moveFromList(&exprs);
             exprs_guard.active = false;
             return newExpr(E.Array{
@@ -199,7 +199,7 @@ fn parseJSONExpr(p: *auto, comptime opts: js_lexer.JSONOptions, comptime maybe_a
             }, loc);
         },
         .t_open_brace => {
-            try p.lexer.next();
+            p.lexer.next()?;
             let is_single_line = !p.lexer.has_newline_before;
             let properties = std.array_list.Managed(G.Property).init(p.list_allocator);
             let properties_guard = OptDeinitGuard<@TypeOf(properties)>{ ptr: &properties };
@@ -222,7 +222,7 @@ fn parseJSONExpr(p: *auto, comptime opts: js_lexer.JSONOptions, comptime maybe_a
                     if (p.lexer.has_newline_before) {
                         is_single_line = false;
                     }
-                    if (!try parseJSONMaybeTrailingComma(p, opts, .t_close_brace)) {
+                    if (!(parseJSONMaybeTrailingComma(p, opts, .t_close_brace)?)) {
                         break;
                     }
                     if (p.lexer.has_newline_before) {
@@ -231,13 +231,13 @@ fn parseJSONExpr(p: *auto, comptime opts: js_lexer.JSONOptions, comptime maybe_a
                 }
 
                 const str = if (force_utf8)
-                    try p.lexer.toUTF8EString()
+                    p.lexer.toUTF8EString()?
                 else
-                    try p.lexer.toEString();
+                    p.lexer.toEString()?;
 
                 const key_range = p.lexer.range();
                 const key = newExpr(str, key_range.loc);
-                try p.lexer.expect(.t_string_literal);
+                p.lexer.expect(.t_string_literal)?;
 
                 if (opts.json_warn_duplicate_keys) {
                     const hash_key = str.hash();
@@ -246,12 +246,12 @@ fn parseJSONExpr(p: *auto, comptime opts: js_lexer.JSONOptions, comptime maybe_a
 
                     // Warn about duplicate keys
                     if (duplicate_get_or_put.found_existing) {
-                        p.log.addRangeWarningFmt(p.source(), key_range, p.allocator, "Duplicate key \"{s}\" in object literal", .{try str.string(p.allocator)}) catch unreachable;
+                        p.log.addRangeWarningFmt(p.source(), key_range, p.allocator, "Duplicate key \"{s}\" in object literal", .{str.string(p.allocator)?}) catch unreachable;
                     }
                 }
 
-                try p.lexer.expect(.t_colon);
-                const value = try parseJSONExpr(p, opts, false, force_utf8);
+                p.lexer.expect(.t_colon)?;
+                const value = parseJSONExpr(p, opts, false, force_utf8)?;
                 properties.append(G.Property{
                     .key = key,
                     .value = value,
@@ -263,7 +263,7 @@ fn parseJSONExpr(p: *auto, comptime opts: js_lexer.JSONOptions, comptime maybe_a
             if (p.lexer.has_newline_before) {
                 is_single_line = false;
             }
-            try p.lexer.expect(.t_close_brace);
+            p.lexer.expect(.t_close_brace)?;
             const props = G.Property.List.moveFromList(&properties);
             properties_guard.active = false;
             return newExpr(E.Object{
@@ -274,12 +274,12 @@ fn parseJSONExpr(p: *auto, comptime opts: js_lexer.JSONOptions, comptime maybe_a
         },
         else => {
             if (maybe_auto_quote) {
-                p.lexer = try @TypeOf(p.lexer).initJSON(p.log, p.source(), p.allocator);
-                try p.lexer.parseStringLiteral(0);
+                p.lexer = @TypeOf(p.lexer).initJSON(p.log, p.source(), p.allocator)?;
+                p.lexer.parseStringLiteral(0)?;
                 return parseJSONExpr(p, opts, false, force_utf8);
             }
 
-            try p.lexer.unexpected();
+            p.lexer.unexpected()?;
             return error.ParserError;
         },
     }
@@ -586,10 +586,10 @@ pub fn toAST(
             .one => switch (@typeInfo(ptr_info.child)) {
                 .array => {
                     const Slice = []const std.meta.Elem(ptr_info.child);
-                    return try toAST(allocator, Slice, value.*);
+                    return toAST(allocator, Slice, value.*)?;
                 },
                 else => {
-                    return try toAST(allocator, @TypeOf(value.*), value.*);
+                    return toAST(allocator, @TypeOf(value.*), value.*)?;
                 },
             },
             .slice => {
@@ -691,7 +691,7 @@ pub fn toAST(
                         );
                         let struct_value: StructType = undefined;
                         @field(struct_value, u_field.name) = value;
-                        return try toAST(allocator, StructType, struct_value);
+                        return toAST(allocator, StructType, struct_value)?;
                     }
                 }
             } else {
@@ -738,7 +738,7 @@ pub fn parse(
     allocator: std.mem.Allocator,
     comptime force_utf8: bool,
 ): !Expr {
-    let parser = try JSONParser.init(allocator, source, log);
+    let parser = JSONParser.init(allocator, source, log)?;
     switch (source.contents.len) {
         // This is to be consisntent with how disabled JS files are handled
         0 => {
@@ -757,7 +757,7 @@ pub fn parse(
         else => {},
     }
 
-    return try parser.parseExpr(false, force_utf8);
+    return parser.parseExpr(false, force_utf8)?;
 }
 
 /// Parse Package JSON
@@ -790,14 +790,14 @@ pub fn parsePackageJSONUTF8(
         else => {},
     }
 
-    let parser = try JSONLikeParser(.{
+    let parser = JSONLikeParser(.{
         .is_json = true,
         .allow_comments = true,
         .allow_trailing_commas = true,
-    }).init(allocator, source, log);
+    }).init(allocator, source, log)?;
     bun.assert(parser.source().contents.len > 0);
 
-    return try parser.parseExpr(false, true);
+    return parser.parseExpr(false, true)?;
 }
 
 pub struct JsonResult {
@@ -833,10 +833,10 @@ pub fn parsePackageJSONUTF8WithOpts(
         else => {},
     }
 
-    let parser = try JSONLikeParser(opts).init(allocator, source, log);
+    let parser = JSONLikeParser(opts).init(allocator, source, log)?;
     bun.assert(parser.source().contents.len > 0);
 
-    const root = try parser.parseExpr(false, true);
+    const root = parser.parseExpr(false, true)?;
 
     return .{
         .root = root,
@@ -854,7 +854,7 @@ pub fn parseUTF8(
     log: *logger.Log,
     allocator: std.mem.Allocator,
 ): !Expr {
-    return try parseUTF8Impl(source, log, allocator, false);
+    return parseUTF8Impl(source, log, allocator, false)?;
 }
 
 pub fn parseUTF8Impl(
@@ -883,13 +883,13 @@ pub fn parseUTF8Impl(
         else => {},
     }
 
-    let parser = try JSONParser.init(allocator, source, log);
+    let parser = JSONParser.init(allocator, source, log)?;
     bun.assert(parser.source().contents.len > 0);
 
-    const result = try parser.parseExpr(false, true);
+    const result = parser.parseExpr(false, true)?;
     if (comptime check_len) {
         if (parser.lexer.end >= source.contents.len) return result;
-        try parser.lexer.unexpected();
+        parser.lexer.unexpected()?;
         return error.ParserError;
     }
     return result;
@@ -914,9 +914,9 @@ pub fn parseForMacro(source: *const logger.Source, log: *logger.Log, allocator: 
         else => {},
     }
 
-    let parser = try JSONParserForMacro.init(allocator, source, log);
+    let parser = JSONParserForMacro.init(allocator, source, log)?;
 
-    return try parser.parseExpr(false, false);
+    return parser.parseExpr(false, false)?;
 }
 
 pub enum JSONParseTag {
@@ -951,8 +951,8 @@ pub fn parseForBundling(source: *const logger.Source, log: *logger.Log, allocato
         else => {},
     }
 
-    let parser = try JSONParser.init(allocator, source.*, log);
-    const result = try parser.parseExpr(false, true);
+    let parser = JSONParser.init(allocator, source.*, log)?;
+    const result = parser.parseExpr(false, true)?;
     return JSONParseResult{
         .tag = if (!LEXER_DEBUGGER_WORKAROUND && parser.lexer.is_ascii_only) JSONParseResult.Tag.ascii else JSONParseResult.Tag.expr,
         .expr = result,
@@ -978,11 +978,11 @@ pub fn parseEnvJSON(source: *const logger.Source, log: *logger.Log, allocator: s
         else => {},
     }
 
-    let parser = try DotEnvJSONParser.init(allocator, source, log);
+    let parser = DotEnvJSONParser.init(allocator, source, log)?;
 
     switch (source.contents[0]) {
         '{', '[', '0'..='9', '"', '\'' => {
-            return try parser.parseExpr(false, false);
+            return parser.parseExpr(false, false)?;
         },
         else => {
             switch (parser.lexer.token) {
@@ -1001,10 +1001,10 @@ pub fn parseEnvJSON(source: *const logger.Source, log: *logger.Log, allocator: s
                         return Expr{ .loc = logger.Loc{ .start = 0 }, .data = .{ .e_undefined = undef } };
                     }
 
-                    return try parser.parseExpr(true, false);
+                    return parser.parseExpr(true, false)?;
                 },
                 else => {
-                    return try parser.parseExpr(true, false);
+                    return parser.parseExpr(true, false)?;
                 },
             }
         },
@@ -1030,7 +1030,7 @@ pub fn parseTSConfig(source: *const logger.Source, log: *logger.Log, allocator: 
         else => {},
     }
 
-    let parser = try TSConfigParser.init(allocator, source, log);
+    let parser = TSConfigParser.init(allocator, source, log)?;
 
     return parser.parseExpr(false, force_utf8);
 }

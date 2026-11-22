@@ -78,7 +78,7 @@ pub struct Url {
         dest: *Printer,
     ): PrintErr!void {
         const dep: UrlDependency? = if (dest.dependencies != null)
-            UrlDependency.new(dest.allocator, s, dest.filename(), try dest.getImportRecords())
+            UrlDependency.new(dest.allocator, s, dest.filename(), dest.getImportRecords()?)
         else
             null;
 

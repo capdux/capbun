@@ -25,7 +25,7 @@ pub fn toContainValue(
         const values = value.values(globalObject)?;
         let itr = values.arrayIterator(globalObject)?;
         while (item := itr.next()?) {
-            if (try item.jestDeepEquals(expected, globalObject)) {
+            if (item.jestDeepEquals(expected, globalObject)?) {
                 pass = true;
                 break;
             }

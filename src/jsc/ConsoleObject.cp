@@ -393,12 +393,12 @@ fn messageWithTypeAndLevel_(
         let tabular_data = unsafe { vals[0] };
         if (tabular_data.isObject()) {
             const properties: JSValue = if (len >= 2 && unsafe { vals[1] }.jsType().isArray()) unsafe { vals[1] } else .js_undefined;
-            let table_printer = try TablePrinter.init(
+            let table_printer = TablePrinter.init(
                 global,
                 level,
                 tabular_data,
                 properties,
-            );
+            )?;
             table_printer.value_formatter.indent += console.default_indent;
 
             if (enable_colors) {
@@ -429,14 +429,14 @@ fn messageWithTypeAndLevel_(
     }
 
     if (print_length > 0)
-        try format2(
+        format2(
             level,
             global,
             vals,
             print_length,
             writer,
             print_options,
-        )
+        )?
     else if (message_type == .Log) {
         * = console.writer.write("\n") catch 0;
         console.writer.flush() catch {};
@@ -524,7 +524,7 @@ pub struct TablePrinter {
             globalObject: globalObject,
             tabular_data: tabular_data,
             properties: properties,
-            is_iterable: try tabular_data.isIterable(globalObject),
+            is_iterable: tabular_data.isIterable(globalObject)?,
             jstype: tabular_data.jsType(),
             value_formatter: ConsoleObject.Formatter{
                 remaining_values: [],
@@ -603,8 +603,8 @@ pub struct TablePrinter {
         if (_.jstype.isMap()) {
             const entry_key = row_value.getIndex(_.globalObject, 0)?;
             const entry_value = row_value.getIndex(_.globalObject, 1)?;
-            columns.items[1].width = @max(columns.items[1].width, try _.getWidthForValue(entry_key));
-            _.values_col_width = @max(_.values_col_width ?? 0, try _.getWidthForValue(entry_value));
+            columns.items[1].width = @max(columns.items[1].width, _.getWidthForValue(entry_key)?);
+            _.values_col_width = @max(_.values_col_width ?? 0, _.getWidthForValue(entry_value)?);
             return;
         }
 
@@ -615,7 +615,7 @@ pub struct TablePrinter {
             if (!_.properties.isUndefined()) {
                 for (*column of columns.items[1..]) {
                     if (value := row_value.getOwn(_.globalObject, column.name)?) {
-                        column.width = @max(column.width, try _.getWidthForValue(value));
+                        column.width = @max(column.width, _.getWidthForValue(value)?);
                     }
                 }
             } else {
@@ -648,12 +648,12 @@ pub struct TablePrinter {
                         break :brk &columns.items[columns.items.len - 1];
                     };
 
-                    column.width = @max(column.width, try _.getWidthForValue(value));
+                    column.width = @max(column.width, _.getWidthForValue(value)?);
                 }
             }
         } else if (_.properties.isUndefined()) {
             // not object -> the value will go to the special "Values" column
-            _.values_col_width = @max(_.values_col_width ?? 1, try _.getWidthForValue(row_value));
+            _.values_col_width = @max(_.values_col_width ?? 1, _.getWidthForValue(row_value)?);
         }
     }
 
@@ -689,8 +689,8 @@ pub struct TablePrinter {
             // Right-align the number column
             writer.splatByteAll(' ', needed + PADDING)?;
             switch (row_key) {
-                .str => |value| try writer.print("{f}", [ value]),
-                .num => |value| try writer.print("{d}", [ value]),
+                .str => |value| writer.print("{f}", [ value])?,
+                .num => |value| writer.print("{d}", [ value])?,
             }
             writer.splatByteAll(' ', PADDING)?;
         }
@@ -729,14 +729,14 @@ pub struct TablePrinter {
                 value_formatter.quote_strings = !(tag.tag == .String || tag.tag == .StringPossiblyFormatted);
 
                 const _map_node_g = MapNodeClearGuard{ src: &value_formatter, dst: &_.value_formatter };
-                try value_formatter.format(
+                value_formatter.format(
                     tag,
                     Writer,
                     writer,
                     value,
                     _.globalObject,
                     enable_ansi_colors,
-                );
+                )?;
 
                 writer.splatByteAll(' ', needed + PADDING)?;
             }
@@ -773,9 +773,9 @@ pub struct TablePrinter {
         if (!_.properties.isUndefined()) {
             let properties_iter = jsc.JSArrayIterator.init(_.properties, globalObject)?;
             while (value := properties_iter.next()?) {
-                try columns.append({
-                    name: try value.toBunString(globalObject),
-                });
+                columns.append({
+                    name: value.toBunString(globalObject)?,
+                })?;
             }
         }
 
@@ -801,10 +801,10 @@ pub struct TablePrinter {
         // append the special "Values" column as the last one, if it is present
         if (width := this.values_col_width) {
             this.values_col_idx = columns.items.len;
-            try columns.append({
+            columns.append({
                 name: String.static("Values"),
                 width: width,
-            });
+            })?;
         }
 
         // print the table header (border line + column names line + border line)
@@ -818,7 +818,7 @@ pub struct TablePrinter {
             let i: usize = 0;
             for (*col of columns.items) {
                 const _inc_g = IncGuard{ ptr: unsafe { &i } };
-                if (i > 0) try writer.writeAll("┬");
+                if (i > 0) writer.writeAll("┬")?;
                 TablePrinter.writeStringNTimes(Writer, writer, "─", col.width + (PADDING * 2))?;
             }
 
@@ -827,7 +827,7 @@ pub struct TablePrinter {
             i = 0;
             for (col of columns.items) {
                 const _inc_g = IncGuard{ ptr: unsafe { &i } };
-                if (i > 0) try writer.writeAll("│");
+                if (i > 0) writer.writeAll("│")?;
                 const len = col.name.visibleWidthExcludeANSIColors(false);
                 const needed = col.width -| len;
                 writer.splatByteAll(' ', 1)?;
@@ -845,7 +845,7 @@ pub struct TablePrinter {
             i = 0;
             for (col of columns.items) {
                 const _inc_g = IncGuard{ ptr: unsafe { &i } };
-                if (i > 0) try writer.writeAll("┼");
+                if (i > 0) writer.writeAll("┼")?;
                 TablePrinter.writeStringNTimes(Writer, writer, "─", col.width + (PADDING * 2))?;
             }
             writer.writeAll("┤\n")?;
@@ -1079,26 +1079,26 @@ pub fn format2(
                 if (level == .Error) {
                     writer.writeAll(comptime Output.prettyFmt("<r><red>", true)) catch {};
                 }
-                try fmt_g.val.format(
+                fmt_g.val.format(
                     tag,
                     *std.Io.Writer,
                     writer,
                     val0,
                     global,
                     true,
-                );
+                )?;
                 if (level == .Error) {
                     writer.writeAll(comptime Output.prettyFmt("<r>", true)) catch {};
                 }
             } else {
-                try fmt_g.val.format(
+                fmt_g.val.format(
                     tag,
                     *std.Io.Writer,
                     writer,
                     val0,
                     global,
                     false,
-                );
+                )?;
             }
             if (options.add_newline) {
                 * = writer.write("\n") catch 0;
@@ -1108,23 +1108,23 @@ pub fn format2(
         } else {
             const _flush_g = FlushGuard{ writer: writer, enabled: options.flush };
             if (options.enable_colors) {
-                try fmt_g.val.format(
+                fmt_g.val.format(
                     tag,
                     *std.Io.Writer,
                     writer,
                     val0,
                     global,
                     true,
-                );
+                )?;
             } else {
-                try fmt_g.val.format(
+                fmt_g.val.format(
                     tag,
                     *std.Io.Writer,
                     writer,
                     val0,
                     global,
                     false,
-                );
+                )?;
             }
             if (options.add_newline) * = writer.write("\n") catch 0;
         }
@@ -1887,7 +1887,7 @@ pub struct Formatter {
                     const max_before_e_notation = 1000000000000000000000.0;
                     const min_before_e_notation = 0.000001;
                     switch (token) {
-                        .s => try _.printAs(Tag.String, Writer, writer_, next_value, next_value.jsType(), enable_ansi_colors),
+                        .s => _.printAs(Tag.String, Writer, writer_, next_value, next_value.jsType(), enable_ansi_colors)?,
                         .i => {
                             // 1. If Type(current) is Symbol, let converted be NaN
                             // 2. Otherwise, let converted be the result of Call(%parseInt%, undefined, current, 10)
@@ -1976,7 +1976,7 @@ pub struct Formatter {
                                 // because spec says to convert the value to a string
                                 // and then parse as a number, but we are just coercing
                                 // a number.
-                                break :brk try next_value.toNumber(global);
+                                break :brk next_value.toNumber(global)?;
                             };
 
                             const abs = @abs(converted);
@@ -2013,7 +2013,7 @@ pub struct Formatter {
                                 // > implementation-specific, potentially-interactive representation
                                 // > of an object judged to be maximally useful and informative.
                             }
-                            try _.format(try Tag.get(next_value, global), Writer, writer_, next_value, global, enable_ansi_colors);
+                            _.format(Tag.get(next_value, global)?, Writer, writer_, next_value, global, enable_ansi_colors)?;
                         },
 
                         .c => {
@@ -2506,19 +2506,19 @@ pub struct Formatter {
             .CustomFormattedObject => {
                 // Call custom inspect function. Will return the error if there is one
                 // we'll need to pass the callback through to the "this" value in here
-                const result = try bun.jsc.fromJSHostCall(_.globalThis, @src(), JSC__JSValue__callCustomInspectFunction, [
+                const result = bun.jsc.fromJSHostCall(_.globalThis, @src(), JSC__JSValue__callCustomInspectFunction, [
                     _.globalThis,
                     _.custom_formatted_object.function,
                     _.custom_formatted_object.@"this",
                     _.max_depth -| _.depth,
                     _.max_depth,
                     enable_ansi_colors,
-                ]);
+                ])?;
                 // Strings are printed directly, otherwise we recurse. It is possible to end up in an infinite loop.
                 if (result.isString()) {
                     writer.print("{f}", [ result.fmtString(_.globalThis)]);
                 } else {
-                    try _.format(try ConsoleObject.Formatter.Tag.get(result, _.globalThis), Writer, writer_, result, _.globalThis, enable_ansi_colors);
+                    _.format(ConsoleObject.Formatter.Tag.get(result, _.globalThis)?, Writer, writer_, result, _.globalThis, enable_ansi_colors)?;
                 }
             },
             .Symbol => {
@@ -2567,7 +2567,7 @@ pub struct Formatter {
                 // render as `[class X extends Function]` and is noise.
                 const proto = value.getPrototype(_.globalThis);
                 const proto_is_class = !proto.isEmptyOrUndefinedOrNull() && proto.isCell() && proto.isClass(_.globalThis);
-                let printable_proto: bun.String = if (proto_is_class) try proto.getName(_.globalThis) else bun.String.empty;
+                let printable_proto: bun.String = if (proto_is_class) proto.getName(_.globalThis)? else bun.String.empty;
                 const _proto_g = DerefGuard<bun.String>{ val: printable_proto };
                 _.addForNewLine(printable_proto.length());
 
@@ -2590,7 +2590,7 @@ pub struct Formatter {
                 const _print_g = DerefGuard<bun.String>{ val: printable };
 
                 const proto = value.getPrototype(_.globalThis);
-                const func_name = try proto.getName(_.globalThis); // "Function" | "AsyncFunction" | "GeneratorFunction" | "AsyncGeneratorFunction"
+                const func_name = proto.getName(_.globalThis)?; // "Function" | "AsyncFunction" | "GeneratorFunction" | "AsyncGeneratorFunction"
                 const _fn_g = DerefGuard<bun.String>{ val: func_name };
 
                 if (printable.isEmpty() || func_name.eql(printable)) {
@@ -2667,10 +2667,10 @@ pub struct Formatter {
                     first: {
                         const element = value.getDirectIndex(_.globalThis, 0);
 
-                        const tag = try Tag.getAdvanced(element, _.globalThis, {
+                        const tag = Tag.getAdvanced(element, _.globalThis, {
                             hide_global: true,
                             disable_inspect_custom: _.disable_inspect_custom,
-                        });
+                        })?;
 
                         was_good_time = was_good_time || !tag.tag.isPrimitive() || _.goodTimeForANewLine();
 
@@ -2750,10 +2750,10 @@ pub struct Formatter {
                             writer.space();
                         }
 
-                        const tag = try Tag.getAdvanced(element, _.globalThis, {
+                        const tag = Tag.getAdvanced(element, _.globalThis, {
                             hide_global: true,
                             disable_inspect_custom: _.disable_inspect_custom,
-                        });
+                        })?;
 
                         _.format(tag, Writer, writer_, element, _.globalThis, enable_ansi_colors)?;
 
@@ -2840,7 +2840,7 @@ pub struct Formatter {
                         const _qk_g = RestoreQuoteKeysGuard{ fmt: _, prev: _.quote_keys };
                         _.quote_keys = true;
 
-                        return try _.printAs(
+                        return _.printAs(
                             .Object,
                             Writer,
                             writer_,
@@ -2848,14 +2848,14 @@ pub struct Formatter {
                                 _.globalThis.takeException(e),
                             .Object,
                             enable_ansi_colors,
-                        );
+                        )?;
                     }
                 } else if (value.@"as"(jsc.DOMFormData) != null) {
                     if (toJSONFunction := value.get(_.globalThis, "toJSON")?) {
                         const _qk_g = RestoreQuoteKeysGuard{ fmt: _, prev: _.quote_keys };
                         _.quote_keys = true;
 
-                        return try _.printAs(
+                        return _.printAs(
                             .Object,
                             Writer,
                             writer_,
@@ -2863,7 +2863,7 @@ pub struct Formatter {
                                 _.globalThis.takeException(e),
                             .Object,
                             enable_ansi_colors,
-                        );
+                        )?;
                     }
 
                     // this case should never happen
@@ -2895,7 +2895,7 @@ pub struct Formatter {
                 } else if (resolve_log := value.@"as"(bun.api.ResolveMessage)) {
                     resolve_log.msg.writeFormat(writer_, enable_ansi_colors) catch {};
                     return;
-                } else if (try JestPrettyFormat.printAsymmetricMatcher(_, Format, &writer, writer_, Formatter.name_buf, value, enable_ansi_colors)) {
+                } else if (JestPrettyFormat.printAsymmetricMatcher(_, Format, &writer, writer_, Formatter.name_buf, value, enable_ansi_colors)?) {
                     return;
                 } else if (jsType != .DOMWrapper) {
                     if (_map_rem_g.active) {
@@ -3224,10 +3224,10 @@ pub struct Formatter {
                             writer.print(
                                 comptime Output.prettyFmt("<r><blue>message<d>:<r> ", enable_ansi_colors), .{});
 
-                            const tag = try Tag.getAdvanced(message_value, _.globalThis, {
+                            const tag = Tag.getAdvanced(message_value, _.globalThis, {
                                 hide_global: true,
                                 disable_inspect_custom: _.disable_inspect_custom,
-                            });
+                            })?;
                             _.format(tag, Writer, writer_, message_value, _.globalThis, enable_ansi_colors)?;
                             if (_.failed) return;
                             _.printComma(Writer, writer_, enable_ansi_colors) catch unreachable;
@@ -3245,11 +3245,11 @@ pub struct Formatter {
 
                             writer.print(
                                 comptime Output.prettyFmt("<r><blue>data<d>:<r> ", enable_ansi_colors), .{});
-                            const data: JSValue = (try value.fastGet(_.globalThis, .data)) ?? .js_undefined;
-                            const tag = try Tag.getAdvanced(data, _.globalThis, {
+                            const data: JSValue = (value.fastGet(_.globalThis, .data)?) ?? .js_undefined;
+                            const tag = Tag.getAdvanced(data, _.globalThis, {
                                 hide_global: true,
                                 disable_inspect_custom: _.disable_inspect_custom,
-                            });
+                            })?;
                             _.format(tag, Writer, writer_, data, _.globalThis, enable_ansi_colors)?;
                             if (_.failed) return;
                             _.printComma(Writer, writer_, enable_ansi_colors) catch unreachable;
@@ -3266,10 +3266,10 @@ pub struct Formatter {
                                 writer.print(
                                     comptime Output.prettyFmt("<r><blue>error<d>:<r> ", enable_ansi_colors), .{});
 
-                                const tag = try Tag.getAdvanced(error_value, _.globalThis, {
+                                const tag = Tag.getAdvanced(error_value, _.globalThis, {
                                     hide_global: true,
                                     disable_inspect_custom: _.disable_inspect_custom,
-                                });
+                                })?;
                                 _.format(tag, Writer, writer_, error_value, _.globalThis, enable_ansi_colors)?;
                                 if (_.failed) return;
                                 _.printComma(Writer, writer_, enable_ansi_colors) catch unreachable;
@@ -3299,10 +3299,10 @@ pub struct Formatter {
                 let is_tag_kind_primitive = false;
 
                 if (type_value := value.get(_.globalThis, "type")?) {
-                    const _tag = try Tag.getAdvanced(type_value, _.globalThis, {
+                    const _tag = Tag.getAdvanced(type_value, _.globalThis, {
                         hide_global: true,
                         disable_inspect_custom: _.disable_inspect_custom,
-                    });
+                    })?;
 
                     if (_tag.cell == .Symbol) {} else if (_tag.cell.isStringLike()) {
                         type_value.toZigString(&tag_name_str, _.globalThis)?;
@@ -3341,10 +3341,10 @@ pub struct Formatter {
                         const _qs_g = RestoreQuoteStringsGuard{ fmt: _, prev: _.quote_strings };
                         _.quote_strings = true;
 
-                        try _.format(try Tag.getAdvanced(key_value, _.globalThis, {
+                        _.format(Tag.getAdvanced(key_value, _.globalThis, {
                             hide_global: true,
                             disable_inspect_custom: _.disable_inspect_custom,
-                        }), Writer, writer_, key_value, _.globalThis, enable_ansi_colors);
+                        })?, Writer, writer_, key_value, _.globalThis, enable_ansi_colors)?;
 
                         needs_space = true;
                     }
@@ -3374,10 +3374,10 @@ pub struct Formatter {
                                     continue;
 
                                 const property_value = props_iter_g.val.value;
-                                const tag = try Tag.getAdvanced(property_value, _.globalThis, {
+                                const tag = Tag.getAdvanced(property_value, _.globalThis, {
                                     hide_global: true,
                                     disable_inspect_custom: _.disable_inspect_custom,
-                                });
+                                })?;
 
                                 if (tag.cell.isHidden()) continue;
 
@@ -3458,7 +3458,7 @@ pub struct Formatter {
                                                 _.indent += 1;
                                                 _.writeIndent(Writer, writer_) catch unreachable;
                                                 const _id_g = IndentDepthGuard{ fmt: _, dec_depth: false };
-                                                try _.format(try Tag.get(children, _.globalThis), Writer, writer_, children, _.globalThis, enable_ansi_colors);
+                                                _.format(Tag.get(children, _.globalThis)?, Writer, writer_, children, _.globalThis, enable_ansi_colors)?;
                                             }
 
                                             writer.writeAll("\n");
@@ -3480,10 +3480,10 @@ pub struct Formatter {
                                                 let j: usize = 0;
                                                 while (j < length) : (j += 1) {
                                                     const child = children.getIndex(_.globalThis, @as(u32, i32(j)))?;
-                                                    try _.format(try Tag.getAdvanced(child, _.globalThis, {
+                                                    _.format(Tag.getAdvanced(child, _.globalThis, {
                                                         hide_global: true,
                                                         disable_inspect_custom: _.disable_inspect_custom,
-                                                    }), Writer, writer_, child, _.globalThis, enable_ansi_colors);
+                                                    })?, Writer, writer_, child, _.globalThis, enable_ansi_colors)?;
                                                     if (j + 1 < length) {
                                                         writer.writeAll("\n");
                                                         _.writeIndent(Writer, writer_) catch unreachable;
@@ -3577,9 +3577,9 @@ pub struct Formatter {
 
                 if (iter.i == 0) {
                     if (value.isClass(_.globalThis))
-                        try _.printAs(.Class, Writer, writer_, value, jsType, enable_ansi_colors)
+                        _.printAs(.Class, Writer, writer_, value, jsType, enable_ansi_colors)?
                     else if (value.isCallable())
-                        try _.printAs(.Function, Writer, writer_, value, jsType, enable_ansi_colors)
+                        _.printAs(.Function, Writer, writer_, value, jsType, enable_ansi_colors)?
                     else {
                         if (name_str := getObjectName(_.globalThis, value)?) {
                             writer.print("{f} ", [ name_str]);
@@ -3725,7 +3725,7 @@ pub struct Formatter {
                 }
                 // TODO: if (options.showProxy), print like `Proxy { target: ..., handlers: ... }`
                 // this is default off so it is not used.
-                try _.format(try ConsoleObject.Formatter.Tag.get(target, _.globalThis), Writer, writer_, target, _.globalThis, enable_ansi_colors);
+                _.format(ConsoleObject.Formatter.Tag.get(target, _.globalThis)?, Writer, writer_, target, _.globalThis, enable_ansi_colors)?;
             },
         }
     }
@@ -3771,7 +3771,7 @@ pub struct Formatter {
         // it _should_ limit the stack usage because each version of the
         // function will be relatively small
         switch (result.tag.tag()) {
-            inline else => |tag| try _.printAs(tag, Writer, writer, value, result.cell, enable_ansi_colors),
+            inline else => |tag| _.printAs(tag, Writer, writer, value, result.cell, enable_ansi_colors)?,
 
             .CustomFormattedObject => {
                 _.custom_formatted_object = result.tag.CustomFormattedObject;

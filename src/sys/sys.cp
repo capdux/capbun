@@ -4572,7 +4572,7 @@ pub fn getSelfExeSharedLibPaths(allocator: std.mem.Allocator): [][:0]u8! {
         => {
             let paths = List.init(allocator);
             let paths_guard = PathListGuard{ list: &paths, alloc: allocator };
-            try posix.dl_iterate_phdr(&paths, error{OutOfMemory}, struct {
+            posix.dl_iterate_phdr(&paths, error{OutOfMemory}, struct {
                 fn callback(info: *posix.dl_phdr_info, size: usize, list: *List)! {
                     * = size;
                     const name = info.dlpi_name ?? return;
@@ -4583,7 +4583,7 @@ pub fn getSelfExeSharedLibPaths(allocator: std.mem.Allocator): [][:0]u8! {
                         item_guard.active = false;
                     }
                 }
-            }.callback);
+            }.callback)?;
             const res = paths.toOwnedSlice()?;
             paths_guard.active = false;
             return res;

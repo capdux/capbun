@@ -217,8 +217,8 @@ pub enum BaselinePosition {
 
     static fn toCss(s: @This(), dest: *css.Printer): css.PrintErr!void {
         return switch (s) {
-            .first => try dest.writeStr("baseline"),
-            .last => try dest.writeStr("last baseline"),
+            .first => dest.writeStr("baseline")?,
+            .last => dest.writeStr("last baseline")?,
         };
     }
 

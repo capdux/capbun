@@ -353,10 +353,10 @@ pub fn editUpdateNoArgs(manager: *PackageManager, current_package_json: *Expr, o
                                         break :version_literal (if (@typeInfo(@TypeOf(entry)) == .@"enum") @intFromEnum(entry) else entry.value).original_version_literal;
 };
                                         const pinned_version = Semver.Version.whichVersionIsPinned(version_literal);
-                                        break :new_version try (switch (pinned_version) {
-.patch => std.fmt.allocPrint(allocator, "{f}", .{ version_fmt }),
-.minor => std.fmt.allocPrint(allocator, "~{f}", .{ version_fmt }),
-.major => std.fmt.allocPrint(allocator, "^{f}", .{ version_fmt }),
+                                        break :new_version (switch (pinned_version) {
+.patch => try std.fmt.allocPrint(allocator, "{f}", .{ version_fmt }),
+.minor => try std.fmt.allocPrint(allocator, "~{f}", .{ version_fmt }),
+.major => try std.fmt.allocPrint(allocator, "^{f}", .{ version_fmt }),
 });
 };
                                         if (is_alias) {
@@ -719,10 +719,10 @@ else => try allocator.dupe(u8, (request.*).version.literal.slice((request.*).ver
                         break :version_literal (if (@typeInfo(@TypeOf(entry)) == .@"enum") @intFromEnum(entry) else entry.value).original_version_literal;
 };
                         const pinned_version = Semver.Version.whichVersionIsPinned(version_literal);
-                        break :new_version try (switch (pinned_version) {
-.patch => std.fmt.allocPrint(allocator, "{f}", .{ version_fmt }),
-.minor => std.fmt.allocPrint(allocator, "~{f}", .{ version_fmt }),
-.major => std.fmt.allocPrint(allocator, "^{f}", .{ version_fmt }),
+                        break :new_version (switch (pinned_version) {
+.patch => try std.fmt.allocPrint(allocator, "{f}", .{ version_fmt }),
+.minor => try std.fmt.allocPrint(allocator, "~{f}", .{ version_fmt }),
+.major => try std.fmt.allocPrint(allocator, "^{f}", .{ version_fmt }),
 });
 };
                         if ((if (@typeInfo(@TypeOf(entry)) == .@"enum") @intFromEnum(entry) else entry.value).is_alias) {
@@ -736,8 +736,8 @@ else => try allocator.dupe(u8, (request.*).version.literal.slice((request.*).ver
                     }
                 }
                 if ((((request.*).version.tag == .dist_tag) or (((manager.subcommand == .update) and ((request.*).version.tag == .npm)) and (!(if (@typeInfo(@TypeOf((request.*).version)) == .@"enum") @intFromEnum((request.*).version) else (request.*).version.value).npm.version.isExact())))) {
-                    const new_version = try (switch (options.exact_versions) {
-inline else => |exact_versions| std.fmt.allocPrint(allocator, (if (comptime exact_versions) "{f}" else "^{f}"), .{ (if (@typeInfo(@TypeOf(resolutions[@as(usize, @intCast((request.*).package_id))])) == .@"enum") @intFromEnum(resolutions[@as(usize, @intCast((request.*).package_id))]) else resolutions[@as(usize, @intCast((request.*).package_id))].value).npm.version.fmt((request.*).version_buf) }),
+                    const new_version = (switch (options.exact_versions) {
+inline else => |exact_versions| try std.fmt.allocPrint(allocator, (if (comptime exact_versions) "{f}" else "^{f}"), .{ (if (@typeInfo(@TypeOf(resolutions[@as(usize, @intCast((request.*).package_id))])) == .@"enum") @intFromEnum(resolutions[@as(usize, @intCast((request.*).package_id))]) else resolutions[@as(usize, @intCast((request.*).package_id))].value).npm.version.fmt((request.*).version_buf) }),
 });
                     if ((((request.*).version.tag == .npm) and (if (@typeInfo(@TypeOf((request.*).version)) == .@"enum") @intFromEnum((request.*).version) else (request.*).version.value).npm.is_alias)) {
                         const dep_literal = (request.*).version.literal.slice((request.*).version_buf);

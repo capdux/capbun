@@ -110,7 +110,7 @@ pub struct PropertyRule {
         dest.writeStr("syntax:")?;
         dest.whitespace()?;
         _.syntax.toCss(dest)?;
-        try dest.writeChar(';');
+        dest.writeChar(';')?;
         dest.newline()?;
 
         dest.writeStr("inherits:")?;
@@ -122,7 +122,7 @@ pub struct PropertyRule {
         }
 
         if (*initial_value := _.initial_value) {
-            try dest.writeChar(';');
+            dest.writeChar(';')?;
             dest.newline()?;
 
             dest.writeStr("initial-value:")?;
@@ -130,7 +130,7 @@ pub struct PropertyRule {
             initial_value.toCss(dest)?;
 
             if (!dest.minify) {
-                try dest.writeChar(';');
+                dest.writeChar(';')?;
             }
         }
 

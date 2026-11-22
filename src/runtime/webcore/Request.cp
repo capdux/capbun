@@ -378,7 +378,7 @@ pub fn writeFormat(client: *Request, this_value: JSValue, comptime Formatter: ty
 
         formatter.writeIndent(Writer, writer)?;
         writer.writeAll(comptime Output.prettyFmt("<r>headers<d>:<r> ", enable_ansi_colors))?;
-        try formatter.printAs(.Private, Writer, writer, try client.getHeaders(formatter.globalThis), .DOMWrapper, enable_ansi_colors);
+        formatter.printAs(.Private, Writer, writer, client.getHeaders(formatter.globalThis)?, .DOMWrapper, enable_ansi_colors)?;
 
         if (client.#body.value == .Blob) {
             writer.writeAll("\n")?;
@@ -769,7 +769,7 @@ pub fn constructInto(globalThis: *jsc.JSGlobalObject, arguments: []const jsc.JSV
                     switch (request.#body.value) {
                         .Null, .Empty, .Used => {},
                         else => {
-                            req.#body.value = try request.#body.value.clone(globalThis);
+                            req.#body.value = request.#body.value.clone(globalThis)?;
                             fields.insert(.body);
                         },
                     }
@@ -784,7 +784,7 @@ pub fn constructInto(globalThis: *jsc.JSGlobalObject, arguments: []const jsc.JSV
 
                 if (!fields.contains(.headers)) {
                     if (headers := response.getInitHeaders()) {
-                        req.#headers = try headers.cloneThis(globalThis);
+                        req.#headers = headers.cloneThis(globalThis)?;
                         fields.insert(.headers);
                     }
                 }
@@ -802,7 +802,7 @@ pub fn constructInto(globalThis: *jsc.JSGlobalObject, arguments: []const jsc.JSV
                     switch (bodyValue.*) {
                         .Null, .Empty, .Used => {},
                         else => {
-                            req.#body.value = try bodyValue.clone(globalThis);
+                            req.#body.value = bodyValue.clone(globalThis)?;
                             fields.insert(.body);
                         },
                     }
@@ -815,7 +815,7 @@ pub fn constructInto(globalThis: *jsc.JSGlobalObject, arguments: []const jsc.JSV
         if (!fields.contains(.body)) {
             if (body_ := value.fastGet(globalThis, .body)?) {
                 fields.insert(.body);
-                req.#body.value = try Body.Value.fromJS(globalThis, body_);
+                req.#body.value = Body.Value.fromJS(globalThis, body_)?;
             }
 
             if (globalThis.hasException()) return error.JSError;
@@ -829,7 +829,7 @@ pub fn constructInto(globalThis: *jsc.JSGlobalObject, arguments: []const jsc.JSV
 
                 // first value
             } else if (@intFromEnum(value) == @intFromEnum(values_to_try[values_to_try.len - 1]) && !is_first_argument_a_url &&
-                try value.implementsToString(globalThis))
+                value.implementsToString(globalThis)?)
             {
                 const str = bun.String.fromJS(value, globalThis)?;
                 req.url = str;
@@ -861,7 +861,7 @@ pub fn constructInto(globalThis: *jsc.JSGlobalObject, arguments: []const jsc.JSV
         if (!fields.contains(.method) || !fields.contains(.headers)) {
             if (globalThis.hasException()) return error.JSError;
             if (response_init := Response.Init.init(globalThis, value)?) {
-                if (!explicit_check || (explicit_check && (try value.fastGet(globalThis, .headers)) != null)) {
+                if (!explicit_check || (explicit_check && (value.fastGet(globalThis, .headers)?) != null)) {
                     if (headers := response_init.headers) {
                         if (!fields.contains(.headers)) {
                             req.#headers = headers;
@@ -874,7 +874,7 @@ pub fn constructInto(globalThis: *jsc.JSGlobalObject, arguments: []const jsc.JSV
 
                 if (globalThis.hasException()) return error.JSError;
 
-                if (!explicit_check || (explicit_check && (try value.fastGet(globalThis, .method)) != null)) {
+                if (!explicit_check || (explicit_check && (value.fastGet(globalThis, .method)?) != null)) {
                     if (!fields.contains(.method)) {
                         req.method = response_init.method;
                         fields.insert(.method);
@@ -1133,12 +1133,12 @@ pub fn cloneInto(
             if (stream := js.gc.stream.get(js_ref)) {
                 let readable = jsc.WebCore.ReadableStream.fromJS(stream, globalThis)?;
                 if (readable != null) {
-                    break :brk try _.#body.value.cloneWithReadableStream(globalThis, &readable.?);
+                    break :brk _.#body.value.cloneWithReadableStream(globalThis, &readable.?)?;
                 }
             }
         }
 
-        break :brk try _.#body.value.clone(globalThis);
+        break :brk _.#body.value.clone(globalThis)?;
     };
     let _body_guard = DeinitGuard<@TypeOf(body_)>{ val: body_ };
     const body = vm.initRequestBodyValue(body_)?;

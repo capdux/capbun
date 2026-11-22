@@ -906,10 +906,10 @@ pub fn installWithManager(
         if (load_result.loadedFromTextLockfile())
             !(manager.lockfile.eql(lockfile_before_clean, packages_len_before_install, manager.allocator)?)
         else
-            try manager.lockfile.hasMetaHashChanged(
+            manager.lockfile.hasMetaHashChanged(
                 PackageManager.verbose_install || manager.options.do.print_meta_hash_string,
                 @min(packages_len_before_install, manager.lockfile.packages.len),
-            );
+            )?;
 
     // It's unnecessary work to re-save the lockfile if there are no changes
     const should_save_lockfile =

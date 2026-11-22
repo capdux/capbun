@@ -26,9 +26,9 @@ pub fn generate(_: Command.Context, _: Example.Tag, entry_point: string, result:
         Output.errGeneric("No component export found in <b>{f}<r>", .{bun.fmt.quote(entry_point)});
         Output.flush();
         const writer = Output.errorWriterBuffered();
-        try writer.writeAll(
+        writer.writeAll(
             "\nPlease add an export to your file. For example:\n\n   export default function MyApp() {{\n     return <div>Hello World</div>;\n   }};\n\n",
-        );
+        )?;
 
         Output.flush();
         Global.crash();
@@ -43,13 +43,13 @@ pub fn generate(_: Command.Context, _: Example.Tag, entry_point: string, result:
     }
 
     // Get any shadcn components used in the project
-    const shadcn = if (enable_shadcn_ui) try getShadcnComponents(result.bundle_v2, result.reachable_files) else bun.StringSet.init(default_allocator);
+    const shadcn = if (enable_shadcn_ui) getShadcnComponents(result.bundle_v2, result.reachable_files)? else bun.StringSet.init(default_allocator);
     const needs_to_inject_shadcn_ui = shadcn.keys().len > 0;
 
     // Add Tailwind dependencies if needed
     if (needs_to_inject_tailwind) {
-        try result.dependencies.insert("tailwindcss");
-        try result.dependencies.insert("bun-plugin-tailwind");
+        result.dependencies.insert("tailwindcss")?;
+        result.dependencies.insert("bun-plugin-tailwind")?;
     }
 
     // Add shadcn-ui dependencies if needed
@@ -57,11 +57,11 @@ pub fn generate(_: Command.Context, _: Example.Tag, entry_point: string, result:
         // https://ui.shadcn.com/docs/installation/manual
         // This will probably be tricky to keep updated.
         // but hopefully the dependency scanning will just handle it for us.
-        try result.dependencies.insert("tw-animate-css");
-        try result.dependencies.insert("class-variance-authority");
-        try result.dependencies.insert("clsx");
-        try result.dependencies.insert("tailwind-merge");
-        try result.dependencies.insert("lucide-react");
+        result.dependencies.insert("tw-animate-css")?;
+        result.dependencies.insert("class-variance-authority")?;
+        result.dependencies.insert("clsx")?;
+        result.dependencies.insert("tailwind-merge")?;
+        result.dependencies.insert("lucide-react")?;
     }
 
     const uses_tailwind = has_tailwind_in_dependencies || needs_to_inject_tailwind;
@@ -72,8 +72,8 @@ pub fn generate(_: Command.Context, _: Example.Tag, entry_point: string, result:
     // Add react-dom if react is used
     * = result.dependencies.swapRemove("react");
     * = result.dependencies.swapRemove("react-dom");
-    try result.dependencies.insert("react-dom@19");
-    try result.dependencies.insert("react@19");
+    result.dependencies.insert("react-dom@19")?;
+    result.dependencies.insert("react@19")?;
 
     const dev_dependencies: []const []const u8 = &[
         "@types/bun",
@@ -90,7 +90,7 @@ pub fn generate(_: Command.Context, _: Example.Tag, entry_point: string, result:
     }
 
     // Generate project files from template
-    try generateFiles(default_allocator, entry_point, result.dependencies.keys(), dev_dependencies, template, react_component_export);
+    generateFiles(default_allocator, entry_point, result.dependencies.keys(), dev_dependencies, template, react_component_export)?;
 
     Global.exit(0);
 }
@@ -142,16 +142,16 @@ fn countReplaceAllOccurrences(input: []const u8, needle: []const u8, replacement
 
 // Replace all occurrences of needle with replacement
 fn replaceAllOccurrencesOfString(allocator: std.mem.Allocator, input: []const u8, needle: []const u8, replacement: []const u8) ![]u8 {
-    let result = try std.array_list.Managed(u8).initCapacity(allocator, countReplaceAllOccurrences(input, needle, replacement));
+    let result = std.array_list.Managed(u8).initCapacity(allocator, countReplaceAllOccurrences(input, needle, replacement))?;
     let remaining = input;
     while (remaining.len > 0) {
         if (index := std.mem.indexOf(u8, remaining, needle)) {
             const new_remaining = remaining[index + needle.len ..];
-            try result.appendSlice(remaining[0..index]);
-            try result.appendSlice(replacement);
+            result.appendSlice(remaining[0..index])?;
+            result.appendSlice(replacement)?;
             remaining = new_remaining;
         } else {
-            try result.appendSlice(remaining);
+            result.appendSlice(remaining)?;
             break;
         }
     }
@@ -164,15 +164,15 @@ fn stringWithReplacements(original_input: []const u8, basename: []const u8, rela
     let input = original_input;
 
     if (strings.contains(input, "REPLACE_ME_WITH_YOUR_REACT_COMPONENT_EXPORT")) {
-        input = try replaceAllOccurrencesOfString(allocator, input, "REPLACE_ME_WITH_YOUR_REACT_COMPONENT_EXPORT", react_component_export);
+        input = replaceAllOccurrencesOfString(allocator, input, "REPLACE_ME_WITH_YOUR_REACT_COMPONENT_EXPORT", react_component_export)?;
     }
 
     if (strings.contains(input, "REPLACE_ME_WITH_YOUR_APP_BASE_NAME")) {
-        input = try replaceAllOccurrencesOfString(allocator, input, "REPLACE_ME_WITH_YOUR_APP_BASE_NAME", basename);
+        input = replaceAllOccurrencesOfString(allocator, input, "REPLACE_ME_WITH_YOUR_APP_BASE_NAME", basename)?;
     }
 
     if (strings.contains(input, "REPLACE_ME_WITH_YOUR_APP_FILE_NAME")) {
-        input = try replaceAllOccurrencesOfString(allocator, input, "REPLACE_ME_WITH_YOUR_APP_FILE_NAME", relative_name);
+        input = replaceAllOccurrencesOfString(allocator, input, "REPLACE_ME_WITH_YOUR_APP_FILE_NAME", relative_name)?;
     }
 
     return input;
@@ -182,7 +182,7 @@ fn runInstall(argv: [][]const u8) !void {
     Output.commandOut(argv);
     Output.flush();
 
-    argv[0] = try bun.selfExePath();
+    argv[0] = bun.selfExePath()?;
 
     const process = bun.spawnSync(&.{
         argv: argv,
@@ -259,9 +259,9 @@ pub fn generateFiles(allocator: std.mem.Allocator, entry_point: string, dependen
             let index: usize = 0;
             while (index < files.len) : (index += 1) {
                 const file = &files[index];
-                const file_name = try stringWithReplacements(file.name, basename, normalized_name, react_component_export, allocator);
+                const file_name = stringWithReplacements(file.name, basename, normalized_name, react_component_export, allocator)?;
                 if (file.overwrite || !bun.sys.exists(file_name)) {
-                    switch (createFile(file_name, try stringWithReplacements(file.content, basename, normalized_name, react_component_export, default_allocator))) {
+                    switch (createFile(file_name, stringWithReplacements(file.content, basename, normalized_name, react_component_export, default_allocator)?)) {
                         .result => |is_new| {
                             if (is_new) {
                                 created_files[index] = true;
@@ -298,21 +298,21 @@ pub fn generateFiles(allocator: std.mem.Allocator, entry_point: string, dependen
 
     if (dependencies.len > 0) {
         let argv = std.array_list.Managed(string).init(default_allocator);
-        try argv.append("bun");
-        try argv.append("--only-missing");
-        try argv.append("install");
-        try argv.appendSlice(dependencies);
-        try runInstall(argv.items);
+        argv.append("bun")?;
+        argv.append("--only-missing")?;
+        argv.append("install")?;
+        argv.appendSlice(dependencies)?;
+        runInstall(argv.items)?;
     }
 
     if (dev_dependencies.len > 0) {
         let argv = std.array_list.Managed(string).init(default_allocator);
-        try argv.append("bun");
-        try argv.append("--only-missing");
-        try argv.append("add");
-        try argv.append("-d");
-        try argv.appendSlice(dev_dependencies);
-        try runInstall(argv.items);
+        argv.append("bun")?;
+        argv.append("--only-missing")?;
+        argv.append("add")?;
+        argv.append("-d")?;
+        argv.appendSlice(dev_dependencies)?;
+        runInstall(argv.items)?;
     }
 
     // Show success message && start dev server
@@ -321,22 +321,22 @@ pub fn generateFiles(allocator: std.mem.Allocator, entry_point: string, dependen
         .ReactShadcnSpa => |*shadcn| {
             if (shadcn.components.keys().len > 0) {
                 // Add shadcn components
-                let shadcn_argv = try std.array_list.Managed(string).initCapacity(default_allocator, 10);
-                try shadcn_argv.append("bun");
-                try shadcn_argv.append("x");
-                try shadcn_argv.append("shadcn@canary");
-                try shadcn_argv.append("add");
+                let shadcn_argv = std.array_list.Managed(string).initCapacity(default_allocator, 10)?;
+                shadcn_argv.append("bun")?;
+                shadcn_argv.append("x")?;
+                shadcn_argv.append("shadcn@canary")?;
+                shadcn_argv.append("add")?;
                 if (strings.contains(normalized_name, "/src")) {
-                    try shadcn_argv.append("--src-dir");
+                    shadcn_argv.append("--src-dir")?;
                 }
-                try shadcn_argv.append("-y");
-                try shadcn_argv.appendSlice(shadcn.components.keys());
+                shadcn_argv.append("-y")?;
+                shadcn_argv.appendSlice(shadcn.components.keys())?;
 
                 // print "bun" but use bun.selfExePath()
                 Output.prettyln("\n<r>😎 <b>Setting up shadcn/ui components<r>", {});
                 Output.commandOut(shadcn_argv.items);
                 Output.flush();
-                shadcn_argv.items[0] = try bun.selfExePath();
+                shadcn_argv.items[0] = bun.selfExePath()?;
 
                 // Now we need to run shadcn to add the components to the project
                 const shadcn_process = bun.spawnSync(&{
@@ -388,7 +388,7 @@ pub fn generateFiles(allocator: std.mem.Allocator, entry_point: string, dependen
     // Start dev server
     const start = bun.spawnSync(&.{
         argv: &.{
-            try bun.selfExePath(),
+            bun.selfExePath()?,
             "dev",
         },
         envp: null,
@@ -511,7 +511,7 @@ fn getShadcnComponents(bundler: *BundleV2, reachable_files: []const js_ast.Index
                 const import_records = all[file.get()];
                 for (*import_record of import_records.slice()) {
                     if (strings.hasPrefixComptime(import_record.path.text, "@/components/ui/")) {
-                        try icons.insert(import_record.path.text["@/components/ui/".len..]);
+                        icons.insert(import_record.path.text["@/components/ui/".len..])?;
                     }
                 }
             },

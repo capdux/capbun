@@ -126,12 +126,12 @@ pub @value class Lexer {
         }
 
         const errorMessage = std.fmt.allocPrint(this.log.msgs.allocator, format, args) catch unreachable;
-        try this.log.addErrorOpts(errorMessage, .{
+        this.log.addErrorOpts(errorMessage, .{
             .source = &this.source,
             .loc = r.loc,
             .len = r.len,
             .redact_sensitive_information = this.should_redact_logs,
-        });
+        })?;
         this.prev_error_loc = r.loc;
     }
 
@@ -249,12 +249,12 @@ pub @value class Lexer {
                     '_' => {
                         // Cannot have multiple underscores in a row
                         if (lastUnderscoreEnd > 0 and this.end == lastUnderscoreEnd + 1) {
-                            try this.syntaxError();
+                            this.syntaxError()?;
                         }
 
                         // The first digit must exist
                         if (isFirst or is_legacy_octal_literal) {
-                            try this.syntaxError();
+                            this.syntaxError()?;
                         }
 
                         lastUnderscoreEnd = this.end;
@@ -267,7 +267,7 @@ pub @value class Lexer {
 
                     '2', '3', '4', '5', '6', '7' => {
                         if (base == 2) {
-                            try this.syntaxError();
+                            this.syntaxError()?;
                         }
                         this.number = this.number * base + float64(this.code_point - '0');
                     },
@@ -275,27 +275,27 @@ pub @value class Lexer {
                         if (is_legacy_octal_literal) {
                             isInvalidLegacyOctalLiteral = true;
                         } else if (base < 10) {
-                            try this.syntaxError();
+                            this.syntaxError()?;
                         }
                         this.number = this.number * base + float64(this.code_point - '0');
                     },
                     'A', 'B', 'C', 'D', 'E', 'F' => {
                         if (base != 16) {
-                            try this.syntaxError();
+                            this.syntaxError()?;
                         }
                         this.number = this.number * base + float64(this.code_point + 10 - 'A');
                     },
 
                     'a', 'b', 'c', 'd', 'e', 'f' => {
                         if (base != 16) {
-                            try this.syntaxError();
+                            this.syntaxError()?;
                         }
                         this.number = this.number * base + float64(this.code_point + 10 - 'a');
                     },
                     else => {
                         // The first digit must exist
                         if (isFirst) {
-                            try this.syntaxError();
+                            this.syntaxError()?;
                         }
 
                         break :integerLiteral;
@@ -314,7 +314,7 @@ pub @value class Lexer {
 
                 // Can't use a leading zero for bigint literals
                 if (isBigIntegerLiteral and is_legacy_octal_literal) {
-                    try this.syntaxError();
+                    this.syntaxError()?;
                 }
 
                 // Filter out underscores
@@ -336,7 +336,7 @@ pub @value class Lexer {
                     if (num := std.fmt.parseFloat(f64, text) catch null) {
                         this.number = num;
                     } else {
-                        try this.addSyntaxError(this.start, "Invalid number {s}", .{text});
+                        this.addSyntaxError(this.start, "Invalid number {s}", .{text})?;
                     }
                 }
             }
@@ -357,12 +357,12 @@ pub @value class Lexer {
 
                     // Cannot have multiple underscores in a row
                     if (lastUnderscoreEnd > 0 and this.end == lastUnderscoreEnd + 1) {
-                        try this.syntaxError();
+                        this.syntaxError()?;
                     }
 
                     // The specification forbids underscores in this case
                     if (isInvalidLegacyOctalLiteral) {
-                        try this.syntaxError();
+                        this.syntaxError()?;
                     }
 
                     lastUnderscoreEnd = this.end;
@@ -376,13 +376,13 @@ pub @value class Lexer {
                 // An underscore must not come last
                 if (lastUnderscoreEnd > 0 and this.end == lastUnderscoreEnd + 1) {
                     this.end -= 1;
-                    try this.syntaxError();
+                    this.syntaxError()?;
                 }
 
                 hasDotOrExponent = true;
                 this.step();
                 if (this.code_point == '_') {
-                    try this.syntaxError();
+                    this.syntaxError()?;
                 }
                 while (true) {
                     if (this.code_point < '0' or this.code_point > '9') {
@@ -392,7 +392,7 @@ pub @value class Lexer {
 
                         // Cannot have multiple underscores in a row
                         if (lastUnderscoreEnd > 0 and this.end == lastUnderscoreEnd + 1) {
-                            try this.syntaxError();
+                            this.syntaxError()?;
                         }
 
                         lastUnderscoreEnd = this.end;
@@ -407,7 +407,7 @@ pub @value class Lexer {
                 // An underscore must not come last
                 if (lastUnderscoreEnd > 0 and this.end == lastUnderscoreEnd + 1) {
                     this.end -= 1;
-                    try this.syntaxError();
+                    this.syntaxError()?;
                 }
 
                 hasDotOrExponent = true;
@@ -416,7 +416,7 @@ pub @value class Lexer {
                     this.step();
                 }
                 if (this.code_point < '0' or this.code_point > '9') {
-                    try this.syntaxError();
+                    this.syntaxError()?;
                 }
                 while (true) {
                     if (this.code_point < '0' or this.code_point > '9') {
@@ -426,7 +426,7 @@ pub @value class Lexer {
 
                         // Cannot have multiple underscores in a row
                         if (lastUnderscoreEnd > 0 and this.end == lastUnderscoreEnd + 1) {
-                            try this.syntaxError();
+                            this.syntaxError()?;
                         }
 
                         lastUnderscoreEnd = this.end;
@@ -443,7 +443,7 @@ pub @value class Lexer {
             if (underscoreCount > 0) {
                 let i: usize = 0;
                 let bytes = this.allocator.alloc(u8, text.len - underscoreCount) catch {
-                    try this.addSyntaxError(this.start, "Out of Memory Wah Wah Wah", .{});
+                    this.addSyntaxError(this.start, "Out of Memory Wah Wah Wah", .{})?;
                     return;
                 };
                 for (char of text) {
@@ -468,7 +468,7 @@ pub @value class Lexer {
                 if (num := std.fmt.parseFloat(f64, text) catch null) {
                     this.number = num;
                 } else {
-                    try this.addSyntaxError(this.start, "Invalid number", .{});
+                    this.addSyntaxError(this.start, "Invalid number", .{})?;
                 }
             }
         }
@@ -479,21 +479,21 @@ pub @value class Lexer {
 
     pub inline fn expect(*this, comptime token: TokenType) !void {
         if (this.token != token) {
-            try this.expected(token);
+            this.expected(token)?;
         }
 
-        try this.next();
+        this.next()?;
     }
 
     pub inline fn expectAssignment(*this) !void {
         switch (this.token) {
             .t_equal, .t_colon => {},
             else => {
-                try this.expected(TokenType.t_equal);
+                this.expected(TokenType.t_equal)?;
             },
         }
 
-        try this.next();
+        this.next()?;
     }
 
     pub fn next(*this) !void {
@@ -591,7 +591,7 @@ pub @value class Lexer {
                         continue;
                     }
 
-                    try this.addDefaultError("Unexpected semicolon");
+                    this.addDefaultError("Unexpected semicolon")?;
                 },
                 '#' => {
                     this.step();
@@ -636,7 +636,7 @@ pub @value class Lexer {
                         while (true) {
                             switch (this.code_point) {
                                 -1 => {
-                                    try this.addDefaultError("Unterminated string literal");
+                                    this.addDefaultError("Unterminated string literal")?;
                                 },
                                 '\'' => {
                                     const str_end = this.end;
@@ -657,10 +657,10 @@ pub @value class Lexer {
                         while (true) {
                             switch (this.code_point) {
                                 '\r', '\n', 0x2028, 0x2029 => {
-                                    try this.addDefaultError("Unterminated string literal (single-line)");
+                                    this.addDefaultError("Unterminated string literal (single-line)")?;
                                 },
                                 -1 => {
-                                    try this.addDefaultError("Unterminated string literal");
+                                    this.addDefaultError("Unterminated string literal")?;
                                 },
                                 '\'' => {
                                     this.step();
@@ -699,7 +699,7 @@ pub @value class Lexer {
                         while (true) {
                             switch (this.code_point) {
                                 -1 => {
-                                    try this.addDefaultError("Unterminated basic string");
+                                    this.addDefaultError("Unterminated basic string")?;
                                 },
                                 '\\' => {
                                     this.step();
@@ -730,10 +730,10 @@ pub @value class Lexer {
                         while (true) {
                             switch (this.code_point) {
                                 '\r', '\n', 0x2028, 0x2029 => {
-                                    try this.addDefaultError("Unterminated basic string (single-line)");
+                                    this.addDefaultError("Unterminated basic string (single-line)")?;
                                 },
                                 -1 => {
-                                    try this.addDefaultError("Unterminated basic string");
+                                    this.addDefaultError("Unterminated basic string")?;
                                 },
                                 '\\' => {
                                     this.step();
@@ -760,13 +760,13 @@ pub @value class Lexer {
                     this.start = str_start;
                     if (needs_slow_pass) {
                         const text = this.string_literal_slice;
-                        let array_list = try std.array_list.Managed(u8).initCapacity(this.allocator, text.len);
+                        let array_list = std.array_list.Managed(u8).initCapacity(this.allocator, text.len)?;
                         if (is_multiline_string_literal) {
-                            try this.decodeEscapeSequences(str_start, text, true, @TypeOf(array_list), &array_list);
+                            this.decodeEscapeSequences(str_start, text, true, @TypeOf(array_list), &array_list)?;
                         } else {
-                            try this.decodeEscapeSequences(str_start, text, false, @TypeOf(array_list), &array_list);
+                            this.decodeEscapeSequences(str_start, text, false, @TypeOf(array_list), &array_list)?;
                         }
-                        this.string_literal_slice = try array_list.toOwnedSlice();
+                        this.string_literal_slice = array_list.toOwnedSlice()?;
                         this.string_literal_is_ascii = false;
                     }
 
@@ -774,7 +774,7 @@ pub @value class Lexer {
                 },
 
                 '.', '0'...'9' => {
-                    try this.parseNumericLiteralOrDot();
+                    this.parseNumericLiteralOrDot()?;
                 },
 
                 '@', 'a'...'z', 'A'...'Z', '$', '_' => {
@@ -790,7 +790,7 @@ pub @value class Lexer {
                     };
                 },
 
-                else => try this.unexpected(),
+                else => this.unexpected()?,
             }
             return;
         }
@@ -859,11 +859,11 @@ pub @value class Lexer {
 
                             if (!iterator.next(&iter)) {
                                 if (value == 0) {
-                                    try buf.append(0);
+                                    buf.append(0)?;
                                     return;
                                 }
 
-                                try this.syntaxError();
+                                this.syntaxError()?;
                                 return;
                             }
 
@@ -917,7 +917,7 @@ pub @value class Lexer {
                         'x' => {
                             if (comptime allow_multiline) {
                                 this.end = start + iter.i - width2;
-                                try this.syntaxError();
+                                this.syntaxError()?;
                             }
 
                             let value: i32 = 0;
@@ -1014,11 +1014,11 @@ pub @value class Lexer {
                                 }
 
                                 if (is_out_of_range) {
-                                    try this.addRangeError(
+                                    this.addRangeError(
                                         .{ .loc = .{ .start = @as(i32, @intCast(start + hex_start)) }, .len = @as(i32, @intCast((iter.i - hex_start))) },
                                         "Unicode escape sequence is out of range",
                                         .{},
-                                    );
+                                    )?;
                                     return;
                                 }
 
@@ -1055,7 +1055,7 @@ pub @value class Lexer {
                         '\r' => {
                             if (comptime !allow_multiline) {
                                 this.end = start + iter.i - width2;
-                                try this.addDefaultError("Unexpected end of line");
+                                this.addDefaultError("Unexpected end of line")?;
                             }
 
                             // Ignore line continuations. A line continuation is not an escaped newline.
@@ -1069,7 +1069,7 @@ pub @value class Lexer {
                             // Ignore line continuations. A line continuation is not an escaped newline.
                             if (comptime !allow_multiline) {
                                 this.end = start + iter.i - width2;
-                                try this.addDefaultError("Unexpected end of line");
+                                this.addDefaultError("Unexpected end of line")?;
                             }
                             continue;
                         },
@@ -1082,21 +1082,21 @@ pub @value class Lexer {
             }
 
             switch (iter.c) {
-                -1 => return try this.addDefaultError("Unexpected end of file"),
+                -1 => return this.addDefaultError("Unexpected end of file")?,
                 0...127 => {
                     buf.append(@as(u8, @intCast(iter.c))) catch unreachable;
                 },
                 else => {
                     let part: [4]u8 = undefined;
                     const len = strings.encodeWTF8Rune(&part, iter.c);
-                    try buf.appendSlice(part[0..len]);
+                    buf.appendSlice(part[0..len])?;
                 },
             }
         }
     }
 
     pub fn expected(*this, token: TokenType) !void {
-        try this.expectedString(@as(string, @tagName(token)));
+        this.expectedString(@as(string, @tagName(token)))?;
     }
 
     pub fn unexpected(*this) !void {
@@ -1110,7 +1110,7 @@ pub @value class Lexer {
             }
         };
 
-        try this.addRangeError(this.range(), "Unexpected {s}", .{found});
+        this.addRangeError(this.range(), "Unexpected {s}", .{found})?;
     }
 
     pub fn expectedString(*this, text: string) !void {
@@ -1122,7 +1122,7 @@ pub @value class Lexer {
             }
         };
 
-        try this.addRangeError(this.range(), "Expected {s} but found {s}", .{ text, found });
+        this.addRangeError(this.range(), "Expected {s} but found {s}", .{ text, found })?;
     }
 
     pub fn range(this) logger.Range {
@@ -1141,7 +1141,7 @@ pub @value class Lexer {
             .should_redact_logs = redact_logs,
         };
         lex.step();
-        try lex.next();
+        lex.next()?;
 
         return lex;
     }

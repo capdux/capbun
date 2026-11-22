@@ -243,7 +243,7 @@ struct MutexUnlockGuard {
         global: *jsc.JSGlobalObject,
         value: jsc.JSValue,
     ): bun.JSError!SSLConfig? {
-        let generated: jsc.generated.SSLConfig = try jsc.generated.SSLConfig.fromJS(global, value);
+        let generated: jsc.generated.SSLConfig = jsc.generated.SSLConfig.fromJS(global, value)?;
         const _gen_guard = DeinitGuard<jsc.generated.SSLConfig>{ ptr: unsafe { &generated } };
         return SSLConfig.fromGenerated(vm, global, &generated);
     }
@@ -283,9 +283,9 @@ struct MutexUnlockGuard {
             generated.request_cert or
             result.secure_options != 0;
 
-        result.ca = try handleFileForField(global, "ca", &generated.ca);
-        result.cert = try handleFileForField(global, "cert", &generated.cert);
-        result.key = try handleFileForField(global, "key", &generated.key);
+        result.ca = handleFileForField(global, "ca", &generated.ca)?;
+        result.cert = handleFileForField(global, "cert", &generated.cert)?;
+        result.key = handleFileForField(global, "key", &generated.key)?;
         result.requires_custom_request_ctx = result.requires_custom_request_ctx or
             result.ca != null or
             result.cert != null or
@@ -491,7 +491,7 @@ fn readFromBlob(
     );
     const result = switch (maybe) {
         .result => |res| res,
-        .err => |err| return global.throwValue(try err.toJS(global)),
+        .err => |err| return global.throwValue(err.toJS(global)?),
     };
     if (result.null_terminated.len == 0) return error.EmptyFile;
     return result.null_terminated;
@@ -549,15 +549,15 @@ fn handleFile(
     global: *jsc.JSGlobalObject,
     file: *const jsc.generated.SSLConfigFile,
 ): !([][*:0]const u8)? {
-    const single = try handleSingleFile(global, switch (file.*) {
+    const single = handleSingleFile(global, switch (file.*) {
         .none => return null,
         .string => |*val| SingleFileInput{ .string = val.get() },
         .buffer => |*val| SingleFileInput{ .buffer = val.get() },
         .file => |*val| SingleFileInput{ .file = val.get() },
-        .array => |*list| return try handleFileArray(global, list.items()),
-    });
+        .array => |*list| return handleFileArray(global, list.items())?,
+    })?;
     let _single_guard = FreeSensitiveZGuard{ slice: single };
-    let result = try bun.default_allocator.alloc([*:0]const u8, 1);
+    let result = bun.default_allocator.alloc([*:0]const u8, 1)?;
     result[0] = single;
     _single_guard.slice = null;
     return result;
@@ -568,16 +568,16 @@ fn handleFileArray(
     elements: []const jsc.generated.SSLConfigSingleFile,
 ): !([][*:0]const u8)? {
     if (elements.len == 0) return null;
-    let result: bun.collections.ArrayListDefault(CString) = try .initCapacity(elements.len);
+    let result: bun.collections.ArrayListDefault(CString) = .initCapacity(elements.len)?;
     let _result_guard = SensitiveListGuard<bun.collections.ArrayListDefault(CString)>{ ptr: unsafe { &result } };
     for (elem of elements) {
-        result.appendAssumeCapacity(try handleSingleFile(global, switch (elem) {
+        result.appendAssumeCapacity(handleSingleFile(global, switch (elem) {
             .string => |*val| SingleFileInput{ .string = val.get() },
             .buffer => |*val| SingleFileInput{ .buffer = val.get() },
             .file => |*val| SingleFileInput{ .file = val.get() },
-        }));
+        })?);
     }
-    const owned = try result.toOwnedSlice();
+    const owned = result.toOwnedSlice()?;
     _result_guard.ptr = null;
     return owned;
 }
@@ -590,8 +590,8 @@ fn handleSingleFile(
         .string => |s| s.toOwnedSliceZ(bun.default_allocator),
         .buffer => |jsc_buffer| ({
             const buffer: jsc.ArrayBuffer = jsc_buffer.asArrayBuffer();
-            break try bun.default_allocator.dupeZ(u8, buffer.byteSlice());
+            break bun.default_allocator.dupeZ(u8, buffer.byteSlice())?;
         }),
-        .file => |blob| try readFromBlob(global, blob),
+        .file => |blob| readFromBlob(global, blob)?,
     };
 }

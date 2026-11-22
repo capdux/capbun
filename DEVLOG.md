@@ -1655,3 +1655,9 @@
 - **Waves #52–#54 (2026-11-22)**：CP 中 `export` 仅用于 C-ABI 导出，普通跨模块导出须用 `pub`（如 `H2Client.cp`、`AltSvc.cp`）；`cpc` 会将 `comptime Mutex: type` 名称映射为内置 `CpBareMutex`，泛型互斥包装器形参应命名为 `MutexType`；Zig `return struct` 透传块内的 `?T` 须保留前缀写法以免被解析为后缀 `try`。
 - **Wave #55 (2026-11-22)**：多句柄泛型调用（如 `GlobWalker` 传入 `SyscallHandle`/`DirEntryHandle`）须使用双泛型 RAII Guard（`CloseDisallowingCwdGuard<T, F>`）；`~init()` 内部调用的清理函数不得扩大原本仅返回 `OOM!void` 的调用链错误集；纯状态复位/计数步进 `defer`（如 `defer _.* = undefined;`、`defer i += 1;`）保留为轻量局部语法。
 - **Waves #56–#57 (2026-11-22)**：CP 中 `for (*x of slice)` 会对 `x` 自动解引用，直接读写 `x` 即等效于 Zig 的 `x.*`，传指针参数需写 `&x`（严禁 `x.*` 以免双重解引用）；针对可能为 `[]align(1) u16` 的非对齐切片应使用 `while (i < len)` 索引写入以避开 `cp_mut_slice` 2 字节对齐限制；`return struct/union/enum` 透传块内及 `inline for` 保留原生 Zig `|capture|` 与 `self`/`this`。
+
+### [2026-11-22] Wave #58 技术要点（前缀 `try` -> 后缀 `?`）
+- `!(expr?)` 否定错误联合返回值时必须加外层括号，否则 `!expr?` 会被解析为 `(!expr)?`。
+- `&expr?` 取地址传参需先绑定局部常量 `const tmp = expr?;` 再传 `&tmp`（如 `std.posix.toPosixPath`）。
+- `return struct/union/enum { ... }` 透传泛型工厂块内部仍保持原生 Zig 语法（`try`/`orelse`/`?T`/`|capture|`/`self`）。
+- `export const` 在 CP 中会生成 `pub export const`，跨模块 Zig 导出常量统一使用 `pub const`。

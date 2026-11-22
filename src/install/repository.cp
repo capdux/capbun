@@ -274,8 +274,8 @@ pub struct TopFormatter {
         const repo = if (hash == 0) remain[slash + 1 ..] else remain[slash + 1 .. hash];
 
         let result: Repository = {
-            owner: try buf.append(remain[0..slash]),
-            repo: try buf.append(repo),
+            owner: buf.append(remain[0..slash])?,
+            repo: buf.append(repo)?,
         };
 
         if (hash != 0) {

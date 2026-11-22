@@ -15,7 +15,7 @@ pub struct TailwindAtRule {
         dest.writeStr("@tailwind")?;
         dest.whitespace()?;
         _.style_name.toCss(dest)?;
-        try dest.writeChar(';');
+        dest.writeChar(';')?;
     }
 
     fn deepClone(_: std.mem.Allocator): @This() {

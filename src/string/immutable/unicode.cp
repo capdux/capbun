@@ -350,7 +350,7 @@ pub fn convertUTF16ToUTF8Append(list: *std.array_list.Managed(u8), utf16: []cons
 
     if (result.status == .surrogate) {
         // Slow path: there was invalid UTF-16, so we need to convert it without simdutf.
-        * = try toUTF8ListWithTypeBun(list, utf16, false);
+        * = toUTF8ListWithTypeBun(list, utf16, false)?;
         return;
     }
 

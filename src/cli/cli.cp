@@ -599,11 +599,11 @@ pub struct Command {
 
                 ctx.passthrough = bun.argv[offset_for_passthrough..];
 
-                try bun_js.Run.bootStandalone(
+                bun_js.Run.bootStandalone(
                     ctx,
                     graph.entryPoint().name,
                     graph,
-                );
+                )?;
                 return;
             }
         }
@@ -613,12 +613,12 @@ pub struct Command {
         const tag = which();
 
         switch (tag) {
-            .DiscordCommand => return try DiscordCommand.exec(allocator),
-            .HelpCommand => return try HelpCommand.exec(allocator),
-            .ReservedCommand => return try ReservedCommand.exec(allocator),
+            .DiscordCommand => return DiscordCommand.exec(allocator)?,
+            .HelpCommand => return HelpCommand.exec(allocator)?,
+            .ReservedCommand => return ReservedCommand.exec(allocator)?,
             .InitCommand => {
                 const init_exec = InitCommand.exec;
-                return try init_exec(allocator, bun.argv[@min(2, bun.argv.len)..]);
+                return init_exec(allocator, bun.argv[@min(2, bun.argv.len)..])?;
             },
             .InfoCommand => {
                 @"bun info"(allocator, log)?;
@@ -760,7 +760,7 @@ pub struct Command {
 
                 if (ctx.positionals.len > 0) {
                     const run_exec = RunCommand.exec;
-                    if (try run_exec(ctx, { bin_dirs_only: false, log_errors: true, allow_fast_run_for_extensions: false })) {
+                    if (run_exec(ctx, { bin_dirs_only: false, log_errors: true, allow_fast_run_for_extensions: false })?) {
                         return;
                     }
 
@@ -821,7 +821,7 @@ pub struct Command {
                         Output.prettyln("<r><yellow>warn<r>: Filters are ignored for auto command", {});
                     }
                     const run_exec = RunCommand.exec;
-                    if (try run_exec(ctx, { bin_dirs_only: true, log_errors: !ctx.runtime_options.if_present, allow_fast_run_for_extensions: true })) {
+                    if (run_exec(ctx, { bin_dirs_only: true, log_errors: !ctx.runtime_options.if_present, allow_fast_run_for_extensions: true })?) {
                         return;
                     }
                     return;
@@ -1161,12 +1161,12 @@ pub struct Command {
             }
         }
 
-        try Install.Lockfile.Printer.print(
+        Install.Lockfile.Printer.print(
             ctx.allocator,
             ctx.log,
             ctx.args.entry_points[0],
             .yarn,
-        );
+        )?;
     }
 
     fn @"bun getcompletes"(allocator: std.mem.Allocator, log: *logger.Log)! {
@@ -1357,7 +1357,7 @@ pub struct Command {
             if (dash_dash_bun) {
                 bunx_args[1] = "--bun";
             }
-            bunx_args[1 + @as(usize, @intFromBool(dash_dash_bun))] = try BunxCommand.addCreatePrefix(allocator, template_name);
+            bunx_args[1 + @as(usize, @intFromBool(dash_dash_bun))] = BunxCommand.addCreatePrefix(allocator, template_name)?;
             let dst = bunx_args[2 + @as(usize, @intFromBool(dash_dash_bun)) ..];
             const srcs = args[template_name_start..];
             let di: usize = 0;

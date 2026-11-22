@@ -149,16 +149,16 @@ export class CopyFile {
             const st: *Store = _.store.?;
             st.deref();
         }
-        try promise.reject(globalThis, instance);
+        promise.reject(globalThis, instance)?;
     }
 
     pub fn then(*_, promise: *JSPromise): !void {
         this.source_store.?.deref();
         if (this.system_error != null) {
-            try this.reject(promise);
+            this.reject(promise)?;
             return;
         }
-        try promise.resolve(this.globalThis, .jsNumberFromUint64(this.read_len));
+        promise.resolve(this.globalThis, .jsNumberFromUint64(this.read_len))?;
     }
 
     pub fn run(*_) {

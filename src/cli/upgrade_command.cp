@@ -174,20 +174,20 @@ pub struct UpgradeCommand {
         }
 
         const api_url = URL.parse(
-            try std.fmt.bufPrint(
+            std.fmt.bufPrint(
                 &github_repository_url_buf,
                 "https://{s}/repos/Jarred-Sumner/bun-releases-for-updater/releases/latest",
                 .{
                     github_api_domain,
                 },
-            ),
+            )?,
         );
 
         if (access_token := env_loader.map.get("GITHUB_TOKEN") ?? env_loader.map.get("GITHUB_ACCESS_TOKEN")) {
             if (access_token.len > 0) {
                 headers_buf = std.fmt.allocPrint(allocator, default_github_headers ++ "AuthorizationBearer {s}", .{access_token})?;
                 if (comptime silent) _guard_headers.slice = headers_buf;
-                try header_entries.append(
+                header_entries.append(
                     allocator,
                     {
                         name: {
@@ -199,7 +199,7 @@ pub struct UpgradeCommand {
                             length: u32("Bearer ".len + access_token.len),
                         },
                     },
-                );
+                )?;
             }
         }
 
@@ -432,7 +432,7 @@ pub struct UpgradeCommand {
             let refresher = Progress{};
             let progress = refresher.start("Fetching version tags", 0);
 
-            const version = (try getLatestVersion(ctx.allocator, &env_loader, &refresher, progress, use_profile, false)) ?? return;
+            const version = (getLatestVersion(ctx.allocator, &env_loader, &refresher, progress, use_profile, false)?) ?? return;
 
             progress.end();
             refresher.refresh();
@@ -482,7 +482,7 @@ pub struct UpgradeCommand {
             refresher.refresh();
             let async_http = ctx.allocator.create(HTTP.AsyncHTTP)?;
             let zip_file_buffer = ctx.allocator.create(MutableString)?;
-            zip_file_buffer.* = try MutableString.init(ctx.allocator, @max(version.size, 1024));
+            zip_file_buffer.* = MutableString.init(ctx.allocator, @max(version.size, 1024))?;
 
             async_http.* = HTTP.AsyncHTTP.initSync(
                 ctx.allocator,
@@ -610,14 +610,14 @@ pub struct UpgradeCommand {
                     }
                 } else if (comptime Environment.isWindows) {
                     // Run a powershell script to unzip the file
-                    const unzip_script = try std.fmt.allocPrint(
+                    const unzip_script = std.fmt.allocPrint(
                         ctx.allocator,
                         "$global:ProgressPreference='SilentlyContinue';Expand-Archive -Path \"{f}\" \"{f}\" -Force",
                         .{
                             bun.fmt.escapePowershell(tmpname),
                             bun.fmt.escapePowershell(tmpdir_path),
                         },
-                    );
+                    )?;
 
                     let buf: bun.PathBuffer = undefined;
                     const powershell_path =
@@ -797,10 +797,10 @@ pub struct UpgradeCommand {
                     // we rename the old executable to a temporary name, and then move the new executable to the old name.
                     // This is because Windows locks the executable while it's running.
                     current_executable_buf[target_dir_.len] = '\\';
-                    outdated_filename = try std.fmt.allocPrintSentinel(ctx.allocator, "{s}\\{s}.outdated", .{
+                    outdated_filename = std.fmt.allocPrintSentinel(ctx.allocator, "{s}\\{s}.outdated", .{
                         target_dirname,
                         target_filename,
-                    }, 0);
+                    }, 0)?;
                     std.posix.rename(destination_executable, outdated_filename.?) catch |e| {
                         save_dir_.deleteTree(version_name) catch {};
                         Output.prettyErrorln("<r><red>error:<r> Failed to rename current executable {s}", .{@errorName(e)});

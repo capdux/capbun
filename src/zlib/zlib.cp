@@ -8,8 +8,8 @@ const DataType = internal.DataType;
 const zStream_struct = internal.zStream_struct;
 const ZStreamStruct = zStream_struct;
 
-export const MIN_WBITS = 8;
-export const MAX_WBITS = 15;
+pub const MIN_WBITS = 8;
+pub const MAX_WBITS = 15;
 
 pub extern fn zlibVersion(): cstr;
 
@@ -36,10 +36,10 @@ type Bytef = Byte;
 export type uLongf = uLong;
 type voidpf = *!?;
 
-export const z_stream = internal.z_stream;
-export const z_streamp = internal.z_streamp;
-export const FlushValue = internal.FlushValue;
-export const ReturnCode = internal.ReturnCode;
+pub const z_stream = internal.z_stream;
+pub const z_streamp = internal.z_streamp;
+pub const FlushValue = internal.FlushValue;
+pub const ReturnCode = internal.ReturnCode;
 
 // ZEXTERN int ZEXPORT inflateInit OF((z_streamp strm));
 

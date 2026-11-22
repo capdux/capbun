@@ -253,7 +253,7 @@ pub struct Parser {
             }
             break :brk .none;
         };
-        return { ast: try p.toAST(&parts, exports_kind, .none, "") };
+        return { ast: p.toAST(&parts, exports_kind, .none, "")? };
     }
 
     fn parse(*_): js_ast.Result! {
@@ -1089,32 +1089,32 @@ pub struct Parser {
 
                     let notes = ListManaged(logger.Data).init(p.allocator);
 
-                    try notes.append(logger.Data{
-                        text: try std.fmt.allocPrint(p.allocator, "Try require({f}) instead", .{bun.fmt.QuotedFormatter{ text: record.path.text }}),
-                    });
+                    notes.append(logger.Data{
+                        text: std.fmt.allocPrint(p.allocator, "Try require({f}) instead", .{bun.fmt.QuotedFormatter{ text: record.path.text }})?,
+                    })?;
 
                     if (uses_module_ref) {
-                        try notes.append(logger.Data{
+                        notes.append(logger.Data{
                             text: "This file is CommonJS because 'module' was used",
-                        });
+                        })?;
                     }
 
                     if (uses_exports_ref) {
-                        try notes.append(logger.Data{
+                        notes.append(logger.Data{
                             text: "This file is CommonJS because 'exports' was used",
-                        });
+                        })?;
                     }
 
                     if (p.has_top_level_return) {
-                        try notes.append(logger.Data{
+                        notes.append(logger.Data{
                             text: "This file is CommonJS because top-level return was used",
-                        });
+                        })?;
                     }
 
                     if (p.has_with_scope) {
-                        try notes.append(logger.Data{
+                        notes.append(logger.Data{
                             text: "This file is CommonJS because a \"with\" statement is used",
-                        });
+                        })?;
                     }
 
                     p.log.addRangeErrorWithNotes(p.source, record.range, "Cannot use import statement with CommonJS-only features", notes.items)?;
@@ -1422,7 +1422,7 @@ pub struct Parser {
         if (p.server_components_wrap_ref.isValid()) {
             const fw = p.options.framework ?? @panic("server components requires a framework configured, but none was set");
             const sc = fw.server_components.?;
-            try p.generateReactRefreshImport(
+            p.generateReactRefreshImport(
                 &before,
                 sc.server_runtime_import,
                 &.{
@@ -1432,7 +1432,7 @@ pub struct Parser {
                         enabled: true,
                     },
                 },
-            );
+            )?;
         }
 
         if (p.react_refresh.register_used || p.react_refresh.signature_used) {
@@ -1501,7 +1501,7 @@ pub struct Parser {
             }
         }
 
-        return js_ast.Result{ ast: try p.toAST(&parts, exports_kind, wrap_mode, hashbang) };
+        return js_ast.Result{ ast: p.toAST(&parts, exports_kind, wrap_mode, hashbang)? };
     }
 
     fn init(_options: Options, log: *logger.Log, source: *const logger.Source, define: *Define, allocator: Allocator): Parser! {

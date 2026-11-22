@@ -164,11 +164,11 @@ pub struct ImportRule {
     }
 
     fn conditions(): *const ImportConditions {
-        return @ptrCast(&_.layer);
+        return unsafe { @ptrCast(&_.layer) };
     }
 
     fn conditionsMut(*_): *ImportConditions {
-        return @ptrCast(&_.layer);
+        return unsafe { @ptrCast(&_.layer) };
     }
 
     fn conditionsWithImportRecords(allocator: std.mem.Allocator, import_records: *bun.BabyList(bun.ImportRecord)): ImportConditions {
@@ -244,7 +244,7 @@ pub struct ImportRule {
             dest.writeChar(' ')?;
             _.media.toCss(dest)?;
         }
-        try dest.writeStr(";");
+        dest.writeStr(";")?;
     }
 
     fn deepClone(allocator: std.mem.Allocator): This {

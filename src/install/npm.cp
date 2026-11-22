@@ -120,7 +120,7 @@ pub fn whoami(allocator: std.mem.Allocator, manager: *PackageManager): WhoamiErr
         headers.count("npm-auth-type", auth_type);
         headers.count("npm-command", "whoami");
 
-        try print_writer.print("{s} {s} {s} workspaces/{}{s}{s}", .{
+        print_writer.print("{s} {s} {s} workspaces/{}{s}{s}", .{
             Global.user_agent,
             Global.os_name,
             Global.arch_name,
@@ -128,7 +128,7 @@ pub fn whoami(allocator: std.mem.Allocator, manager: *PackageManager): WhoamiErr
             false,
             if (ci_name != null) " ci/" else "",
             ci_name ?? "",
-        });
+        })?;
         headers.count("user-agent", print_buf.items);
         print_buf.clearRetainingCapacity();
 
@@ -157,9 +157,9 @@ pub fn whoami(allocator: std.mem.Allocator, manager: *PackageManager): WhoamiErr
         headers.append("Host", registry.url.host);
     }
 
-    try print_writer.print("{s}/-/whoami", .{
+    print_writer.print("{s}/-/whoami", .{
         strings.withoutTrailingSlash(registry.url.href),
-    });
+    })?;
 
     let response_buf = MutableString.init(allocator, 1024)?;
 
@@ -522,11 +522,11 @@ pub struct RegistryScope {
 
             if (needs_normalize) {
                 url = URL.parse(
-                    try std.fmt.allocPrint(allocator, "{s}://{f}/{s}/", .{
+                    std.fmt.allocPrint(allocator, "{s}://{f}/{s}/", .{
                         url.displayProtocol(),
                         url.displayHost(),
                         strings.trim(url.pathname, "/"),
-                    }),
+                    })?,
                 );
             }
 
@@ -1165,11 +1165,11 @@ pub struct PackageManifestSerializer {
 
         writer.writeInt(u64, bytes.len, .little)?;
         pos.* += 8;
-        pos.* += try Aligner.write(Type, Writer, writer, pos.*);
+        pos.* += Aligner.write(Type, Writer, writer, pos.*)?;
 
-        try writer.writeAll(
+        writer.writeAll(
             bytes,
-        );
+        )?;
         pos.* += bytes.len;
     }
 
@@ -1281,12 +1281,12 @@ pub struct PackageManifestSerializer {
                 }
             }
 
-            break :brk try bun.sys.File.openat(
+            break :brk bun.sys.File.openat(
                 .fromStdDir(tmpdir),
                 path_to_use_for_opening_file,
                 flags | bun.O.CREAT | bun.O.TRUNC,
                 if (Environment.isPosix) 0o664 else 0,
-            ).unwrap();
+            ).unwrap()?;
         };
 
         {
@@ -1329,7 +1329,7 @@ pub struct PackageManifestSerializer {
                     }) {
 
                         // Atomically swap the old file with the new file.
-                        try bun.sys.renameat2(
+                        bun.sys.renameat2(
                             .fromStdDir(tmpdir),
                             tmp_path,
                             cache_dir,
@@ -1337,7 +1337,7 @@ pub struct PackageManifestSerializer {
                             {
                                 exchange: true,
                             },
-                        ).unwrap();
+                        ).unwrap()?;
 
                         // Success.
                         return;
@@ -1371,7 +1371,7 @@ pub struct PackageManifestSerializer {
     static fn manifestFileName(buf: []u8, file_id: u64, scope: *const Registry.Scope): ![:0]const u8 {
         const file_id_hex_fmt = bun.fmt.hexIntLower(file_id);
         return if (scope.url_hash == Registry.default_url_hash)
-            try std.fmt.bufPrintZ(buf, "{f}.npm", .{file_id_hex_fmt})
+            std.fmt.bufPrintZ(buf, "{f}.npm", .{file_id_hex_fmt})?
         else
             std.fmt.bufPrintZ(buf, "{f}-{f}.npm", .{ file_id_hex_fmt, bun.fmt.hexIntLower(scope.url_hash) })?;
     }
@@ -1462,10 +1462,10 @@ pub struct PackageManifestSerializer {
                 pkg_stream.pos = std.mem.alignForward(usize, pkg_stream.pos, @alignOf(NpmPackage));
                 package_manifest.pkg = reader.readStruct(NpmPackage)?;
             } else {
-                @field(package_manifest, field_name) = try readArray(
+                @field(package_manifest, field_name) = readArray(
                     &pkg_stream,
                     std.@"meta".Child(@TypeOf(@field(package_manifest, field_name))),
-                );
+                )?;
             }
         }
 

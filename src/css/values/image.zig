@@ -172,11 +172,9 @@ else => self.deepClone(allocator),
 
 pub fn getFallbacks(self: *Image, allocator: Allocator, targets: css.targets.Targets) css.SmallList(Image, 6) {
             const ColorFallbackKind = css.ColorFallbackKind;
-            _ = &ColorFallbackKind;
             const prefixes = self.getNecessaryPrefixes(targets);
             const fallbacks = self.getNecessaryFallbacks(targets);
             const SmallListImage = css.SmallList(Image, 6);
-            _ = &SmallListImage;
             var res = SmallListImage{  };
             _ = &res;
             var rgb: ?Image = (if (fallbacks.rgb) self.getFallback(allocator, ColorFallbackKind{ .rgb = true }) else null);

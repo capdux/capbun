@@ -327,7 +327,7 @@ pub fn SkipTypescript(
             } else {
                 p.lexer.expect(.t_open_paren)?;
                 if (comptime get_metadata) {
-                    result.* = try p.skipTypeScriptTypeWithMetadata(.lowest);
+                    result.* = p.skipTypeScriptTypeWithMetadata(.lowest)?;
                 } else {
                     p.skipTypeScriptType(.lowest)?;
                 }
@@ -465,12 +465,12 @@ pub fn SkipTypescript(
                             return;
                         }
 
-                        * = try p.skipTypeScriptTypeParameters({ allow_const_modifier: true });
+                        * = p.skipTypeScriptTypeParameters({ allow_const_modifier: true })?;
                         p.skipTypeScriptParenOrFnType(get_metadata, result)?;
                     },
                     .t_less_than => {
                         // "<T>() => Foo<T>"
-                        * = try p.skipTypeScriptTypeParameters({ allow_const_modifier: true });
+                        * = p.skipTypeScriptTypeParameters({ allow_const_modifier: true })?;
                         p.skipTypeScriptParenOrFnType(get_metadata, result)?;
                     },
                     .t_open_paren => {
@@ -649,7 +649,7 @@ pub fn SkipTypescript(
 
                         // "let foo: any \n <number>foo" must not become a single type
                         if (check_type_parameters && !p.lexer.has_newline_before) {
-                            * = try p.skipTypeScriptTypeArguments(false);
+                            * = p.skipTypeScriptTypeArguments(false)?;
                         }
                     },
                     .t_typeof => {
@@ -687,7 +687,7 @@ pub fn SkipTypescript(
                             }
 
                             if (!p.lexer.has_newline_before) {
-                                * = try p.skipTypeScriptTypeArguments(false);
+                                * = p.skipTypeScriptTypeArguments(false)?;
                             }
                         }
                     },
@@ -844,7 +844,7 @@ pub fn SkipTypescript(
 
                         // "{ <A extends B>(): c.d \n <E extends F>(): g.h }" must not become a single type
                         if (!p.lexer.has_newline_before) {
-                            * = try p.skipTypeScriptTypeArguments(false);
+                            * = p.skipTypeScriptTypeArguments(false)?;
                         }
                     },
                     .t_open_bracket => {
@@ -979,9 +979,9 @@ pub fn SkipTypescript(
                 }
 
                 // Type parameters come right after the optional mark
-                * = try p.skipTypeScriptTypeParameters({
+                * = p.skipTypeScriptTypeParameters({
                     allow_const_modifier: true,
-                });
+                })?;
 
                 switch (p.lexer.token) {
                     .t_colon => {
@@ -1117,13 +1117,13 @@ pub fn SkipTypescript(
 
                 // Only report an error for the first invalid modifier
                 if (invalid_modifier_range.len > 0) {
-                    try p.log.addRangeErrorFmt(
+                    p.log.addRangeErrorFmt(
                         p.source,
                         invalid_modifier_range,
                         p.allocator,
                         "The modifier \"{s}\" is not valid here",
                         .{p.source.textForRange(invalid_modifier_range)},
-                    );
+                    )?;
                 }
 
                 // expectIdentifier => Mandatory identifier (e.g. after "type Foo <in ___")
@@ -1168,10 +1168,10 @@ pub fn SkipTypescript(
                     .t_open_brace => {
                         // "export type {foo}"
                         // "export type {foo} from 'bar'"
-                        * = try p.parseExportClause();
+                        * = p.parseExportClause()?;
                         if (p.lexer.isContextualKeyword("from")) {
                             p.lexer.next()?;
-                            * = try p.parsePath();
+                            * = p.parsePath()?;
                         }
                         p.lexer.expectOrInsertSemicolon()?;
                         return;
@@ -1184,11 +1184,11 @@ pub fn SkipTypescript(
                         if (p.lexer.isContextualKeyword("as")) {
                             // "export type * as ns from 'path'"
                             p.lexer.next()?;
-                            * = try p.parseClauseAlias("export");
+                            * = p.parseClauseAlias("export")?;
                             p.lexer.next()?;
                         }
                         p.lexer.expectContextualKeyword("from")?;
-                        * = try p.parsePath();
+                        * = p.parsePath()?;
                         p.lexer.expectOrInsertSemicolon()?;
                         return;
                     },
@@ -1203,10 +1203,10 @@ pub fn SkipTypescript(
                 p.local_type_names.put(p.allocator, name, true) catch unreachable;
             }
 
-            * = try p.skipTypeScriptTypeParameters({
+            * = p.skipTypeScriptTypeParameters({
                 allow_in_out_variance_annotations: true,
                 allow_empty_type_parameters: true,
-            });
+            })?;
 
             p.lexer.expect(.t_equals)?;
             p.skipTypeScriptType(.lowest)?;
@@ -1221,10 +1221,10 @@ pub fn SkipTypescript(
                 p.local_type_names.put(p.allocator, name, true) catch unreachable;
             }
 
-            * = try p.skipTypeScriptTypeParameters({
+            * = p.skipTypeScriptTypeParameters({
                 allow_in_out_variance_annotations: true,
                 allow_empty_type_parameters: true,
-            });
+            })?;
 
             if (p.lexer.token == .t_extends) {
                 p.lexer.next()?;

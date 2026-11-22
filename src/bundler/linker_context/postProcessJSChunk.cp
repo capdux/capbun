@@ -622,13 +622,13 @@ pub fn postProcessJSChunk(ctx: GenerateChunkCtx, worker: *ThreadPool.Worker, chu
 
     if (c.options.source_maps != .none) {
         const can_have_shifts = chunk.intermediate_output == .pieces;
-        chunk.output_source_map = try c.generateSourceMapForChunk(
+        chunk.output_source_map = c.generateSourceMapForChunk(
             chunk.isolated_hash,
             worker,
             compile_results_for_source_map,
             c.resolver.opts.output_dir,
             can_have_shifts,
-        );
+        )?;
     }
     j_guard.ptr = null;
 }

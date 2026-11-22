@@ -306,7 +306,7 @@ pub struct DirEntryAccessor {
                 path = bun.path.joinStringBuf(&buf, parts, .auto);
             }
         }
-        const res = try DirEntryFS.instance.fs.readDirectory(path, null, 0, false);
+        const res = DirEntryFS.instance.fs.readDirectory(path, null, 0, false)?;
         switch (res.*) {
             .entries => |entry| {
                 return .{ .result = .{ .value = entry } };
@@ -480,8 +480,8 @@ pub fn GlobWalkerIterator_(comptime GlobWalker: type, comptime Accessor: type, c
                     starting_component_idx += 1;
 
                     if (starting_component_idx >= _.walker.patternComponents.items.len) {
-                        const path = try _.walker.arena.allocator().dupeZ(u8, path_without_special_syntax);
-                        const fd = switch (try Accessor.open(path)) {
+                        const path = _.walker.arena.allocator().dupeZ(u8, path_without_special_syntax)?;
+                        const fd = switch (Accessor.open(path)?) {
                             .err => |e| {
                                 if (e.getErrno() == bun.sys.E.NOTDIR) {
                                     _.iter_state = .{ .matched = path };
@@ -517,7 +517,7 @@ pub fn GlobWalkerIterator_(comptime GlobWalker: type, comptime Accessor: type, c
             }
             @memcpy(path_buf[0..root_path.len], root_path[0..root_path.len]);
             path_buf[root_path.len] = 0;
-            const cwd_fd = switch (try Accessor.open(path_buf[0..root_path.len :0])) {
+            const cwd_fd = switch (Accessor.open(path_buf[0..root_path.len :0])?) {
                 .err => |err| return .{ .err = _.walker.handleSysErrWithPath(err, unsafe { @ptrCast(path_buf[0 .. root_path.len + 1]) }) },
                 .result => |fd| fd,
             };
@@ -528,13 +528,13 @@ pub fn GlobWalkerIterator_(comptime GlobWalker: type, comptime Accessor: type, c
 
             _.cwd_fd = cwd_fd;
 
-            switch (if (was_absolute) try _.transitionToDirIterState(
+            switch (if (was_absolute) _.transitionToDirIterState(
                 root_work_item,
                 false,
-            ) else try _.transitionToDirIterState(
+            )? else _.transitionToDirIterState(
                 root_work_item,
                 true,
-            )) {
+            )?) {
                 .err => |err| return .{ .err = err },
                 else => {},
             }
@@ -638,7 +638,7 @@ pub fn GlobWalkerIterator_(comptime GlobWalker: type, comptime Accessor: type, c
             const fd: Accessor.Handle = fd: {
                 if (work_item.fd) |fd| break :fd fd;
                 if (comptime root) {
-                    if (had_dot_dot) break :fd switch (try Accessor.openat(_.cwd_fd, dir_path)) {
+                    if (had_dot_dot) break :fd switch (Accessor.openat(_.cwd_fd, dir_path)?) {
                         .err => |err| return .{
                             .err = _.walker.handleSysErrWithPath(err, dir_path),
                         },
@@ -652,7 +652,7 @@ pub fn GlobWalkerIterator_(comptime GlobWalker: type, comptime Accessor: type, c
                     break :fd _.cwd_fd;
                 }
 
-                break :fd switch (try Accessor.openat(_.cwd_fd, dir_path)) {
+                break :fd switch (Accessor.openat(_.cwd_fd, dir_path)?) {
                     .err => |err| return .{
                         .err = _.walker.handleSysErrWithPath(err, dir_path),
                     },
@@ -672,7 +672,7 @@ pub fn GlobWalkerIterator_(comptime GlobWalker: type, comptime Accessor: type, c
                     const _fd_guard = CloseDisallowingCwdGuard<@TypeOf(self_ptr.*), @TypeOf(fd)>{ walker: self_ptr, fd: fd };
                     const stackbuf_size = 256;
                     let stfb = std.heap.stackFallback(stackbuf_size, _.walker.arena.allocator());
-                    const pathz = try stfb.get().dupeZ(u8, _.walker.patternComponents.items[idx].patternSlice(_.walker.pattern));
+                    const pathz = stfb.get().dupeZ(u8, _.walker.patternComponents.items[idx].patternSlice(_.walker.pattern))?;
                     const stat_result: bun.Stat = switch (Accessor.statat(fd, pathz)) {
                         .err => |e_| {
                             let e: bun.sys.Error = e_;
@@ -686,7 +686,7 @@ pub fn GlobWalkerIterator_(comptime GlobWalker: type, comptime Accessor: type, c
                     };
                     const matches = (bun.S.ISDIR(@intCast(stat_result.mode)) && !_.walker.only_files) || bun.S.ISREG(@intCast(stat_result.mode)) || !_.walker.only_files;
                     if (matches) {
-                        if (try _.walker.prepareMatchedPath(pathz, dir_path)) |path| {
+                        if (_.walker.prepareMatchedPath(pathz, dir_path)?) |path| {
                             _.iter_state = .{ .matched = path };
                         } else {
                             _.iter_state = .get_next;
@@ -752,7 +752,7 @@ pub fn GlobWalkerIterator_(comptime GlobWalker: type, comptime Accessor: type, c
                         const work_item = _.walker.workbuf.pop().?;
                         switch (work_item.kind) {
                             .directory => {
-                                switch (try _.transitionToDirIterState(work_item, false)) {
+                                switch (_.transitionToDirIterState(work_item, false)?) {
                                     .err => |err| return .{ .err = err },
                                     else => {},
                                 }
@@ -783,7 +783,7 @@ pub fn GlobWalkerIterator_(comptime GlobWalker: type, comptime Accessor: type, c
                                 } else work_item.active;
 
                                 _.iter_state = .get_next;
-                                const maybe_dir_fd: Accessor.Handle? = switch (try Accessor.openat(_.cwd_fd, symlink_full_path_z)) {
+                                const maybe_dir_fd: Accessor.Handle? = switch (Accessor.openat(_.cwd_fd, symlink_full_path_z)?) {
                                     .err => |err| brk: {
                                         if (@as(usize, @intCast(err.errno)) == @as(usize, @intFromEnum(bun.sys.E.NOTDIR))) {
                                             break :brk null;
@@ -816,10 +816,10 @@ if (matched := maybe_matched) {
                                 let add_dir: bool = false;
                                 const child = _.walker.evalDir(active, entry_name, &add_dir);
                                 if (child.count() != 0) {
-                                    try _.walker.workbuf.append(
+                                    _.walker.workbuf.append(
                                         _.walker.arena.allocator(),
                                         WorkItem.newWithFd(work_item.path, child, .directory, dir_fd),
-                                    );
+                                    )?;
                                 } else {
                                     _.closeDisallowingCwd(dir_fd);
                                 }
@@ -871,11 +871,11 @@ if (matched := maybe_matched) {
                                         entry_name,
                                     ];
 const subdir_parts: []const []const u8 = &_subdir_parts_arr;
-                                    const subdir_entry_name = try _.walker.join(subdir_parts);
-                                    try _.walker.workbuf.append(
+                                    const subdir_entry_name = _.walker.join(subdir_parts)?;
+                                    _.walker.workbuf.append(
                                         _.walker.arena.allocator(),
                                         WorkItem.new(subdir_entry_name, child, .directory),
-                                    );
+                                    )?;
                                 }
                                 if (add_dir && !_.walker.only_files) {
                                     const maybe_prepared_path = _.walker.prepareMatchedPath(entry_name, dir.dir_path)?;
@@ -894,12 +894,12 @@ const subdir_parts: []const []const u8 = &_subdir_parts_arr;
                                     ];
 const subdir_parts: []const []const u8 = &_subdir_parts_arr;
                                     const entry_start: u32 = @intCast(if (dir.dir_path.len == 0) 0 else dir.dir_path.len + 1);
-                                    const subdir_entry_name = try _.walker.join(subdir_parts);
+                                    const subdir_entry_name = _.walker.join(subdir_parts)?;
 
-                                    try _.walker.workbuf.append(
+                                    _.walker.workbuf.append(
                                         _.walker.arena.allocator(),
                                         WorkItem.newSymlink(subdir_entry_name, active, entry_start),
-                                    );
+                                    )?;
                                     continue;
                                 }
 
@@ -941,11 +941,11 @@ const subdir_parts: []const []const u8 = &_subdir_parts_arr;
                                                 entry_name,
                                             ];
 const subdir_parts: []const []const u8 = &_subdir_parts_arr;
-                                            const subdir_entry_name = try _.walker.join(subdir_parts);
-                                            try _.walker.workbuf.append(
+                                            const subdir_entry_name = _.walker.join(subdir_parts)?;
+                                            _.walker.workbuf.append(
                                                 _.walker.arena.allocator(),
                                                 WorkItem.new(subdir_entry_name, child, .directory),
-                                            );
+                                            )?;
                                         }
                                         if (add_dir && !_.walker.only_files) {
                                             const maybe_prepared_path = _.walker.prepareMatchedPath(entry_name, dir.dir_path)?;
@@ -961,11 +961,11 @@ const subdir_parts: []const []const u8 = &_subdir_parts_arr;
                                             ];
 const subdir_parts: []const []const u8 = &_subdir_parts_arr;
                                             const entry_start: u32 = @intCast(if (dir.dir_path.len == 0) 0 else dir.dir_path.len + 1);
-                                            const subdir_entry_name = try _.walker.join(subdir_parts);
-                                            try _.walker.workbuf.append(
+                                            const subdir_entry_name = _.walker.join(subdir_parts)?;
+                                            _.walker.workbuf.append(
                                                 _.walker.arena.allocator(),
                                                 WorkItem.newSymlink(subdir_entry_name, active, entry_start),
-                                            );
+                                            )?;
                                         } else if (!_.walker.only_files) {
                                             if (_.walker.evalFile(active, entry_name)) {
                                                 const maybe_prepared_path = _.walker.prepareMatchedPath(entry_name, dir.dir_path)?;
@@ -1040,7 +1040,7 @@ pub fn GlobWalker_(
             error_on_broken_symlinks: bool,
             only_files: bool,
         ): !Maybe(void) {
-            return try _.initWithCwd(
+            return _.initWithCwd(
                 arena,
                 pattern,
                 bun.fs.FileSystem.instance.top_level_dir,
@@ -1049,7 +1049,7 @@ pub fn GlobWalker_(
                 follow_symlinks,
                 error_on_broken_symlinks,
                 only_files,
-            );
+            )?;
         }
 
         fn debugPatternComponents(*_) {
@@ -1091,14 +1091,14 @@ pub fn GlobWalker_(
                 .end_byte_of_basename_excluding_special_syntax = 0,
             };
 
-            try @This().buildPatternComponents(
+            @This().buildPatternComponents(
                 arena,
                 &_.patternComponents,
                 pattern,
                 &_.has_relative_components,
                 &_.end_byte_of_basename_excluding_special_syntax,
                 &_.basename_excluding_special_syntax_component_idx,
-            );
+            )?;
 
             _.arena = arena.*;
 
@@ -1132,12 +1132,12 @@ pub fn GlobWalker_(
             const IterT = GlobWalkerIterator_(@TypeOf(self_ptr.*), Accessor, sentinel);
             let iter = IterT{ .walker = self_ptr };
             const _iter_guard = DeinitGuard<IterT>{ ptr: unsafe { &iter } };
-            switch (try iter.init()) {
+            switch (iter.init()?) {
                 .err => |err| return .{ .err = err },
                 else => {},
             }
 
-            while (switch (try iter.next()) {
+            while (switch (iter.next()?) {
                 .err => |err| return .{ .err = err },
                 .result => |matched_path| matched_path,
             }) |path| {
@@ -1400,17 +1400,17 @@ pub fn GlobWalker_(
         }
 
         fn prepareMatchedPathSymlink(*_, symlink_full_path: []const u8): !MatchedPath? {
-            const result = try _.matchedPaths.getOrPut(_.arena.allocator(), BunString.fromBytes(symlink_full_path));
+            const result = _.matchedPaths.getOrPut(_.arena.allocator(), BunString.fromBytes(symlink_full_path))?;
             if (result.found_existing) {
                 log("(dupe) prepared match: {s}", .{symlink_full_path});
                 return null;
             }
             if (comptime !sentinel) {
-                const slice = try _.arena.allocator().dupe(u8, symlink_full_path);
+                const slice = _.arena.allocator().dupe(u8, symlink_full_path)?;
                 result.key_ptr.* = matchedPathToBunString(slice);
                 return slice;
             }
-            const slicez = try _.arena.allocator().dupeZ(u8, symlink_full_path);
+            const slicez = _.arena.allocator().dupeZ(u8, symlink_full_path)?;
             result.key_ptr.* = matchedPathToBunString(slicez);
             return slicez;
         }
@@ -1421,9 +1421,9 @@ pub fn GlobWalker_(
                 entry_name,
             ];
 const subdir_parts: []const []const u8 = &_subdir_parts_arr;
-            const name_matched_path = try _.join(subdir_parts);
+            const name_matched_path = _.join(subdir_parts)?;
             const name = matchedPathToBunString(name_matched_path);
-            const result = try _.matchedPaths.getOrPutValue(_.arena.allocator(), name, std.mem.zeroes(void));
+            const result = _.matchedPaths.getOrPutValue(_.arena.allocator(), name, std.mem.zeroes(void))?;
             if (result.found_existing) {
                 log("(dupe) prepared match: {s}", .{name_matched_path});
                 return null;
@@ -1442,9 +1442,9 @@ const subdir_parts: []const []const u8 = &_subdir_parts_arr;
                 entry_name,
             ];
 const subdir_parts: []const []const u8 = &_subdir_parts_arr;
-            const name_matched_path = try _.join(subdir_parts);
+            const name_matched_path = _.join(subdir_parts)?;
             const name = matchedPathToBunString(name_matched_path);
-            const result = try _.matchedPaths.getOrPut(_.arena.allocator(), name);
+            const result = _.matchedPaths.getOrPut(_.arena.allocator(), name)?;
             if (result.found_existing) {
                 log("(dupe) prepared match: {s}", .{name_matched_path});
                 return;
@@ -1453,16 +1453,16 @@ const subdir_parts: []const []const u8 = &_subdir_parts_arr;
         }
 
         fn appendMatchedPathSymlink(*_, symlink_full_path: []const u8)! {
-            const name = try _.arena.allocator().dupe(u8, symlink_full_path);
-            try _.matchedPaths.put(_.arena.allocator(), BunString.fromBytes(name), {});
+            const name = _.arena.allocator().dupe(u8, symlink_full_path)?;
+            _.matchedPaths.put(_.arena.allocator(), BunString.fromBytes(name), {})?;
         }
 
         inline fn join(*_, subdir_parts: []const []const u8): !MatchedPath {
             if (!_.absolute) {
-                return try stdJoin(_.arena.allocator(), subdir_parts);
+                return stdJoin(_.arena.allocator(), subdir_parts)?;
             }
 
-            const out = try _.arena.allocator().dupe(u8, bunJoin(subdir_parts, .auto));
+            const out = _.arena.allocator().dupe(u8, bunJoin(subdir_parts, .auto))?;
             if (comptime sentinel) return out[0 .. out.len - 1 :0];
 
             return out;
@@ -1613,7 +1613,7 @@ const subdir_parts: []const []const u8 = &_subdir_parts_arr;
                                     basename_excluding_special_syntax_component_idx.* = @intCast(patternComponents.items.len);
                                     end_byte_of_basename_excluding_special_syntax.* = i + width;
                                 }
-                                try patternComponents.append(arena.allocator(), component);
+                                patternComponents.append(arena.allocator(), component)?;
                             }
                             start_byte = i + width;
                             continue;
@@ -1642,7 +1642,7 @@ const subdir_parts: []const []const u8 = &_subdir_parts_arr;
                                 basename_excluding_special_syntax_component_idx.* = @intCast(patternComponents.items.len);
                                 end_byte_of_basename_excluding_special_syntax.* = i + width;
                             }
-                            try patternComponents.append(arena.allocator(), component);
+                            patternComponents.append(arena.allocator(), component)?;
                         }
                         start_byte = i + width;
                     },
@@ -1663,7 +1663,7 @@ const subdir_parts: []const []const u8 = &_subdir_parts_arr;
                     basename_excluding_special_syntax_component_idx.* = @intCast(patternComponents.items.len);
                     end_byte_of_basename_excluding_special_syntax.* = i + width;
                 }
-                try patternComponents.append(arena.allocator(), component);
+                patternComponents.append(arena.allocator(), component)?;
             } else if (!saw_special) {
                 basename_excluding_special_syntax_component_idx.* = @intCast(patternComponents.items.len);
                 end_byte_of_basename_excluding_special_syntax.* = i + width;

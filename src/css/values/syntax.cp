@@ -51,7 +51,7 @@ pub enum SyntaxString {
     pub static fn toCss(this_ptr: *const @This(), dest: *Printer): PrintErr!void {
         dest.writeChar('"')?;
         switch (this_ptr.*) {
-            .universal => try dest.writeChar('*'),
+            .universal => dest.writeChar('*')?,
             .components => |components| {
                 let first = true;
                 for (component of components.items) {
@@ -122,7 +122,7 @@ pub enum SyntaxString {
 
     /// Parses a value according to the syntax grammar.
     pub fn parseValue(input: *css.Parser): Result(ParsedComponent) {
-        switch (_.*) {
+        switch (_) {
             .universal => return { result: ParsedComponent{
                 token_list: switch (css.css_properties.custom.TokenList.parse(
                     input,
@@ -401,21 +401,21 @@ pub enum SyntaxComponentKind {
 
     pub static fn toCss(this_ptr: *const @This(), dest: *Printer): PrintErr!void {
         return switch (this_ptr.*) {
-            .length => try dest.writeStr("<length>"),
-            .number => try dest.writeStr("<number>"),
-            .percentage => try dest.writeStr("<percentage>"),
-            .length_percentage => try dest.writeStr("<length-percentage>"),
-            .color => try dest.writeStr("<color>"),
-            .image => try dest.writeStr("<image>"),
-            .url => try dest.writeStr("<url>"),
-            .integer => try dest.writeStr("<integer>"),
-            .angle => try dest.writeStr("<angle>"),
-            .time => try dest.writeStr("<time>"),
-            .resolution => try dest.writeStr("<resolution>"),
-            .transform_function => try dest.writeStr("<transform-function>"),
-            .transform_list => try dest.writeStr("<transform-list>"),
-            .custom_ident => try dest.writeStr("<custom-ident>"),
-            .literal => |l| try dest.writeStr(l),
+            .length => dest.writeStr("<length>")?,
+            .number => dest.writeStr("<number>")?,
+            .percentage => dest.writeStr("<percentage>")?,
+            .length_percentage => dest.writeStr("<length-percentage>")?,
+            .color => dest.writeStr("<color>")?,
+            .image => dest.writeStr("<image>")?,
+            .url => dest.writeStr("<url>")?,
+            .integer => dest.writeStr("<integer>")?,
+            .angle => dest.writeStr("<angle>")?,
+            .time => dest.writeStr("<time>")?,
+            .resolution => dest.writeStr("<resolution>")?,
+            .transform_function => dest.writeStr("<transform-function>")?,
+            .transform_list => dest.writeStr("<transform-list>")?,
+            .custom_ident => dest.writeStr("<custom-ident>")?,
+            .literal => |l| dest.writeStr(l)?,
         };
     }
 
@@ -479,19 +479,19 @@ pub enum ParsedComponent {
 
     pub static fn toCss(this_ptr: *const @This(), dest: *Printer): PrintErr!void {
         return switch (this_ptr.*) {
-            .length => |*v| try v.toCss(dest),
-            .number => |*v| try CSSNumberFns.toCss(v, dest),
-            .percentage => |*v| try v.toCss(dest),
-            .length_percentage => |*v| try v.toCss(dest),
-            .color => |*v| try v.toCss(dest),
-            .image => |*v| try v.toCss(dest),
-            .url => |*v| try v.toCss(dest),
-            .integer => |*v| try CSSIntegerFns.toCss(v, dest),
-            .angle => |*v| try v.toCss(dest),
-            .time => |*v| try v.toCss(dest),
-            .resolution => |*v| try v.toCss(dest),
-            .transform_function => |*v| try v.toCss(dest),
-            .transform_list => |*v| try v.toCss(dest),
+            .length => |*v| v.toCss(dest)?,
+            .number => |*v| CSSNumberFns.toCss(v, dest)?,
+            .percentage => |*v| v.toCss(dest)?,
+            .length_percentage => |*v| v.toCss(dest)?,
+            .color => |*v| v.toCss(dest)?,
+            .image => |*v| v.toCss(dest)?,
+            .url => |*v| v.toCss(dest)?,
+            .integer => |*v| CSSIntegerFns.toCss(v, dest)?,
+            .angle => |*v| v.toCss(dest)?,
+            .time => |*v| v.toCss(dest)?,
+            .resolution => |*v| v.toCss(dest)?,
+            .transform_function => |*v| v.toCss(dest)?,
+            .transform_list => |*v| v.toCss(dest)?,
             .custom_ident v => CustomIdentFns.toCss(v, dest)?,
             .literal => |*v| css.serializer.serializeIdentifier(v.v, dest) catch return dest.addFmtError(),
             .repeated => |*r| {
@@ -499,8 +499,8 @@ pub enum ParsedComponent {
                 for (*component of r.components.items) {
                     if (!first) {
                         switch (r.multiplier) {
-                            .comma => try dest.delim(',', false),
-                            .space => try dest.writeChar(' '),
+                            .comma => dest.delim(',', false)?,
+                            .space => dest.writeChar(' ')?,
                             .none => unreachable,
                         }
                     } else {
@@ -509,7 +509,7 @@ pub enum ParsedComponent {
                     component.toCss(dest)?;
                 }
             },
-            .token_list => |*t| try t.toCss(dest, false),
+            .token_list => |*t| t.toCss(dest, false)?,
         };
     }
 

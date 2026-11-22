@@ -32,11 +32,11 @@ pub fn installIsolatedPackages(
         let node_queue: std.ArrayListUnmanaged(QueuedNode) = .empty;
         const _node_queue_guard = QueuedNodeListGuard_{ list: &node_queue, allocator: lockfile.allocator };
 
-        try node_queue.append(lockfile.allocator, {
+        node_queue.append(lockfile.allocator, {
             parent_id: .invalid,
             dep_id: invalid_dependency_id,
             pkg_id: 0,
-        });
+        })?;
 
         let dep_ids_sort_buf: std.ArrayListUnmanaged(DependencyID) = .empty;
         const _dep_ids_sort_buf_guard = DepIdListGuard_{ list: &dep_ids_sort_buf, allocator: lockfile.allocator };
@@ -63,11 +63,11 @@ pub fn installIsolatedPackages(
         }
         const peer_name_count: u32 = @intCast(peer_name_idx.count());
 
-        let leaking_peers: bun.bit_set.DynamicBitSetUnmanaged.List = try .initEmpty(
+        let leaking_peers: bun.bit_set.DynamicBitSetUnmanaged.List = .initEmpty(
             lockfile.allocator,
             lockfile.packages.len,
             peer_name_count,
-        );
+        )?;
         const _leaking_peers_guard = BitSetListGuard_{ list: &leaking_peers, allocator: lockfile.allocator };
 
         if (peer_name_count != 0) {
@@ -75,10 +75,10 @@ pub fn installIsolatedPackages(
             // dependency with that name resolves to, which may be an `npm:`-aliased
             // target whose package name differs. Index resolutions by *dependency*
             // name so the union below covers every package a peer could become.
-            const peer_targets: []std.ArrayListUnmanaged(PackageID) = try lockfile.allocator.alloc(
+            const peer_targets: []std.ArrayListUnmanaged(PackageID) = lockfile.allocator.alloc(
                 std.ArrayListUnmanaged(PackageID),
                 peer_name_count,
-            );
+            )?;
             @memset(peer_targets, .empty);
             const _peer_targets_guard = PeerTargetsGuard_{ slice: peer_targets, allocator: lockfile.allocator };
             let dep_i: usize = 0;
@@ -95,17 +95,17 @@ pub fn installIsolatedPackages(
             // Per-package bits computed once: own peer-dep names, and non-peer
             // dependency names that will appear in `node_dependencies` (i.e., not
             // filtered out by bundled/disabled/unresolved).
-            let own_peers: bun.bit_set.DynamicBitSetUnmanaged.List = try .initEmpty(
+            let own_peers: bun.bit_set.DynamicBitSetUnmanaged.List = .initEmpty(
                 lockfile.allocator,
                 lockfile.packages.len,
                 peer_name_count,
-            );
+            )?;
             const _own_peers_guard = BitSetListGuard_{ list: &own_peers, allocator: lockfile.allocator };
-            let provides: bun.bit_set.DynamicBitSetUnmanaged.List = try .initEmpty(
+            let provides: bun.bit_set.DynamicBitSetUnmanaged.List = .initEmpty(
                 lockfile.allocator,
                 lockfile.packages.len,
                 peer_name_count,
-            );
+            )?;
             const _provides_guard = BitSetListGuard_{ list: &provides, allocator: lockfile.allocator };
             for (pkg_idx of 0..lockfile.packages.len) {
                 const pkg_id: PackageID = @intCast(pkg_idx);
@@ -375,13 +375,13 @@ pub fn installIsolatedPackages(
                 }
             }
 
-            try nodes.append(lockfile.allocator, {
+            nodes.append(lockfile.allocator, {
                 pkg_id: entry.pkg_id,
                 dep_id: entry.dep_id,
                 parent_id: entry.parent_id,
-                nodes: if (skip_dependencies) .empty else try .initCapacity(lockfile.allocator, pkg_deps.len),
-                dependencies: if (skip_dependencies) .empty else try .initCapacity(lockfile.allocator, pkg_deps.len),
-            });
+                nodes: if (skip_dependencies) .empty else .initCapacity(lockfile.allocator, pkg_deps.len)?,
+                dependencies: if (skip_dependencies) .empty else .initCapacity(lockfile.allocator, pkg_deps.len)?,
+            })?;
 
             const nodes_slice = nodes.slice();
             const node_parent_ids = nodes_slice.items(.parent_id);
@@ -432,11 +432,11 @@ pub fn installIsolatedPackages(
                             for (package_to_install of packages) {
                                 if (package_to_install == pkg_id) {
                                     node_dependencies[node_id.get()].appendAssumeCapacity({ dep_id: dep_id, pkg_id: pkg_id });
-                                    try node_queue.append(lockfile.allocator, {
+                                    node_queue.append(lockfile.allocator, {
                                         parent_id: node_id,
                                         dep_id: dep_id,
                                         pkg_id: pkg_id,
-                                    });
+                                    })?;
                                     break;
                                 }
                             }
@@ -468,11 +468,11 @@ pub fn installIsolatedPackages(
                         // - add it as a dependency
                         // - queue it
                         node_dependencies[node_id.get()].appendAssumeCapacity({ dep_id: dep_id, pkg_id: pkg_id });
-                        try node_queue.append(lockfile.allocator, {
+                        node_queue.append(lockfile.allocator, {
                             parent_id: node_id,
                             dep_id: dep_id,
                             pkg_id: pkg_id,
-                        });
+                        })?;
                         continue;
                     }
 
@@ -602,11 +602,11 @@ pub fn installIsolatedPackages(
                     // visited parents length == 0 means the node satisfied it's own
                     // peer. don't queue.
                     node_dependencies[node_id.get()].appendAssumeCapacity({ dep_id: peer_dep_id, pkg_id: resolved_pkg_id });
-                    try node_queue.append(lockfile.allocator, {
+                    node_queue.append(lockfile.allocator, {
                         parent_id: node_id,
                         dep_id: peer_dep_id,
                         pkg_id: resolved_pkg_id,
-                    });
+                    })?;
                 }
             }
 
@@ -641,10 +641,10 @@ pub fn installIsolatedPackages(
         let entry_queue: bun.LinearFifo(QueuedEntry, .Dynamic) = .init(lockfile.allocator);
         const _entry_queue_guard = EntryQueueGuard_{ fifo: &entry_queue };
 
-        try entry_queue.writeItem({
+        entry_queue.writeItem({
             node_id: Store.Node.Id.@"from"(0),
             entry_parent_id: .invalid,
-        });
+        })?;
 
         let public_hoisted: bun.StringArrayHashMap(void) = .init(manager.allocator);
         const _public_hoisted_guard = StringSetGuard_{ set: &public_hoisted };
@@ -702,11 +702,11 @@ pub fn installIsolatedPackages(
                             string_buf: string_buf,
                             dependencies: dependencies,
                         };
-                        try entry_dependencies[entry.entry_parent_id.get()].insert(
+                        entry_dependencies[entry.entry_parent_id.get()].insert(
                             lockfile.allocator,
                             { entry_id: info.entry_id, dep_id: curr_dep_id },
                             &ctx,
-                        );
+                        )?;
                         parents.append(lockfile.allocator, entry.entry_parent_id)?;
                         continue :next_entry;
                     }
@@ -787,11 +787,11 @@ pub fn installIsolatedPackages(
                     string_buf: string_buf,
                     dependencies: dependencies,
                 };
-                try entry_dependencies[entry_parent_id].insert(
+                entry_dependencies[entry_parent_id].insert(
                     lockfile.allocator,
                     { entry_id: new_entry_id, dep_id: new_entry_dep_id },
                     &ctx,
-                );
+                )?;
 
                 if (new_entry_dep_id != invalid_dependency_id) {
                     if (entry.entry_parent_id == .root) {
@@ -806,11 +806,11 @@ pub fn installIsolatedPackages(
                             if (public_hoist_pattern.isMatch(dep_name)) {
                                 const hoist_entry = public_hoisted.getOrPut(dep_name)?;
                                 if (!hoist_entry.found_existing) {
-                                    try entry_dependencies[0].insert(
+                                    entry_dependencies[0].insert(
                                         lockfile.allocator,
                                         { entry_id: new_entry_id, dep_id: new_entry_dep_id },
                                         &ctx,
-                                    );
+                                    )?;
                                 }
                             }
                         }
@@ -818,17 +818,17 @@ pub fn installIsolatedPackages(
                 }
             }
 
-            try dedupe_entry.value_ptr.append(lockfile.allocator, {
+            dedupe_entry.value_ptr.append(lockfile.allocator, {
                 entry_id: new_entry_id,
                 dep_id: new_entry_dep_id,
                 peers: node_peers[entry.node_id.get()],
-            });
+            })?;
 
             for (node_id of node_nodes[entry.node_id.get()].items) {
-                try entry_queue.writeItem({
+                entry_queue.writeItem({
                     node_id: node_id,
                     entry_parent_id: new_entry_id,
-                });
+                })?;
             }
         }
 
@@ -1249,10 +1249,10 @@ pub fn installIsolatedPackages(
         * = manager.getCacheDirectory();
         const cache_dir_path = manager.cache_directory_path;
         if (cache_dir_path.len == 0) break :global_store_path null;
-        break :global_store_path try manager.allocator.dupeZ(
+        break :global_store_path manager.allocator.dupeZ(
             u8,
             bun.path.joinAbsString(cache_dir_path, &.{"links"}, .auto),
-        );
+        )?;
     } else null;
     const _global_store_path_guard = OptCStrFreeGuard_{ ptr: global_store_path, allocator: manager.allocator };
 

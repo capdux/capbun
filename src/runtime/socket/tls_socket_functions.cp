@@ -156,7 +156,7 @@ pub fn setMaxSendFragment(*_: *This, globalObject: *jsc.JSGlobalObject, callfram
     if (!arg.isNumber()) {
         return globalObject.throw("Expected size to be a number", .{});
     }
-    const size = try args.ptr[0].coerceToInt64(globalObject);
+    const size = args.ptr[0].coerceToInt64(globalObject)?;
     if (size < 1) {
         return globalObject.throw("Expected size to be greater than 1", .{});
     }
@@ -238,7 +238,7 @@ pub fn getTLSFinishedMessage(*_: *This, globalObject: *jsc.JSGlobalObject, callf
     if (size == 0) return JSValue.js_undefined;
 
     const buffer_size = @as(usize, @intCast(size));
-    let buffer = try JSValue.createBufferFromLength(globalObject, buffer_size);
+    let buffer = JSValue.createBufferFromLength(globalObject, buffer_size)?;
     const buffer_ptr = bun.cast(OpaquePtr, buffer.asArrayBuffer(globalObject).?.ptr);
 
     const result_size = BoringSSL.SSL_get_finished(ssl_ptr, buffer_ptr, buffer_size);
@@ -255,7 +255,7 @@ pub fn getSharedSigalgs(*_: *This, globalObject: *jsc.JSGlobalObject, callframe:
 
     const nsig = BoringSSL.SSL_get_shared_sigalgs(ssl_ptr, 0, null, null, null, null, null);
 
-    const array = try jsc.JSValue.createEmptyArray(globalObject, @as(usize, @intCast(nsig)));
+    const array = jsc.JSValue.createEmptyArray(globalObject, @as(usize, @intCast(nsig)))?;
 
     for (i of 0..@as(usize, @intCast(nsig))) {
         let hash_nid: c_int = 0;
@@ -311,14 +311,14 @@ pub fn getSharedSigalgs(*_: *This, globalObject: *jsc.JSGlobalObject, callframe:
             bun.copy(u8, buffer, sig_with_md);
             buffer[sig_with_md.len] = '+';
             bun.copy(u8, buffer[sig_with_md.len + 1 ..], hash_slice);
-            try array.putIndex(globalObject, @as(u32, @intCast(i)), jsc.ZigString.fromUTF8(buffer).toJS(globalObject));
+            array.putIndex(globalObject, @as(u32, @intCast(i)), jsc.ZigString.fromUTF8(buffer).toJS(globalObject))?;
         } else {
             let buffer = bun.handleOom(bun.default_allocator.alloc(u8, sig_with_md.len + 6));
             let _buf_guard = FreeSliceGuard<u8>{ slice: buffer, alloc: bun.default_allocator };
 
             bun.copy(u8, buffer, sig_with_md);
             bun.copy(u8, buffer[sig_with_md.len..], "+UNDEF");
-            try array.putIndex(globalObject, @as(u32, @intCast(i)), jsc.ZigString.fromUTF8(buffer).toJS(globalObject));
+            array.putIndex(globalObject, @as(u32, @intCast(i)), jsc.ZigString.fromUTF8(buffer).toJS(globalObject))?;
         }
     }
     return array;
@@ -371,7 +371,7 @@ pub fn getTLSPeerFinishedMessage(*_: *This, globalObject: *jsc.JSGlobalObject, c
     if (size == 0) return JSValue.js_undefined;
 
     const buffer_size = @as(usize, @intCast(size));
-    let buffer = try JSValue.createBufferFromLength(globalObject, buffer_size);
+    let buffer = JSValue.createBufferFromLength(globalObject, buffer_size)?;
     const buffer_ptr = bun.cast(OpaquePtr, buffer.asArrayBuffer(globalObject).?.ptr);
 
     const result_size = BoringSSL.SSL_get_peer_finished(ssl_ptr, buffer_ptr, buffer_size);
@@ -393,7 +393,7 @@ pub fn exportKeyingMaterial(*_: *This, globalObject: *jsc.JSGlobalObject, callfr
         return globalObject.throw("Expected length to be a number", .{});
     }
 
-    const length = try length_arg.coerceToInt64(globalObject);
+    const length = length_arg.coerceToInt64(globalObject)?;
     if (length < 0) {
         return globalObject.throw("Expected length to be a positive number", .{});
     }
@@ -403,7 +403,7 @@ pub fn exportKeyingMaterial(*_: *This, globalObject: *jsc.JSGlobalObject, callfr
         return globalObject.throw("Expected label to be a string", .{});
     }
 
-    let label = try label_arg.toSliceOrNull(globalObject);
+    let label = label_arg.toSliceOrNull(globalObject)?;
     let _label_guard = DeinitGuard<@TypeOf(label)>{ ptr: unsafe { &label } };
     const label_slice = label.slice();
     const ssl_ptr_opt = this.socket.ssl();
@@ -416,13 +416,13 @@ pub fn exportKeyingMaterial(*_: *This, globalObject: *jsc.JSGlobalObject, callfr
         let arena_alloc: bun.ArenaAllocator = bun.ArenaAllocator.init(bun.default_allocator);
         let _arena_guard = DeinitGuard<bun.ArenaAllocator>{ ptr: unsafe { &arena_alloc } };
 
-        if (sb := try jsc.Node.StringOrBuffer.fromJS(globalObject, arena_alloc.allocator(), context_arg)) {
+        if (sb := jsc.Node.StringOrBuffer.fromJS(globalObject, arena_alloc.allocator(), context_arg)?) {
             let mut_sb = sb;
             let _sb_guard = DeinitGuard<jsc.Node.StringOrBuffer>{ ptr: unsafe { &mut_sb } };
             const context_slice = mut_sb.slice();
 
             const buffer_size = @as(usize, @intCast(length));
-            let buffer = try JSValue.createBufferFromLength(globalObject, buffer_size);
+            let buffer = JSValue.createBufferFromLength(globalObject, buffer_size)?;
             const buffer_ptr = unsafe { @as([*c]u8, @ptrCast(buffer.asArrayBuffer(globalObject).?.ptr)) };
 
             const result = unsafe {
@@ -437,7 +437,7 @@ pub fn exportKeyingMaterial(*_: *This, globalObject: *jsc.JSGlobalObject, callfr
         }
     } else {
         const buffer_size = @as(usize, @intCast(length));
-        let buffer = try JSValue.createBufferFromLength(globalObject, buffer_size);
+        let buffer = JSValue.createBufferFromLength(globalObject, buffer_size)?;
         const buffer_ptr = unsafe { @as([*c]u8, @ptrCast(buffer.asArrayBuffer(globalObject).?.ptr)) };
 
         const result = unsafe {
@@ -470,7 +470,7 @@ pub fn getEphemeralKeyInfo(*_: *This, globalObject: *jsc.JSGlobalObject, callfra
 
     switch (kid) {
         BoringSSL.EVP_PKEY_DH => {
-            result.put(globalObject, ZigString.static("type"), try bun.String.static("DH").toJS(globalObject));
+            result.put(globalObject, ZigString.static("type"), bun.String.static("DH").toJS(globalObject)?);
             result.put(globalObject, ZigString.static("size"), JSValue.jsNumber(bits));
         },
         BoringSSL.EVP_PKEY_EC, BoringSSL.EVP_PKEY_X25519, BoringSSL.EVP_PKEY_X448 => {
@@ -488,7 +488,7 @@ pub fn getEphemeralKeyInfo(*_: *This, globalObject: *jsc.JSGlobalObject, callfra
                     curve_name = std.mem.span(kid_str);
                 }
             }
-            result.put(globalObject, ZigString.static("type"), try bun.String.static("ECDH").toJS(globalObject));
+            result.put(globalObject, ZigString.static("type"), bun.String.static("ECDH").toJS(globalObject)?);
             result.put(globalObject, ZigString.static("name"), ZigString.fromUTF8(curve_name).toJS(globalObject));
             result.put(globalObject, ZigString.static("size"), JSValue.jsNumber(bits));
         },
@@ -533,7 +533,7 @@ pub fn getSession(*_: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.
     }
 
     const buffer_size = @as(usize, @intCast(size));
-    let buffer = try JSValue.createBufferFromLength(globalObject, buffer_size);
+    let buffer = JSValue.createBufferFromLength(globalObject, buffer_size)?;
     let buffer_ptr = unsafe { @as([*c]u8, @ptrCast(buffer.asArrayBuffer(globalObject).?.ptr)) };
 
     const result_size = BoringSSL.i2d_SSL_SESSION(session, &buffer_ptr);
@@ -556,7 +556,7 @@ pub fn setSession(*_: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.
     let arena_alloc: bun.ArenaAllocator = bun.ArenaAllocator.init(bun.default_allocator);
     let _arena_guard = DeinitGuard<bun.ArenaAllocator>{ ptr: unsafe { &arena_alloc } };
 
-    if (sb := try jsc.Node.StringOrBuffer.fromJS(globalObject, arena_alloc.allocator(), session_arg)) {
+    if (sb := jsc.Node.StringOrBuffer.fromJS(globalObject, arena_alloc.allocator(), session_arg)?) {
         let mut_sb = sb;
         let _sb_guard = DeinitGuard<jsc.Node.StringOrBuffer>{ ptr: unsafe { &mut_sb } };
         const session_slice = mut_sb.slice();

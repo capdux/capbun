@@ -209,7 +209,7 @@ pub union(enum) AnyRoute {
         } else return null;
         let path_string = bun.String.fromJS(path_val, init_ctx.global)?;
         const _guard_path_string = DerefGuard<bun.String>{ ptr: unsafe { &path_string } };
-        let path = jsc.Node.PathOrFileDescriptor{ .path = try jsc.Node.PathLike.fromBunString(init_ctx.global, &path_string, false, bun.default_allocator) };
+        let path = jsc.Node.PathOrFileDescriptor{ .path = jsc.Node.PathLike.fromBunString(init_ctx.global, &path_string, false, bun.default_allocator)? };
         const _guard_path = DeinitGuard<jsc.Node.PathOrFileDescriptor>{ ptr: unsafe { &path } };
 
         // Construct the route by stripping paths above the root.
@@ -239,19 +239,19 @@ pub union(enum) AnyRoute {
         let builder = std.array_list.Managed(u8).init(bun.default_allocator);
         const _guard_builder = DeinitGuard<@TypeOf(builder)>{ ptr: unsafe { &builder } };
         if (!strings.hasPrefixComptime(relative_path, "/")) {
-            try builder.append('/');
+            builder.append('/')?;
         }
 
-        try builder.appendSlice(relative_path);
+        builder.appendSlice(relative_path)?;
 
         const headers_opt = (argument.get(init_ctx.global, "headers"))?;
         if (headers_opt == null) return null;
         const headers_val = headers_opt.?;
-        const fetch_headers = try jsc.WebCore.FetchHeaders.createFromJS(init_ctx.global, headers_val);
+        const fetch_headers = jsc.WebCore.FetchHeaders.createFromJS(init_ctx.global, headers_val)?;
         const _guard_fetch_headers = OptDerefGuard<jsc.WebCore.FetchHeaders>{ ptr: fetch_headers };
         if (init_ctx.global.hasException()) return error.JSError;
 
-        const route = try fromOptions(init_ctx.global, fetch_headers, &path);
+        const route = fromOptions(init_ctx.global, fetch_headers, &path)?;
 
         if (is_index_route) {
             return route;
@@ -261,11 +261,11 @@ pub union(enum) AnyRoute {
         methods.insert(.GET);
         methods.insert(.HEAD);
 
-        try init_ctx.user_routes.append(.{
-            .path = try builder.toOwnedSlice(),
+        init_ctx.user_routes.append(.{
+            .path = builder.toOwnedSlice()?,
             .route = route,
             .method = methods,
-        });
+        })?;
         return null;
     }
 
@@ -337,7 +337,7 @@ pub union(enum) AnyRoute {
             }
         }
 
-        if (html_route := try bundledHTMLManifestFromJS(argument, init_ctx)) {
+        if (html_route := bundledHTMLManifestFromJS(argument, init_ctx)?) {
             return html_route;
         }
 
@@ -352,13 +352,13 @@ pub union(enum) AnyRoute {
         argument: jsc.JSValue,
         init_ctx: *ServerInitContext,
     ): bun.JSError!AnyRoute? {
-        if (html_route := try AnyRoute.htmlRouteFromJS(argument, init_ctx)) {
+        if (html_route := AnyRoute.htmlRouteFromJS(argument, init_ctx)?) {
             return html_route;
         }
 
         if (argument.isObject()) {
             const FrameworkRouter = bun.bake.FrameworkRouter;
-            if (dir := try argument.getOptional(global, "dir", bun.String.Slice)) {
+            if (dir := argument.getOptional(global, "dir", bun.String.Slice)?) {
                 let alloc = init_ctx.js_string_allocations;
                 const relative_root = alloc.track(dir);
 
@@ -372,7 +372,7 @@ pub union(enum) AnyRoute {
                     return global.throwInvalidArguments("To mount a directory, make sure the path ends in `/*`", .{});
                 }
 
-                try init_ctx.framework_router_list.append(.{
+                init_ctx.framework_router_list.append(.{
                     .root = relative_root,
                     .style = style,
 
@@ -386,7 +386,7 @@ pub union(enum) AnyRoute {
                     .ignore_dirs = &.{ "node_modules", ".git" },
                     .extensions = &.{ ".tsx", ".jsx" },
                     .allow_layouts = true,
-                });
+                })?;
                 _guard_style.ptr = null;
 
                 const limit = std.math.maxInt(@typeInfo(FrameworkRouter.Type.Index).@"enum".tag_type);
@@ -397,7 +397,7 @@ pub union(enum) AnyRoute {
             }
         }
 
-        if (file_route := try FileRoute.fromJS(global, argument)) {
+        if (file_route := FileRoute.fromJS(global, argument)?) {
             return .{ .file = file_route };
         }
         const static_route_opt = StaticRoute.fromJS(global, argument)?;
@@ -471,14 +471,14 @@ struct ServePlugins {
         while (true) {
             switch (_.state) {
                 .unqueued => {
-                    try _.loadAndResolvePlugins(global);
+                    _.loadAndResolvePlugins(global)?;
                     continue; // could jump to any branch if synchronously resolved
                 },
                 .pending => |*pending| {
                     switch (cb) {
                         .html_bundle_route => |route| {
                             route.ref();
-                            try pending.html_bundle_routes.append(bun.default_allocator, route);
+                            pending.html_bundle_routes.append(bun.default_allocator, route)?;
                         },
                         .dev_server => |server| {
                             assert(pending.dev_server == null or pending.dev_server == server); // one dev server per server
@@ -517,8 +517,8 @@ struct ServePlugins {
             bunstring_array[i] = bun.String.init(raw_plugin);
             i += 1;
         }
-        const plugin_js_array = try bun.String.toJSArray(global, bunstring_array);
-        const bunfig_folder_bunstr = try bun.String.createUTF8ForJS(global, bunfig_folder);
+        const plugin_js_array = bun.String.toJSArray(global, bunstring_array)?;
+        const bunfig_folder_bunstr = bun.String.createUTF8ForJS(global, bunfig_folder)?;
 
         _.state = .{ .pending = .{
             .promise = jsc.JSPromise.Strong.init(global),
@@ -528,7 +528,7 @@ struct ServePlugins {
         } };
 
         global.bunVM().eventLoop().enter();
-        const result = try bun.jsc.fromJSHostCall(global, @src(), JSBundlerPlugin__loadAndResolvePluginsForServe, .{ plugin, plugin_js_array, bunfig_folder_bunstr });
+        const result = bun.jsc.fromJSHostCall(global, @src(), JSBundlerPlugin__loadAndResolvePluginsForServe, .{ plugin, plugin_js_array, bunfig_folder_bunstr })?;
         global.bunVM().eventLoop().exit();
 
         // handle the case where js synchronously throws an error
@@ -546,7 +546,7 @@ struct ServePlugins {
                         _.ref();
                         const promise_value = promise.asValue();
                         _.state.pending.promise.strong.set(global, promise_value);
-                        try promise_value.then(global, _, onResolveImpl, onRejectImpl);
+                        promise_value.then(global, _, onResolveImpl, onRejectImpl)?;
                         return;
                     },
                     .fulfilled => {
@@ -803,7 +803,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                 return globalThis.throwInvalidArguments("subscriberCount requires a topic name as a string", .{});
             }
 
-            let topic = try arguments.ptr[0].toSlice(globalThis, bun.default_allocator);
+            let topic = arguments.ptr[0].toSlice(globalThis, bun.default_allocator)?;
             const _guard_topic = DeinitGuard<@TypeOf(topic)>{ ptr: unsafe { &topic } };
 
             if (topic.len == 0) {
@@ -880,7 +880,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
         }
 
         pub fn appendStaticRoute(this: *ThisServer, path: []const u8, route: AnyRoute, method: HTTP.Method.Optional) !void {
-            try this.config.appendStaticRoute(path, route, method);
+            this.config.appendStaticRoute(path, route, method)?;
         }
 
         pub fn publish(this: *ThisServer, globalThis: *jsc.JSGlobalObject, topic: ZigString, message_value: JSValue, compress_value: ?JSValue) bun.JSError!JSValue {
@@ -913,7 +913,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             }
 
             {
-                let js_string = try message_value.toJSString(globalThis);
+                let js_string = message_value.toJSString(globalThis)?;
                 const view = js_string.view(globalThis);
                 let slice = view.toSlice(bun.default_allocator);
                 const _guard_slice = DeinitGuard<@TypeOf(slice)>{ ptr: unsafe { &slice } };
@@ -970,7 +970,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                             return globalThis.throwInvalidArguments("upgrade options must be an object", .{});
                         }
 
-                        if (try opts.fastGet(globalThis, .data)) |headers_value| {
+                        if (opts.fastGet(globalThis, .data)?) |headers_value| {
                             data_value = headers_value;
                         }
 
@@ -978,14 +978,14 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                             return error.JSError;
                         }
 
-                        if (try opts.fastGet(globalThis, .headers)) |headers_value| {
+                        if (opts.fastGet(globalThis, .headers)?) |headers_value| {
                             if (headers_value.isEmptyOrUndefinedOrNull()) {
                                 break :getter;
                             }
 
                             let fetch_headers_to_use: *WebCore.FetchHeaders = headers_value.as(WebCore.FetchHeaders) orelse brk: {
                                 if (headers_value.isObject()) {
-                                    if (try WebCore.FetchHeaders.createFromJS(globalThis, headers_value)) |fetch_headers| {
+                                    if (WebCore.FetchHeaders.createFromJS(globalThis, headers_value)?) |fetch_headers| {
                                         _guard_fetch_headers_to_deref.ptr = fetch_headers;
                                         break :brk fetch_headers;
                                     }
@@ -1137,7 +1137,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                         return globalThis.throwInvalidArguments("upgrade options must be an object", .{});
                     }
 
-                    if (try opts.fastGet(globalThis, .data)) |headers_value| {
+                    if (opts.fastGet(globalThis, .data)?) |headers_value| {
                         data_value = headers_value;
                     }
 
@@ -1145,14 +1145,14 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                         return error.JSError;
                     }
 
-                    if (try opts.fastGet(globalThis, .headers)) |headers_value| {
+                    if (opts.fastGet(globalThis, .headers)?) |headers_value| {
                         if (headers_value.isEmptyOrUndefinedOrNull()) {
                             break :getter;
                         }
 
                         fetch_headers_to_use = headers_value.as(WebCore.FetchHeaders) orelse brk: {
                             if (headers_value.isObject()) {
-                                if (try WebCore.FetchHeaders.createFromJS(globalThis, headers_value)) |fetch_headers| {
+                                if (WebCore.FetchHeaders.createFromJS(globalThis, headers_value)?) |fetch_headers| {
                                     _guard_fetch_headers_to_deref.ptr = fetch_headers;
                                     break :brk fetch_headers;
                                 }
@@ -1220,7 +1220,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                 }
 
                 if (cookies_to_write) |cookies| {
-                    try cookies.write(globalThis, uws.ResponseKind.from(ssl_enabled, false), unsafe { @ptrCast(resp) });
+                    cookies.write(globalThis, uws.ResponseKind.from(ssl_enabled, false), unsafe { @ptrCast(resp) })?;
                 }
             }
 
@@ -1356,7 +1356,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                 // Static routes will get cleaned up when the server is stopped
                 return false;
             }
-            this.config = try this.config.cloneForReloadingStaticRoutes();
+            this.config = this.config.cloneForReloadingStaticRoutes()?;
             this.app.?.clearRoutes();
             if (comptime has_h3) if (this.h3_app) |h3a| h3a.clearRoutes();
             const route_list_value = this.setRoutes();
@@ -1380,11 +1380,11 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             const _guard_args_slice = DeinitGuard<jsc.CallFrame.ArgumentsSlice>{ ptr: unsafe { &args_slice } };
 
             let new_config: ServerConfig = .{};
-            try ServerConfig.fromJS(globalThis, &new_config, &args_slice, .{
+            ServerConfig.fromJS(globalThis, &new_config, &args_slice, .{
                 .allow_bake_config = false,
                 .is_fetch_required = true,
                 .has_user_routes = this.user_routes.items.len > 0,
-            });
+            })?;
             if (globalThis.hasException()) {
                 new_config.deinit();
                 return error.JSError;
@@ -1420,7 +1420,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             // TODO: set User-Agent header
             // TODO: unify with fetch() implementation.
             if (first_arg.isString()) {
-                let url_zig_str = try arguments[0].toSlice(ctx, bun.default_allocator);
+                let url_zig_str = arguments[0].toSlice(ctx, bun.default_allocator)?;
                 const _guard_url_zig_str = DeinitGuard<@TypeOf(url_zig_str)>{ ptr: unsafe { &url_zig_str } };
                 const temp_url_str = url_zig_str.slice();
 
@@ -1443,21 +1443,21 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
 
                 if (arguments.len >= 2 and arguments[1].isObject()) {
                     let opts = arguments[1];
-                    if (try opts.fastGet(ctx, .method)) |method_| {
-                        let slice_ = try method_.toSlice(ctx, bun.default_allocator);
+                    if (opts.fastGet(ctx, .method)?) |method_| {
+                        let slice_ = method_.toSlice(ctx, bun.default_allocator)?;
                         const _guard_slice = DeinitGuard<@TypeOf(slice_)>{ ptr: unsafe { &slice_ } };
                         method = HTTP.Method.which(slice_.slice()) orelse method;
                     }
 
-                    if (try opts.fastGet(ctx, .headers)) |headers_| {
+                    if (opts.fastGet(ctx, .headers)?) |headers_| {
                         if (headers_.as(WebCore.FetchHeaders)) |headers__| {
                             headers = headers__;
-                        } else if (try WebCore.FetchHeaders.createFromJS(ctx, headers_)) |headers__| {
+                        } else if (WebCore.FetchHeaders.createFromJS(ctx, headers_)?) |headers__| {
                             headers = headers__;
                         }
                     }
 
-                    if (try opts.fastGet(ctx, .body)) |body__| {
+                    if (opts.fastGet(ctx, .body)?) |body__| {
                         if (Blob.get(ctx, body__, true, false)) |new_blob| {
                             body = .{ .Blob = new_blob };
                         } else |_| {
@@ -1473,12 +1473,12 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                     method,
                 );
             } else if (first_arg.as(Request)) |request_| {
-                try request_.cloneInto(
+                request_.cloneInto(
                     &existing_request,
                     bun.default_allocator,
                     ctx,
                     false,
-                );
+                )?;
             } else {
                 const fetch_error = jsc.WebCore.Fetch.fetch_type_error_strings.get(bun.jsc.C.JSValueGetType(ctx, first_arg.asRef()));
                 const err = ctx.toTypeError(.INVALID_ARG_TYPE, "{s}", .{fetch_error});
@@ -1646,14 +1646,14 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                 },
             };
 
-            const buf = try std.fmt.allocPrint(default_allocator, "{f}", .{fmt});
+            const buf = std.fmt.allocPrint(default_allocator, "{f}", .{fmt})?;
             const _guard_buf = FreeGuard<@TypeOf(buf)>{ alloc: default_allocator, slice: buf };
 
             return bun.String.cloneUTF8(buf);
         }
 
         pub fn getURL(this: *ThisServer, globalThis: *JSGlobalObject) bun.OOM!jsc.JSValue {
-            let url = try this.getURLAsString();
+            let url = this.getURLAsString()?;
             const _guard_url = DerefGuard<bun.String>{ ptr: unsafe { &url } };
 
             return url.toJSDOMURL(globalThis);
@@ -1953,19 +1953,19 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
         }
 
         pub fn init(config: *ServerConfig, global: *JSGlobalObject) bun.JSOOM!*ThisServer {
-            const base_url = try bun.default_allocator.dupe(u8, strings.trim(config.base_url.href, "/"));
+            const base_url = bun.default_allocator.dupe(u8, strings.trim(config.base_url.href, "/"))?;
             let _guard_base_url = OptFreeGuard<@TypeOf(base_url)>{ alloc: bun.default_allocator, slice: base_url };
 
             let dev_server: ?*bun.bake.DevServer = null;
             if (config.bake != null) {
-                dev_server = try bun.bake.DevServer.init(.{
+                dev_server = bun.bake.DevServer.init(.{
                     .arena = config.bake.?.arena.allocator(),
                     .root = config.bake.?.root,
                     .framework = config.bake.?.framework,
                     .bundler_options = config.bake.?.bundler_options,
                     .vm = global.bunVM(),
                     .broadcast_console_log_from_browser_to_server = config.broadcast_console_log_from_browser_to_server_for_bake,
-                });
+                })?;
             }
             let _guard_dev_server = OptDeinitGuard<bun.bake.DevServer>{ ptr: dev_server };
 

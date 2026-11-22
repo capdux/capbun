@@ -491,7 +491,7 @@ pub fn listen(globalObject: *jsc.JSGlobalObject, opts: JSValue): bun.JSError!JSV
 
     const vm = jsc.VirtualMachine.get();
 
-    let socket_config = try SocketConfig.fromJS(vm, opts, globalObject, true);
+    let socket_config = SocketConfig.fromJS(vm, opts, globalObject, true)?;
     const _guard_socket_config = SocketConfigGuard{ ptr: &socket_config };
 
     const handlers = &socket_config.handlers;
@@ -618,7 +618,7 @@ pub fn listen(globalObject: *jsc.JSGlobalObject, opts: JSValue): bun.JSError!JSV
         const err = globalObject.createErrorInstance("Failed to listen at {s}", .{hostname});
         log("Failed to listen {d}", .{errno});
         if (errno != 0) {
-            err.put(globalObject, ZigString.static("syscall"), try bun.String.createUTF8ForJS(globalObject, "listen"));
+            err.put(globalObject, ZigString.static("syscall"), bun.String.createUTF8ForJS(globalObject, "listen")?);
             err.put(globalObject, ZigString.static("errno"), JSValue.jsNumber(errno));
             err.put(globalObject, ZigString.static("address"), ZigString.initUTF8(hostname).toJS(globalObject));
             if (p := port) err.put(globalObject, ZigString.static("port"), .jsNumber(p));
@@ -714,7 +714,7 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: (*TCPSock
     }
     const vm = globalObject.bunVM();
 
-    let socket_config = try SocketConfig.fromJS(vm, opts, globalObject, false);
+    let socket_config = SocketConfig.fromJS(vm, opts, globalObject, false)?;
     const _guard_socket_config = SocketConfigGuard{ ptr: &socket_config };
 
     const handlers = &socket_config.handlers;
@@ -730,7 +730,7 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: (*TCPSock
 
     let connection: UnixOrHost = undefined;
     let has_fd = false;
-    if (fd_ := try opts.getTruthy(globalObject, "fd")) {
+    if (fd_ := opts.getTruthy(globalObject, "fd")?) {
         if (fd_.isNumber()) {
             connection = .{ .fd = fd_.asFileDescriptor() };
             has_fd = true;
@@ -749,9 +749,9 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: (*TCPSock
     let owned_ssl_ctx: (*BoringSSL.SSL_CTX)? = null;
     if (ssl_enabled) {
         let native_sc: (*SecureContext)? = null;
-        if (tls_js := try opts.getTruthy(globalObject, "tls")) {
+        if (tls_js := opts.getTruthy(globalObject, "tls")?) {
             if (tls_js.isObject()) {
-                if (sc_js := try tls_js.getTruthy(globalObject, "secureContext")) {
+                if (sc_js := tls_js.getTruthy(globalObject, "secureContext")?) {
                     native_sc = SecureContext.fromJS(sc_js);
                 }
             }

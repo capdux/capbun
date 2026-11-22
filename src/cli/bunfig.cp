@@ -99,7 +99,7 @@ pub struct BunfigParser {
                     return _.parseRegistryObject(obj);
                 },
                 else => {
-                    try _.addError(expr.loc, "Expected registry to be a URL string or an object");
+                    _.addError(expr.loc, "Expected registry to be a URL string or an object")?;
                     return std.mem.zeroes(api.NpmRegistry);
                 },
             }
@@ -137,7 +137,7 @@ pub struct BunfigParser {
                 while (item := array.next()) {
                     _.expectString(item)?;
                     if (item.data.e_string.len() > 0)
-                        preloads.appendAssumeCapacity(try item.data.e_string.string(allocator));
+                        preloads.appendAssumeCapacity(item.data.e_string.string(allocator)?);
                 }
                 _.ctx.preloads = preloads.items;
             } else if (expr.data == .e_string) {
@@ -591,7 +591,7 @@ pub struct BunfigParser {
                             },
                             .e_string => |str| {
                                 install.ca = {
-                                    str: try str.stringCloned(allocator),
+                                    str: str.stringCloned(allocator)?,
                                 };
                             },
                             else => {
@@ -1214,7 +1214,7 @@ pub struct BunfigParser {
 
                         _.bunfig.external = externals;
                     },
-                    else => try _.addError(expr.loc, "Expected string or array"),
+                    else => _.addError(expr.loc, "Expected string or array")?,
                 }
             }
 
@@ -1303,18 +1303,18 @@ pub struct Bunfig {
 
         const expr = if (strings.eqlComptime(source.path.name.ext[1..], "toml")) TOML.parse(source, ctx.log, allocator, true) catch |e| {
             if (ctx.log.errors + ctx.log.warnings == log_count) {
-                try ctx.log.addErrorOpts("Failed to parse", {
+                ctx.log.addErrorOpts("Failed to parse", {
                     source: source,
                     redact_sensitive_information: true,
-                });
+                })?;
             }
             return e;
         } else JSONParser.parseTSConfig(source, ctx.log, allocator, true) catch |e| {
             if (ctx.log.errors + ctx.log.warnings == log_count) {
-                try ctx.log.addErrorOpts("Failed to parse", {
+                ctx.log.addErrorOpts("Failed to parse", {
                     source: source,
                     redact_sensitive_information: true,
-                });
+                })?;
             }
             return e;
         };

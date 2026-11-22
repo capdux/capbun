@@ -852,9 +852,9 @@ pub struct Resolver {
     static fn flushDebugLogs(r: *ThisResolver, flush_mode: DebugLogs.FlushMode)! {
         if (*debug := r.debug_logs) {
             if (flush_mode == DebugLogs.FlushMode.fail) {
-                try r.log.addRangeDebugWithNotes(null, logger.Range{ .loc = logger.Loc{} }, debug.what, try debug.notes.toOwnedSlice());
+                r.log.addRangeDebugWithNotes(null, logger.Range{ .loc = logger.Loc{} }, debug.what, debug.notes.toOwnedSlice()?)?;
             } else if (@intFromEnum(r.log.level) <= @intFromEnum(logger.Log.Level.verbose)) {
-                try r.log.addVerboseWithNotes(null, logger.Loc.Empty, debug.what, try debug.notes.toOwnedSlice());
+                r.log.addVerboseWithNotes(null, logger.Loc.Empty, debug.what, debug.notes.toOwnedSlice()?)?;
             }
         }
     }
@@ -1305,7 +1305,7 @@ pub struct Resolver {
                         if (!query.entry.cache.fd.isValid() && store_fd) {
                             buf[out.len] = 0;
                             const span = buf[0..out.len :0];
-                            let file: bun.FD = .fromStdFile(try std.fs.openFileAbsoluteZ(span, { mode: .read_only }));
+                            let file: bun.FD = .fromStdFile(std.fs.openFileAbsoluteZ(span, { mode: .read_only })?);
                             query.entry.cache.fd = file;
                             Fs.FileSystem.setMaxFd(file.native());
                         }
@@ -2533,7 +2533,7 @@ pub struct Resolver {
         // which gets overwritten on the next auto-install resolution. `dirInfoUncached` stores
         // its `path` argument directly as `DirInfo.abs_path` in the permanent `dir_cache`, so
         // pass the interned copy from `DirEntry.dir` (always backed by `DirnameStore`) instead.
-        try r.dirInfoUncached(
+        r.dirInfoUncached(
             dir_info_ptr,
             dir_entries_option.entries.dir,
             dir_entries_option,
@@ -2545,7 +2545,7 @@ pub struct Resolver {
             allocators.NotFound,
             open_dir,
             package_id,
-        );
+        )?;
         return dir_info_ptr;
     }
 
@@ -2823,14 +2823,14 @@ pub struct Resolver {
     ): !(*TSConfigJSON)? {
         // Since tsconfig.json is cached permanently, in our DirEntries cache
         // we must use the global allocator
-        let entry = try r.caches.fs.readFileWithAllocator(
+        let entry = r.caches.fs.readFileWithAllocator(
             bun.default_allocator,
             r.fs,
             file,
             dirname_fd,
             false,
             null,
-        );
+        )?;
         const _guard_entry_fd = CloseFDGuard<@TypeOf(entry)>{ ptr: &entry };
 
         // The file name needs to be persistent because it can have errors
@@ -3242,9 +3242,9 @@ pub struct Resolver {
                 new_entry.fd = if (r.store_fd) open_dir else .invalid;
                 let dir_entries_ptr = in_place ?? allocator.create(Fs.FileSystem.DirEntry) catch unreachable;
                 dir_entries_ptr.* = new_entry;
-                dir_entries_option = try rfs.entries.put(&cached_dir_entry_result, {
+                dir_entries_option = rfs.entries.put(&cached_dir_entry_result, {
                     entries: dir_entries_ptr,
-                });
+                })?;
                 bun.fs.debug("readdir({f}, {s}) = {d}", .{ open_dir, dir_path, dir_entries_ptr.data.count() });
             }
 
@@ -3252,7 +3252,7 @@ pub struct Resolver {
             // This is important so that browser_scope has a valid index.
             const dir_info_ptr = r.dir_cache.put(&queue_top.result, DirInfo{})?;
 
-            try r.dirInfoUncached(
+            r.dirInfoUncached(
                 dir_info_ptr,
                 dir_path,
                 dir_entries_option,
@@ -3262,7 +3262,7 @@ pub struct Resolver {
                 top_parent.index,
                 open_dir,
                 null,
-            );
+            )?;
 
             if (queue_slice.len == 0) {
                 return dir_info_ptr;

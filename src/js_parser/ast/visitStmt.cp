@@ -280,15 +280,15 @@ fn VisitStmtVisitors(
                         const temp_id = p.generateTempRef("default_export");
                         p.current_scope.generated.append(p.allocator, temp_id)?;
 
-                        try stmts.append(Stmt.alloc(S.Local, {
+                        stmts.append(Stmt.alloc(S.Local, {
                             kind: .k_const,
-                            decls: try G.Decl.List.fromSlice(p.allocator, &.{
+                            decls: G.Decl.List.fromSlice(p.allocator, &.{
                                 {
                                     binding: Binding.alloc(p.allocator, B.Identifier{ ref: temp_id }, stmt.loc),
                                     value: data.value.expr,
                                 },
-                            }),
-                        }, stmt.loc));
+                            })?,
+                        }, stmt.loc))?;
 
                         data.value = { expr: .initIdentifier(temp_id, stmt.loc) };
 
@@ -413,12 +413,12 @@ fn VisitStmtVisitors(
 
                                 stmts.append(Stmt.alloc(S.Local, {
                                     kind: .k_const,
-                                    decls: try G.Decl.List.fromSlice(p.allocator, &.{
+                                    decls: G.Decl.List.fromSlice(p.allocator, &.{
                                         {
                                             binding: Binding.alloc(p.allocator, B.Identifier{ ref: ref_to_use }, stmt.loc),
                                             value: data.value.expr,
                                         },
-                                    }),
+                                    })?,
                                 }, stmt.loc)) catch |e| bun.handleOom(e);
 
                                 data.value = { expr: .initIdentifier(ref_to_use, stmt.loc) };
@@ -566,17 +566,17 @@ fn VisitStmtVisitors(
                     const name = data.func.name.?;
                     // From the inner scope, have code reference the wrapped function.
                     data.func.name = null;
-                    try stmts.append(p.s(S.Local{
+                    stmts.append(p.s(S.Local{
                         kind: .k_var,
                         is_export: true,
-                        decls: try G.Decl.List.fromSlice(p.allocator, &.{{
+                        decls: G.Decl.List.fromSlice(p.allocator, &.{{
                             binding: p.b(B.Identifier{ ref: name_ref }, name.loc),
                             value: p.wrapValueForServerComponentReference(
                                 p.newExpr(E.Function{ func: data.func }, stmt.loc),
                                 original_name,
                             ),
-                        }}),
-                    }, stmt.loc));
+                        }})?,
+                    }, stmt.loc))?;
                 } else {
                     bun.handleOom(stmts.append(stmt.*));
                 }
@@ -590,9 +590,9 @@ fn VisitStmtVisitors(
                 if (react_hook_data != null) {
                     const hook = &react_hook_data.?;
                     stmts.append(p.getReactRefreshHookSignalDecl(hook.signature_cb))?;
-                    try stmts.append(p.s(S.SExpr{
+                    stmts.append(p.s(S.SExpr{
                         value: p.getReactRefreshHookSignalInit(hook, Expr.initIdentifier(name_ref, logger.Loc.Empty)),
-                    }, logger.Loc.Empty));
+                    }, logger.Loc.Empty))?;
                 }
 
                 if (p.current_scope == p.module_scope) {
@@ -1534,7 +1534,7 @@ fn VisitStmtVisitors(
                 value_stmts.appendAssumeCapacity(p.s(S.SExpr{ value: expr }, expr.loc));
             }
             value_exprs.deinit();
-            try p.generateClosureForTypeScriptNamespaceOrEnum(
+            p.generateClosureForTypeScriptNamespaceOrEnum(
                 stmts,
                 stmt.loc,
                 data.is_export,
@@ -1543,7 +1543,7 @@ fn VisitStmtVisitors(
                 data.arg,
                 value_stmts.items,
                 all_values_are_pure,
-            );
+            )?;
             return;
         }
         static fn s_namespace(p: *P, stmts: *ListManaged(Stmt), stmt: *Stmt, data: *S.Namespace)! {
@@ -1575,7 +1575,7 @@ fn VisitStmtVisitors(
             p.popScope();
             p.enclosing_namespace_arg_ref = old_enclosing_namespace_arg_ref;
 
-            try p.generateClosureForTypeScriptNamespaceOrEnum(
+            p.generateClosureForTypeScriptNamespaceOrEnum(
                 stmts,
                 stmt.loc,
                 data.is_export,
@@ -1584,7 +1584,7 @@ fn VisitStmtVisitors(
                 data.arg,
                 prepend_list.items,
                 false,
-            );
+            )?;
             return;
         }
     };

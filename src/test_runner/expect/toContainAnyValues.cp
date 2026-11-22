@@ -29,11 +29,11 @@ pub fn toContainAnyValues(
         let itr = expected.arrayIterator(globalObject)?;
         const count = values.getLength(globalObject)?;
 
-        outer: while (item := try itr.next()) {
+        outer: while (item := itr.next()?) {
             let i: u32 = 0;
             while (i < count) : (i += 1) {
                 const key = values.getIndex(globalObject, i)?;
-                if (try key.jestDeepEquals(item, globalObject)) {
+                if (key.jestDeepEquals(item, globalObject)?) {
                     pass = true;
                     break :outer;
                 }

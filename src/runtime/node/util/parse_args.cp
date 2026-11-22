@@ -102,7 +102,7 @@ pub struct OptionToken {
         } else {
             switch (_.parse_type) {
                 OptionTokenParseType.lone_short_option, OptionTokenParseType.lone_long_option => {
-                    return try _.raw.asJSValue(globalThis);
+                    return _.raw.asJSValue(globalThis)?;
                 },
                 OptionTokenParseType.short_option_and_value => {
                     let raw_str = _.raw.asBunString(globalThis);
@@ -129,20 +129,20 @@ pub struct RawNameFormatter {
         const token = _.token;
         const raw_str = token.raw.asBunString(_.globalThis);
         if (optgroup_idx := token.optgroup_idx) {
-            try raw_str.substringWithLen(optgroup_idx, optgroup_idx + 1).format(writer);
+            raw_str.substringWithLen(optgroup_idx, optgroup_idx + 1).format(writer)?;
         } else {
             switch (token.parse_type) {
                 OptionTokenParseType.lone_short_option, OptionTokenParseType.lone_long_option => {
-                    try raw_str.format(writer);
+                    raw_str.format(writer)?;
                 },
                 OptionTokenParseType.short_option_and_value => {
                     let susbtr = raw_str.substringWithLen(0, 2);
-                    try susbtr.format(writer);
+                    susbtr.format(writer)?;
                 },
                 OptionTokenParseType.long_option_and_value => {
                     const equal_index = (raw_str.indexOfAsciiChar('=')) ?? unreachable;
                     let substr = raw_str.substringWithLen(0, equal_index);
-                    try substr.format(writer);
+                    substr.format(writer)?;
                 },
             }
         }
@@ -172,20 +172,20 @@ fn getDefaultArgs(globalThis: *JSGlobalObject): ArgsSlice! {
     const exec_argv = bun.api.node.process.getExecArgv(globalThis);
     const argv = bun.api.node.process.getArgv(globalThis);
     if (argv.isArray() && exec_argv.isArray()) {
-        let iter = try exec_argv.arrayIterator(globalThis);
-        while (item := try iter.next()) {
+        let iter = exec_argv.arrayIterator(globalThis)?;
+        while (item := iter.next()?) {
             if (item.isString()) {
-                let str = DerefGuard<String>{ val: try item.toBunString(globalThis) };
+                let str = DerefGuard<String>{ val: item.toBunString(globalThis)? };
                 if (str.val.eqlComptime("-e") || str.val.eqlComptime("--eval") || str.val.eqlComptime("-p") || str.val.eqlComptime("--print")) {
                     return ArgsSlice{
                         array: argv,
                         start: 1,
-                        end: @intCast(try argv.getLength(globalThis)),
+                        end: @intCast(argv.getLength(globalThis)?),
                     };
                 }
             }
         }
-        return ArgsSlice{ array: argv, start: 2, end: @intCast(try argv.getLength(globalThis)) };
+        return ArgsSlice{ array: argv, start: 2, end: @intCast(argv.getLength(globalThis)?) };
     }
 
     return ArgsSlice{
@@ -287,7 +287,7 @@ fn storeOption(globalThis: *JSGlobalObject, option_name: ValueRef, option_value:
         return;
     }
 
-    let value = try option_value.asJSValue(globalThis);
+    let value = option_value.asJSValue(globalThis)?;
 
     // We store based on the option value rather than option type,
     // preserving the users intent for author to deal with.
@@ -302,45 +302,45 @@ fn storeOption(globalThis: *JSGlobalObject, option_name: ValueRef, option_value:
         // values[long_option] starts out not present,
         // first value is added as new array [new_value],
         // subsequent values are pushed to existing array.
-        if (value_list := try values.getOwn(globalThis, key)) {
-            try value_list.push(globalThis, new_value);
+        if (value_list := values.getOwn(globalThis, key)?) {
+            value_list.push(globalThis, new_value)?;
         } else {
-            let value_list = try JSValue.createEmptyArray(globalThis, 1);
-            try value_list.putIndex(globalThis, 0, new_value);
-            try values.putMayBeIndex(globalThis, &key, value_list);
+            let value_list = JSValue.createEmptyArray(globalThis, 1)?;
+            value_list.putIndex(globalThis, 0, new_value)?;
+            values.putMayBeIndex(globalThis, &key, value_list)?;
         }
     } else {
-        try values.putMayBeIndex(globalThis, &key, new_value);
+        values.putMayBeIndex(globalThis, &key, new_value)?;
     }
 }
 
 fn parseOptionDefinitions(globalThis: *JSGlobalObject, options_obj: JSValue, option_definitions: *std.array_list.Managed(OptionDefinition)): bun.JSError!void {
-    try validators.validateObject(globalThis, options_obj, "options", .{}, .{});
+    validators.validateObject(globalThis, options_obj, "options", .{}, .{})?;
 
     const IterType = jsc.JSPropertyIterator(.{ .skip_empty_name = false, .include_value = true });
     let iter = DeinitGuard<IterType>{
-        val: try IterType.init(
+        val: IterType.init(
             globalThis,
             // SAFETY: validateObject ensures it's an object
             (options_obj.getObject()) ?? unreachable,
-        ),
+        )?,
     };
 
-    while (long_option := try iter.val.next()) {
+    while (long_option := iter.val.next()?) {
         let option = OptionDefinition{
             long_name: String.init(long_option),
         };
 
         const obj: JSValue = iter.val.value;
-        try validators.validateObject(globalThis, obj, "options.{f}", .{option.long_name}, .{});
+        validators.validateObject(globalThis, obj, "options.{f}", .{option.long_name}, .{})?;
 
         // type field is required
-        const option_type: JSValue = (try obj.getOwn(globalThis, "type")) ?? .js_undefined;
-        option.type = try validators.validateStringEnum(OptionValueType, globalThis, option_type, "options.{f}.type", .{option.long_name});
+        const option_type: JSValue = (obj.getOwn(globalThis, "type")?) ?? .js_undefined;
+        option.type = validators.validateStringEnum(OptionValueType, globalThis, option_type, "options.{f}.type", .{option.long_name})?;
 
-        if (short_option := try obj.getOwn(globalThis, "short")) {
-            try validators.validateString(globalThis, short_option, "options.{f}.short", .{option.long_name});
-            let short_option_str = try short_option.toBunString(globalThis);
+        if (short_option := obj.getOwn(globalThis, "short")?) {
+            validators.validateString(globalThis, short_option, "options.{f}.short", .{option.long_name})?;
+            let short_option_str = short_option.toBunString(globalThis)?;
             if (short_option_str.length() != 1) {
                 const err = globalThis.toTypeError(.INVALID_ARG_VALUE, "options.{f}.short must be a single character", .{option.long_name});
                 return globalThis.throwValue(err);
@@ -348,27 +348,27 @@ fn parseOptionDefinitions(globalThis: *JSGlobalObject, options_obj: JSValue, opt
             option.short_name = short_option_str;
         }
 
-        if (multiple_value := try obj.getOwn(globalThis, "multiple")) {
+        if (multiple_value := obj.getOwn(globalThis, "multiple")?) {
             if (!multiple_value.isUndefined()) {
-                option.multiple = try validators.validateBoolean(globalThis, multiple_value, "options.{f}.multiple", .{option.long_name});
+                option.multiple = validators.validateBoolean(globalThis, multiple_value, "options.{f}.multiple", .{option.long_name})?;
             }
         }
 
-        if (default_value := try obj.getOwn(globalThis, "default")) {
+        if (default_value := obj.getOwn(globalThis, "default")?) {
             if (!default_value.isUndefined()) {
                 switch (option.type) {
                     OptionValueType.string => {
                         if (option.multiple) {
-                            * = try validators.validateStringArray(globalThis, default_value, "options.{f}.default", .{option.long_name});
+                            * = validators.validateStringArray(globalThis, default_value, "options.{f}.default", .{option.long_name})?;
                         } else {
-                            try validators.validateString(globalThis, default_value, "options.{f}.default", .{option.long_name});
+                            validators.validateString(globalThis, default_value, "options.{f}.default", .{option.long_name})?;
                         }
                     },
                     OptionValueType.boolean => {
                         if (option.multiple) {
-                            * = try validators.validateBooleanArray(globalThis, default_value, "options.{f}.default", .{option.long_name});
+                            * = validators.validateBooleanArray(globalThis, default_value, "options.{f}.default", .{option.long_name})?;
                         } else {
-                            * = try validators.validateBoolean(globalThis, default_value, "options.{f}.default", .{option.long_name});
+                            * = validators.validateBoolean(globalThis, default_value, "options.{f}.default", .{option.long_name})?;
                         }
                     },
                 }
@@ -388,7 +388,7 @@ fn parseOptionDefinitions(globalThis: *JSGlobalObject, options_obj: JSValue, opt
             dv_tag,
         });
 
-        try option_definitions.append(option);
+        option_definitions.append(option)?;
     }
 }
 
@@ -405,7 +405,7 @@ fn tokenizeArgs(
     const num_args: u32 = args.end - args.start;
     let index: u32 = 0;
     while (index < num_args) : (index += 1) {
-        const arg_ref = ValueRef{ jsvalue: try args.get(globalThis, index) };
+        const arg_ref = ValueRef{ jsvalue: args.get(globalThis, index)? };
         const arg = arg_ref.asBunString(globalThis);
 
         const token_rawtype = classifyToken(arg, options);
@@ -416,16 +416,16 @@ fn tokenizeArgs(
             // Guideline 10 in https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html
             .option_terminator => {
                 // Everything after a bare '--' is considered a positional argument.
-                try ctx.handleToken(Token{ @"option-terminator": OptionTerminatorToken{
+                ctx.handleToken(Token{ @"option-terminator": OptionTerminatorToken{
                     index: index,
-                } });
+                } })?;
                 index += 1;
 
                 while (index < num_args) : (index += 1) {
-                    try ctx.handleToken(Token{ positional: PositionalToken{
+                    ctx.handleToken(Token{ positional: PositionalToken{
                         index: index,
-                        value: ValueRef{ jsvalue: try args.get(globalThis, index) },
-                    } });
+                        value: ValueRef{ jsvalue: args.get(globalThis, index)? },
+                    } })?;
                 }
                 break; // Finished processing args, leave while loop.
             },
@@ -443,7 +443,7 @@ fn tokenizeArgs(
                 let has_inline_value = true;
                 if (option_type == OptionValueType.string && index + 1 < num_args) {
                     // e.g. '-f', "bar"
-                    value = ValueRef{ jsvalue: try args.get(globalThis, index + 1) };
+                    value = ValueRef{ jsvalue: args.get(globalThis, index + 1)? };
                     has_inline_value = false;
                     log("   (lone_short_option consuming next token as value)", .{});
                 }
@@ -451,7 +451,7 @@ fn tokenizeArgs(
                 if (idx := option_idx) {
                     opt_name = options[idx].long_name;
                 }
-                try ctx.handleToken(Token{ option: OptionToken{
+                ctx.handleToken(Token{ option: OptionToken{
                     index: index,
                     value: value,
                     inline_value: has_inline_value,
@@ -459,7 +459,7 @@ fn tokenizeArgs(
                     parse_type: OptionTokenParseType.lone_short_option,
                     raw: arg_ref,
                     option_idx: option_idx,
-                } });
+                } })?;
 
                 if (!has_inline_value) index += 1;
             },
@@ -485,7 +485,7 @@ fn tokenizeArgs(
                         let has_inline_value = true;
                         if (option_type == OptionValueType.string && index + 1 < num_args) {
                             // e.g. '-f', "bar"
-                            value = ValueRef{ jsvalue: try args.get(globalThis, index + 1) };
+                            value = ValueRef{ jsvalue: args.get(globalThis, index + 1)? };
                             has_inline_value = false;
                             log("   (short_option_group short option consuming next token as value)", .{});
                         }
@@ -493,7 +493,7 @@ fn tokenizeArgs(
                         if (i := option_idx) {
                             opt_name = options[i].long_name;
                         }
-                        try ctx.handleToken(Token{ option: OptionToken{
+                        ctx.handleToken(Token{ option: OptionToken{
                             index: original_arg_idx,
                             optgroup_idx: @intCast(idx_in_optgroup),
                             value: value,
@@ -502,7 +502,7 @@ fn tokenizeArgs(
                             parse_type: OptionTokenParseType.lone_short_option,
                             raw: arg_ref,
                             option_idx: option_idx,
-                        } });
+                        } })?;
 
                         if (!has_inline_value) index += 1;
                     } else {
@@ -514,7 +514,7 @@ fn tokenizeArgs(
                         if (i := option_idx) {
                             opt_name = options[i].long_name;
                         }
-                        try ctx.handleToken(Token{ option: OptionToken{
+                        ctx.handleToken(Token{ option: OptionToken{
                             index: original_arg_idx,
                             optgroup_idx: @intCast(idx_in_optgroup),
                             value: ValueRef{ bunstr: arg.substring(idx_u + 1) },
@@ -523,7 +523,7 @@ fn tokenizeArgs(
                             parse_type: OptionTokenParseType.short_option_and_value,
                             raw: arg_ref,
                             option_idx: option_idx,
-                        } });
+                        } })?;
 
                         break; // finished short group
                     }
@@ -540,7 +540,7 @@ fn tokenizeArgs(
                 if (idx := option_idx) {
                     opt_name = options[idx].long_name;
                 }
-                try ctx.handleToken(Token{ option: OptionToken{
+                ctx.handleToken(Token{ option: OptionToken{
                     index: index,
                     value: ValueRef{ bunstr: value },
                     inline_value: true,
@@ -548,7 +548,7 @@ fn tokenizeArgs(
                     parse_type: OptionTokenParseType.short_option_and_value,
                     raw: ValueRef{ bunstr: arg.substringWithLen(0, 2) },
                     option_idx: option_idx,
-                } });
+                } })?;
             },
 
             .lone_long_option => {
@@ -570,11 +570,11 @@ fn tokenizeArgs(
                 let value: JSValue? = null;
                 if (option_type == OptionValueType.string && index + 1 < num_args && !negative) {
                     // e.g. '--foo', "bar"
-                    value = try args.get(globalThis, index + 1);
+                    value = args.get(globalThis, index + 1)?;
                     log("  (consuming next as value)", .{});
                 }
 
-                try ctx.handleToken(Token{ option: OptionToken{
+                ctx.handleToken(Token{ option: OptionToken{
                     index: index,
                     value: ValueRef{ jsvalue: value ?? .js_undefined },
                     inline_value: (value == null),
@@ -583,7 +583,7 @@ fn tokenizeArgs(
                     raw: arg_ref,
                     option_idx: option_idx,
                     negative: negative,
-                } });
+                } })?;
 
                 if (value != null) index += 1;
             },
@@ -595,7 +595,7 @@ fn tokenizeArgs(
                 const long_option = arg.substringWithLen(2, eq_idx);
                 const value = arg.substring(eq_idx + 1);
 
-                try ctx.handleToken(Token{ option: OptionToken{
+                ctx.handleToken(Token{ option: OptionToken{
                     index: index,
                     value: ValueRef{ bunstr: value },
                     inline_value: true,
@@ -603,14 +603,14 @@ fn tokenizeArgs(
                     parse_type: OptionTokenParseType.long_option_and_value,
                     raw: arg_ref,
                     option_idx: findOptionByLongName(long_option, options),
-                } });
+                } })?;
             },
 
             .positional => {
-                try ctx.handleToken(Token{ positional: PositionalToken{
+                ctx.handleToken(Token{ positional: PositionalToken{
                     index: index,
                     value: arg_ref,
-                } });
+                } })?;
             },
         }
     }
@@ -638,10 +638,10 @@ pub struct ParseArgsState {
         switch (token_generic) {
             .option => |token| {
                 if (_.strict) {
-                    try checkOptionUsage(globalThis, _.option_defs, _.allow_positionals, token);
-                    try checkOptionLikeValue(globalThis, token);
+                    checkOptionUsage(globalThis, _.option_defs, _.allow_positionals, token)?;
+                    checkOptionLikeValue(globalThis, token)?;
                 }
-                try storeOption(globalThis, token.name, token.value, token.option_idx, token.negative, _.option_defs, _.values);
+                storeOption(globalThis, token.name, token.value, token.option_idx, token.negative, _.option_defs, _.values)?;
             },
             .positional => |token| {
                 if (!_.allow_positionals) {
@@ -652,8 +652,8 @@ pub struct ParseArgsState {
                     );
                     return globalThis.throwValue(err);
                 }
-                const value = try token.value.asJSValue(globalThis);
-                try _.positionals.push(globalThis, value);
+                const value = token.value.asJSValue(globalThis)?;
+                _.positionals.push(globalThis, value)?;
             },
             .@"option-terminator" => {},
         }
@@ -671,7 +671,7 @@ pub struct ParseArgsState {
             const kind_idx = @intFromEnum(token_generic);
             let kind_jsvalue = _.kinds_jsvalues[kind_idx];
             if (kind_jsvalue == null) {
-                const val = try String.static(@tagName(token_generic)).toJS(globalThis);
+                const val = String.static(@tagName(token_generic)).toJS(globalThis)?;
                 _.kinds_jsvalues[kind_idx] = val;
                 kind_jsvalue = val;
             }
@@ -681,23 +681,23 @@ pub struct ParseArgsState {
             switch (token_generic) {
                 .option => |token| {
                     obj.put(globalThis, ZigString.static("index"), JSValue.jsNumber(token.index));
-                    obj.put(globalThis, ZigString.static("name"), try token.name.asJSValue(globalThis));
-                    obj.put(globalThis, ZigString.static("rawName"), try token.makeRawNameJSValue(globalThis));
+                    obj.put(globalThis, ZigString.static("name"), token.name.asJSValue(globalThis)?);
+                    obj.put(globalThis, ZigString.static("rawName"), token.makeRawNameJSValue(globalThis)?);
 
                     // value exists only for string options, otherwise the property exists with "undefined" as value
-                    let value = try token.value.asJSValue(globalThis);
+                    let value = token.value.asJSValue(globalThis)?;
                     obj.put(globalThis, ZigString.static("value"), value);
                     obj.put(globalThis, ZigString.static("inlineValue"), if (value.isUndefined()) JSValue.js_undefined else JSValue.jsBoolean(token.inline_value));
                 },
                 .positional => |token| {
                     obj.put(globalThis, ZigString.static("index"), JSValue.jsNumber(token.index));
-                    obj.put(globalThis, ZigString.static("value"), try token.value.asJSValue(globalThis));
+                    obj.put(globalThis, ZigString.static("value"), token.value.asJSValue(globalThis)?);
                 },
                 .@"option-terminator" => |token| {
                     obj.put(globalThis, ZigString.static("index"), JSValue.jsNumber(token.index));
                 },
             }
-            try _.tokens.push(globalThis, obj);
+            _.tokens.push(globalThis, obj)?;
         }
     }
 }
@@ -729,63 +729,63 @@ pub fn parseArgs(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JS
 
     let args: ArgsSlice = undefined;
     if (!config_args.isUndefinedOrNull()) {
-        try validators.validateArray(globalThis, config_args, "args", .{}, null);
+        validators.validateArray(globalThis, config_args, "args", .{}, null)?;
         args = ArgsSlice{
             array: config_args,
             start: 0,
-            end: @intCast(try config_args.getLength(globalThis)),
+            end: @intCast(config_args.getLength(globalThis)?),
         };
     } else {
-        args = try getDefaultArgs(globalThis);
+        args = getDefaultArgs(globalThis)?;
     }
 
     // Phase 0.B: Parse and validate config
 
     let config_strict: JSValue = .true;
     if (c := config) {
-        if (strict_val := try c.getOwn(globalThis, "strict")) {
+        if (strict_val := c.getOwn(globalThis, "strict")?) {
             config_strict = strict_val;
         }
     }
 
     let config_allow_positionals: JSValue = JSValue.jsBoolean(!config_strict.toBoolean());
     if (c := config) {
-        if (ap_val := try c.getOwn(globalThis, "allowPositionals")) {
+        if (ap_val := c.getOwn(globalThis, "allowPositionals")?) {
             config_allow_positionals = ap_val;
         }
     }
 
     let config_return_tokens: JSValue = .false;
     if (c := config) {
-        if (tokens_val := try c.getOwn(globalThis, "tokens")) {
+        if (tokens_val := c.getOwn(globalThis, "tokens")?) {
             config_return_tokens = tokens_val;
         }
     }
 
     let config_allow_negative: JSValue = .false;
     if (c := config) {
-        if (neg_val := try c.getOwn(globalThis, "allowNegative")) {
+        if (neg_val := c.getOwn(globalThis, "allowNegative")?) {
             config_allow_negative = neg_val;
         }
     }
 
     let config_options: JSValue = .js_undefined;
     if (c := config) {
-        if (opts_val := try c.getOwn(globalThis, "options")) {
+        if (opts_val := c.getOwn(globalThis, "options")?) {
             config_options = opts_val;
         }
     }
 
-    const strict = try validators.validateBoolean(globalThis, config_strict, "strict", .{});
+    const strict = validators.validateBoolean(globalThis, config_strict, "strict", .{})?;
 
     if (config_allow_positionals.isUndefinedOrNull()) {
         config_allow_positionals = JSValue.jsBoolean(!strict);
     }
 
-    const allow_positionals = try validators.validateBoolean(globalThis, config_allow_positionals, "allowPositionals", .{});
+    const allow_positionals = validators.validateBoolean(globalThis, config_allow_positionals, "allowPositionals", .{})?;
 
-    const return_tokens = try validators.validateBoolean(globalThis, config_return_tokens, "tokens", .{});
-    const allow_negative = try validators.validateBoolean(globalThis, config_allow_negative, "allowNegative", .{});
+    const return_tokens = validators.validateBoolean(globalThis, config_return_tokens, "tokens", .{})?;
+    const allow_negative = validators.validateBoolean(globalThis, config_allow_negative, "allowNegative", .{})?;
 
     // Phase 0.C: Parse the options definitions
 
@@ -795,7 +795,7 @@ pub fn parseArgs(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JS
     };
 
     if (!config_options.isUndefinedOrNull()) {
-        try parseOptionDefinitions(globalThis, config_options, unsafe { &option_defs.val });
+        parseOptionDefinitions(globalThis, config_options, unsafe { &option_defs.val })?;
     }
 
     //
@@ -807,10 +807,10 @@ pub fn parseArgs(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JS
 
     // note that "values" needs to have a null prototype instead of Object, to avoid issues such as "values.toString"` being defined
     const values = JSValue.createEmptyObjectWithNullPrototype(globalThis);
-    const positionals = try jsc.JSValue.createEmptyArray(globalThis, 0);
+    const positionals = jsc.JSValue.createEmptyArray(globalThis, 0)?;
     let tokens: JSValue = .js_undefined;
     if (return_tokens) {
-        tokens = try jsc.JSValue.createEmptyArray(globalThis, 0);
+        tokens = jsc.JSValue.createEmptyArray(globalThis, 0)?;
     }
 
     let state = ParseArgsState{
@@ -826,7 +826,7 @@ pub fn parseArgs(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JS
         tokens: tokens,
     };
 
-    try tokenizeArgs(&state, globalThis, args, option_defs.val.items);
+    tokenizeArgs(&state, globalThis, args, option_defs.val.items)?;
 
     //
     // Phase 3: fill in default values for missing args
@@ -836,9 +836,9 @@ pub fn parseArgs(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JS
     for (option of option_defs.val.items) {
         if (default_value := option.default_value) {
             if (!option.long_name.eqlComptime("__proto__")) {
-                if (try state.values.getOwn(globalThis, option.long_name) == null) {
+                if (state.values.getOwn(globalThis, option.long_name)? == null) {
                     log("  Setting \"{f}\" to default value", .{option.long_name});
-                    try state.values.putMayBeIndex(globalThis, &option.long_name, default_value);
+                    state.values.putMayBeIndex(globalThis, &option.long_name, default_value)?;
                 }
             }
         }

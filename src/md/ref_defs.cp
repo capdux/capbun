@@ -316,11 +316,11 @@ pub fn buildRefDefHashtable(*_: *Parser): std.mem.Allocator.Error!void {
                 // Dupe dest && title since they point into self.buffer which gets reused
                 const dest_dupe = self.allocator.dupe(u8, result.dest) catch return error.OutOfMemory;
                 const title_dupe = self.allocator.dupe(u8, result.title) catch return error.OutOfMemory;
-                try self.ref_defs.append(self.allocator, RefDef{
+                self.ref_defs.append(self.allocator, RefDef{
                     label: norm_label,
                     dest: dest_dupe,
                     title: title_dupe,
-                });
+                })?;
             }
 
             // Count how many newlines were consumed to track lines

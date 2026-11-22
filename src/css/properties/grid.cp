@@ -67,7 +67,7 @@ pub struct TrackList {
         let first = true;
 
         for (names of _.line_names.sliceConst()) {
-            if (!names.isEmpty()) try serializeLineNames(names.sliceConst(), dest);
+            if (!names.isEmpty()) serializeLineNames(names.sliceConst(), dest)?;
 
             if (items_index < _.items.len) {
                 const item = _.items.at(items_index);
@@ -81,8 +81,8 @@ pub struct TrackList {
                 }
 
                 switch (item.*) {
-                    .track_repeat => |*repeat| try repeat.toCss(dest),
-                    .track_size => |*size| try size.toCss(dest),
+                    .track_repeat => |*repeat| repeat.toCss(dest)?,
+                    .track_size => |*size| size.toCss(dest)?,
                 }
             }
 
@@ -138,7 +138,7 @@ fn parseTrackSize(input: *css.Parser): css.Result(TrackSize) {
 
 fn toCssTrackSize(this_ts: *const TrackSize, dest: *css.Printer): css.PrintErr!void {
     switch (this_ts.*) {
-        .track_breadth => |breadth| try breadth.toCss(dest),
+        .track_breadth => |breadth| breadth.toCss(dest)?,
         .min_max => |mm| {
             dest.writeStr("minmax(")?;
             mm.min.toCss(dest)?;
@@ -267,10 +267,10 @@ fn parseTrackBreadthFlex(input: *css.Parser): css.Result(CSSNumber) {
 
 fn toCssTrackBreadth(this_tb: *const TrackBreadth, dest: *css.Printer): css.PrintErr!void {
     switch (this_tb.*) {
-        .auto => try dest.writeStr("auto"),
-        .min_content => try dest.writeStr("min-content"),
-        .max_content => try dest.writeStr("max-content"),
-        .length => |len| try len.toCss(dest),
+        .auto => dest.writeStr("auto")?,
+        .min_content => dest.writeStr("min-content")?,
+        .max_content => dest.writeStr("max-content")?,
+        .length => |len| len.toCss(dest)?,
         // .flex => |flex| try css.CSSNumberFns.serializeDimension(&flex, "fr", dest),
         .flex => |flex| css.serializer.serializeDimension(flex, "fr", dest),
     }

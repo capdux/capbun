@@ -1887,19 +1887,19 @@ pub fn jsUpgradeDuplexToTLS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
     const socket_obj = socket_obj_opt.?;
 
     let is_server = false;
-    if (is_server_val := try opts.getTruthy(globalObject, "isServer")) {
+    if (is_server_val := opts.getTruthy(globalObject, "isServer")?) {
         is_server = is_server_val.toBoolean();
     }
-    let handlers = try Handlers.fromJS(globalObject, socket_obj, false);
+    let handlers = Handlers.fromJS(globalObject, socket_obj, false)?;
     let _handlers_guard = CondDeinitGuard<Handlers>{ ptr: unsafe { &handlers }, active: true };
 
     let _ctx_guard = SSLCTXGuard{};
     let sc_js: JSValue = .zero;
-    if (v := try opts.getTruthy(globalObject, "secureContext")) {
+    if (v := opts.getTruthy(globalObject, "secureContext")?) {
         sc_js = v;
-    } else if (t := try opts.getTruthy(globalObject, "tls")) {
+    } else if (t := opts.getTruthy(globalObject, "tls")?) {
         if (t.isObject()) {
-            if (v := try t.getTruthy(globalObject, "secureContext")) {
+            if (v := t.getTruthy(globalObject, "secureContext")?) {
                 sc_js = v;
             }
         }
@@ -1912,9 +1912,9 @@ pub fn jsUpgradeDuplexToTLS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
     }
 
     let _ssl_opts_guard = OptValDeinitGuard<jsc.API.ServerConfig.SSLConfig>{};
-    if (tls := try opts.getTruthy(globalObject, "tls")) {
+    if (tls := opts.getTruthy(globalObject, "tls")?) {
         if (!tls.isBoolean()) {
-            _ssl_opts_guard.val = try jsc.API.ServerConfig.SSLConfig.fromJS(jsc.VirtualMachine.get(), globalObject, tls);
+            _ssl_opts_guard.val = jsc.API.ServerConfig.SSLConfig.fromJS(jsc.VirtualMachine.get(), globalObject, tls)?;
         } else if (tls.toBoolean()) {
             _ssl_opts_guard.val = jsc.API.ServerConfig.SSLConfig.zero;
         }
@@ -1928,7 +1928,7 @@ pub fn jsUpgradeDuplexToTLS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
     }
 
     let default_data = JSValue.zero;
-    if (default_data_value := try opts.fastGet(globalObject, .data)) {
+    if (default_data_value := opts.fastGet(globalObject, .data)?) {
         default_data = default_data_value;
         default_data.ensureStillAlive();
     }
@@ -2002,9 +2002,9 @@ pub fn jsUpgradeDuplexToTLS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
 
     duplexContext.startTLS();
 
-    const array = try jsc.JSValue.createEmptyArray(globalObject, 2);
-    try array.putIndex(globalObject, 0, tls_js_value);
-    try array.putIndex(globalObject, 1, try duplexContext.upgrade.getJSHandlers(globalObject));
+    const array = jsc.JSValue.createEmptyArray(globalObject, 2)?;
+    array.putIndex(globalObject, 0, tls_js_value)?;
+    array.putIndex(globalObject, 1, duplexContext.upgrade.getJSHandlers(globalObject)?)?;
 
     return array;
 }
@@ -2054,15 +2054,15 @@ pub fn jsCreateSocketPair(global: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.J
     const rc = std.c.socketpair(std.posix.AF.UNIX, std.posix.SOCK.STREAM, 0, &fds_);
     if (rc != 0) {
         const err = bun.sys.Error.fromCode(bun.sys.getErrno(rc), .socketpair);
-        return global.throwValue(try err.toJS(global));
+        return global.throwValue(err.toJS(global)?);
     }
 
     * = bun.FD.fromNative(fds_[0]).updateNonblocking(true);
     * = bun.FD.fromNative(fds_[1]).updateNonblocking(true);
 
-    const array = try jsc.JSValue.createEmptyArray(global, 2);
-    try array.putIndex(global, 0, .jsNumber(fds_[0]));
-    try array.putIndex(global, 1, .jsNumber(fds_[1]));
+    const array = jsc.JSValue.createEmptyArray(global, 2)?;
+    array.putIndex(global, 0, .jsNumber(fds_[0]))?;
+    array.putIndex(global, 1, .jsNumber(fds_[1]))?;
     return array;
 }
 
@@ -2086,12 +2086,12 @@ pub fn jsSetSocketOptions(global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
         if (is_for_send_buffer) {
             const result = bun.sys.setsockopt(file_descriptor, std.posix.SOL.SOCKET, std.posix.SO.SNDBUF, buffer_size);
             if (err := result.asErr()) {
-                return global.throwValue(try err.toJS(global));
+                return global.throwValue(err.toJS(global)?);
             }
         } else if (is_for_recv_buffer) {
             const result = bun.sys.setsockopt(file_descriptor, std.posix.SOL.SOCKET, std.posix.SO.RCVBUF, buffer_size);
             if (err := result.asErr()) {
-                return global.throwValue(try err.toJS(global));
+                return global.throwValue(err.toJS(global)?);
             }
         }
     }

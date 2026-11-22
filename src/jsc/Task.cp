@@ -255,19 +255,19 @@ pub fn tickQueueWithCount(*_: *EventLoop, virtual_machine: *VirtualMachine, coun
         switch (task.tag()) {
             @field(Task.Tag, @typeName(ArchiveExtractTask)) => {
                 let archive_task: *ArchiveExtractTask = task.get(ArchiveExtractTask).?;
-                try archive_task.runFromJS();
+                archive_task.runFromJS()?;
             },
             @field(Task.Tag, @typeName(ArchiveBlobTask)) => {
                 let archive_task: *ArchiveBlobTask = task.get(ArchiveBlobTask).?;
-                try archive_task.runFromJS();
+                archive_task.runFromJS()?;
             },
             @field(Task.Tag, @typeName(ArchiveWriteTask)) => {
                 let archive_task: *ArchiveWriteTask = task.get(ArchiveWriteTask).?;
-                try archive_task.runFromJS();
+                archive_task.runFromJS()?;
             },
             @field(Task.Tag, @typeName(ArchiveFilesTask)) => {
                 let archive_task: *ArchiveFilesTask = task.get(ArchiveFilesTask).?;
-                try archive_task.runFromJS();
+                archive_task.runFromJS()?;
             },
             @field(Task.Tag, @typeName(ShellAsync)) => {
                 let shell_ls_task: *ShellAsync = task.get(ShellAsync).?;
@@ -332,11 +332,11 @@ pub fn tickQueueWithCount(*_: *EventLoop, virtual_machine: *VirtualMachine, coun
             },
             @field(Task.Tag, @typeName(FetchTasklet)) => {
                 let fetch_task: *Fetch.FetchTasklet = task.get(Fetch.FetchTasklet).?;
-                try fetch_task.onProgressUpdate();
+                fetch_task.onProgressUpdate()?;
             },
             @field(Task.Tag, @typeName(S3HttpSimpleTask)) => {
                 let s3_task: *S3HttpSimpleTask = task.get(S3HttpSimpleTask).?;
-                try s3_task.onResponse();
+                s3_task.onResponse()?;
             },
             @field(Task.Tag, @typeName(S3HttpDownloadStreamingTask)) => {
                 let s3_task: *S3HttpDownloadStreamingTask = task.get(S3HttpDownloadStreamingTask).?;
@@ -345,22 +345,22 @@ pub fn tickQueueWithCount(*_: *EventLoop, virtual_machine: *VirtualMachine, coun
             @field(Task.Tag, @typeName(AsyncGlobWalkTask)) => {
                 let globWalkTask: *AsyncGlobWalkTask = task.get(AsyncGlobWalkTask).?;
                 const _guard = DeinitGuard<AsyncGlobWalkTask>{ ptr: globWalkTask };
-                try globWalkTask.runFromJS();
+                globWalkTask.runFromJS()?;
             },
             @field(Task.Tag, @typeName(AsyncImageTask)) => {
                 let image_task: *AsyncImageTask = task.get(AsyncImageTask).?;
                 const _guard = DeinitGuard<AsyncImageTask>{ ptr: image_task };
-                try image_task.runFromJS();
+                image_task.runFromJS()?;
             },
             @field(Task.Tag, @typeName(AsyncTransformTask)) => {
                 let transform_task: *AsyncTransformTask = task.get(AsyncTransformTask).?;
                 const _guard = DeinitGuard<AsyncTransformTask>{ ptr: transform_task };
-                try transform_task.runFromJS();
+                transform_task.runFromJS()?;
             },
             @field(Task.Tag, @typeName(CopyFilePromiseTask)) => {
                 let transform_task: *CopyFilePromiseTask = task.get(CopyFilePromiseTask).?;
                 const _guard = DeinitGuard<CopyFilePromiseTask>{ ptr: transform_task };
-                try transform_task.runFromJS();
+                transform_task.runFromJS()?;
             },
             @field(Task.Tag, @typeName(bun.api.napi.napi_async_work)) => {
                 const transform_task: *bun.api.napi.napi_async_work = task.get(bun.api.napi.napi_async_work).?;
@@ -373,17 +373,17 @@ pub fn tickQueueWithCount(*_: *EventLoop, virtual_machine: *VirtualMachine, coun
             @field(Task.Tag, @typeName(ReadFileTask)) => {
                 let transform_task: *ReadFileTask = task.get(ReadFileTask).?;
                 const _guard = DeinitGuard<ReadFileTask>{ ptr: transform_task };
-                try transform_task.runFromJS();
+                transform_task.runFromJS()?;
             },
             @field(Task.Tag, @typeName(JSCDeferredWorkTask)) => {
                 let jsc_task: *JSCDeferredWorkTask = task.get(JSCDeferredWorkTask).?;
                 jsc.markBinding(@src());
-                try jsc_task.run();
+                jsc_task.run()?;
             },
             @field(Task.Tag, @typeName(WriteFileTask)) => {
                 let transform_task: *WriteFileTask = task.get(WriteFileTask).?;
                 const _guard = DeinitGuard<WriteFileTask>{ ptr: transform_task };
-                try transform_task.runFromJS();
+                transform_task.runFromJS()?;
             },
             @field(Task.Tag, @typeName(HotReloadTask)) => {
                 const transform_task: *HotReloadTask = task.get(HotReloadTask).?;
@@ -403,15 +403,15 @@ pub fn tickQueueWithCount(*_: *EventLoop, virtual_machine: *VirtualMachine, coun
             },
             @field(Task.Tag, @typeName(AnyTask)) => {
                 let task_ptr: *AnyTask = task.get(AnyTask).?;
-                task_ptr.run() catch |e| try reportErrorOrTerminate(global, e);
+                task_ptr.run() catch |e| reportErrorOrTerminate(global, e)?;
             },
             @field(Task.Tag, @typeName(ManagedTask)) => {
                 let task_ptr: *ManagedTask = task.get(ManagedTask).?;
-                task_ptr.run() catch |e| try reportErrorOrTerminate(global, e);
+                task_ptr.run() catch |e| reportErrorOrTerminate(global, e)?;
             },
             @field(Task.Tag, @typeName(CppTask)) => {
                 let task_ptr: *CppTask = task.get(CppTask).?;
-                task_ptr.run(global) catch |e| try reportErrorOrTerminate(global, e);
+                task_ptr.run(global) catch |e| reportErrorOrTerminate(global, e)?;
             },
             @field(Task.Tag, @typeName(PollPendingModulesTask)) => {
                 virtual_machine.modules.onPoll();
@@ -420,171 +420,171 @@ pub fn tickQueueWithCount(*_: *EventLoop, virtual_machine: *VirtualMachine, coun
                 if (Environment.os == .windows) @panic("This should not be reachable on Windows");
                 let task_ptr: *GetAddrInfoRequestTask = task.get(GetAddrInfoRequestTask).?;
                 const _guard = DeinitGuard<GetAddrInfoRequestTask>{ ptr: task_ptr };
-                try task_ptr.runFromJS();
+                task_ptr.runFromJS()?;
             },
             @field(Task.Tag, @typeName(Stat)) => {
                 let task_ptr: *Stat = task.get(Stat).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(Lstat)) => {
                 let task_ptr: *Lstat = task.get(Lstat).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(Fstat)) => {
                 let task_ptr: *Fstat = task.get(Fstat).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(Open)) => {
                 let task_ptr: *Open = task.get(Open).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(ReadFile)) => {
                 let task_ptr: *ReadFile = task.get(ReadFile).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(WriteFile)) => {
                 let task_ptr: *WriteFile = task.get(WriteFile).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(CopyFile)) => {
                 let task_ptr: *CopyFile = task.get(CopyFile).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(Read)) => {
                 let task_ptr: *Read = task.get(Read).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(Write)) => {
                 let task_ptr: *Write = task.get(Write).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(Truncate)) => {
                 let task_ptr: *Truncate = task.get(Truncate).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(Writev)) => {
                 let task_ptr: *Writev = task.get(Writev).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(Readv)) => {
                 let task_ptr: *Readv = task.get(Readv).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(Rename)) => {
                 let task_ptr: *Rename = task.get(Rename).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(FTruncate)) => {
                 let task_ptr: *FTruncate = task.get(FTruncate).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(Readdir)) => {
                 let task_ptr: *Readdir = task.get(Readdir).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(ReaddirRecursive)) => {
                 let task_ptr: *ReaddirRecursive = task.get(ReaddirRecursive).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(Close)) => {
                 let task_ptr: *Close = task.get(Close).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(Rm)) => {
                 let task_ptr: *Rm = task.get(Rm).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(Rmdir)) => {
                 let task_ptr: *Rmdir = task.get(Rmdir).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(Chown)) => {
                 let task_ptr: *Chown = task.get(Chown).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(FChown)) => {
                 let task_ptr: *FChown = task.get(FChown).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(Utimes)) => {
                 let task_ptr: *Utimes = task.get(Utimes).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(Lutimes)) => {
                 let task_ptr: *Lutimes = task.get(Lutimes).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(Chmod)) => {
                 let task_ptr: *Chmod = task.get(Chmod).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(Fchmod)) => {
                 let task_ptr: *Fchmod = task.get(Fchmod).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(Link)) => {
                 let task_ptr: *Link = task.get(Link).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(Symlink)) => {
                 let task_ptr: *Symlink = task.get(Symlink).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(Readlink)) => {
                 let task_ptr: *Readlink = task.get(Readlink).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(Realpath)) => {
                 let task_ptr: *Realpath = task.get(Realpath).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(RealpathNonNative)) => {
                 let task_ptr: *RealpathNonNative = task.get(RealpathNonNative).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(Mkdir)) => {
                 let task_ptr: *Mkdir = task.get(Mkdir).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(Fsync)) => {
                 let task_ptr: *Fsync = task.get(Fsync).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(Fdatasync)) => {
                 let task_ptr: *Fdatasync = task.get(Fdatasync).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(Access)) => {
                 let task_ptr: *Access = task.get(Access).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(AppendFile)) => {
                 let task_ptr: *AppendFile = task.get(AppendFile).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(Mkdtemp)) => {
                 let task_ptr: *Mkdtemp = task.get(Mkdtemp).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(Exists)) => {
                 let task_ptr: *Exists = task.get(Exists).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(Futimes)) => {
                 let task_ptr: *Futimes = task.get(Futimes).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(Lchmod)) => {
                 let task_ptr: *Lchmod = task.get(Lchmod).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(Lchown)) => {
                 let task_ptr: *Lchown = task.get(Lchown).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(Unlink)) => {
                 let task_ptr: *Unlink = task.get(Unlink).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(NativeZlib)) => {
                 let task_ptr: *NativeZlib = task.get(NativeZlib).?;
@@ -609,7 +609,7 @@ pub fn tickQueueWithCount(*_: *EventLoop, virtual_machine: *VirtualMachine, coun
             },
             @field(Task.Tag, @typeName(ServerAllConnectionsClosedTask)) => {
                 let task_ptr: *ServerAllConnectionsClosedTask = task.get(ServerAllConnectionsClosedTask).?;
-                try task_ptr.runFromJSThread(virtual_machine);
+                task_ptr.runFromJSThread(virtual_machine)?;
             },
             @field(Task.Tag, @typeName(bun.bundle_v2.DeferredBatchTask)) => {
                 let task_ptr: *bun.bundle_v2.DeferredBatchTask = task.get(bun.bundle_v2.DeferredBatchTask).?;
@@ -627,7 +627,7 @@ pub fn tickQueueWithCount(*_: *EventLoop, virtual_machine: *VirtualMachine, coun
             },
             @field(Task.Tag, @typeName(StatFS)) => {
                 let task_ptr: *StatFS = task.get(StatFS).?;
-                try task_ptr.runFromJSThread();
+                task_ptr.runFromJSThread()?;
             },
             @field(Task.Tag, @typeName(FlushPendingFileSinkTask)) => {
                 let task_ptr: *FlushPendingFileSinkTask = task.get(FlushPendingFileSinkTask).?;
@@ -642,7 +642,7 @@ pub fn tickQueueWithCount(*_: *EventLoop, virtual_machine: *VirtualMachine, coun
             },
         }
 
-        try this.drainMicrotasksWithGlobal(global, global_vm);
+        this.drainMicrotasksWithGlobal(global, global_vm)?;
     }
 
     this.tasks.head = if (this.tasks.count == 0) 0 else this.tasks.head;

@@ -6309,7 +6309,7 @@ pub union(TokenKind) Token {
         writer: *std.Io.Writer,
     )! {
         return switch (tok.*) {
-            .ident => |value| try serializer.serializeIdentifier(value, writer),
+            .ident => |value| serializer.serializeIdentifier(value, writer)?,
             .at_keyword => |value| {
                 writer.writeByte('@')?;
                 serializer.serializeIdentifier(value, writer)?;
@@ -6322,7 +6322,7 @@ pub union(TokenKind) Token {
                 writer.writeByte('#')?;
                 serializer.serializeIdentifier(value, writer)?;
             },
-            .quoted_string => |value| try serializer.serializeString(value, writer),
+            .quoted_string => |value| serializer.serializeString(value, writer)?,
             .unquoted_url => |value| {
                 writer.writeAll("url(")?;
                 serializer.serializeUnquotedUrl(value, writer)?;
@@ -6334,7 +6334,7 @@ pub union(TokenKind) Token {
                 bun.debugAssert(value <= 0x7F);
                 writer.writeByte(@truncate(value))?;
             },
-            .number => |num| try serializer.writeNumeric(num.value, num.int_value, num.has_sign, writer),
+            .number => |num| serializer.writeNumeric(num.value, num.int_value, num.has_sign, writer)?,
             .percentage => |num| {
                 serializer.writeNumeric(num.unit_value * 100, num.int_value, num.has_sign, writer)?;
                 writer.writeAll("%")?;
@@ -6352,29 +6352,29 @@ pub union(TokenKind) Token {
                     serializer.serializeIdentifier(unit, writer)?;
                 }
             },
-            .whitespace => |content| try writer.writeAll(content),
+            .whitespace => |content| writer.writeAll(content)?,
             .comment => |content| {
                 writer.writeAll("/*")?;
                 writer.writeAll(content)?;
                 writer.writeAll("*/")?;
             },
-            .colon => try writer.writeByte(':'),
-            .semicolon => try writer.writeByte(';'),
-            .comma => try writer.writeByte(','),
-            .include_match => try writer.writeAll("~="),
-            .dash_match => try writer.writeAll("|="),
-            .prefix_match => try writer.writeAll("^="),
-            .suffix_match => try writer.writeAll("$="),
-            .substring_match => try writer.writeAll("*="),
-            .cdo => try writer.writeAll("<!--"),
-            .cdc => try writer.writeAll("-->"),
+            .colon => writer.writeByte(':')?,
+            .semicolon => writer.writeByte(';')?,
+            .comma => writer.writeByte(',')?,
+            .include_match => writer.writeAll("~=")?,
+            .dash_match => writer.writeAll("|=")?,
+            .prefix_match => writer.writeAll("^=")?,
+            .suffix_match => writer.writeAll("$=")?,
+            .substring_match => writer.writeAll("*=")?,
+            .cdo => writer.writeAll("<!--")?,
+            .cdc => writer.writeAll("-->")?,
             .function => |name| {
                 serializer.serializeIdentifier(name, writer)?;
                 writer.writeByte('(')?;
             },
-            .open_paren => try writer.writeAll("("),
-            .open_square => try writer.writeAll("["),
-            .open_curly => try writer.writeAll("{"),
+            .open_paren => writer.writeAll("(")?,
+            .open_square => writer.writeAll("[")?,
+            .open_curly => writer.writeAll("{")?,
             .bad_url => |contents| {
                 writer.writeAll("url(")?;
                 writer.writeAll(contents)?;
@@ -6385,9 +6385,9 @@ pub union(TokenKind) Token {
                 let string_writer = serializer.CssStringWriter(@TypeOf(writer)).new(writer);
                 string_writer.writeStr(value)?;
             },
-            .close_paren => try writer.writeAll(")"),
-            .close_square => try writer.writeAll("]"),
-            .close_curly => try writer.writeAll("}"),
+            .close_paren => writer.writeAll(")")?,
+            .close_square => writer.writeAll("]")?,
+            .close_curly => writer.writeAll("}")?,
         };
     }
 
@@ -6465,24 +6465,24 @@ pub union(TokenKind) Token {
                 writer.writeAll(content)?;
                 writer.writeAll("*/")?;
             },
-            .colon => try writer.writeAll(":"),
-            .semicolon => try writer.writeAll(";"),
-            .comma => try writer.writeAll(","),
-            .include_match => try writer.writeAll("~="),
-            .dash_match => try writer.writeAll("|="),
-            .prefix_match => try writer.writeAll("^="),
-            .suffix_match => try writer.writeAll("$="),
-            .substring_match => try writer.writeAll("*="),
-            .cdo => try writer.writeAll("<!--"),
-            .cdc => try writer.writeAll("-->"),
+            .colon => writer.writeAll(":")?,
+            .semicolon => writer.writeAll(";")?,
+            .comma => writer.writeAll(",")?,
+            .include_match => writer.writeAll("~=")?,
+            .dash_match => writer.writeAll("|=")?,
+            .prefix_match => writer.writeAll("^=")?,
+            .suffix_match => writer.writeAll("$=")?,
+            .substring_match => writer.writeAll("*=")?,
+            .cdo => writer.writeAll("<!--")?,
+            .cdc => writer.writeAll("-->")?,
 
             .function => |name| {
                 serializer.serializeIdentifier(name, writer)?;
                 writer.writeAll("(")?;
             },
-            .open_paren => try writer.writeAll("("),
-            .open_square => try writer.writeAll("["),
-            .open_curly => try writer.writeAll("{"),
+            .open_paren => writer.writeAll("(")?,
+            .open_square => writer.writeAll("[")?,
+            .open_curly => writer.writeAll("{")?,
 
             .bad_url => |contents| {
                 writer.writeAll("url(")?;
@@ -6499,9 +6499,9 @@ pub union(TokenKind) Token {
                 let string_writer = serializer.CssStringWriter(@TypeOf(writer)).new(writer);
                 string_writer.writeStr(value)?;
             },
-            .close_paren => try writer.writeAll(")"),
-            .close_square => try writer.writeAll("]"),
-            .close_curly => try writer.writeAll("}"),
+            .close_paren => writer.writeAll(")")?,
+            .close_square => writer.writeAll("]")?,
+            .close_curly => writer.writeAll("}")?,
         };
     }
 
@@ -6861,15 +6861,15 @@ pub struct color {
     static fn parseHashColorImpl(value: []const u8): ColorError![u8, u8, u8, f32] {
         return switch (value.len) {
             8 => .{
-                (try fromHex(value[0])) * 16 + (try fromHex(value[1])),
-                (try fromHex(value[2])) * 16 + (try fromHex(value[3])),
-                (try fromHex(value[4])) * 16 + (try fromHex(value[5])),
-                @as(f32, @floatFromInt((try fromHex(value[6])) * 16 + (try fromHex(value[7])))) / 255.0,
+                (fromHex(value[0])?) * 16 + (fromHex(value[1])?),
+                (fromHex(value[2])?) * 16 + (fromHex(value[3])?),
+                (fromHex(value[4])?) * 16 + (fromHex(value[5])?),
+                @as(f32, @floatFromInt((fromHex(value[6])?) * 16 + (fromHex(value[7])?))) / 255.0,
             },
             6 => {
-                const r = (try fromHex(value[0])) * 16 + (try fromHex(value[1]));
-                const g = (try fromHex(value[2])) * 16 + (try fromHex(value[3]));
-                const b = (try fromHex(value[4])) * 16 + (try fromHex(value[5]));
+                const r = (fromHex(value[0])?) * 16 + (fromHex(value[1])?);
+                const g = (fromHex(value[2])?) * 16 + (fromHex(value[3])?);
+                const b = (fromHex(value[4])?) * 16 + (fromHex(value[5])?);
                 return .{
                     r,      g, b,
 
@@ -6877,15 +6877,15 @@ pub struct color {
                 };
             },
             4 => .{
-                (try fromHex(value[0])) * 17,
-                (try fromHex(value[1])) * 17,
-                (try fromHex(value[2])) * 17,
-                @as(f32, @floatFromInt((try fromHex(value[3])) * 17)) / 255.0,
+                (fromHex(value[0])?) * 17,
+                (fromHex(value[1])?) * 17,
+                (fromHex(value[2])?) * 17,
+                @as(f32, @floatFromInt((fromHex(value[3])?) * 17)) / 255.0,
             },
             3 => .{
-                (try fromHex(value[0])) * 17,
-                (try fromHex(value[1])) * 17,
-                (try fromHex(value[2])) * 17,
+                (fromHex(value[0])?) * 17,
+                (fromHex(value[1])?) * 17,
+                (fromHex(value[2])?) * 17,
                 OPAQUE,
             },
             else => ColorError.parse,
@@ -7198,8 +7198,8 @@ pub struct to_css {
         let printer = Printer.new(allocator, std.array_list.Managed(u8).init(allocator), writer, options, import_info, local_names, symbols);
         let _printer_guard = DeinitGuard<Printer>{ ptr: &printer };
         switch (T) {
-            CSSString => try CSSStringFns.toCss(val, &printer),
-            else => try val.toCss(&printer),
+            CSSString => CSSStringFns.toCss(val, &printer)?,
+            else => val.toCss(&printer)?,
         }
         _s_guard.ptr = null;
         return s.written();

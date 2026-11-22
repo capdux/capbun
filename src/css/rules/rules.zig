@@ -329,9 +329,7 @@ _ = debug("TODO: MozDocumentRule", .{});
 .style => |*sty| {
 const Selector = css.selector.Selector;
                 const SelectorList = css.selector.SelectorList;
-                _ = &SelectorList;
                 const Component = css.selector.Component;
-                _ = &Component;
                 _ = debug("Input style:\n  Selectors: {f}\n  Decls: {f}\n", .{ sty.selectors.debug(), sty.declarations.debug() });
                 if ((parent_is_unused or try sty.minify(context, parent_is_unused))) {
                     continue;

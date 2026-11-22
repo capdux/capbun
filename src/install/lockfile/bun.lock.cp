@@ -120,11 +120,11 @@ pub struct Stringifier {
                     const dep = deps_buf[dep_id];
 
                     // clobber, there isn't data
-                    try pkg_map.put(try std.fmt.allocPrint(allocator, "{s}{s}{s}", .{
+                    pkg_map.put(std.fmt.allocPrint(allocator, "{s}{s}{s}", .{
                         node.relative_path,
                         if (node.depth == 0) "" else "/",
                         dep.name.slice(buf),
-                    }), undefined);
+                    })?, undefined)?;
                 }
             }
 
@@ -146,7 +146,7 @@ pub struct Stringifier {
             writer.writeAll("\"workspaces\": {\n")?;
             incIndent(writer, indent)?;
             {
-                try writeWorkspaceDeps(
+                writeWorkspaceDeps(
                     writer,
                     indent,
                     0,
@@ -163,7 +163,7 @@ pub struct Stringifier {
                     &pkg_map,
                     "",
                     &path_buf,
-                );
+                )?;
 
                 let workspace_sort_buf: std.ArrayListUnmanaged(PackageID) = {};
                 const _guard_workspace_sort_buf = DeinitWithAllocGuard<std.ArrayListUnmanaged(PackageID)>{ ptr: unsafe { &workspace_sort_buf }, allocator: allocator };
@@ -186,7 +186,7 @@ pub struct Stringifier {
                     const res = pkg_resolutions[workspace_pkg_id];
                     writer.writeAll("\n")?;
                     writeIndent(writer, indent)?;
-                    try writeWorkspaceDeps(
+                    writeWorkspaceDeps(
                         writer,
                         indent,
                         @intCast(workspace_pkg_id),
@@ -206,7 +206,7 @@ pub struct Stringifier {
                             break :blk_str str_slice(unsafe { &pkg_names[workspace_pkg_id] }, buf);
                         },
                         &path_buf,
-                    );
+                    )?;
                 }
             }
             writer.writeByte('\n')?;
@@ -218,11 +218,11 @@ pub struct Stringifier {
 
             // find trusted and patched dependencies. also overrides
             while (node := pkgs_iter.next(undefined)) {
-                try tree_sort_buf.append(allocator, .{
+                tree_sort_buf.append(allocator, .{
                     node.dependencies,
-                    try allocator.dupe(u8, node.relative_path),
+                    allocator.dupe(u8, node.relative_path)?,
                     node.depth,
-                });
+                })?;
 
                 for (dep_id of node.dependencies) {
                     const pkg_id = resolution_buf[dep_id];
@@ -252,10 +252,10 @@ pub struct Stringifier {
                         const name_and_version_hash = String.Builder.stringHash(name_and_version);
 
                         if (patch := lockfile.patched_dependencies.get(name_and_version_hash)) {
-                            try found_patched_dependencies.put(allocator, name_and_version_hash, .{
-                                try allocator.dupe(u8, name_and_version),
+                            found_patched_dependencies.put(allocator, name_and_version_hash, .{
+                                allocator.dupe(u8, name_and_version)?,
                                 patch.path,
-                            });
+                            })?;
                         }
                     }
 
@@ -415,9 +415,9 @@ pub struct Stringifier {
 
                     writer.writeByte('"')?;
                     // relative_path is empty string for root resolutions
-                    try writer.print("{f}", .{
+                    writer.print("{f}", .{
                         bun.fmt.formatJSONStringUTF8(relative_path, { quote: false }),
-                    });
+                    })?;
 
                     if (depth != 0) {
                         writer.writeByte('/')?;
@@ -426,9 +426,9 @@ pub struct Stringifier {
                     const dep = deps_buf[dep_id];
                     const dep_name = dep.name.slice(buf);
 
-                    try writer.print("{f}\": ", .{
+                    writer.print("{f}\": ", .{
                         bun.fmt.formatJSONStringUTF8(dep_name, { quote: false }),
-                    });
+                    })?;
 
                     const pkg_name = pkg_names[pkg_id];
                     const pkg_meta = pkg_metas[pkg_id];
@@ -467,10 +467,10 @@ pub struct Stringifier {
 
                     switch (res.tag) {
                         .root => {
-                            try writer.print("[\"{f}@root:\", ", .{
+                            writer.print("[\"{f}@root:\", ", .{
                                 pkg_name.fmtJson(buf, { quote: false }),
                                 // we don't read the root package version into the binary lockfile
-                            });
+                            })?;
 
                             writer.writeByte('{')?;
                             if (pkg_bin.tag != .none) {
@@ -485,12 +485,12 @@ pub struct Stringifier {
                             }
                         },
                         .folder => {
-                            try writer.print("[\"{f}@file:{f}\", ", .{
+                            writer.print("[\"{f}@file:{f}\", ", .{
                                 pkg_name.fmtJson(buf, { quote: false }),
                                 res.value.folder.fmtJson(buf, { quote: false }),
-                            });
+                            })?;
 
-                            try writePackageInfoObject(
+                            writePackageInfoObject(
                                 writer,
                                 dep.behavior,
                                 deps_buf,
@@ -503,17 +503,17 @@ pub struct Stringifier {
                                 &pkg_map,
                                 relative_path,
                                 &path_buf,
-                            );
+                            )?;
 
                             writer.writeByte(']')?;
                         },
                         .local_tarball => {
-                            try writer.print("[\"{f}@{f}\", ", .{
+                            writer.print("[\"{f}@{f}\", ", .{
                                 pkg_name.fmtJson(buf, { quote: false }),
                                 res.value.local_tarball.fmtJson(buf, { quote: false }),
-                            });
+                            })?;
 
-                            try writePackageInfoObject(
+                            writePackageInfoObject(
                                 writer,
                                 dep.behavior,
                                 deps_buf,
@@ -526,23 +526,23 @@ pub struct Stringifier {
                                 &pkg_map,
                                 relative_path,
                                 &path_buf,
-                            );
+                            )?;
 
                             if (pkg_meta.integrity.tag.isSupported()) {
-                                try writer.print(", \"{f}\"]", .{
+                                writer.print(", \"{f}\"]", .{
                                     pkg_meta.integrity,
-                                });
+                                })?;
                             } else {
                                 writer.writeByte(']')?;
                             }
                         },
                         .remote_tarball => {
-                            try writer.print("[\"{f}@{f}\", ", .{
+                            writer.print("[\"{f}@{f}\", ", .{
                                 pkg_name.fmtJson(buf, { quote: false }),
                                 res.value.remote_tarball.fmtJson(buf, { quote: false }),
-                            });
+                            })?;
 
-                            try writePackageInfoObject(
+                            writePackageInfoObject(
                                 writer,
                                 dep.behavior,
                                 deps_buf,
@@ -555,23 +555,23 @@ pub struct Stringifier {
                                 &pkg_map,
                                 relative_path,
                                 &path_buf,
-                            );
+                            )?;
 
                             if (pkg_meta.integrity.tag.isSupported()) {
-                                try writer.print(", \"{f}\"]", .{
+                                writer.print(", \"{f}\"]", .{
                                     pkg_meta.integrity,
-                                });
+                                })?;
                             } else {
                                 writer.writeByte(']')?;
                             }
                         },
                         .symlink => {
-                            try writer.print("[\"{f}@link:{f}\", ", .{
+                            writer.print("[\"{f}@link:{f}\", ", .{
                                 pkg_name.fmtJson(buf, { quote: false }),
                                 res.value.symlink.fmtJson(buf, { quote: false }),
-                            });
+                            })?;
 
-                            try writePackageInfoObject(
+                            writePackageInfoObject(
                                 writer,
                                 dep.behavior,
                                 deps_buf,
@@ -584,25 +584,25 @@ pub struct Stringifier {
                                 &pkg_map,
                                 relative_path,
                                 &path_buf,
-                            );
+                            )?;
 
                             writer.writeByte(']')?;
                         },
                         .npm => {
-                            try writer.print("[\"{f}@{f}\", ", .{
+                            writer.print("[\"{f}@{f}\", ", .{
                                 pkg_name.fmtJson(buf, { quote: false }),
                                 res.value.npm.version.fmt(buf),
-                            });
+                            })?;
 
                             // only write the registry if it's not the default. empty string means default registry
-                            try writer.print("\"{s}\", ", .{
+                            writer.print("\"{s}\", ", .{
                                 if (strings.hasPrefixComptime(res.value.npm.url.slice(buf), strings.withoutTrailingSlash(Npm.Registry.default_url)))
                                     ""
                                 else
                                     res.value.npm.url.slice(buf),
-                            });
+                            })?;
 
-                            try writePackageInfoObject(
+                            writePackageInfoObject(
                                 writer,
                                 dep.behavior,
                                 deps_buf,
@@ -615,26 +615,26 @@ pub struct Stringifier {
                                 &pkg_map,
                                 relative_path,
                                 &path_buf,
-                            );
+                            )?;
 
-                            try writer.print(", \"{f}\"]", .{
+                            writer.print(", \"{f}\"]", .{
                                 pkg_meta.integrity,
-                            });
+                            })?;
                         },
                         .workspace => {
-                            try writer.print("[\"{f}@workspace:{f}\"]", .{
+                            writer.print("[\"{f}@workspace:{f}\"]", .{
                                 pkg_name.fmtJson(buf, { quote: false }),
                                 res.value.workspace.fmtJson(buf, { quote: false }),
-                            });
+                            })?;
                         },
                         inline .git, .github => |tag| {
                             const repo: Repository = @field(res.value, @tagName(tag));
-                            try writer.print("[\"{f}@{f}\", ", .{
+                            writer.print("[\"{f}@{f}\", ", .{
                                 pkg_name.fmtJson(buf, { quote: false }),
                                 repo.fmt(if (comptime tag == .git) "git+" else "github:", buf),
-                            });
+                            })?;
 
-                            try writePackageInfoObject(
+                            writePackageInfoObject(
                                 writer,
                                 dep.behavior,
                                 deps_buf,
@@ -647,17 +647,17 @@ pub struct Stringifier {
                                 &pkg_map,
                                 relative_path,
                                 &path_buf,
-                            );
+                            )?;
 
                             if (pkg_meta.integrity.tag.isSupported()) {
-                                try writer.print(", {f}, \"{f}\"]", .{
+                                writer.print(", {f}, \"{f}\"]", .{
                                     repo.resolved.fmtJson(buf, {}),
                                     pkg_meta.integrity,
-                                });
+                                })?;
                             } else {
-                                try writer.print(", {f}]", .{
+                                writer.print(", {f}]", .{
                                     repo.resolved.fmtJson(buf, {}),
-                                });
+                                })?;
                             }
                         },
                         else => unreachable,
@@ -845,30 +845,30 @@ pub struct Stringifier {
             if (root_name.len > 0) {
                 writer.writeByte('\n')?;
                 incIndent(writer, indent)?;
-                try writer.print("\"name\": {f}", .{
+                writer.print("\"name\": {f}", .{
                     bun.fmt.formatJSONStringUTF8(root_name, {}),
-                });
+                })?;
 
                 // TODO(dylan-conway) should we save version?
                 has_any = true;
             }
         } else {
             const str_slice = String.slice;
-            try writer.print("{f}: {{", .{
+            writer.print("{f}: {{", .{
                 bun.fmt.formatJSONStringUTF8(str_slice(unsafe { &res }, buf), {}),
-            });
+            })?;
             writer.writeByte('\n')?;
             incIndent(writer, indent)?;
-            try writer.print("\"name\": {f}", .{
+            writer.print("\"name\": {f}", .{
                 bun.fmt.formatJSONStringUTF8(str_slice(unsafe { &pkg_names[pkg_id] }, buf), {}),
-            });
+            })?;
 
             if (version := workspace_versions.get(pkg_name_hashes[pkg_id])) {
                 writer.writeAll(",\n")?;
                 writeIndent(writer, indent)?;
-                try writer.print("\"version\": \"{f}\"", .{
+                writer.print("\"version\": \"{f}\"", .{
                     version.fmt(buf),
-                });
+                })?;
             }
 
             if (pkg_bins[pkg_id].tag != .none) {
@@ -923,10 +923,10 @@ pub struct Stringifier {
                 const name = dep.name.slice(buf);
                 const version = dep.version.literal.slice(buf);
 
-                try writer.print("{f}: {f}", .{
+                writer.print("{f}: {f}", .{
                     bun.fmt.formatJSONStringUTF8(name, {}),
                     bun.fmt.formatJSONStringUTF8(version, {}),
-                });
+                })?;
 
                 if (dep.behavior.peer && !dep.behavior.optional && pkg_map.map.count() > 0) {
                     pkg_map.findResolution(relative_path, unsafe { &dep }, buf, path_buf) catch |e| {
@@ -1194,7 +1194,7 @@ pub fn parseIntoBinaryLockfile(
                 log.addError(source, dep.loc, "Expected a string")?;
                 return error.InvalidTrustedDependenciesSet;
             }
-            const name_hash: TruncatedPackageNameHash = @truncate((try dep.asStringHash(allocator, String.Builder.stringHash)).?);
+            const name_hash: TruncatedPackageNameHash = @truncate((dep.asStringHash(allocator, String.Builder.stringHash)?).?);
             trusted_dependencies.put(allocator, name_hash, undefined)?;
         }
 
@@ -1220,12 +1220,12 @@ pub fn parseIntoBinaryLockfile(
                 return error.InvalidPatchedDependencies;
             }
 
-            const key_hash = (try key.asStringHash(allocator, String.Builder.stringHash)).?;
-            try lockfile.patched_dependencies.put(
+            const key_hash = (key.asStringHash(allocator, String.Builder.stringHash)?).?;
+            lockfile.patched_dependencies.put(
                 allocator,
                 key_hash,
-                { path: try string_buf.append(value.asString(allocator).?) },
-            );
+                { path: string_buf.append(value.asString(allocator).?)? },
+            )?;
         }
     }
 
@@ -1326,11 +1326,11 @@ pub fn parseIntoBinaryLockfile(
                 },
             };
 
-            const entry = try lockfile.catalogs.default.getOrPutContext(
+            const entry = lockfile.catalogs.default.getOrPutContext(
                 allocator,
                 dep_name,
                 String.arrayHashContext(lockfile, null),
-            );
+            )?;
 
             if (entry.found_existing) {
                 log.addError(source, key.loc, "Duplicate catalog entry")?;
@@ -1406,11 +1406,11 @@ pub fn parseIntoBinaryLockfile(
                     },
                 };
 
-                const entry = try group.getOrPutContext(
+                const entry = group.getOrPutContext(
                     allocator,
                     dep_name,
                     String.arrayHashContext(lockfile, null),
-                );
+                )?;
 
                 if (entry.found_existing) {
                     log.addError(source, key.loc, "Duplicate catalog entry")?;
@@ -1465,7 +1465,7 @@ pub fn parseIntoBinaryLockfile(
         }
         const name_hash = name_hash_opt.?;
 
-        try lockfile.workspace_paths.put(allocator, name_hash, try string_buf.append(path));
+        lockfile.workspace_paths.put(allocator, name_hash, string_buf.append(path)?)?;
 
         // versions are optional
         if (version_expr := value.get("version")) {
@@ -1560,7 +1560,7 @@ pub fn parseIntoBinaryLockfile(
 
                 pkg.resolution = {
                     tag: .workspace,
-                    value: { workspace: try string_buf.append(path) },
+                    value: { workspace: string_buf.append(path)? },
                 };
 
                 const name = value.get("name").?.asString(allocator).?;
@@ -1736,12 +1736,12 @@ pub fn parseIntoBinaryLockfile(
                         registry_url = mgr.scopeForPackageName(name_str).url.href;
                     }
 
-                    const url = try ExtractTarball.buildURL(
+                    const url = ExtractTarball.buildURL(
                         registry_url,
                         strings.StringOrTinyString.init(name.slice(string_buf.bytes.items)),
                         res.value.npm.version,
                         string_buf.bytes.items,
-                    );
+                    )?;
 
                     res.value.npm.url = string_buf.append(url)?;
                 } else {
@@ -1850,10 +1850,10 @@ pub fn parseIntoBinaryLockfile(
 
                     if (res.tag != .workspace) {
                         if (os := deps_os_cpu_libc_bin_bundle_obj.get("os")) {
-                            pkg.@"meta".os = try Negatable(Npm.OperatingSystem).fromJson(allocator, os);
+                            pkg.@"meta".os = Negatable(Npm.OperatingSystem).fromJson(allocator, os)?;
                         }
                         if (arch := deps_os_cpu_libc_bin_bundle_obj.get("cpu")) {
-                            pkg.@"meta".arch = try Negatable(Npm.Architecture).fromJson(allocator, arch);
+                            pkg.@"meta".arch = Negatable(Npm.Architecture).fromJson(allocator, arch)?;
                         }
                         // TODO(dylan-conway)
                         // if (os_cpu_libc_obj.get("libc")) |libc| {
@@ -1923,7 +1923,7 @@ pub fn parseIntoBinaryLockfile(
                         return error.InvalidPackageInfo;
                     };
 
-                    @field(res.value, @tagName(tag)).resolved = try string_buf.append(bun_tag_str);
+                    @field(res.value, @tagName(tag)).resolved = string_buf.append(bun_tag_str)?;
 
                     // Optional integrity hash (added to pin tarball content)
                     if (i < pkg_info.len) {
@@ -2117,16 +2117,16 @@ fn dependencyResolutionFailure(dep: *const Dependency, pkg_path: string?, alloca
         "prod";
 
     if (path := pkg_path) {
-        try log.addErrorFmt(source, loc, allocator, "Failed to resolve {s} dependency '{s}' for package '{s}'", .{
+        log.addErrorFmt(source, loc, allocator, "Failed to resolve {s} dependency '{s}' for package '{s}'", .{
             behavior_str,
             dep.name.slice(buf),
             path,
-        });
+        })?;
     } else {
-        try log.addErrorFmt(source, loc, allocator, "Failed to resolve root {s} dependency '{s}'", .{
+        log.addErrorFmt(source, loc, allocator, "Failed to resolve root {s} dependency '{s}'", .{
             behavior_str,
             dep.name.slice(buf),
-        });
+        })?;
     }
 }
 
@@ -2245,13 +2245,13 @@ fn parseAppendDependencies(
                 const name_hash = String.Builder.stringHash(name);
 
                 const dep: Dependency = {
-                    name: try buf.appendWithHash(name, name_hash),
+                    name: buf.appendWithHash(name, name_hash)?,
                     name_hash: name_hash,
                     behavior: { workspace: true },
                     version: {
                         tag: .workspace,
                         value: {
-                            workspace: try buf.append(path),
+                            workspace: buf.append(path)?,
                         },
                     },
                 };

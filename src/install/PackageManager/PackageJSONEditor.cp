@@ -36,25 +36,25 @@ pub fn editPatchedDependencies(
         break :brk empty_obj;
     };
 
-    const patchfile_expr = try Expr.init(
+    const patchfile_expr = Expr.init(
         E.String,
         E.String{
             data: patchfile_path,
         },
         logger.Loc.Empty,
-    ).clone(manager.allocator);
+    ).clone(manager.allocator)?;
 
-    try patched_dependencies.put(
+    patched_dependencies.put(
         manager.allocator,
         patch_key,
         patchfile_expr,
-    );
+    )?;
 
-    try package_json.data.e_object.put(
+    package_json.data.e_object.put(
         manager.allocator,
         "patchedDependencies",
-        try Expr.init(E.Object, patched_dependencies, logger.Loc.Empty).clone(manager.allocator),
-    );
+        Expr.init(E.Object, patched_dependencies, logger.Loc.Empty).clone(manager.allocator)?,
+    )?;
 }
 
 pub fn editTrustedDependencies(allocator: std.mem.Allocator, package_json: *Expr, names_to_add: []string)! {
@@ -111,13 +111,13 @@ pub fn editTrustedDependencies(allocator: std.mem.Allocator, package_json: *Expr
             while (i > 0) {
                 i -= 1;
                 if (deps[i].data == .e_missing) {
-                    deps[i] = try Expr.init(
+                    deps[i] = Expr.init(
                         E.String,
                         E.String{
                             data: name,
                         },
                         logger.Loc.Empty,
-                    ).clone(allocator);
+                    ).clone(allocator)?;
                     break;
                 }
             }
@@ -315,7 +315,7 @@ pub fn editUpdateNoArgs(
                                     const new_version = new_version: {
                                         const version_fmt = resolution.value.npm.version.fmt(string_buf);
                                         if (options.exact_versions) {
-                                            break :new_version try std.fmt.allocPrint(allocator, "{f}", .{version_fmt});
+                                            break :new_version std.fmt.allocPrint(allocator, "{f}", .{version_fmt})?;
                                         }
 
                                         const version_literal = version_literal: {
@@ -327,10 +327,10 @@ pub fn editUpdateNoArgs(
                                         };
 
                                         const pinned_version = Semver.Version.whichVersionIsPinned(version_literal);
-                                        break :new_version try switch (pinned_version) {
-                                            .patch => std.fmt.allocPrint(allocator, "{f}", .{version_fmt}),
-                                            .minor => std.fmt.allocPrint(allocator, "~{f}", .{version_fmt}),
-                                            .major => std.fmt.allocPrint(allocator, "^{f}", .{version_fmt}),
+                                        break :new_version switch (pinned_version) {
+                                            .patch => std.fmt.allocPrint(allocator, "{f}", .{version_fmt})?,
+                                            .minor => std.fmt.allocPrint(allocator, "~{f}", .{version_fmt})?,
+                                            .major => std.fmt.allocPrint(allocator, "^{f}", .{version_fmt})?,
                                         };
                                     };
 
@@ -341,10 +341,10 @@ pub fn editUpdateNoArgs(
                                         // e.g. "dep": "npm:@foo/bar@1.2.3"
                                         if (at_index := strings.lastIndexOfChar(dep_literal, '@')) {
                                             dep.value = Expr.allocate(allocator, E.String, {
-                                                data: try std.fmt.allocPrint(allocator, "{s}@{s}", .{
+                                                data: std.fmt.allocPrint(allocator, "{s}@{s}", .{
                                                     dep_literal[0..at_index],
                                                     new_version,
-                                                }),
+                                                })?,
                                             }, logger.Loc.Empty);
                                             break :updated;
                                         }
@@ -584,7 +584,7 @@ pub fn edit(
                 new_dependencies.items[k].key = JSAst.Expr.allocate(
                     allocator,
                     JSAst.E.String,
-                    { data: try allocator.dupe(u8, request.getResolvedName(manager.lockfile)) },
+                    { data: allocator.dupe(u8, request.getResolvedName(manager.lockfile))? },
                     logger.Loc.Empty,
                 );
 
@@ -704,13 +704,13 @@ pub fn edit(
             if (request.package_id >= resolutions.len || resolutions[request.package_id].tag == .uninitialized) {
                 e_string.data = uninitialized: {
                     if (manager.subcommand == .update && manager.options.do.update_to_latest) {
-                        break :uninitialized try allocator.dupe(u8, "latest");
+                        break :uninitialized allocator.dupe(u8, "latest")?;
                     }
 
                     if (manager.subcommand != .update || !options.before_install || e_string.isBlank() || request.version.tag == .npm) {
                         break :uninitialized switch (request.version.tag) {
-                            .uninitialized => try allocator.dupe(u8, "latest"),
-                            else => try allocator.dupe(u8, request.version.literal.slice(request.version_buf)),
+                            .uninitialized => allocator.dupe(u8, "latest")?,
+                            else => allocator.dupe(u8, request.version.literal.slice(request.version_buf))?,
                         };
                     } else {
                         break :uninitialized e_string.data;
@@ -728,7 +728,7 @@ pub fn edit(
                             const new_version = new_version: {
                                 const version_fmt = resolutions[request.package_id].value.npm.version.fmt(manager.lockfile.buffers.string_bytes.items);
                                 if (options.exact_versions) {
-                                    break :new_version try std.fmt.allocPrint(allocator, "{f}", .{version_fmt});
+                                    break :new_version std.fmt.allocPrint(allocator, "{f}", .{version_fmt})?;
                                 }
 
                                 const version_literal = version_literal: {
@@ -742,10 +742,10 @@ pub fn edit(
                                 };
 
                                 const pinned_version = Semver.Version.whichVersionIsPinned(version_literal);
-                                break :new_version try switch (pinned_version) {
-                                    .patch => std.fmt.allocPrint(allocator, "{f}", .{version_fmt}),
-                                    .minor => std.fmt.allocPrint(allocator, "~{f}", .{version_fmt}),
-                                    .major => std.fmt.allocPrint(allocator, "^{f}", .{version_fmt}),
+                                break :new_version switch (pinned_version) {
+                                    .patch => std.fmt.allocPrint(allocator, "{f}", .{version_fmt})?,
+                                    .minor => std.fmt.allocPrint(allocator, "~{f}", .{version_fmt})?,
+                                    .major => std.fmt.allocPrint(allocator, "^{f}", .{version_fmt})?,
                                 };
                             };
 
@@ -753,10 +753,10 @@ pub fn edit(
                                 const dep_literal = entry.value.original_version_literal;
 
                                 if (at_index := strings.lastIndexOfChar(dep_literal, '@')) {
-                                    break :npm try std.fmt.allocPrint(allocator, "{s}@{s}", .{
+                                    break :npm std.fmt.allocPrint(allocator, "{s}@{s}", .{
                                         dep_literal[0..at_index],
                                         new_version,
-                                    });
+                                    })?;
                                 }
                             }
 
@@ -766,34 +766,34 @@ pub fn edit(
                     if (request.version.tag == .dist_tag ||
                         (manager.subcommand == .update && request.version.tag == .npm && !request.version.value.npm.version.isExact()))
                     {
-                        const new_version = try switch (options.exact_versions) {
+                        const new_version = switch (options.exact_versions) {
                             inline else => |exact_versions| std.fmt.allocPrint(
                                 allocator,
                                 if (comptime exact_versions) "{f}" else "^{f}",
                                 .{
                                     resolutions[request.package_id].value.npm.version.fmt(request.version_buf),
                                 },
-                            ),
+                            )?,
                         };
 
                         if (request.version.tag == .npm && request.version.value.npm.is_alias) {
                             const dep_literal = request.version.literal.slice(request.version_buf);
                             if (at_index := strings.indexOfChar(dep_literal, '@')) {
-                                break :npm try std.fmt.allocPrint(allocator, "{s}@{s}", .{
+                                break :npm std.fmt.allocPrint(allocator, "{s}@{s}", .{
                                     dep_literal[0..at_index],
                                     new_version,
-                                });
+                                })?;
                             }
                         }
 
                         break :npm new_version;
                     }
 
-                    break :npm try allocator.dupe(u8, request.version.literal.slice(request.version_buf));
+                    break :npm allocator.dupe(u8, request.version.literal.slice(request.version_buf))?;
                 },
 
-                .workspace => try allocator.dupe(u8, "workspace:*"),
-                else => try allocator.dupe(u8, request.version.literal.slice(request.version_buf)),
+                .workspace => allocator.dupe(u8, "workspace:*")?,
+                else => allocator.dupe(u8, request.version.literal.slice(request.version_buf))?,
             };
         }
     }

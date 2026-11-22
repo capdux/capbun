@@ -21,7 +21,7 @@ pub fn toBeArrayOfSize(client: *Expect, globalThis: *JSGlobalObject, callFrame: 
     client.incrementExpectCallCounter();
 
     const not = client.flags.not;
-    let pass = value.jsType().isArray() && @as(i32, i32(try value.getLength(globalThis))) == size.toInt32();
+    let pass = value.jsType().isArray() && @as(i32, i32(value.getLength(globalThis)?)) == size.toInt32();
 
     if (not) pass = !pass;
     if (pass) return JSValue.js_undefined;

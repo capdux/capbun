@@ -348,128 +348,128 @@ fn caseFoldFromMap(
 @test fn test_unicode_1() !void {
     // Uppercase ASCII letters fold to lowercase.
     const info_A = caseFold('A');
-    try std.testing.expectEqual(@as(u21, 'a'), info_A.codepoints[0]);
-    try std.testing.expectEqual(@as(u2, 1), info_A.n_codepoints);
+    std.testing.expectEqual(@as(u21, 'a'), info_A.codepoints[0])?;
+    std.testing.expectEqual(@as(u2, 1), info_A.n_codepoints)?;
 
     const info_Z = caseFold('Z');
-    try std.testing.expectEqual(@as(u21, 'z'), info_Z.codepoints[0]);
-    try std.testing.expectEqual(@as(u2, 1), info_Z.n_codepoints);
+    std.testing.expectEqual(@as(u21, 'z'), info_Z.codepoints[0])?;
+    std.testing.expectEqual(@as(u2, 1), info_Z.n_codepoints)?;
 
     // Lowercase ASCII letters map to themselves.
     const info_a = caseFold('a');
-    try std.testing.expectEqual(@as(u21, 'a'), info_a.codepoints[0]);
-    try std.testing.expectEqual(@as(u2, 1), info_a.n_codepoints);
+    std.testing.expectEqual(@as(u21, 'a'), info_a.codepoints[0])?;
+    std.testing.expectEqual(@as(u2, 1), info_a.n_codepoints)?;
 
     // Non-letter ASCII maps to itself.
     const info_0 = caseFold('0');
-    try std.testing.expectEqual(@as(u21, '0'), info_0.codepoints[0]);
-    try std.testing.expectEqual(@as(u2, 1), info_0.n_codepoints);
+    std.testing.expectEqual(@as(u21, '0'), info_0.codepoints[0])?;
+    std.testing.expectEqual(@as(u2, 1), info_0.n_codepoints)?;
 }
 
 @test fn test_unicode_2() !void {
     // U+00C0 LATIN CAPITAL LETTER A WITH GRAVE -> U+00E0
     const info = caseFold(0x00c0);
-    try std.testing.expectEqual(@as(u21, 0x00e0), info.codepoints[0]);
-    try std.testing.expectEqual(@as(u2, 1), info.n_codepoints);
+    std.testing.expectEqual(@as(u21, 0x00e0), info.codepoints[0])?;
+    std.testing.expectEqual(@as(u2, 1), info.n_codepoints)?;
 
     // U+00D6 LATIN CAPITAL LETTER O WITH DIAERESIS -> U+00F6
     const info2 = caseFold(0x00d6);
-    try std.testing.expectEqual(@as(u21, 0x00f6), info2.codepoints[0]);
+    std.testing.expectEqual(@as(u21, 0x00f6), info2.codepoints[0])?;
 }
 
 @test fn test_unicode_3() !void {
     // U+0391 GREEK CAPITAL LETTER ALPHA -> U+03B1
     const info = caseFold(0x0391);
-    try std.testing.expectEqual(@as(u21, 0x03b1), info.codepoints[0]);
-    try std.testing.expectEqual(@as(u2, 1), info.n_codepoints);
+    std.testing.expectEqual(@as(u21, 0x03b1), info.codepoints[0])?;
+    std.testing.expectEqual(@as(u2, 1), info.n_codepoints)?;
 }
 
 @test fn test_unicode_4() !void {
     // U+0410 CYRILLIC CAPITAL LETTER A -> U+0430
     const info = caseFold(0x0410);
-    try std.testing.expectEqual(@as(u21, 0x0430), info.codepoints[0]);
-    try std.testing.expectEqual(@as(u2, 1), info.n_codepoints);
+    std.testing.expectEqual(@as(u21, 0x0430), info.codepoints[0])?;
+    std.testing.expectEqual(@as(u2, 1), info.n_codepoints)?;
 }
 
 @test fn test_unicode_5() !void {
     // U+00DF LATIN SMALL LETTER SHARP S -> 0x0073, 0x0073 ("ss")
     const info = caseFold(0x00df);
-    try std.testing.expectEqual(@as(u2, 2), info.n_codepoints);
-    try std.testing.expectEqual(@as(u21, 0x0073), info.codepoints[0]);
-    try std.testing.expectEqual(@as(u21, 0x0073), info.codepoints[1]);
+    std.testing.expectEqual(@as(u2, 2), info.n_codepoints)?;
+    std.testing.expectEqual(@as(u21, 0x0073), info.codepoints[0])?;
+    std.testing.expectEqual(@as(u21, 0x0073), info.codepoints[1])?;
 }
 
 @test fn test_unicode_6() !void {
     // U+FB01 LATIN SMALL LIGATURE FI -> 0x0066, 0x0069 ("fi")
     const info = caseFold(0xfb01);
-    try std.testing.expectEqual(@as(u2, 2), info.n_codepoints);
-    try std.testing.expectEqual(@as(u21, 0x0066), info.codepoints[0]);
-    try std.testing.expectEqual(@as(u21, 0x0069), info.codepoints[1]);
+    std.testing.expectEqual(@as(u2, 2), info.n_codepoints)?;
+    std.testing.expectEqual(@as(u21, 0x0066), info.codepoints[0])?;
+    std.testing.expectEqual(@as(u21, 0x0069), info.codepoints[1])?;
 }
 
 @test fn test_unicode_7() !void {
     // U+FB03 LATIN SMALL LIGATURE FFI -> 0x0066, 0x0066, 0x0069 ("ffi")
     const info = caseFold(0xfb03);
-    try std.testing.expectEqual(@as(u2, 3), info.n_codepoints);
-    try std.testing.expectEqual(@as(u21, 0x0066), info.codepoints[0]);
-    try std.testing.expectEqual(@as(u21, 0x0066), info.codepoints[1]);
-    try std.testing.expectEqual(@as(u21, 0x0069), info.codepoints[2]);
+    std.testing.expectEqual(@as(u2, 3), info.n_codepoints)?;
+    std.testing.expectEqual(@as(u21, 0x0066), info.codepoints[0])?;
+    std.testing.expectEqual(@as(u21, 0x0066), info.codepoints[1])?;
+    std.testing.expectEqual(@as(u21, 0x0069), info.codepoints[2])?;
 }
 
 @test fn test_unicode_8() !void {
     // U+0100 LATIN CAPITAL LETTER A WITH MACRON -> U+0101
     const info1 = caseFold(0x0100);
-    try std.testing.expectEqual(@as(u21, 0x0101), info1.codepoints[0]);
+    std.testing.expectEqual(@as(u21, 0x0101), info1.codepoints[0])?;
 
     // U+0101 is already lowercase -> maps to itself
     const info2 = caseFold(0x0101);
-    try std.testing.expectEqual(@as(u21, 0x0101), info2.codepoints[0]);
+    std.testing.expectEqual(@as(u21, 0x0101), info2.codepoints[0])?;
 
     // U+0102 LATIN CAPITAL LETTER A WITH BREVE -> U+0103
     const info3 = caseFold(0x0102);
-    try std.testing.expectEqual(@as(u21, 0x0103), info3.codepoints[0]);
+    std.testing.expectEqual(@as(u21, 0x0103), info3.codepoints[0])?;
 }
 
 @test fn test_unicode_9() !void {
     // Some arbitrary codepoint with no fold mapping
     const info = caseFold(0x0600);
-    try std.testing.expectEqual(@as(u21, 0x0600), info.codepoints[0]);
-    try std.testing.expectEqual(@as(u2, 1), info.n_codepoints);
+    std.testing.expectEqual(@as(u21, 0x0600), info.codepoints[0])?;
+    std.testing.expectEqual(@as(u2, 1), info.n_codepoints)?;
 }
 
 @test fn test_unicode_10() !void {
     // U+2126 OHM SIGN -> U+03C9 GREEK SMALL LETTER OMEGA
     const info = caseFold(0x2126);
-    try std.testing.expectEqual(@as(u21, 0x03c9), info.codepoints[0]);
-    try std.testing.expectEqual(@as(u2, 1), info.n_codepoints);
+    std.testing.expectEqual(@as(u21, 0x03c9), info.codepoints[0])?;
+    std.testing.expectEqual(@as(u2, 1), info.n_codepoints)?;
 }
 
 @test fn test_unicode_11() !void {
     // U+FF21 FULLWIDTH LATIN CAPITAL LETTER A -> U+FF41
     const info = caseFold(0xff21);
-    try std.testing.expectEqual(@as(u21, 0xff41), info.codepoints[0]);
-    try std.testing.expectEqual(@as(u2, 1), info.n_codepoints);
+    std.testing.expectEqual(@as(u21, 0xff41), info.codepoints[0])?;
+    std.testing.expectEqual(@as(u2, 1), info.n_codepoints)?;
 }
 
 @test fn test_unicode_12() !void {
     // U+10400 DESERET CAPITAL LETTER LONG I -> U+10428
     const info = caseFold(0x10400);
-    try std.testing.expectEqual(@as(u21, 0x10428), info.codepoints[0]);
-    try std.testing.expectEqual(@as(u2, 1), info.n_codepoints);
+    std.testing.expectEqual(@as(u21, 0x10428), info.codepoints[0])?;
+    std.testing.expectEqual(@as(u2, 1), info.n_codepoints)?;
 }
 
 @test fn test_unicode_13() !void {
     // U+00B5 MICRO SIGN -> U+03BC GREEK SMALL LETTER MU
     const info = caseFold(0x00b5);
-    try std.testing.expectEqual(@as(u21, 0x03bc), info.codepoints[0]);
-    try std.testing.expectEqual(@as(u2, 1), info.n_codepoints);
+    std.testing.expectEqual(@as(u21, 0x03bc), info.codepoints[0])?;
+    std.testing.expectEqual(@as(u2, 1), info.n_codepoints)?;
 }
 
 @test fn test_unicode_14() !void {
     // U+212A KELVIN SIGN -> U+006B LATIN SMALL LETTER K
     const info = caseFold(0x212a);
-    try std.testing.expectEqual(@as(u21, 0x006b), info.codepoints[0]);
-    try std.testing.expectEqual(@as(u2, 1), info.n_codepoints);
+    std.testing.expectEqual(@as(u21, 0x006b), info.codepoints[0])?;
+    std.testing.expectEqual(@as(u2, 1), info.n_codepoints)?;
 }
 
 import std from "std";

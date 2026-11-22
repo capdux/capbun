@@ -185,7 +185,7 @@ pub struct Background {
         }
 
         if (!_.image.eql(&Image.default())) {
-            if (has_output) try dest.writeStr(" ");
+            if (has_output) dest.writeStr(" ")?;
             _.image.toCss(dest)?;
             has_output = true;
         }
@@ -206,13 +206,13 @@ pub struct Background {
         }
 
         if (!_.repeat.eql(&BackgroundRepeat.default())) {
-            if (has_output) try dest.writeStr(" ");
+            if (has_output) dest.writeStr(" ")?;
             _.repeat.toCss(dest)?;
             has_output = true;
         }
 
         if (!_.attachment.eql(&BackgroundAttachment.default())) {
-            if (has_output) try dest.writeStr(" ");
+            if (has_output) dest.writeStr(" ")?;
             _.attachment.toCss(dest)?;
             has_output = true;
         }
@@ -221,7 +221,7 @@ pub struct Background {
             (!_.clip.eqlOrigin(&BackgroundOrigin.@"border-box") && _.clip.isBackgroundBox());
 
         if (output_padding_box) {
-            if (has_output) try dest.writeStr(" ");
+            if (has_output) dest.writeStr(" ")?;
             _.origin.toCss(dest)?;
             has_output = true;
         }
@@ -229,7 +229,7 @@ pub struct Background {
         if ((output_padding_box && !_.clip.eqlOrigin(&BackgroundOrigin.@"border-box")) ||
             !_.clip.eqlOrigin(&BackgroundOrigin.@"border-box"))
         {
-            if (has_output) try dest.writeStr(" ");
+            if (has_output) dest.writeStr(" ")?;
 
             _.clip.toCss(dest)?;
             has_output = true;

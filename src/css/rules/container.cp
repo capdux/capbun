@@ -106,14 +106,14 @@ pub union(enum) StyleQuery {
 
     fn toCss(dest: *Printer): PrintErr!void {
         switch (_) {
-            .feature => |f| try f.toCss(dest, false),
+            .feature => |f| f.toCss(dest, false)?,
             .not => |c| {
                 dest.writeStr("not ")?;
-                return try css.media_query.toCssWithParensIfNeeded(
+                return css.media_query.toCssWithParensIfNeeded(
                     c,
                     dest,
                     c.needsParens(null, &dest.targets),
-                );
+                )?;
             },
             .operation => |op| return css.media_query.operationToCss(
                 StyleQuery,
@@ -237,16 +237,16 @@ pub union(enum) ContainerCondition {
 
     fn toCss(dest: *Printer): PrintErr!void {
         switch (_) {
-            .feature => |f| try f.toCss(dest),
+            .feature => |f| f.toCss(dest)?,
             .not => |c| {
                 dest.writeStr("not ")?;
-                return try css.media_query.toCssWithParensIfNeeded(
+                return css.media_query.toCssWithParensIfNeeded(
                     c,
                     dest,
                     c.needsParens(null, &dest.targets),
-                );
+                )?;
             },
-            .operation => |op| try css.media_query.operationToCss(ContainerCondition, op.operator, &op.conditions, dest),
+            .operation => |op| css.media_query.operationToCss(ContainerCondition, op.operator, &op.conditions, dest)?,
             .style => |query| {
                 dest.writeStr("style(")?;
                 query.toCss(dest)?;

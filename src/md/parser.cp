@@ -280,7 +280,7 @@ pub fn renderWithRenderer(text: []const u8, allocator: Allocator, flags: Flags, 
         val: Parser.init(allocator, input, flags, rend),
     };
 
-    try p_guard.val.processDoc();
+    p_guard.val.processDoc()?;
 }
 
 import blocks_mod from "./blocks.zig";

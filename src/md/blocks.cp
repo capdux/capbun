@@ -185,7 +185,7 @@ pub fn analyzeLine(p: *Parser, off_start: u32, p_end: *u32, pivot_line: *const L
                     const align_mask_: usize = @alignOf(BlockHeader) - 1;
                     const top_off = (p.block_bytes.items.len - @sizeOf(BlockHeader) + align_mask_) & ~align_mask_;
                     if (top_off + @sizeOf(BlockHeader) <= p.block_bytes.items.len) {
-                        const top_hdr: *const BlockHeader = @ptrCast(@alignCast(p.block_bytes.items.ptr + (p.block_bytes.items.len - @sizeOf(BlockHeader))));
+                        const top_hdr: *const BlockHeader = unsafe { @ptrCast(@alignCast(p.block_bytes.items.ptr + (p.block_bytes.items.len - @sizeOf(BlockHeader)))) };
                         if (top_hdr.block_type == .li) {
                             p.last_list_item_starts_with_two_blank_lines = true;
                         }
@@ -202,7 +202,7 @@ pub fn analyzeLine(p: *Parser, off_start: u32, p_end: *u32, pivot_line: *const L
                     n_brothers + n_children == 0 && p.current_block == null &&
                     p.block_bytes.items.len > @sizeOf(BlockHeader))
                 {
-                    const top_hdr: *const BlockHeader = @ptrCast(@alignCast(p.block_bytes.items.ptr + (p.block_bytes.items.len - @sizeOf(BlockHeader))));
+                    const top_hdr: *const BlockHeader = unsafe { @ptrCast(@alignCast(p.block_bytes.items.ptr + (p.block_bytes.items.len - @sizeOf(BlockHeader)))) };
                     if (top_hdr.block_type == .li) {
                         n_parents -= 1;
                         line.indent = total_indent;
@@ -718,11 +718,11 @@ pub fn addLineToCurrentBlock(p: *Parser, line: *const Line): void ! std.mem.Allo
     if (cb_off := p.current_block) {
         let hdr = p.getBlockHeaderAt(cb_off);
         hdr.n_lines += 1;
-        try p.current_block_lines.append(p.allocator, {
+        p.current_block_lines.append(p.allocator, {
             beg: line.beg,
             end: line.end,
             indent: line.indent,
-        });
+        })?;
     }
 }
 
@@ -839,7 +839,7 @@ pub fn consumeRefDefsFromCurrentBlock(p: *Parser) {
 }
 
 pub fn getBlockHeaderAt(p: *Parser, off: usize): *BlockHeader {
-    return @ptrCast(@alignCast(p.block_bytes.items.ptr + off));
+    return unsafe { @ptrCast(@alignCast(p.block_bytes.items.ptr + off)) };
 }
 
 pub fn getBlockAt(p: *Parser, off: usize): *BlockHeader {

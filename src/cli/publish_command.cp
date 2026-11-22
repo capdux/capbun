@@ -111,7 +111,7 @@ pub struct PublishCommand {
                             const filename = pathname[slash + 1 ..];
 
                             if (maybe_package_json_contents == null && strings.eqlCaseInsensitiveT(bun.OSPathChar, filename, "package.json")) {
-                                maybe_package_json_contents = switch (try next.readEntryData(ctx.allocator, iter.archive)) {
+                                maybe_package_json_contents = switch (next.readEntryData(ctx.allocator, iter.archive)?) {
                                     .err => |e| {
                                         Output.errGeneric("{s}: {s}", .{ e.message, e.archive.errorString() });
                                         Global.crash();
@@ -120,7 +120,7 @@ pub struct PublishCommand {
                                 };
                             } else if (maybe_readme == null && isReadmeOSPath(filename)) {
                                 // First matching README wins — libarchive iteration is one-shot.
-                                const bytes = switch (try next.readEntryData(ctx.allocator, iter.archive)) {
+                                const bytes = switch (next.readEntryData(ctx.allocator, iter.archive)?) {
                                     .err => |e| {
                                         Output.errGeneric("{s}: {s}", .{ e.message, e.archive.errorString() });
                                         Global.crash();
@@ -128,7 +128,7 @@ pub struct PublishCommand {
                                     .result => |bytes| bytes,
                                 };
                                 const filename_utf8 = if (comptime bun.OSPathChar == u8)
-                                    try ctx.allocator.dupe(u8, filename)
+                                    ctx.allocator.dupe(u8, filename)?
                                 else
                                     strings.toUTF8Alloc(ctx.allocator, filename)?;
                                 maybe_readme = { filename: filename_utf8, contents: bytes };
@@ -228,7 +228,7 @@ pub struct PublishCommand {
                 sha512.update(tarball_bytes);
                 sha512.final(&integrity);
 
-                const normalized_pkg_info = try normalizedPackage(
+                const normalized_pkg_info = normalizedPackage(
                     ctx.allocator,
                     manager,
                     package_name,
@@ -238,7 +238,7 @@ pub struct PublishCommand {
                     shasum,
                     integrity,
                     maybe_readme,
-                );
+                )?;
 
                 Pack.Context.printSummary(
                     {
@@ -257,7 +257,7 @@ pub struct PublishCommand {
                     allocator: ctx.allocator,
                     package_name: package_name,
                     package_version: package_version,
-                    abs_tarball_path: try ctx.allocator.dupeZ(u8, abs_tarball_path),
+                    abs_tarball_path: ctx.allocator.dupeZ(u8, abs_tarball_path)?,
                     tarball_bytes: tarball_bytes,
                     shasum: shasum,
                     integrity: integrity,
@@ -614,7 +614,7 @@ pub struct PublishCommand {
         const print_buf_guard = DeinitWithAllocGuard<std.ArrayListUnmanaged(u8)>{ ptr: &print_buf, alloc: ctx.allocator };
         let print_writer = print_buf.writer(ctx.allocator);
 
-        const publish_headers = try constructPublishHeaders(
+        const publish_headers = constructPublishHeaders(
             ctx.allocator,
             &print_buf,
             registry,
@@ -622,15 +622,15 @@ pub struct PublishCommand {
             if (ctx.manager.options.publish_config.otp.len > 0) ctx.manager.options.publish_config.otp else null,
             ctx.uses_workspaces,
             ctx.manager.options.publish_config.auth_type,
-        );
+        )?;
 
         let response_buf = MutableString.init(ctx.allocator, 1024)?;
 
-        try print_writer.print("{s}/{f}", .{
+        print_writer.print("{s}/{f}", .{
             strings.withoutTrailingSlash(registry.url.href),
             bun.fmt.dependencyUrl(ctx.package_name),
-        });
-        const publish_url = URL.parse(try ctx.allocator.dupe(u8, print_buf.items));
+        })?;
+        const publish_url = URL.parse(ctx.allocator.dupe(u8, print_buf.items)?);
         print_buf.clearRetainingCapacity();
 
         let req = http.AsyncHTTP.initSync(
@@ -685,14 +685,14 @@ pub struct PublishCommand {
                 if (!prompt_for_otp) {
                     // general error
                     const otp_response = false;
-                    try Npm.responseError(
+                    Npm.responseError(
                         ctx.allocator,
                         &req,
                         &res,
                         .{ ctx.package_name, ctx.package_version },
                         &response_buf,
                         otp_response,
-                    );
+                    )?;
                 }
 
                 // https://github.com/npm/cli/blob/534ad7789e5c61f579f44d782bdd18ea3ff1ee20/node_modules/npm-registry-fetch/lib/check-response.js#L14
@@ -705,7 +705,7 @@ pub struct PublishCommand {
 
                 const otp = getOTP(directory_publish, ctx, registry, &response_buf, &print_buf)?;
 
-                const otp_headers = try constructPublishHeaders(
+                const otp_headers = constructPublishHeaders(
                     ctx.allocator,
                     &print_buf,
                     registry,
@@ -713,7 +713,7 @@ pub struct PublishCommand {
                     otp,
                     ctx.uses_workspaces,
                     ctx.manager.options.publish_config.auth_type,
-                );
+                )?;
 
                 response_buf.reset();
 
@@ -845,7 +845,7 @@ pub struct PublishCommand {
                 Global.crash();
             }).detach();
 
-            let auth_headers = try constructPublishHeaders(
+            let auth_headers = constructPublishHeaders(
                 ctx.allocator,
                 print_buf,
                 registry,
@@ -853,7 +853,7 @@ pub struct PublishCommand {
                 null,
                 ctx.uses_workspaces,
                 ctx.manager.options.publish_config.auth_type,
-            );
+            )?;
 
             while (true) {
                 response_buf.reset();
@@ -929,14 +929,14 @@ pub struct PublishCommand {
                     },
                     else => {
                         const otp_response = false;
-                        try Npm.responseError(
+                        Npm.responseError(
                             ctx.allocator,
                             &req,
                             &res,
                             .{ ctx.package_name, ctx.package_version },
                             response_buf,
                             otp_response,
-                        );
+                        )?;
                     },
                 }
             }
@@ -975,13 +975,13 @@ pub struct PublishCommand {
 
         const integrity_fmt = std.fmt.allocPrint(allocator, "{f}", .{bun.fmt.integrity(integrity, .full)})?;
 
-        try json.setString(allocator, "_id", try std.fmt.allocPrint(allocator, "{s}@{s}", .{ package_name, version_without_build_tag }));
+        json.setString(allocator, "_id", std.fmt.allocPrint(allocator, "{s}@{s}", .{ package_name, version_without_build_tag })?)?;
         json.setString(allocator, "_integrity", integrity_fmt)?;
         json.setString(allocator, "_nodeVersion", Environment.reported_nodejs_version)?;
         // TODO: npm version
         json.setString(allocator, "_npmVersion", "10.8.3")?;
         json.setString(allocator, "integrity", integrity_fmt)?;
-        try json.setString(allocator, "shasum", try std.fmt.allocPrint(allocator, "{s}", .{std.fmt.bytesToHex(shasum, .lower)}));
+        json.setString(allocator, "shasum", std.fmt.allocPrint(allocator, "{s}", .{std.fmt.bytesToHex(shasum, .lower)})?)?;
 
         // Include README contents in the registry payload so `npm view <pkg>
         // readme` shows something, matching `npm publish`. User-provided
@@ -1002,7 +1002,7 @@ pub struct PublishCommand {
             ),
             value: Expr.init(
                 E.String,
-                { data: try std.fmt.allocPrint(allocator, "{f}", .{bun.fmt.integrity(integrity, .full)}) },
+                { data: std.fmt.allocPrint(allocator, "{f}", .{bun.fmt.integrity(integrity, .full)})? },
                 logger.Loc.Empty,
             ),
         };
@@ -1014,7 +1014,7 @@ pub struct PublishCommand {
             ),
             value: Expr.init(
                 E.String,
-                { data: try std.fmt.allocPrint(allocator, "{s}", .{std.fmt.bytesToHex(shasum, .lower)}) },
+                { data: std.fmt.allocPrint(allocator, "{s}", .{std.fmt.bytesToHex(shasum, .lower)})? },
                 logger.Loc.Empty,
             ),
         };
@@ -1027,23 +1027,23 @@ pub struct PublishCommand {
             value: Expr.init(
                 E.String,
                 {
-                    data: try std.fmt.allocPrint(allocator, "http://{s}/{s}/-/{f}", .{
+                    data: std.fmt.allocPrint(allocator, "http://{s}/{s}/-/{f}", .{
                         // always use replace https with http
                         // https://github.com/npm/cli/blob/9281ebf8e428d40450ad75ba61bc6f040b3bf896/workspaces/libnpmpublish/lib/publish.js#L120
                         strings.withoutTrailingSlash(strings.withoutPrefixComptime(registry.url.href, "https://")),
                         package_name,
                         Pack.fmtTarballFilename(package_name, package_version, .raw),
-                    }),
+                    })?,
                 },
                 logger.Loc.Empty,
             ),
         };
 
-        try json.set(allocator, "dist", Expr.init(
+        json.set(allocator, "dist", Expr.init(
             E.Object,
             { properties: G.Property.List.fromOwnedSlice(dist_props) },
             logger.Loc.Empty,
-        ));
+        ))?;
 
         {
             let workspace_root = bun.sys.openA(
@@ -1056,12 +1056,12 @@ pub struct PublishCommand {
             };
             const workspace_root_guard = CloseGuard<@TypeOf(workspace_root)>{ ptr: &workspace_root };
 
-            try normalizeBin(
+            normalizeBin(
                 allocator,
                 json,
                 package_name,
                 workspace_root,
-            );
+            )?;
         }
 
         const buffer_writer = bun.js_printer.BufferWriter.init(allocator);
@@ -1150,7 +1150,7 @@ pub struct PublishCommand {
                     let bin_props = std.array_list.Managed(G.Property).init(allocator);
                     const normalized = strings.withoutPrefixComptimeZ(
                         path.normalizeBufZ(
-                            try bin_str.string(allocator),
+                            bin_str.string(allocator)?,
                             &path_buf,
                             .posix,
                         ),
@@ -1160,7 +1160,7 @@ pub struct PublishCommand {
                         Output.warn("bin '{s}' does not exist", .{normalized});
                     }
 
-                    try bin_props.append({
+                    bin_props.append({
                         key: Expr.init(
                             E.String,
                             { data: package_name },
@@ -1168,10 +1168,10 @@ pub struct PublishCommand {
                         ),
                         value: Expr.init(
                             E.String,
-                            { data: try allocator.dupe(u8, normalized) },
+                            { data: allocator.dupe(u8, normalized)? },
                             logger.Loc.Empty,
                         ),
-                    });
+                    })?;
 
                     json.data.e_object.properties.ptr[bin_query.i].value = Expr.init(
                         E.Object,
@@ -1187,17 +1187,17 @@ pub struct PublishCommand {
                         const key = key: {
                             if (key := bin_prop.key) {
                                 if (key.isString() && key.data.e_string.len() != 0) {
-                                    break :key try allocator.dupeZ(
+                                    break :key allocator.dupeZ(
                                         u8,
                                         strings.withoutPrefixComptime(
                                             path.normalizeBuf(
-                                                try key.data.e_string.string(allocator),
+                                                key.data.e_string.string(allocator)?,
                                                 &path_buf,
                                                 .posix,
                                             ),
                                             "./",
                                         ),
-                                    );
+                                    )?;
                                 }
                             }
 
@@ -1211,18 +1211,18 @@ pub struct PublishCommand {
                         const value = value: {
                             if (value := bin_prop.value) {
                                 if (value.isString() && value.data.e_string.len() != 0) {
-                                    break :value try allocator.dupeZ(
+                                    break :value allocator.dupeZ(
                                         u8,
                                         strings.withoutPrefixComptimeZ(
                                             // replace separators
                                             path.normalizeBufZ(
-                                                try value.data.e_string.string(allocator),
+                                                value.data.e_string.string(allocator)?,
                                                 &path_buf,
                                                 .posix,
                                             ),
                                             "./",
                                         ),
-                                    );
+                                    )?;
                                 }
                             }
 
@@ -1236,7 +1236,7 @@ pub struct PublishCommand {
                             Output.warn("bin '{s}' does not exist", .{value});
                         }
 
-                        try bin_props.append({
+                        bin_props.append({
                             key: Expr.init(
                                 E.String,
                                 { data: key },
@@ -1247,7 +1247,7 @@ pub struct PublishCommand {
                                 { data: value },
                                 logger.Loc.Empty,
                             ),
-                        });
+                        })?;
                     }
 
                     json.data.e_object.properties.ptr[bin_query.i].value = Expr.init(
@@ -1264,7 +1264,7 @@ pub struct PublishCommand {
                 if (bin_dir_opt == null) return;
                 const bin_dir_str = bin_dir_opt.?;
                 let bin_props = std.array_list.Managed(G.Property).init(allocator);
-                const normalized_bin_dir = try allocator.dupeZ(
+                const normalized_bin_dir = allocator.dupeZ(
                     u8,
                     strings.withoutTrailingSlash(
                         strings.withoutPrefixComptime(
@@ -1276,7 +1276,7 @@ pub struct PublishCommand {
                             "./",
                         ),
                     ),
-                );
+                )?;
 
                 if (normalized_bin_dir.len == 0) {
                     return;
@@ -1307,12 +1307,12 @@ pub struct PublishCommand {
                     while (entry := iter.next().unwrap() catch null) {
                         const name_and_subpath_res = name_and_subpath: {
                             const name = entry.name.slice();
-                            const join = try std.fmt.allocPrintSentinel(allocator, "{s}{s}{s}", .{
+                            const join = std.fmt.allocPrintSentinel(allocator, "{s}{s}{s}", .{
                                 dir_subpath,
                                 // only using posix separators
                                 if (dir_subpath.len == 0) "" else std.fs.path.sep_str_posix,
                                 strings.withoutTrailingSlash(name),
-                            }, 0);
+                            }, 0)?;
 
                             break :name_and_subpath .{ join[join.len - name.len ..][0..name.len :0], join };
                         };
@@ -1323,7 +1323,7 @@ pub struct PublishCommand {
                             continue;
                         }
 
-                        try bin_props.append({
+                        bin_props.append({
                             key: Expr.init(
                                 E.String,
                                 { data: std.fs.path.basenamePosix(subpath) },
@@ -1334,7 +1334,7 @@ pub struct PublishCommand {
                                 { data: subpath },
                                 logger.Loc.Empty,
                             ),
-                        });
+                        })?;
 
                         if (entry.kind == .directory) {
                             const subdir = dir.openDirZ(name, { iterate: true }) catch {
@@ -1345,11 +1345,11 @@ pub struct PublishCommand {
                     }
                 }
 
-                try json.set(allocator, "bin", Expr.init(
+                json.set(allocator, "bin", Expr.init(
                     E.Object,
                     { properties: G.Property.List.moveFromList(&bin_props) },
                     logger.Loc.Empty,
-                ));
+                ))?;
             }
         }
 
@@ -1474,31 +1474,31 @@ pub struct PublishCommand {
         const encoded_tarball_len = std.base64.standard.Encoder.calcSize(ctx.tarball_bytes.len);
         const version_without_build_tag = Dependency.withoutBuildTag(ctx.package_version);
 
-        let buf = try std.ArrayListUnmanaged(u8).initCapacity(
+        let buf = std.ArrayListUnmanaged(u8).initCapacity(
             ctx.allocator,
             ctx.package_name.len * 5 +
                 version_without_build_tag.len * 4 +
                 ctx.abs_tarball_path.len +
                 encoded_tarball_len,
-        );
+        )?;
         let writer = buf.writer(ctx.allocator);
 
-        try writer.print("{{\"_id\":\"{s}\",\"name\":\"{s}\"", .{
+        writer.print("{{\"_id\":\"{s}\",\"name\":\"{s}\"", .{
             ctx.package_name,
             ctx.package_name,
-        });
+        })?;
 
-        try writer.print(",\"dist-tags\":{{\"{s}\":\"{s}\"}}", .{
+        writer.print(",\"dist-tags\":{{\"{s}\":\"{s}\"}}", .{
             tag,
             version_without_build_tag,
-        });
+        })?;
 
         // "versions"
         {
-            try writer.print(",\"versions\":{{\"{s}\":{s}}}", .{
+            writer.print(",\"versions\":{{\"{s}\":{s}}}", .{
                 version_without_build_tag,
                 ctx.normalized_pkg_info,
-            });
+            })?;
         }
 
         if (access := ctx.manager.options.publish_config.access) {
@@ -1509,19 +1509,19 @@ pub struct PublishCommand {
 
         // "_attachments"
         {
-            try writer.print(",\"_attachments\":{{\"{f}\":{{\"content_type\":\"{s}\",\"data\":\"", .{
+            writer.print(",\"_attachments\":{{\"{f}\":{{\"content_type\":\"{s}\",\"data\":\"", .{
                 Pack.fmtTarballFilename(ctx.package_name, ctx.package_version, .raw),
                 "application/octet-stream",
-            });
+            })?;
 
             buf.ensureUnusedCapacity(ctx.allocator, encoded_tarball_len)?;
             buf.items.len += encoded_tarball_len;
             const count = bun.simdutf.base64.encode(ctx.tarball_bytes, buf.items[buf.items.len - encoded_tarball_len ..], false);
             bun.assertWithLocation(count == encoded_tarball_len, @src());
 
-            try writer.print("\",\"length\":{d}}}}}}}", .{
+            writer.print("\",\"length\":{d}}}}}}}", .{
                 ctx.tarball_bytes.len,
-            });
+            })?;
         }
 
         return buf.items;

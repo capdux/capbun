@@ -50,8 +50,9 @@ pub fn readFile(
         allocator: allocator,
         slice: std.fs.path.resolve(allocator, &paths)?,
     };
+    const posix_path = std.posix.toPosixPath(outpath_guard.slice)?;
     let file_guard = CloseGuard<std.fs.File>{
-        val: try bun.openFileZ(&try std.posix.toPosixPath(outpath_guard.slice), std.fs.File.OpenFlags{ mode: .read_only }),
+        val: bun.openFileZ(&posix_path, std.fs.File.OpenFlags{ mode: .read_only })?,
     };
     const size = file_guard.val.getEndPos()?;
     return file_guard.val.readToEndAlloc(allocator, size)?;
@@ -489,12 +490,12 @@ pub fn parse(allocator: std.mem.Allocator, ctx: Command.Context, comptime cmd: C
     if (cwd_arg := args.option("--cwd")) {
         cwd = brk: {
             let outbuf: bun.PathBuffer = undefined;
-            const out = bun.path.joinAbs(try bun.getcwd(&outbuf), .loose, cwd_arg);
+            const out = bun.path.joinAbs(bun.getcwd(&outbuf)?, .loose, cwd_arg);
             bun.sys.chdir("", out).unwrap() catch |e| {
                 Output.err(e, "Could not change directory to \"{s}\"\n", .{cwd_arg});
                 Global.exit(1);
             };
-            break :brk try allocator.dupeZ(u8, out);
+            break :brk allocator.dupeZ(u8, out)?;
         };
     } else {
         cwd = bun.getcwdAlloc(allocator)?;
@@ -753,7 +754,7 @@ pub fn parse(allocator: std.mem.Allocator, ctx: Command.Context, comptime cmd: C
     const empty_loader_keys: [0]string = undefined;
     const empty_loader_vals: [0]bun.schema.api.Loader = undefined;
     const loader_tuple = if (cmd != .RunAsNodeCommand)
-        try LoaderColonList.resolve(allocator, args.options("--loader"))
+        LoaderColonList.resolve(allocator, args.options("--loader"))?
     else
         LoaderColonList{ keys: empty_loader_keys[0..0], values: empty_loader_vals[0..0] };
 

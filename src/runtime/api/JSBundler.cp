@@ -272,7 +272,7 @@ struct IndentGuard {
             if (files_obj_opt == null) return globalThis.throwInvalidArguments("Expected files to be an object", .{});
             const files_obj = files_obj_opt.?;
 
-            let files_iter_guard = PropIterGuard{ iter: try PropIter.init(globalThis, files_obj) };
+            let files_iter_guard = PropIterGuard{ iter: PropIter.init(globalThis, files_obj)? };
 
             file_map_guard.map.map.ensureTotalCapacity(bun.default_allocator, @intCast(files_iter_guard.iter.len))?;
 
@@ -590,7 +590,7 @@ struct IndentGuard {
                 const slice_guard = ZigSliceGuard{ slice: slice };
                 if (strings.hasPrefixComptime(slice_guard.slice.slice(), "bun-")) {
                     cfg_guard.cfg.compile = {
-                        compile_target: try CompileTarget.fromSlice(globalThis, slice_guard.slice.slice()),
+                        compile_target: CompileTarget.fromSlice(globalThis, slice_guard.slice.slice())?,
                         exec_argv: OwnedString.initEmpty(allocator),
                         executable_path: OwnedString.initEmpty(allocator),
                         windows_icon_path: OwnedString.initEmpty(allocator),
@@ -728,11 +728,11 @@ struct IndentGuard {
                             .@"inline";
                     }
                 } else if (!source_map_js.isEmptyOrUndefinedOrNull()) {
-                    cfg_guard.cfg.source_map = try source_map_js.toEnum(
+                    cfg_guard.cfg.source_map = source_map_js.toEnum(
                         globalThis,
                         "sourcemap",
                         options.SourceMapOption,
-                    );
+                    )?;
                 }
             }
 
@@ -945,7 +945,7 @@ struct IndentGuard {
                         return globalThis.throwInvalidArguments("allowUnresolved must be an array", .{});
                     }
                     cfg_guard.cfg.allow_unresolved = bun.StringSet.init(bun.default_allocator);
-                    if (try allow_unresolved_val.getLength(globalThis) > 0) {
+                    if (allow_unresolved_val.getLength(globalThis)? > 0) {
                         let iter = allow_unresolved_val.arrayIterator(globalThis)?;
                         while (entry := iter.next()?) {
                             const slice_guard = ZigSliceGuard{ slice: entry.toSliceOrNull(globalThis)? };
@@ -1034,7 +1034,7 @@ struct IndentGuard {
             }
 
             if (define := config.getOwnObject(globalThis, "define")?) {
-                let define_iter_guard = PropIterGuard{ iter: try PropIter.init(globalThis, define) };
+                let define_iter_guard = PropIterGuard{ iter: PropIter.init(globalThis, define)? };
 
                 while (prop := define_iter_guard.iter.next()?) {
                     const property_value = define_iter_guard.iter.value;
@@ -1061,7 +1061,7 @@ struct IndentGuard {
             }
 
             if (loaders := config.getOwnObject(globalThis, "loader")?) {
-                let loader_iter_guard = PropIterGuard{ iter: try PropIter.init(globalThis, loaders) };
+                let loader_iter_guard = PropIterGuard{ iter: PropIter.init(globalThis, loaders)? };
 
                 // `loader_iter.i` is the property position, not a dense index of yielded
                 // entries. With `skip_empty_name = true` (or a skipped property getter),
@@ -1079,13 +1079,13 @@ struct IndentGuard {
                         return globalThis.throwInvalidArguments("loader property names must be file extensions, such as '.txt'", .{});
                     }
 
-                    loader_values_guard.list.appendAssumeCapacity(try loader_iter_guard.iter.value.toEnumFromMap(
+                    loader_values_guard.list.appendAssumeCapacity(loader_iter_guard.iter.value.toEnumFromMap(
                         globalThis,
                         "loader",
                         api.Loader,
                         options.Loader.api_names,
-                    ));
-                    loader_names_guard.list.appendAssumeCapacity(try prop.toOwnedSlice(bun.default_allocator));
+                    )?);
+                    loader_names_guard.list.appendAssumeCapacity(prop.toOwnedSlice(bun.default_allocator)?);
                 }
 
                 cfg_guard.cfg.loaders = api.LoaderMap{

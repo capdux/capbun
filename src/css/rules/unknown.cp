@@ -39,7 +39,7 @@ pub struct UnknownAtRule {
             dest.newline()?;
             dest.writeChar('}')?;
         } else {
-            try dest.writeChar(';');
+            dest.writeChar(';')?;
         }
     }
 

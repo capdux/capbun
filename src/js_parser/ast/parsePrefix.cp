@@ -201,7 +201,7 @@ pub fn ParsePrefix(
                 let fn_or_arrow_data = FnOrArrowDataParse{
                     needs_async_loc: loc,
                 };
-                return p.newExpr(try p.parseArrowBody(args, &fn_or_arrow_data), loc);
+                return p.newExpr(p.parseArrowBody(args, &fn_or_arrow_data)?, loc);
             }
 
             const ref_ = p.storeNameInRef(name) catch unreachable;
@@ -353,12 +353,12 @@ pub fn ParsePrefix(
         static fn t_minus_minus(p: *P): anyerror!Expr {
             const loc = p.lexer.loc();
             p.lexer.next()?;
-            return p.newExpr(E.Unary{ op: .un_pre_dec, value: try p.parseExpr(.prefix) }, loc);
+            return p.newExpr(E.Unary{ op: .un_pre_dec, value: p.parseExpr(.prefix)? }, loc);
         }
         static fn t_plus_plus(p: *P): anyerror!Expr {
             const loc = p.lexer.loc();
             p.lexer.next()?;
-            return p.newExpr(E.Unary{ op: .un_pre_inc, value: try p.parseExpr(.prefix) }, loc);
+            return p.newExpr(E.Unary{ op: .un_pre_inc, value: p.parseExpr(.prefix)? }, loc);
         }
         static fn t_function(p: *P): anyerror!Expr {
             const loc = p.lexer.loc();
@@ -394,12 +394,12 @@ pub fn ParsePrefix(
 
             // Even anonymous classes can have TypeScript type parameters
             if (is_typescript_enabled) {
-                * = try p.skipTypeScriptTypeParameters({ allow_in_out_variance_annotations: true, allow_const_modifier: true });
+                * = p.skipTypeScriptTypeParameters({ allow_in_out_variance_annotations: true, allow_const_modifier: true })?;
             }
 
-            const cls = try p.parseClass(classKeyword, name, ParseClassOptions{
+            const cls = p.parseClass(classKeyword, name, ParseClassOptions{
                 allow_ts_decorators: is_typescript_enabled || p.options.features.standard_decorators,
-            });
+            })?;
             p.popScope();
 
             return p.newExpr(cls, loc);
@@ -442,13 +442,13 @@ pub fn ParsePrefix(
 
             // Even anonymous classes can have TypeScript type parameters
             if (is_typescript_enabled) {
-                * = try p.skipTypeScriptTypeParameters({ allow_in_out_variance_annotations: true, allow_const_modifier: true });
+                * = p.skipTypeScriptTypeParameters({ allow_in_out_variance_annotations: true, allow_const_modifier: true })?;
             }
 
-            const cls = try p.parseClass(classKeyword, name, ParseClassOptions{
+            const cls = p.parseClass(classKeyword, name, ParseClassOptions{
                 ts_decorators: ts_decorators,
                 allow_ts_decorators: true,
-            });
+            })?;
             p.popScope();
 
             return p.newExpr(cls, loc);
@@ -602,11 +602,11 @@ pub fn ParsePrefix(
                         value: Expr.empty,
                     };
 
-                    try p.parseExprOrBindings(
+                    p.parseExprOrBindings(
                         .comma,
                         &self_errors,
                         &(property.value.?),
-                    );
+                    )?;
                     properties.items.len += 1;
 
                     // Commas are not allowed here when destructuring
@@ -702,10 +702,10 @@ pub fn ParsePrefix(
             //     <A>(x) => {}
             //     <A = B>(x) => {}
             if (comptime is_typescript_enabled && is_jsx_enabled) {
-                if (try TypeScript.isTSArrowFnJSX(p)) {
-                    * = try p.skipTypeScriptTypeParameters(TypeParameterFlag{
+                if (TypeScript.isTSArrowFnJSX(p)?) {
+                    * = p.skipTypeScriptTypeParameters(TypeParameterFlag{
                         allow_const_modifier: true,
-                    });
+                    })?;
                     p.lexer.expect(.t_open_paren)?;
                     return p.parseParenExpr(loc, level, ParenExprOpts{ force_arrow_fn: true })?;
                 }

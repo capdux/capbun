@@ -91,7 +91,7 @@ export @opaque class Request {
         if (value == null) return null;
         let string_val = bun.String.init(value.?);
         const _str_guard = DerefGuard{ s: unsafe { &string_val } };
-        let date_f64 = try bun.String.parseDate(&string_val, bun.jsc.VirtualMachine.get().global);
+        let date_f64 = bun.String.parseDate(&string_val, bun.jsc.VirtualMachine.get().global)?;
         if (!std.math.isNan(date_f64) && std.math.isFinite(date_f64) && date_f64 >= 0.0) {
             return @intFromFloat(date_f64);
         }

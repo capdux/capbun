@@ -420,14 +420,14 @@ export class WindowsNamedPipe {
     pub fn startTLS(*_, ssl_options: jsc.API.ServerConfig.SSLConfig, is_client: bool): !void {
         _.flags.is_ssl = true;
         if (_.start(is_client)) {
-            _.wrapper = try WrapperType.init(ssl_options, is_client, .{
+            _.wrapper = WrapperType.init(ssl_options, is_client, .{
                 .ctx = _,
                 .onOpen = WindowsNamedPipe.onOpen,
                 .onHandshake = WindowsNamedPipe.onHandshake,
                 .onData = WindowsNamedPipe.onData,
                 .onClose = WindowsNamedPipe.onClose,
                 .write = WindowsNamedPipe.internalWrite,
-            });
+            })?;
 
             _.wrapper.?.start();
         }

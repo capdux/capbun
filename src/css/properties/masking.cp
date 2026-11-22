@@ -477,14 +477,14 @@ pub struct MaskBorder {
     }
 
     fn toCss(dest: *css.Printer): css.PrintErr!void {
-        try BorderImage.toCssInternal(
+        BorderImage.toCssInternal(
             &_.source,
             &_.slice,
             &_.width,
             &_.outset,
             &_.repeat,
             dest,
-        );
+        )?;
         if (!_.mode.eql(&MaskBorderMode.default())) {
             dest.writeChar(' ')?;
             _.mode.toCss(dest)?;

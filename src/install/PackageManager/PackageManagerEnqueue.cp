@@ -150,14 +150,14 @@ pub fn enqueueTarballForDownload(
         task_queue.value_ptr.* = {};
     }
 
-    try task_queue.value_ptr.append(
+    task_queue.value_ptr.append(
         mgr.allocator,
         task_context,
-    );
+    )?;
 
     if (task_queue.found_existing) return;
 
-    if (task := try mgr.generateNetworkTaskForTarball(
+    if (task := mgr.generateNetworkTaskForTarball(
         task_id,
         url,
         mgr.lockfile.buffers.dependencies.items[dependency_id].behavior.isRequired(),
@@ -165,7 +165,7 @@ pub fn enqueueTarballForDownload(
         mgr.lockfile.packages.get(package_id),
         patch_name_and_version_hash,
         .no_authorization,
-    )) {
+    )?) {
         task.schedule(&mgr.network_tarball_batch);
         if (mgr.network_tarball_batch.len > 0) {
             * = mgr.scheduleTasks();
@@ -300,16 +300,16 @@ pub fn enqueuePackageForDownload(
         task_queue.value_ptr.* = {};
     }
 
-    try task_queue.value_ptr.append(
+    task_queue.value_ptr.append(
         mgr.allocator,
         task_context,
-    );
+    )?;
 
     if (task_queue.found_existing) return;
 
     const is_required = mgr.lockfile.buffers.dependencies.items[dependency_id].behavior.isRequired();
 
-    if (task := try mgr.generateNetworkTaskForTarball(
+    if (task := mgr.generateNetworkTaskForTarball(
         task_id,
         url,
         is_required,
@@ -317,7 +317,7 @@ pub fn enqueuePackageForDownload(
         mgr.lockfile.packages.get(package_id),
         patch_name_and_version_hash,
         .allow_authorization,
-    )) {
+    )?) {
         task.schedule(&mgr.network_tarball_batch);
         if (mgr.network_tarball_batch.len > 0) {
             * = mgr.scheduleTasks();
@@ -896,7 +896,7 @@ pub fn enqueueDependencyWithMainAndSuccessFn(
                 );
 
             if (repo_fd := mgr.git_repositories.get(clone_id)) {
-                const resolved = try Repository.findCommit(
+                const resolved = Repository.findCommit(
                     mgr.allocator,
                     mgr.env,
                     mgr.log,
@@ -904,7 +904,7 @@ pub fn enqueueDependencyWithMainAndSuccessFn(
                     alias,
                     mgr.lockfile.str(&dep.committish),
                     clone_id,
-                );
+                )?;
                 const checkout_id = Task.Id.forGitCheckout(url, resolved);
 
                 let entry = mgr.task_queue.getOrPutContext(mgr.allocator, checkout_id, {}) catch unreachable;
@@ -993,7 +993,7 @@ pub fn enqueueDependencyWithMainAndSuccessFn(
                 }
             }
 
-            if (network_task := try mgr.generateNetworkTaskForTarball(
+            if (network_task := mgr.generateNetworkTaskForTarball(
                 task_id,
                 url,
                 dependency.behavior.isRequired(),
@@ -1005,7 +1005,7 @@ pub fn enqueueDependencyWithMainAndSuccessFn(
                 },
                 null,
                 .no_authorization,
-            )) {
+            )?) {
                 mgr.enqueueNetworkTask(network_task);
             }
         },
@@ -1181,7 +1181,7 @@ pub fn enqueueDependencyWithMainAndSuccessFn(
                     )));
                 },
                 .remote => {
-                    if (network_task := try mgr.generateNetworkTaskForTarball(
+                    if (network_task := mgr.generateNetworkTaskForTarball(
                         task_id,
                         url,
                         dependency.behavior.isRequired(),
@@ -1193,7 +1193,7 @@ pub fn enqueueDependencyWithMainAndSuccessFn(
                         },
                         null,
                         .no_authorization,
-                    )) {
+                    )?) {
                         mgr.enqueueNetworkTask(network_task);
                     }
                 },
@@ -1561,7 +1561,7 @@ fn getOrPutResolvedPackageWithFindResult(
     }
 
     // appendPackage sets the PackageID on the package
-    const package = try mgr.lockfile.appendPackage(try Lockfile.Package.fromNPM(
+    const package = mgr.lockfile.appendPackage(Lockfile.Package.fromNPM(
         mgr,
         mgr.allocator,
         mgr.lockfile,
@@ -1570,7 +1570,7 @@ fn getOrPutResolvedPackageWithFindResult(
         find_result.version,
         find_result.package,
         Features.npm,
-    ));
+    )?)?;
 
     if (comptime Environment.allow_assert) bun.assert(package.@"meta".id != invalid_package_id);
     defer successFn(mgr, dependency_id, package.@"meta".id);
@@ -1867,7 +1867,7 @@ fn getOrPutResolvedPackage(
             }
             const find_result = maybe_find_result.?;
 
-            return try getOrPutResolvedPackageWithFindResult(
+            return getOrPutResolvedPackageWithFindResult(
                 mgr,
                 name_hash,
                 name,
@@ -1879,7 +1879,7 @@ fn getOrPutResolvedPackage(
                 find_result,
                 install_peer,
                 successFn,
-            );
+            )?;
         },
 
         .folder => {

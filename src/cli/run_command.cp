@@ -506,7 +506,7 @@ pub struct RunCommand {
             BunXFastPath.tryLaunch(ctx, wpath, env, passthrough);
         }
 
-        try runBinaryWithoutBunxPath(
+        runBinaryWithoutBunxPath(
             ctx,
             executable,
             executableZ,
@@ -514,7 +514,7 @@ pub struct RunCommand {
             env,
             passthrough,
             original_script_for_bun_run,
-        );
+        )?;
     }
 
     static fn runBinaryGenericError(executable: []const u8, silent: bool, e: bun.sys.Error): noreturn {
@@ -1975,15 +1975,15 @@ pub struct RunCommand {
         if (path_for_which.len > 0) {
             if (destination := which(&path_buf, path_for_which, this_transpiler.fs.top_level_dir, target_name)) {
                 const out = bun.asByteSlice(destination);
-                return try runBinaryWithoutBunxPath(
+                return runBinaryWithoutBunxPath(
                     ctx,
-                    try this_transpiler.fs.dirname_store.append(@TypeOf(out), out),
+                    this_transpiler.fs.dirname_store.append(@TypeOf(out), out)?,
                     destination,
                     this_transpiler.fs.top_level_dir,
                     this_transpiler.env,
                     passthrough,
                     target_name,
-                );
+                )?;
             }
         }
 

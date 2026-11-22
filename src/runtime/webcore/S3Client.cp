@@ -51,7 +51,7 @@ pub fn writeFormatCredentials(
     writer: anytype,
     comptime enable_ansi_colors: bool,
 ): !void {
-    try writer.writeAll("\n");
+    writer.writeAll("\n")?;
 
     {
         const Writer = @TypeOf(writer);
@@ -61,64 +61,64 @@ pub fn writeFormatCredentials(
 
         const endpoint = if (credentials.endpoint.len > 0) credentials.endpoint else (if (credentials.virtual_hosted_style) "https://<bucket>.s3.<region>.amazonaws.com" else "https://s3.<region>.amazonaws.com");
 
-        try formatter.writeIndent(Writer, writer);
-        try writer.writeAll(Output.prettyFmt("<r>endpoint<d>:<r> \"", enable_ansi_colors));
-        try writer.print(Output.prettyFmt("<r><b>{s}<r>\"", enable_ansi_colors), .{endpoint});
-        try formatter.printComma(Writer, writer, enable_ansi_colors);
-        try writer.writeAll("\n");
+        formatter.writeIndent(Writer, writer)?;
+        writer.writeAll(Output.prettyFmt("<r>endpoint<d>:<r> \"", enable_ansi_colors))?;
+        writer.print(Output.prettyFmt("<r><b>{s}<r>\"", enable_ansi_colors), .{endpoint})?;
+        formatter.printComma(Writer, writer, enable_ansi_colors)?;
+        writer.writeAll("\n")?;
 
         const region = if (credentials.region.len > 0) credentials.region else S3Credentials.guessRegion(credentials.endpoint);
-        try formatter.writeIndent(Writer, writer);
-        try writer.writeAll(Output.prettyFmt("<r>region<d>:<r> \"", enable_ansi_colors));
-        try writer.print(Output.prettyFmt("<r><b>{s}<r>\"", enable_ansi_colors), .{region});
-        try formatter.printComma(Writer, writer, enable_ansi_colors);
-        try writer.writeAll("\n");
+        formatter.writeIndent(Writer, writer)?;
+        writer.writeAll(Output.prettyFmt("<r>region<d>:<r> \"", enable_ansi_colors))?;
+        writer.print(Output.prettyFmt("<r><b>{s}<r>\"", enable_ansi_colors), .{region})?;
+        formatter.printComma(Writer, writer, enable_ansi_colors)?;
+        writer.writeAll("\n")?;
 
         if (credentials.accessKeyId.len > 0) {
-            try formatter.writeIndent(Writer, writer);
-            try writer.writeAll(Output.prettyFmt("<r>accessKeyId<d>:<r> \"<r><b>[REDACTED]<r>\"", enable_ansi_colors));
-            try formatter.printComma(Writer, writer, enable_ansi_colors);
-            try writer.writeAll("\n");
+            formatter.writeIndent(Writer, writer)?;
+            writer.writeAll(Output.prettyFmt("<r>accessKeyId<d>:<r> \"<r><b>[REDACTED]<r>\"", enable_ansi_colors))?;
+            formatter.printComma(Writer, writer, enable_ansi_colors)?;
+            writer.writeAll("\n")?;
         }
 
         if (credentials.secretAccessKey.len > 0) {
-            try formatter.writeIndent(Writer, writer);
-            try writer.writeAll(Output.prettyFmt("<r>secretAccessKey<d>:<r> \"<r><b>[REDACTED]<r>\"", enable_ansi_colors));
-            try formatter.printComma(Writer, writer, enable_ansi_colors);
-            try writer.writeAll("\n");
+            formatter.writeIndent(Writer, writer)?;
+            writer.writeAll(Output.prettyFmt("<r>secretAccessKey<d>:<r> \"<r><b>[REDACTED]<r>\"", enable_ansi_colors))?;
+            formatter.printComma(Writer, writer, enable_ansi_colors)?;
+            writer.writeAll("\n")?;
         }
 
         if (credentials.sessionToken.len > 0) {
-            try formatter.writeIndent(Writer, writer);
-            try writer.writeAll(Output.prettyFmt("<r>sessionToken<d>:<r> \"<r><b>[REDACTED]<r>\"", enable_ansi_colors));
-            try formatter.printComma(Writer, writer, enable_ansi_colors);
-            try writer.writeAll("\n");
+            formatter.writeIndent(Writer, writer)?;
+            writer.writeAll(Output.prettyFmt("<r>sessionToken<d>:<r> \"<r><b>[REDACTED]<r>\"", enable_ansi_colors))?;
+            formatter.printComma(Writer, writer, enable_ansi_colors)?;
+            writer.writeAll("\n")?;
         }
 
         if (acl_value := acl) {
-            try formatter.writeIndent(Writer, writer);
-            try writer.writeAll(Output.prettyFmt("<r>acl<d>:<r> ", enable_ansi_colors));
-            try writer.print(Output.prettyFmt("<r><b>{s}<r>\"", enable_ansi_colors), .{acl_value.toString()});
-            try formatter.printComma(Writer, writer, enable_ansi_colors);
-            try writer.writeAll("\n");
+            formatter.writeIndent(Writer, writer)?;
+            writer.writeAll(Output.prettyFmt("<r>acl<d>:<r> ", enable_ansi_colors))?;
+            writer.print(Output.prettyFmt("<r><b>{s}<r>\"", enable_ansi_colors), .{acl_value.toString()})?;
+            formatter.printComma(Writer, writer, enable_ansi_colors)?;
+            writer.writeAll("\n")?;
         }
 
-        try formatter.writeIndent(Writer, writer);
-        try writer.writeAll(Output.prettyFmt("<r>partSize<d>:<r> ", enable_ansi_colors));
-        try formatter.printAs(.Double, Writer, writer, JSValue.jsNumber(options.partSize), .NumberObject, enable_ansi_colors);
-        try formatter.printComma(Writer, writer, enable_ansi_colors);
-        try writer.writeAll("\n");
+        formatter.writeIndent(Writer, writer)?;
+        writer.writeAll(Output.prettyFmt("<r>partSize<d>:<r> ", enable_ansi_colors))?;
+        formatter.printAs(.Double, Writer, writer, JSValue.jsNumber(options.partSize), .NumberObject, enable_ansi_colors)?;
+        formatter.printComma(Writer, writer, enable_ansi_colors)?;
+        writer.writeAll("\n")?;
 
-        try formatter.writeIndent(Writer, writer);
-        try writer.writeAll(Output.prettyFmt("<r>queueSize<d>:<r> ", enable_ansi_colors));
-        try formatter.printAs(.Double, Writer, writer, JSValue.jsNumber(options.queueSize), .NumberObject, enable_ansi_colors);
-        try formatter.printComma(Writer, writer, enable_ansi_colors);
-        try writer.writeAll("\n");
+        formatter.writeIndent(Writer, writer)?;
+        writer.writeAll(Output.prettyFmt("<r>queueSize<d>:<r> ", enable_ansi_colors))?;
+        formatter.printAs(.Double, Writer, writer, JSValue.jsNumber(options.queueSize), .NumberObject, enable_ansi_colors)?;
+        formatter.printComma(Writer, writer, enable_ansi_colors)?;
+        writer.writeAll("\n")?;
 
-        try formatter.writeIndent(Writer, writer);
-        try writer.writeAll(Output.prettyFmt("<r>retry<d>:<r> ", enable_ansi_colors));
-        try formatter.printAs(.Double, Writer, writer, JSValue.jsNumber(options.retry), .NumberObject, enable_ansi_colors);
-        try writer.writeAll("\n");
+        formatter.writeIndent(Writer, writer)?;
+        writer.writeAll(Output.prettyFmt("<r>retry<d>:<r> ", enable_ansi_colors))?;
+        formatter.printAs(.Double, Writer, writer, JSValue.jsNumber(options.retry), .NumberObject, enable_ansi_colors)?;
+        writer.writeAll("\n")?;
     }
 }
 
@@ -140,7 +140,7 @@ export class S3Client {
         const arguments = callframe.arguments_old(1).slice();
         let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
         const _guard_args = DeinitGuard<@TypeOf(args)>{ target: unsafe { &args } };
-        let aws_options = try S3Credentials.getCredentialsWithOptions(globalThis.bunVM().transpiler.env.getS3Credentials(), .{}, args.nextEat(), null, null, false, globalThis);
+        let aws_options = S3Credentials.getCredentialsWithOptions(globalThis.bunVM().transpiler.env.getS3Credentials(), .{}, args.nextEat(), null, null, false, globalThis)?;
         const _guard_aws_options = DeinitGuard<@TypeOf(aws_options)>{ target: unsafe { &aws_options } };
         return S3Client.new(.{
             .credentials = aws_options.credentials.dupe(),
@@ -152,20 +152,20 @@ export class S3Client {
     }
 
     pub fn writeFormat(*_, comptime Formatter: type, formatter: *Formatter, writer: anytype, comptime enable_ansi_colors: bool): !void {
-        try writer.writeAll(Output.prettyFmt("<r>S3Client<r>", enable_ansi_colors));
+        writer.writeAll(Output.prettyFmt("<r>S3Client<r>", enable_ansi_colors))?;
         const bucket_name = if (_.credentials.virtual_hosted_style and _.credentials.endpoint.len > 0) S3Credentials.guessBucket(_.credentials.endpoint) orelse _.credentials.bucket else _.credentials.bucket;
         if (bucket_name.len > 0) {
-            try writer.print(
+            writer.print(
                 Output.prettyFmt(" (<green>\"{s}\"<r>)<r> {{", enable_ansi_colors),
                 .{bucket_name},
-            );
+            )?;
         } else {
-            try writer.writeAll(" {");
+            writer.writeAll(" {")?;
         }
 
-        try writeFormatCredentials(_.credentials, _.options, _.acl, Formatter, formatter, writer, enable_ansi_colors);
-        try formatter.writeIndent(@TypeOf(writer), writer);
-        try writer.writeAll("}");
+        writeFormatCredentials(_.credentials, _.options, _.acl, Formatter, formatter, writer, enable_ansi_colors)?;
+        formatter.writeIndent(@TypeOf(writer), writer)?;
+        writer.writeAll("}")?;
         formatter.resetLine();
     }
 
@@ -173,7 +173,7 @@ export class S3Client {
         const arguments = callframe.arguments_old(2).slice();
         let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
         const _guard_args = DeinitGuard<@TypeOf(args)>{ target: unsafe { &args } };
-        let path = (try jsc.Node.PathLike.fromJS(globalThis, &args)) orelse {
+        let path = (jsc.Node.PathLike.fromJS(globalThis, &args)?) orelse {
             if (args.len() == 0) {
                 return globalThis.ERR(.MISSING_ARGS, "Expected a path ", .{}).throw();
             }
@@ -181,7 +181,7 @@ export class S3Client {
         };
         let _guard_path = ErrDeinitGuard<@TypeOf(path)>{ target: unsafe { &path } };
         const options = args.nextEat();
-        let blob = Blob.new(try S3File.constructS3FileWithS3CredentialsAndOptions(globalThis, path, options, _.credentials, _.options, _.acl, _.storage_class, _.request_payer));
+        let blob = Blob.new(S3File.constructS3FileWithS3CredentialsAndOptions(globalThis, path, options, _.credentials, _.options, _.acl, _.storage_class, _.request_payer)?);
         _guard_path.disarm();
         return blob.toJS(globalThis);
     }
@@ -190,7 +190,7 @@ export class S3Client {
         const arguments = callframe.arguments_old(2).slice();
         let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
         const _guard_args = DeinitGuard<@TypeOf(args)>{ target: unsafe { &args } };
-        let path = (try jsc.Node.PathLike.fromJS(globalThis, &args)) orelse {
+        let path = (jsc.Node.PathLike.fromJS(globalThis, &args)?) orelse {
             if (args.len() == 0) {
                 return globalThis.ERR(.MISSING_ARGS, "Expected a path to presign", .{}).throw();
             }
@@ -199,7 +199,7 @@ export class S3Client {
         let _guard_path = ErrDeinitGuard<@TypeOf(path)>{ target: unsafe { &path } };
 
         const options = args.nextEat();
-        let blob = try S3File.constructS3FileWithS3CredentialsAndOptions(globalThis, path, options, _.credentials, _.options, _.acl, _.storage_class, _.request_payer);
+        let blob = S3File.constructS3FileWithS3CredentialsAndOptions(globalThis, path, options, _.credentials, _.options, _.acl, _.storage_class, _.request_payer)?;
         _guard_path.disarm();
         const _guard_blob = DetachGuard<@TypeOf(blob)>{ target: unsafe { &blob } };
         return S3File.getPresignUrlFrom(&blob, globalThis, options);
@@ -209,7 +209,7 @@ export class S3Client {
         const arguments = callframe.arguments_old(2).slice();
         let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
         const _guard_args = DeinitGuard<@TypeOf(args)>{ target: unsafe { &args } };
-        let path = (try jsc.Node.PathLike.fromJS(globalThis, &args)) orelse {
+        let path = (jsc.Node.PathLike.fromJS(globalThis, &args)?) orelse {
             if (args.len() == 0) {
                 return globalThis.ERR(.MISSING_ARGS, "Expected a path to check if it exists", .{}).throw();
             }
@@ -217,7 +217,7 @@ export class S3Client {
         };
         let _guard_path = ErrDeinitGuard<@TypeOf(path)>{ target: unsafe { &path } };
         const options = args.nextEat();
-        let blob = try S3File.constructS3FileWithS3CredentialsAndOptions(globalThis, path, options, _.credentials, _.options, _.acl, _.storage_class, _.request_payer);
+        let blob = S3File.constructS3FileWithS3CredentialsAndOptions(globalThis, path, options, _.credentials, _.options, _.acl, _.storage_class, _.request_payer)?;
         _guard_path.disarm();
         const _guard_blob = DetachGuard<@TypeOf(blob)>{ target: unsafe { &blob } };
         return S3File.S3BlobStatTask.exists(globalThis, &blob);
@@ -227,7 +227,7 @@ export class S3Client {
         const arguments = callframe.arguments_old(2).slice();
         let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
         const _guard_args = DeinitGuard<@TypeOf(args)>{ target: unsafe { &args } };
-        let path = (try jsc.Node.PathLike.fromJS(globalThis, &args)) orelse {
+        let path = (jsc.Node.PathLike.fromJS(globalThis, &args)?) orelse {
             if (args.len() == 0) {
                 return globalThis.ERR(.MISSING_ARGS, "Expected a path to check the size of", .{}).throw();
             }
@@ -235,7 +235,7 @@ export class S3Client {
         };
         let _guard_path = ErrDeinitGuard<@TypeOf(path)>{ target: unsafe { &path } };
         const options = args.nextEat();
-        let blob = try S3File.constructS3FileWithS3CredentialsAndOptions(globalThis, path, options, _.credentials, _.options, _.acl, _.storage_class, _.request_payer);
+        let blob = S3File.constructS3FileWithS3CredentialsAndOptions(globalThis, path, options, _.credentials, _.options, _.acl, _.storage_class, _.request_payer)?;
         _guard_path.disarm();
         const _guard_blob = DetachGuard<@TypeOf(blob)>{ target: unsafe { &blob } };
         return S3File.S3BlobStatTask.size(globalThis, &blob);
@@ -245,7 +245,7 @@ export class S3Client {
         const arguments = callframe.arguments_old(2).slice();
         let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
         const _guard_args = DeinitGuard<@TypeOf(args)>{ target: unsafe { &args } };
-        let path = (try jsc.Node.PathLike.fromJS(globalThis, &args)) orelse {
+        let path = (jsc.Node.PathLike.fromJS(globalThis, &args)?) orelse {
             if (args.len() == 0) {
                 return globalThis.ERR(.MISSING_ARGS, "Expected a path to check the stat of", .{}).throw();
             }
@@ -253,7 +253,7 @@ export class S3Client {
         };
         let _guard_path = ErrDeinitGuard<@TypeOf(path)>{ target: unsafe { &path } };
         const options = args.nextEat();
-        let blob = try S3File.constructS3FileWithS3CredentialsAndOptions(globalThis, path, options, _.credentials, _.options, _.acl, _.storage_class, _.request_payer);
+        let blob = S3File.constructS3FileWithS3CredentialsAndOptions(globalThis, path, options, _.credentials, _.options, _.acl, _.storage_class, _.request_payer)?;
         _guard_path.disarm();
         const _guard_blob = DetachGuard<@TypeOf(blob)>{ target: unsafe { &blob } };
         return S3File.S3BlobStatTask.stat(globalThis, &blob);
@@ -263,7 +263,7 @@ export class S3Client {
         const arguments = callframe.arguments_old(3).slice();
         let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
         const _guard_args = DeinitGuard<@TypeOf(args)>{ target: unsafe { &args } };
-        let path = (try jsc.Node.PathLike.fromJS(globalThis, &args)) orelse {
+        let path = (jsc.Node.PathLike.fromJS(globalThis, &args)?) orelse {
             return globalThis.ERR(.MISSING_ARGS, "Expected a path to write to", .{}).throw();
         };
         let _guard_path = ErrDeinitGuard<@TypeOf(path)>{ target: unsafe { &path } };
@@ -272,7 +272,7 @@ export class S3Client {
         };
 
         const options = args.nextEat();
-        let blob = try S3File.constructS3FileWithS3CredentialsAndOptions(globalThis, path, options, _.credentials, _.options, _.acl, _.storage_class, _.request_payer);
+        let blob = S3File.constructS3FileWithS3CredentialsAndOptions(globalThis, path, options, _.credentials, _.options, _.acl, _.storage_class, _.request_payer)?;
         _guard_path.disarm();
         const _guard_blob = DetachGuard<@TypeOf(blob)>{ target: unsafe { &blob } };
         let blob_internal: PathOrBlob = .{ .blob = blob };
@@ -287,7 +287,7 @@ export class S3Client {
         const object_keys = args[0];
         const options = args[1];
 
-        let blob = try S3File.constructS3FileWithS3CredentialsAndOptions(globalThis, .{ .string = PathString.empty }, options, _.credentials, _.options, null, null, _.request_payer);
+        let blob = S3File.constructS3FileWithS3CredentialsAndOptions(globalThis, .{ .string = PathString.empty }, options, _.credentials, _.options, null, null, _.request_payer)?;
 
         const _guard_blob = DetachGuard<@TypeOf(blob)>{ target: unsafe { &blob } };
         return blob.store.?.data.s3.listObjects(blob.store.?, globalThis, object_keys, options);
@@ -297,12 +297,12 @@ export class S3Client {
         const arguments = callframe.arguments_old(2).slice();
         let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
         const _guard_args = DeinitGuard<@TypeOf(args)>{ target: unsafe { &args } };
-        let path = (try jsc.Node.PathLike.fromJS(globalThis, &args)) orelse {
+        let path = (jsc.Node.PathLike.fromJS(globalThis, &args)?) orelse {
             return globalThis.ERR(.MISSING_ARGS, "Expected a path to unlink", .{}).throw();
         };
         let _guard_path = ErrDeinitGuard<@TypeOf(path)>{ target: unsafe { &path } };
         const options = args.nextEat();
-        let blob = try S3File.constructS3FileWithS3CredentialsAndOptions(globalThis, path, options, _.credentials, _.options, _.acl, _.storage_class, _.request_payer);
+        let blob = S3File.constructS3FileWithS3CredentialsAndOptions(globalThis, path, options, _.credentials, _.options, _.acl, _.storage_class, _.request_payer)?;
         _guard_path.disarm();
         const _guard_blob = DetachGuard<@TypeOf(blob)>{ target: unsafe { &blob } };
         return blob.store.?.data.s3.unlink(blob.store.?, globalThis, options);
@@ -343,11 +343,11 @@ export class S3Client {
         let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
         const _guard_args = DeinitGuard<@TypeOf(args)>{ target: unsafe { &args } };
 
-        const path = (try jsc.Node.PathLike.fromJS(globalThis, &args)) orelse {
+        const path = (jsc.Node.PathLike.fromJS(globalThis, &args)?) orelse {
             return globalThis.throwInvalidArguments("Expected file path string", .{});
         };
 
-        return try S3File.constructInternalJS(globalThis, path, args.nextEat());
+        return S3File.constructInternalJS(globalThis, path, args.nextEat())?;
     }
 
     pub static fn staticStat(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
@@ -361,7 +361,7 @@ export class S3Client {
 
         const existing_credentials = globalThis.bunVM().transpiler.env.getS3Credentials();
 
-        let blob = try S3File.constructS3FileWithS3Credentials(globalThis, .{ .string = PathString.empty }, options, existing_credentials);
+        let blob = S3File.constructS3FileWithS3Credentials(globalThis, .{ .string = PathString.empty }, options, existing_credentials)?;
 
         const _guard_blob = DetachGuard<@TypeOf(blob)>{ target: unsafe { &blob } };
         return blob.store.?.data.s3.listObjects(blob.store.?, globalThis, object_keys, options);

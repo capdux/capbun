@@ -56,7 +56,7 @@ struct _DeclarationBlockDebugFmt {
         const w = &_guard_arraylist.val.writer;
         let symbols = bun.ast.Symbol.Map{};
         let _guard_printer = DeinitGuard<css.Printer>{ val: css.Printer.new(bun.default_allocator, std.array_list.Managed(u8).init(bun.default_allocator), w, css.PrinterOptions.default(), null, null, &symbols) };
-        _.self.toCss(unsafe { &_guard_printer.val }) catch |e| return try writer.print("<error writing declaration block: {s}>\n", .{@errorName(e)});
+        _.self.toCss(unsafe { &_guard_printer.val }) catch |e| return writer.print("<error writing declaration block: {s}>\n", .{@errorName(e)})?;
         writer.writeAll(_guard_arraylist.val.written())?;
     }
 }
@@ -149,7 +149,7 @@ pub struct DeclarationBlock {
             for (decl of decls.items) {
                 decl.toCss(dest, is_important)?;
                 if (i != length - 1) {
-                    try dest.writeChar(';');
+                    dest.writeChar(';')?;
                     dest.whitespace()?;
                 }
                 i += 1;
@@ -177,7 +177,7 @@ pub struct DeclarationBlock {
                 dest.newline()?;
                 decl.toCss(dest, is_important)?;
                 if (i != length - 1 || !dest.minify) {
-                    try dest.writeChar(';');
+                    dest.writeChar(';')?;
                 }
                 i += 1;
             }

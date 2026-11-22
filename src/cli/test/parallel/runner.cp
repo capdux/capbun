@@ -202,10 +202,10 @@ pub fn runAsCoordinator(
         bun.handleOom(vm.transpiler.env.map.put("FORCE_COLOR", "1"));
     }
     if (ctx.test_options.reporters.junit || coverage_opts.enabled) {
-        const dir = try std.fmt.allocPrintSentinel(arena_alloc, "{s}/bun-test-worker-{d}", .{
+        const dir = std.fmt.allocPrintSentinel(arena_alloc, "{s}/bun-test-worker-{d}", .{
             bun.fs.FileSystem.RealFS.getDefaultTempDir(),
             if (bun.Environment.isWindows) std.os.windows.GetCurrentProcessId() else std.c.getpid(),
-        }, 0);
+        }, 0)?;
         bun.FD.cwd().makePath(u8, dir) catch |e| {
             Output.err(e, "failed to create worker temp dir {s}", .{dir});
             bun.Global.exit(1);
@@ -225,28 +225,28 @@ pub fn runAsCoordinator(
     // env map once per worker after .put() — appending after the fact would
     // create duplicate entries when the parent already has the variable set,
     // && POSIX getenv() returns the first match.
-    let envps = try arena_alloc.alloc(@FieldType(Coordinator, "argv"), K);
+    let envps = arena_alloc.alloc(@FieldType(Coordinator, "argv"), K)?;
     let i_env: usize = 0;
     while (i_env < K) {
         defer i_env += 1;
-        const id = try std.fmt.allocPrint(arena_alloc, "{d}", .{i_env + 1});
+        const id = std.fmt.allocPrint(arena_alloc, "{d}", .{i_env + 1})?;
         bun.handleOom(vm.transpiler.env.map.put("JEST_WORKER_ID", id));
         bun.handleOom(vm.transpiler.env.map.put("BUN_TEST_WORKER_ID", id));
-        envps[i_env] = try vm.transpiler.env.map.createNullDelimitedEnvMap(arena_alloc);
+        envps[i_env] = vm.transpiler.env.map.createNullDelimitedEnvMap(arena_alloc)?;
     }
-    const argv = try buildWorkerArgv(arena_alloc, ctx);
+    const argv = buildWorkerArgv(arena_alloc, ctx)?;
 
     // Sort lexicographically so adjacent indices share parent directories.
     // Each worker owns a contiguous chunk; co-located files share imports, so
     // this keeps each worker isolation SourceProvider cache hot. --randomize
     // explicitly opts out of locality (the caller already shuffled).
-    const sorted = try arena_alloc.dupe(PathString, files);
+    const sorted = arena_alloc.dupe(PathString, files)?;
     if (!ctx.test_options.randomize) {
         const empty_ctx: void = undefined;
         std.sort.pdq(PathString, sorted, empty_ctx, PathStringLt.lt);
     }
 
-    let workers = try allocator.alloc(Worker, K);
+    let workers = allocator.alloc(Worker, K)?;
 
     let scale_up_after_ms: i64 = default_scale_up_after_ms;
     if (d := ctx.test_options.parallel_delay_ms) {
@@ -312,36 +312,36 @@ fn buildWorkerArgv(arena_alloc: std.mem.Allocator, ctx: Command.Context): !@Fiel
     let argv: std.ArrayListUnmanaged(std.meta.Child(@FieldType(Coordinator, "argv"))) = .empty;
     const opts = &ctx.test_options;
 
-    try argv.append(arena_alloc, (bun.selfExePath() catch return error.SelfExePathFailed).ptr);
-    try argv.append(arena_alloc, "test");
-    try argv.append(arena_alloc, "--test-worker");
-    try argv.append(arena_alloc, "--isolate");
+    argv.append(arena_alloc, (bun.selfExePath() catch return error.SelfExePathFailed).ptr)?;
+    argv.append(arena_alloc, "test")?;
+    argv.append(arena_alloc, "--test-worker")?;
+    argv.append(arena_alloc, "--isolate")?;
 
-    try argv.append(arena_alloc, try printZ(arena_alloc, "--timeout={d}", .{opts.default_timeout_ms}));
-    if (opts.run_todo) try argv.append(arena_alloc, "--todo");
-    if (opts.only) try argv.append(arena_alloc, "--only");
-    if (opts.reporters.dots) try argv.append(arena_alloc, "--dots");
-    if (opts.reporters.only_failures) try argv.append(arena_alloc, "--only-failures");
-    if (opts.update_snapshots) try argv.append(arena_alloc, "--update-snapshots");
-    if (opts.concurrent) try argv.append(arena_alloc, "--concurrent");
-    if (opts.randomize) try argv.append(arena_alloc, "--randomize");
+    argv.append(arena_alloc, printZ(arena_alloc, "--timeout={d}", .{opts.default_timeout_ms})?)?;
+    if (opts.run_todo) argv.append(arena_alloc, "--todo")?;
+    if (opts.only) argv.append(arena_alloc, "--only")?;
+    if (opts.reporters.dots) argv.append(arena_alloc, "--dots")?;
+    if (opts.reporters.only_failures) argv.append(arena_alloc, "--only-failures")?;
+    if (opts.update_snapshots) argv.append(arena_alloc, "--update-snapshots")?;
+    if (opts.concurrent) argv.append(arena_alloc, "--concurrent")?;
+    if (opts.randomize) argv.append(arena_alloc, "--randomize")?;
     if (seed := opts.seed) {
-        try argv.append(arena_alloc, try printZ(arena_alloc, "--seed={d}", .{seed}));
+        argv.append(arena_alloc, printZ(arena_alloc, "--seed={d}", .{seed})?)?;
     }
     if (opts.repeat_count > 0) {
-        try argv.append(arena_alloc, try printZ(arena_alloc, "--rerun-each={d}", .{opts.repeat_count}));
+        argv.append(arena_alloc, printZ(arena_alloc, "--rerun-each={d}", .{opts.repeat_count})?)?;
     }
     if (opts.retry > 0) {
-        try argv.append(arena_alloc, try printZ(arena_alloc, "--retry={d}", .{opts.retry}));
+        argv.append(arena_alloc, printZ(arena_alloc, "--retry={d}", .{opts.retry})?)?;
     }
-    try argv.append(arena_alloc, try printZ(arena_alloc, "--max-concurrency={d}", .{opts.max_concurrency}));
+    argv.append(arena_alloc, printZ(arena_alloc, "--max-concurrency={d}", .{opts.max_concurrency})?)?;
     if (pattern := opts.test_filter_pattern) {
-        try argv.append(arena_alloc, "-t");
-        try argv.append(arena_alloc, dupeZPtr(arena_alloc, pattern)?);
+        argv.append(arena_alloc, "-t")?;
+        argv.append(arena_alloc, dupeZPtr(arena_alloc, pattern)?)?;
     }
     for (preload of ctx.preloads) {
-        try argv.append(arena_alloc, "--preload");
-        try argv.append(arena_alloc, dupeZPtr(arena_alloc, preload)?);
+        argv.append(arena_alloc, "--preload")?;
+        argv.append(arena_alloc, dupeZPtr(arena_alloc, preload)?)?;
     }
     if (define := ctx.args.define) {
         let i: usize = 0;
@@ -349,8 +349,8 @@ fn buildWorkerArgv(arena_alloc: std.mem.Allocator, ctx: Command.Context): !@Fiel
             defer i += 1;
             const key = define.keys[i];
             const value = define.values[i];
-            try argv.append(arena_alloc, "--define");
-            try argv.append(arena_alloc, try printZ(arena_alloc, "{s}={s}", .{ key, value }));
+            argv.append(arena_alloc, "--define")?;
+            argv.append(arena_alloc, printZ(arena_alloc, "{s}={s}", .{ key, value })?)?;
         }
     }
     if (loaders := ctx.args.loaders) {
@@ -359,79 +359,79 @@ fn buildWorkerArgv(arena_alloc: std.mem.Allocator, ctx: Command.Context): !@Fiel
             defer i += 1;
             const ext = loaders.extensions[i];
             const loader = loaders.loaders[i];
-            try argv.append(arena_alloc, "--loader");
-            try argv.append(arena_alloc, try printZ(arena_alloc, "{s}:{s}", .{ ext, @tagName(loader) }));
+            argv.append(arena_alloc, "--loader")?;
+            argv.append(arena_alloc, printZ(arena_alloc, "{s}:{s}", .{ ext, @tagName(loader) })?)?;
         }
     }
     if (tsconfig := ctx.args.tsconfig_override) {
-        try argv.append(arena_alloc, "--tsconfig-override");
-        try argv.append(arena_alloc, dupeZPtr(arena_alloc, tsconfig)?);
+        argv.append(arena_alloc, "--tsconfig-override")?;
+        argv.append(arena_alloc, dupeZPtr(arena_alloc, tsconfig)?)?;
     }
     for (value of ctx.args.conditions) {
-        try argv.append(arena_alloc, "--conditions");
-        try argv.append(arena_alloc, dupeZPtr(arena_alloc, value)?);
+        argv.append(arena_alloc, "--conditions")?;
+        argv.append(arena_alloc, dupeZPtr(arena_alloc, value)?)?;
     }
     for (value of ctx.args.drop) {
-        try argv.append(arena_alloc, "--drop");
-        try argv.append(arena_alloc, dupeZPtr(arena_alloc, value)?);
+        argv.append(arena_alloc, "--drop")?;
+        argv.append(arena_alloc, dupeZPtr(arena_alloc, value)?)?;
     }
     for (value of ctx.args.main_fields) {
-        try argv.append(arena_alloc, "--main-fields");
-        try argv.append(arena_alloc, dupeZPtr(arena_alloc, value)?);
+        argv.append(arena_alloc, "--main-fields")?;
+        argv.append(arena_alloc, dupeZPtr(arena_alloc, value)?)?;
     }
     for (value of ctx.args.extension_order) {
-        try argv.append(arena_alloc, "--extension-order");
-        try argv.append(arena_alloc, dupeZPtr(arena_alloc, value)?);
+        argv.append(arena_alloc, "--extension-order")?;
+        argv.append(arena_alloc, dupeZPtr(arena_alloc, value)?)?;
     }
     for (value of ctx.args.env_files) {
-        try argv.append(arena_alloc, "--env-file");
-        try argv.append(arena_alloc, dupeZPtr(arena_alloc, value)?);
+        argv.append(arena_alloc, "--env-file")?;
+        argv.append(arena_alloc, dupeZPtr(arena_alloc, value)?)?;
     }
     for (value of ctx.args.feature_flags) {
-        try argv.append(arena_alloc, "--feature");
-        try argv.append(arena_alloc, dupeZPtr(arena_alloc, value)?);
+        argv.append(arena_alloc, "--feature")?;
+        argv.append(arena_alloc, dupeZPtr(arena_alloc, value)?)?;
     }
     if (ctx.args.preserve_symlinks orelse false) {
-        try argv.append(arena_alloc, "--preserve-symlinks");
+        argv.append(arena_alloc, "--preserve-symlinks")?;
     }
     if (ctx.runtime_options.smol) {
-        try argv.append(arena_alloc, "--smol");
+        argv.append(arena_alloc, "--smol")?;
     }
     if (ctx.runtime_options.experimental_http2_fetch) {
-        try argv.append(arena_alloc, "--experimental-http2-fetch");
+        argv.append(arena_alloc, "--experimental-http2-fetch")?;
     }
     if (ctx.runtime_options.experimental_http3_fetch) {
-        try argv.append(arena_alloc, "--experimental-http3-fetch");
+        argv.append(arena_alloc, "--experimental-http3-fetch")?;
     }
     if (ctx.args.allow_addons == false) {
-        try argv.append(arena_alloc, "--no-addons");
+        argv.append(arena_alloc, "--no-addons")?;
     }
     if (ctx.debug.macros == .disable) {
-        try argv.append(arena_alloc, "--no-macros");
+        argv.append(arena_alloc, "--no-macros")?;
     }
     if (ctx.args.disable_default_env_files) {
-        try argv.append(arena_alloc, "--no-env-file");
+        argv.append(arena_alloc, "--no-env-file")?;
     }
     if (jsx := ctx.args.jsx) {
         if (jsx.factory.len > 0) {
-            try argv.append(arena_alloc, try printZ(arena_alloc, "--jsx-factory={s}", .{jsx.factory}));
+            argv.append(arena_alloc, printZ(arena_alloc, "--jsx-factory={s}", .{jsx.factory})?)?;
         }
         if (jsx.fragment.len > 0) {
-            try argv.append(arena_alloc, try printZ(arena_alloc, "--jsx-fragment={s}", .{jsx.fragment}));
+            argv.append(arena_alloc, printZ(arena_alloc, "--jsx-fragment={s}", .{jsx.fragment})?)?;
         }
         if (jsx.import_source.len > 0) {
-            try argv.append(arena_alloc, try printZ(arena_alloc, "--jsx-import-source={s}", .{jsx.import_source}));
+            argv.append(arena_alloc, printZ(arena_alloc, "--jsx-import-source={s}", .{jsx.import_source})?)?;
         }
-        try argv.append(arena_alloc, try printZ(arena_alloc, "--jsx-runtime={s}", .{@tagName(jsx.runtime)}));
+        argv.append(arena_alloc, printZ(arena_alloc, "--jsx-runtime={s}", .{@tagName(jsx.runtime)})?)?;
         if (jsx.side_effects) {
-            try argv.append(arena_alloc, "--jsx-side-effects");
+            argv.append(arena_alloc, "--jsx-side-effects")?;
         }
     }
     if (opts.coverage.enabled) {
-        try argv.append(arena_alloc, "--coverage");
+        argv.append(arena_alloc, "--coverage")?;
     }
 
-    try argv.append(arena_alloc, null);
+    argv.append(arena_alloc, null)?;
     return argv.items[0 .. argv.items.len - 1 :null];
 }
 

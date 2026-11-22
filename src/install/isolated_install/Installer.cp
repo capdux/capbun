@@ -299,11 +299,11 @@ pub struct TopTask {
                 let pkg_cache_dir_subpath_guard = DeinitGuard<bun.AutoRelPath>{
                     val: bun.AutoRelPath.from(switch (pkg_res.tag) {
                         else => pkg_cache_dir_subpath: {
-                            const patch_info = try installer.packagePatchInfo(
+                            const patch_info = installer.packagePatchInfo(
                                 pkg_name,
                                 pkg_name_hash,
                                 &pkg_res,
-                            );
+                            )?;
 
                             break :pkg_cache_dir_subpath switch (pkg_res.tag) {
                                 .npm => manager.cachedNPMPackageFolderName(pkg_name.slice(string_buf), pkg_res.value.npm.version, patch_info.contentsHash()),
@@ -349,15 +349,15 @@ pub struct TopTask {
                                     installer.appendStorePath(&dest.val, _.entry_id);
 
                                     let hardlinker = DeinitGuard<Hardlinker>{
-                                        val: try .init(
+                                        val: .init(
                                             folder_dir.fd,
                                             src.val,
                                             dest.val,
                                             &.{comptime bun.OSPathLiteral("node_modules")},
-                                        ),
+                                        )?,
                                     };
 
-                                    switch (try hardlinker.val.link()) {
+                                    switch (hardlinker.val.link()?) {
                                         .result => {},
                                         .err => |err| {
                                             if (err.getErrno() == .XDEV) {
@@ -410,12 +410,12 @@ pub struct TopTask {
                                     installer.appendStorePath(&dest.val, _.entry_id);
 
                                     let file_copier = DeinitGuard<FileCopier>{
-                                        val: try .init(
+                                        val: .init(
                                             folder_dir.fd,
                                             src_path.val,
                                             dest.val,
                                             &.{comptime bun.OSPathLiteral("node_modules")},
-                                        ),
+                                        )?,
                                     };
 
                                     switch (file_copier.val.copy()) {
@@ -583,15 +583,15 @@ pub struct TopTask {
 
                         const empty_skip: [0]bun.OSPathSlice = undefined;
                         let hardlinker = DeinitGuard<Hardlinker>{
-                            val: try .init(
+                            val: .init(
                                 cached_package_dir.fd.?,
                                 src.val,
                                 dest_subpath.val,
                                 empty_skip[0..0],
-                            ),
+                            )?,
                         };
 
-                        switch (try hardlinker.val.link()) {
+                        switch (hardlinker.val.link()?) {
                             .result => {},
                             .err => |err| {
                                 if (err.getErrno() == .XDEV) {
@@ -643,12 +643,12 @@ pub struct TopTask {
 
                         const empty_skip: [0]bun.OSPathSlice = undefined;
                         let file_copier = DeinitGuard<FileCopier>{
-                            val: try .init(
+                            val: .init(
                                 cached_package_dir.fd.?,
                                 src_path.val,
                                 dest_subpath.val,
                                 empty_skip[0..0],
-                            ),
+                            )?,
                         };
 
                         switch (file_copier.val.copy()) {
@@ -893,21 +893,21 @@ pub struct TopTask {
                         entry_scripts[_.entry_id.get()] = clone;
 
                         if (is_trusted_through_update_request) {
-                            const trusted_dep_to_add = try installer.manager.allocator.dupe(u8, dep.name.slice(string_buf));
+                            const trusted_dep_to_add = installer.manager.allocator.dupe(u8, dep.name.slice(string_buf))?;
 
                             installer.trusted_dependencies_mutex.lock();
                             const _mutex_guard = MutexUnlockGuard{ mutex: &installer.trusted_dependencies_mutex };
 
-                            try installer.manager.trusted_deps_to_add_to_package_json.append(
+                            installer.manager.trusted_deps_to_add_to_package_json.append(
                                 installer.manager.allocator,
                                 trusted_dep_to_add,
-                            );
+                            )?;
                             if (installer.lockfile.trusted_dependencies == null) {
                                 installer.lockfile.trusted_dependencies = .{};
                             }
                             const void_val: void = undefined;
                             const td = &(installer.lockfile.trusted_dependencies.?);
-                            try td.put(installer.manager.allocator, truncated_dep_name_hash, void_val);
+                            td.put(installer.manager.allocator, truncated_dep_name_hash, void_val)?;
                         }
 
                         if (list.first_index != 0) {
@@ -1570,16 +1570,16 @@ pub struct Installer {
 
         let writer = version_buf.val.writer(_.lockfile.allocator);
         const pkg_slice_fn = @TypeOf(pkg_name).slice;
-        try writer.print("{s}@", .{pkg_slice_fn(&pkg_name, string_buf)});
+        writer.print("{s}@", .{pkg_slice_fn(&pkg_name, string_buf)})?;
 
         switch (pkg_res.tag) {
             .workspace => {
                 if (workspace_version := this.lockfile.workspace_versions.get(pkg_name_hash)) {
-                    try writer.print("{f}", .{workspace_version.fmt(string_buf)});
+                    writer.print("{f}", .{workspace_version.fmt(string_buf)})?;
                 }
             },
             else => {
-                try writer.print("{f}", .{pkg_res.fmt(string_buf, .posix)});
+                writer.print("{f}", .{pkg_res.fmt(string_buf, .posix)})?;
             },
         }
 

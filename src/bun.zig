@@ -1957,7 +1957,8 @@ flags = (flags | O.RDWR);
             const fd = try sys.openA(path_, flags, 0).unwrap();
             return fd.stdFile();
         }
-        return try openFileZ((&try std.posix.toPosixPath(path_)), open_flags);
+        const posix_path = try std.posix.toPosixPath(path_);
+        return try openFileZ((&posix_path), open_flags);
 }
 
 pub fn openDir(dir: std.fs.Dir, path_: [:0]const u8) !std.fs.Dir {

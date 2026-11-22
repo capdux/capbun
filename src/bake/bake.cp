@@ -1004,36 +1004,36 @@ pub fn addImportMetaDefines(
     // Note that it is not currently possible to have mixed
     // modes (production + hmr dev server)
     // TODO: BASE_URL
-    try define.insert(
+    define.insert(
         allocator,
         "import.meta.env.DEV",
         Define.Data.initBoolean(mode == .development),
-    );
-    try define.insert(
+    )?;
+    define.insert(
         allocator,
         "import.meta.env.PROD",
         Define.Data.initBoolean(mode != .development),
-    );
-    try define.insert(
+    )?;
+    define.insert(
         allocator,
         "import.meta.env.MODE",
         Define.Data.initStaticString(switch (mode) {
             .development => &.{ .data = "development" },
             .production_dynamic, .production_static => &.{ .data = "production" },
         }),
-    );
-    try define.insert(
+    )?;
+    define.insert(
         allocator,
         "import.meta.env.SSR",
         Define.Data.initBoolean(side == .server),
-    );
+    )?;
 
     // To indicate a static build, `STATIC` is set to true then.
-    try define.insert(
+    define.insert(
         allocator,
         "import.meta.env.STATIC",
         Define.Data.initBoolean(mode == .production_static),
-    );
+    )?;
 }
 
 pub const server_virtual_source: bun.logger.Source = .{

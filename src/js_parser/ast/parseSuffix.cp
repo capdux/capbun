@@ -149,7 +149,7 @@ pub fn ParseSuffix(
                         return error.SyntaxError;
                     }
 
-                    * = try p.skipTypeScriptTypeArguments(false);
+                    * = p.skipTypeScriptTypeArguments(false)?;
                     if (p.lexer.token != .t_open_paren) {
                         p.lexer.expected(.t_open_paren)?;
                     }
@@ -380,7 +380,7 @@ pub fn ParseSuffix(
             }
 
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_comma, left: left.*, right: try p.parseExpr(.comma) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_comma, left: left.*, right: p.parseExpr(.comma)? }, left.loc);
             return Continuation.next;
         }
         static fn t_plus(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -389,7 +389,7 @@ pub fn ParseSuffix(
             }
 
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_add, left: left.*, right: try p.parseExpr(.add) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_add, left: left.*, right: p.parseExpr(.add)? }, left.loc);
             return Continuation.next;
         }
         static fn t_plus_equals(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -398,7 +398,7 @@ pub fn ParseSuffix(
             }
 
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_add_assign, left: left.*, right: try p.parseExpr(@as(Op.Level, @enumFromInt(@intFromEnum(Op.Level.assign) - 1))) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_add_assign, left: left.*, right: p.parseExpr(@as(Op.Level, @enumFromInt(@intFromEnum(Op.Level.assign) - 1)))? }, left.loc);
             return Continuation.next;
         }
         static fn t_minus(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -407,7 +407,7 @@ pub fn ParseSuffix(
             }
 
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_sub, left: left.*, right: try p.parseExpr(.add) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_sub, left: left.*, right: p.parseExpr(.add)? }, left.loc);
             return Continuation.next;
         }
         static fn t_minus_equals(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -416,7 +416,7 @@ pub fn ParseSuffix(
             }
 
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_sub_assign, left: left.*, right: try p.parseExpr(Op.Level.sub(Op.Level.assign, 1)) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_sub_assign, left: left.*, right: p.parseExpr(Op.Level.sub(Op.Level.assign, 1))? }, left.loc);
             return Continuation.next;
         }
         static fn t_asterisk(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -425,7 +425,7 @@ pub fn ParseSuffix(
             }
 
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_mul, left: left.*, right: try p.parseExpr(.multiply) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_mul, left: left.*, right: p.parseExpr(.multiply)? }, left.loc);
             return Continuation.next;
         }
         static fn t_asterisk_asterisk(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -434,7 +434,7 @@ pub fn ParseSuffix(
             }
 
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_pow, left: left.*, right: try p.parseExpr(Op.Level.exponentiation.sub(1)) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_pow, left: left.*, right: p.parseExpr(Op.Level.exponentiation.sub(1))? }, left.loc);
             return Continuation.next;
         }
         static fn t_asterisk_asterisk_equals(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -443,7 +443,7 @@ pub fn ParseSuffix(
             }
 
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_pow_assign, left: left.*, right: try p.parseExpr(Op.Level.assign.sub(1)) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_pow_assign, left: left.*, right: p.parseExpr(Op.Level.assign.sub(1))? }, left.loc);
             return Continuation.next;
         }
         static fn t_asterisk_equals(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -452,7 +452,7 @@ pub fn ParseSuffix(
             }
 
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_mul_assign, left: left.*, right: try p.parseExpr(Op.Level.assign.sub(1)) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_mul_assign, left: left.*, right: p.parseExpr(Op.Level.assign.sub(1))? }, left.loc);
             return Continuation.next;
         }
         static fn t_percent(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -461,7 +461,7 @@ pub fn ParseSuffix(
             }
 
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_rem, left: left.*, right: try p.parseExpr(Op.Level.multiply) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_rem, left: left.*, right: p.parseExpr(Op.Level.multiply)? }, left.loc);
             return Continuation.next;
         }
         static fn t_percent_equals(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -470,7 +470,7 @@ pub fn ParseSuffix(
             }
 
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_rem_assign, left: left.*, right: try p.parseExpr(Level.assign.sub(1)) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_rem_assign, left: left.*, right: p.parseExpr(Level.assign.sub(1))? }, left.loc);
             return Continuation.next;
         }
         static fn t_slash(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -479,7 +479,7 @@ pub fn ParseSuffix(
             }
 
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_div, left: left.*, right: try p.parseExpr(Level.multiply) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_div, left: left.*, right: p.parseExpr(Level.multiply)? }, left.loc);
             return Continuation.next;
         }
         static fn t_slash_equals(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -488,7 +488,7 @@ pub fn ParseSuffix(
             }
 
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_div_assign, left: left.*, right: try p.parseExpr(Level.assign.sub(1)) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_div_assign, left: left.*, right: p.parseExpr(Level.assign.sub(1))? }, left.loc);
             return Continuation.next;
         }
         static fn t_equals_equals(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -497,7 +497,7 @@ pub fn ParseSuffix(
             }
 
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_loose_eq, left: left.*, right: try p.parseExpr(Level.equals) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_loose_eq, left: left.*, right: p.parseExpr(Level.equals)? }, left.loc);
             return Continuation.next;
         }
         static fn t_exclamation_equals(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -506,7 +506,7 @@ pub fn ParseSuffix(
             }
 
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_loose_ne, left: left.*, right: try p.parseExpr(Level.equals) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_loose_ne, left: left.*, right: p.parseExpr(Level.equals)? }, left.loc);
             return Continuation.next;
         }
         static fn t_equals_equals_equals(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -515,7 +515,7 @@ pub fn ParseSuffix(
             }
 
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_strict_eq, left: left.*, right: try p.parseExpr(Level.equals) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_strict_eq, left: left.*, right: p.parseExpr(Level.equals)? }, left.loc);
             return Continuation.next;
         }
         static fn t_exclamation_equals_equals(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -524,7 +524,7 @@ pub fn ParseSuffix(
             }
 
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_strict_ne, left: left.*, right: try p.parseExpr(Level.equals) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_strict_ne, left: left.*, right: p.parseExpr(Level.equals)? }, left.loc);
             return Continuation.next;
         }
         static fn t_less_than(p: *P, level: Level, optional_chain: *OptOptionalChain, old_optional_chain: OptionalChain?, left: *Expr): anyerror!Continuation {
@@ -540,7 +540,7 @@ pub fn ParseSuffix(
                 return Continuation.done;
             }
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_lt, left: left.*, right: try p.parseExpr(.compare) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_lt, left: left.*, right: p.parseExpr(.compare)? }, left.loc);
             return Continuation.next;
         }
         static fn t_less_than_equals(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -548,7 +548,7 @@ pub fn ParseSuffix(
                 return Continuation.done;
             }
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_le, left: left.*, right: try p.parseExpr(.compare) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_le, left: left.*, right: p.parseExpr(.compare)? }, left.loc);
             return Continuation.next;
         }
         static fn t_greater_than(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -556,7 +556,7 @@ pub fn ParseSuffix(
                 return Continuation.done;
             }
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_gt, left: left.*, right: try p.parseExpr(.compare) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_gt, left: left.*, right: p.parseExpr(.compare)? }, left.loc);
             return Continuation.next;
         }
         static fn t_greater_than_equals(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -564,7 +564,7 @@ pub fn ParseSuffix(
                 return Continuation.done;
             }
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_ge, left: left.*, right: try p.parseExpr(.compare) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_ge, left: left.*, right: p.parseExpr(.compare)? }, left.loc);
             return Continuation.next;
         }
         static fn t_less_than_less_than(p: *P, level: Level, optional_chain: *OptOptionalChain, old_optional_chain: OptionalChain?, left: *Expr): anyerror!Continuation {
@@ -580,7 +580,7 @@ pub fn ParseSuffix(
                 return Continuation.done;
             }
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_shl, left: left.*, right: try p.parseExpr(.shift) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_shl, left: left.*, right: p.parseExpr(.shift)? }, left.loc);
             return Continuation.next;
         }
         static fn t_less_than_less_than_equals(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -589,7 +589,7 @@ pub fn ParseSuffix(
             }
 
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_shl_assign, left: left.*, right: try p.parseExpr(Level.assign.sub(1)) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_shl_assign, left: left.*, right: p.parseExpr(Level.assign.sub(1))? }, left.loc);
             return Continuation.next;
         }
         static fn t_greater_than_greater_than(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -597,7 +597,7 @@ pub fn ParseSuffix(
                 return Continuation.done;
             }
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_shr, left: left.*, right: try p.parseExpr(.shift) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_shr, left: left.*, right: p.parseExpr(.shift)? }, left.loc);
             return Continuation.next;
         }
         static fn t_greater_than_greater_than_equals(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -606,7 +606,7 @@ pub fn ParseSuffix(
             }
 
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_shr_assign, left: left.*, right: try p.parseExpr(Level.assign.sub(1)) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_shr_assign, left: left.*, right: p.parseExpr(Level.assign.sub(1))? }, left.loc);
             return Continuation.next;
         }
         static fn t_greater_than_greater_than_greater_than(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -614,7 +614,7 @@ pub fn ParseSuffix(
                 return Continuation.done;
             }
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_u_shr, left: left.*, right: try p.parseExpr(.shift) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_u_shr, left: left.*, right: p.parseExpr(.shift)? }, left.loc);
             return Continuation.next;
         }
         static fn t_greater_than_greater_than_greater_than_equals(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -623,7 +623,7 @@ pub fn ParseSuffix(
             }
 
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_u_shr_assign, left: left.*, right: try p.parseExpr(Level.assign.sub(1)) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_u_shr_assign, left: left.*, right: p.parseExpr(Level.assign.sub(1))? }, left.loc);
             return Continuation.next;
         }
         static fn t_question_question(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -632,7 +632,7 @@ pub fn ParseSuffix(
             }
             p.lexer.next()?;
             const prev = left.*;
-            left.* = p.newExpr(E.Binary{ op: .bin_nullish_coalescing, left: prev, right: try p.parseExpr(.nullish_coalescing) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_nullish_coalescing, left: prev, right: p.parseExpr(.nullish_coalescing)? }, left.loc);
             return Continuation.next;
         }
         static fn t_question_question_equals(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -641,7 +641,7 @@ pub fn ParseSuffix(
             }
 
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_nullish_coalescing_assign, left: left.*, right: try p.parseExpr(Level.assign.sub(1)) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_nullish_coalescing_assign, left: left.*, right: p.parseExpr(Level.assign.sub(1))? }, left.loc);
             return Continuation.next;
         }
         static fn t_bar_bar(p: *P, level: Level, left: *Expr, flags: Expr.EFlags): anyerror!Continuation {
@@ -675,7 +675,7 @@ pub fn ParseSuffix(
             }
 
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_logical_or_assign, left: left.*, right: try p.parseExpr(Level.assign.sub(1)) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_logical_or_assign, left: left.*, right: p.parseExpr(Level.assign.sub(1))? }, left.loc);
             return Continuation.next;
         }
         static fn t_ampersand_ampersand(p: *P, level: Level, left: *Expr, flags: Expr.EFlags): anyerror!Continuation {
@@ -690,7 +690,7 @@ pub fn ParseSuffix(
             }
 
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_logical_and, left: left.*, right: try p.parseExpr(.logical_and) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_logical_and, left: left.*, right: p.parseExpr(.logical_and)? }, left.loc);
 
             // Prevent "&&" inside "??" from the left
             if (level.lt(.nullish_coalescing)) {
@@ -709,7 +709,7 @@ pub fn ParseSuffix(
             }
 
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_logical_and_assign, left: left.*, right: try p.parseExpr(Level.assign.sub(1)) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_logical_and_assign, left: left.*, right: p.parseExpr(Level.assign.sub(1))? }, left.loc);
             return Continuation.next;
         }
         static fn t_bar(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -718,7 +718,7 @@ pub fn ParseSuffix(
             }
 
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_bitwise_or, left: left.*, right: try p.parseExpr(.bitwise_or) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_bitwise_or, left: left.*, right: p.parseExpr(.bitwise_or)? }, left.loc);
             return Continuation.next;
         }
         static fn t_bar_equals(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -727,7 +727,7 @@ pub fn ParseSuffix(
             }
 
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_bitwise_or_assign, left: left.*, right: try p.parseExpr(Level.assign.sub(1)) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_bitwise_or_assign, left: left.*, right: p.parseExpr(Level.assign.sub(1))? }, left.loc);
             return Continuation.next;
         }
         static fn t_ampersand(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -736,7 +736,7 @@ pub fn ParseSuffix(
             }
 
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_bitwise_and, left: left.*, right: try p.parseExpr(.bitwise_and) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_bitwise_and, left: left.*, right: p.parseExpr(.bitwise_and)? }, left.loc);
             return Continuation.next;
         }
         static fn t_ampersand_equals(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -745,7 +745,7 @@ pub fn ParseSuffix(
             }
 
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_bitwise_and_assign, left: left.*, right: try p.parseExpr(Level.assign.sub(1)) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_bitwise_and_assign, left: left.*, right: p.parseExpr(Level.assign.sub(1))? }, left.loc);
             return Continuation.next;
         }
         static fn t_caret(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -754,7 +754,7 @@ pub fn ParseSuffix(
             }
 
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_bitwise_xor, left: left.*, right: try p.parseExpr(.bitwise_xor) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_bitwise_xor, left: left.*, right: p.parseExpr(.bitwise_xor)? }, left.loc);
             return Continuation.next;
         }
         static fn t_caret_equals(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -763,7 +763,7 @@ pub fn ParseSuffix(
             }
 
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_bitwise_xor_assign, left: left.*, right: try p.parseExpr(Level.assign.sub(1)) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_bitwise_xor_assign, left: left.*, right: p.parseExpr(Level.assign.sub(1))? }, left.loc);
             return Continuation.next;
         }
         static fn t_equals(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -773,7 +773,7 @@ pub fn ParseSuffix(
 
             p.lexer.next()?;
 
-            left.* = p.newExpr(E.Binary{ op: .bin_assign, left: left.*, right: try p.parseExpr(Level.assign.sub(1)) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_assign, left: left.*, right: p.parseExpr(Level.assign.sub(1))? }, left.loc);
             return Continuation.next;
         }
         static fn t_in(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -793,7 +793,7 @@ pub fn ParseSuffix(
             }
 
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_in, left: left.*, right: try p.parseExpr(.compare) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_in, left: left.*, right: p.parseExpr(.compare)? }, left.loc);
             return Continuation.next;
         }
         static fn t_instanceof(p: *P, level: Level, left: *Expr): anyerror!Continuation {
@@ -815,7 +815,7 @@ pub fn ParseSuffix(
                 }
             }
             p.lexer.next()?;
-            left.* = p.newExpr(E.Binary{ op: .bin_instanceof, left: left.*, right: try p.parseExpr(.compare) }, left.loc);
+            left.* = p.newExpr(E.Binary{ op: .bin_instanceof, left: left.*, right: p.parseExpr(.compare)? }, left.loc);
             return Continuation.next;
         }
 
@@ -918,7 +918,7 @@ pub fn ParseSuffix(
                     else => handleTypescriptAs(p, level),
                 };
 
-                switch (try continuation) {
+                switch (continuation?) {
                     .next => {},
                     .done => break,
                 }

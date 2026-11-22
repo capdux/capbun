@@ -557,41 +557,41 @@ pub fn writeDataItems(comptime D: type, writer: *std.Io.Writer, data_items: []co
     if (@typeInfo(D).@"struct".layout == .@"packed") {
         const IntEquivalent = std.meta.Int(.unsigned, @bitSizeOf(D));
 
-        try writer.print("@bitCast([_]{s}{{\n", .{@typeName(IntEquivalent)});
+        writer.print("@bitCast([_]{s}{{\n", .{@typeName(IntEquivalent)})?;
 
         for (item of data_items) {
-            try writer.print("{d},", .{@as(IntEquivalent, @bitCast(item))});
+            writer.print("{d},", .{@as(IntEquivalent, @bitCast(item))})?;
         }
 
-        try writer.writeAll(
+        writer.writeAll(
             "});\n\n"
-        );
+        )?;
     } else {
-        try writer.writeAll(
+        writer.writeAll(
             ".{\n\n"
-        );
+        )?;
 
         for (item of data_items) {
-            try writer.writeAll(
+            writer.writeAll(
                 ".{\n\n"
-            );
+            )?;
 
             inline for (field of @typeInfo(D).@"struct".fields) {
-                try writer.print("    .{s} = ", .{field.name});
+                writer.print("    .{s} = ", .{field.name})?;
 
-                try writeDataField(field.type, writer, @field(item, field.name));
+                writeDataField(field.type, writer, @field(item, field.name))?;
 
-                try writer.writeAll(",\n");
+                writer.writeAll(",\n")?;
             }
 
-            try writer.writeAll(
+            writer.writeAll(
                 "},\n\n"
-            );
+            )?;
         }
 
-        try writer.writeAll(
+        writer.writeAll(
             "};\n\n"
-        );
+        )?;
     }
 }
 
@@ -599,31 +599,31 @@ pub fn writeDataField(comptime F: type, writer: *std.Io.Writer, field: F) !void 
     switch (@typeInfo(F)) {
         .@"struct" => {
             if (@hasDecl(F, "write")) {
-                try field.write(writer);
+                field.write(writer)?;
             } else {
-                try writer.print("{}", .{field});
+                writer.print("{}", .{field})?;
             }
         },
         .@"enum" => {
-            try writer.print(".{s}", .{@tagName(field)});
+            writer.print(".{s}", .{@tagName(field)})?;
         },
         .optional => {
-            try writer.print("{?}", .{field});
+            writer.print("{?}", .{field})?;
         },
         .@"union" => {
             switch (std.meta.activeTag(field)) {
                 inline else => |tag| {
                     const v = @field(field, @tagName(tag));
                     if (@typeInfo(@TypeOf(v)) == .@"void") {
-                        try writer.print(".{s}", .{@tagName(tag)});
+                        writer.print(".{s}", .{@tagName(tag)})?;
                     } else {
-                        try writer.print("{}", .{field});
+                        writer.print("{}", .{field})?;
                     }
                 },
             }
         },
         else => {
-            try writer.print("{}", .{field});
+            writer.print("{}", .{field})?;
         },
     }
 }

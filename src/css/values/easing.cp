@@ -152,11 +152,11 @@ pub union(enum) EasingFunction {
 
     pub fn toCss(dest: *css.Printer): css.PrintErr!void {
         return switch (_) {
-            .linear => try dest.writeStr("linear"),
-            .ease => try dest.writeStr("ease"),
-            .ease_in => try dest.writeStr("ease-in"),
-            .ease_out => try dest.writeStr("ease-out"),
-            .ease_in_out => try dest.writeStr("ease-in-out"),
+            .linear => dest.writeStr("linear")?,
+            .ease => dest.writeStr("ease")?,
+            .ease_in => dest.writeStr("ease-in")?,
+            .ease_out => dest.writeStr("ease-out")?,
+            .ease_in_out => dest.writeStr("ease-in-out")?,
             else => {
                 if (_.isEase()) {
                     return dest.writeStr("ease");

@@ -19,7 +19,7 @@ type AnyTaskCallback = fn (*!) bun.JSError!void;
         @setRuntimeSafety(false);
         const cb = _.callback;
         const context = _.ctx;
-        try cb(context.?);
+        cb(context.?)?;
     }
 
     pub static fn New(comptime Type: type, comptime Callback: anytype): type {

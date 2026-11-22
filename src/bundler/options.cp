@@ -1535,7 +1535,7 @@ pub fn definesFromTransformOptions(
                     } else if (strings.eqlComptime(node_env, "test")) {
                         break :brk "\"test\"";
                     } else {
-                        break :brk try std.fmt.allocPrint(allocator, "\"{s}\"", [ node_env ]);
+                        break :brk std.fmt.allocPrint(allocator, "\"{s}\"", [ node_env ])?;
                     }
                 }
             }
@@ -2440,7 +2440,7 @@ pub struct EntryPoint {
         if (_.kind == .disabled)
             return null;
 
-        return api.FrameworkEntryPoint{ kind: kind.toAPI(), env: _.env.toAPI(), path: try _.normalizedPath(allocator, toplevel_path) };
+        return api.FrameworkEntryPoint{ kind: kind.toAPI(), env: _.env.toAPI(), path: _.normalizedPath(allocator, toplevel_path)? };
     }
 
     fn normalizedPath(allocator: std.mem.Allocator, toplevel_path: string): !string {

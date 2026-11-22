@@ -1090,12 +1090,12 @@ fn overwritePackageInNodeModulesFolder(
         comptime bun.OSPathLiteral("CMakeFiles"),
     ];
 
-    let copier: bun.install.FileCopier = try .init(
+    let copier: bun.install.FileCopier = .init(
         .fromStdDir(cached_package_folder),
         src_path,
         dest_subpath,
         ignore_directories,
-    );
+    )?;
     const _guard_copier = DeinitGuard<*bun.install.FileCopier!>{ ptr: &copier };
 
     copier.copy().unwrap()?;

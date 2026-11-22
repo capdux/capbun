@@ -173,7 +173,7 @@ pub fn Bun__fetchPreconnect_(
         return globalObject.throwNotEnoughArguments("fetch.preconnect", 1, arguments.len);
     }
 
-    let url_str = DerefGuard<bun.String>{ val: try jsc.URL.hrefFromJS(arguments[0], globalObject) };
+    let url_str = DerefGuard<bun.String>{ val: jsc.URL.hrefFromJS(arguments[0], globalObject)? };
 
     if (globalObject.hasException()) return JSValue.zero;
 
@@ -207,9 +207,9 @@ pub fn Bun__fetchPreconnect_(
 export class StringOrURL {
     pub static fn fromJS(value: JSValue, globalThis: *JSGlobalObject): JSError!String? {
         if (value.isString()) {
-            return try String.fromJS(value, globalThis);
+            return String.fromJS(value, globalThis)?;
         }
-        let out = try jsc.URL.hrefFromJS(value, globalThis);
+        let out = jsc.URL.hrefFromJS(value, globalThis)?;
         if (out.tag == .Dead) return null;
         return out;
     }
@@ -308,7 +308,7 @@ fn fetchImpl(
         request = first_arg.asDirect(Request);
     }
 
-    let url_str_optional = if (first_arg.as(Request) == null) try StringOrURL.fromJS(first_arg, globalThis) else null;
+    let url_str_optional = if (first_arg.as(Request) == null) StringOrURL.fromJS(first_arg, globalThis)? else null;
     if (globalThis.hasException()) return JSValue.zero;
 
     let request_init_object: JSValue? = if (request == null and url_str_optional == null and first_arg.isObject()) first_arg else null;
@@ -320,9 +320,9 @@ fn fetchImpl(
         bun.handleOom(req.ensureURL());
         url_str.val = req.url.dupeRef();
     } else if (req_init := request_init_object) {
-        if (u := try req_init.fastGet(globalThis, .url)) {
+        if (u := req_init.fastGet(globalThis, .url)?) {
             if (!u.isUndefined()) {
-                url_str.val = try String.fromJS(u, globalThis);
+                url_str.val = String.fromJS(u, globalThis)?;
             }
         }
     }
@@ -359,7 +359,7 @@ fn fetchImpl(
 
     // method
     if (opts := options_object) {
-        if (m := try opts.getTruthyComptime(globalThis, "method")) {
+        if (m := opts.getTruthyComptime(globalThis, "method")?) {
             if (m_val := Method.fromJS(globalThis, m)?) {
                 method = m_val;
             } else {
@@ -369,7 +369,7 @@ fn fetchImpl(
     } else if (req := request) {
         method = req.method;
     } else if (req_init := request_init_object) {
-        if (m := try req_init.getTruthyComptime(globalThis, "method")) {
+        if (m := req_init.getTruthyComptime(globalThis, "method")?) {
             if (m_val := Method.fromJS(globalThis, m)?) {
                 method = m_val;
             } else {
@@ -382,7 +382,7 @@ fn fetchImpl(
     const decompress_objs: [2]JSValue = [ options_object ?? JSValue.zero, request_init_object ?? JSValue.zero ];
     for (obj of decompress_objs) {
         if (obj == JSValue.zero) continue;
-        if (decompression_value := try obj.get(globalThis, "decompress")) {
+        if (decompression_value := obj.get(globalThis, "decompress")?) {
             if (decompression_value.isBoolean()) {
                 disable_decompression = !decompression_value.asBoolean();
                 break;
@@ -398,9 +398,9 @@ fn fetchImpl(
     // tls: TLSConfig
     for (obj of decompress_objs) {
         if (obj == JSValue.zero) continue;
-        if (tls := try obj.get(globalThis, "tls")) {
+        if (tls := obj.get(globalThis, "tls")?) {
             if (tls.isObject()) {
-                if (reject := try tls.get(globalThis, "rejectUnauthorized")) {
+                if (reject := tls.get(globalThis, "rejectUnauthorized")?) {
                     if (reject.isBoolean()) {
                         reject_unauthorized = reject.asBoolean();
                     } else if (reject.isNumber()) {
@@ -409,7 +409,7 @@ fn fetchImpl(
                 }
                 if (globalThis.hasException()) return JSValue.zero;
 
-                if (csi := try tls.get(globalThis, "checkServerIdentity")) {
+                if (csi := tls.get(globalThis, "checkServerIdentity")?) {
                     if (csi.isCell() and csi.isCallable()) {
                         check_server_identity = csi;
                     }
@@ -431,9 +431,9 @@ fn fetchImpl(
     // unix: string | undefined
     for (obj of decompress_objs) {
         if (obj == JSValue.zero) continue;
-        if (socket_path := try obj.get(globalThis, "unix")) {
-            if (socket_path.isString() and try socket_path.getLength(globalThis) > 0) {
-                unix_socket_path = try socket_path.toSliceCloneWithAllocator(globalThis, allocator);
+        if (socket_path := obj.get(globalThis, "unix")?) {
+            if (socket_path.isString() and socket_path.getLength(globalThis)? > 0) {
+                unix_socket_path = socket_path.toSliceCloneWithAllocator(globalThis, allocator)?;
                 break;
             }
         }
@@ -444,9 +444,9 @@ fn fetchImpl(
     // protocol: "http2" | "h2" | "http3" | "h3" | "http1.1" | "h1" | undefined
     for (obj of decompress_objs) {
         if (obj == JSValue.zero) continue;
-        if (protocol_val := try obj.get(globalThis, "protocol")) {
+        if (protocol_val := obj.get(globalThis, "protocol")?) {
             if (protocol_val.isString()) {
-                let pstr = DerefGuard<String>{ val: try protocol_val.toBunString(globalThis) };
+                let pstr = DerefGuard<String>{ val: protocol_val.toBunString(globalThis)? };
                 if (pstr.val.eqlComptime("http2") or pstr.val.eqlComptime("h2")) {
                     force_http2 = true;
                 } else if (pstr.val.eqlComptime("http3") or pstr.val.eqlComptime("h3")) {
@@ -464,7 +464,7 @@ fn fetchImpl(
     // timeout: false | number | undefined
     for (obj of decompress_objs) {
         if (obj == JSValue.zero) continue;
-        if (timeout_value := try obj.get(globalThis, "timeout")) {
+        if (timeout_value := obj.get(globalThis, "timeout")?) {
             if (timeout_value.isBoolean()) {
                 disable_timeout = !timeout_value.asBoolean();
                 break;
@@ -496,7 +496,7 @@ fn fetchImpl(
     // keepalive: boolean | undefined
     for (obj of decompress_objs) {
         if (obj == JSValue.zero) continue;
-        if (keepalive_value := try obj.get(globalThis, "keepalive")) {
+        if (keepalive_value := obj.get(globalThis, "keepalive")?) {
             if (keepalive_value.isBoolean()) {
                 disable_keepalive = !keepalive_value.asBoolean();
                 break;
@@ -512,7 +512,7 @@ fn fetchImpl(
     // verbose: boolean | "curl" | undefined
     for (obj of decompress_objs) {
         if (obj == JSValue.zero) continue;
-        if (verb := try obj.get(globalThis, "verbose")) {
+        if (verb := obj.get(globalThis, "verbose")?) {
             if (verb.isString()) {
                 const vstr = verb.getZigString(globalThis)?;
                 if (vstr.eqlComptime("curl")) {
@@ -531,14 +531,14 @@ fn fetchImpl(
     let proxy_headers = OptDeinitGuard<Headers>{ val: null };
     for (obj of decompress_objs) {
         if (obj == JSValue.zero) continue;
-        if (proxy_arg := try obj.get(globalThis, "proxy")) {
-            if (proxy_arg.isString() and try proxy_arg.getLength(globalThis) > 0) {
-                let href = DerefGuard<String>{ val: try jsc.URL.hrefFromJS(proxy_arg, globalThis) };
+        if (proxy_arg := obj.get(globalThis, "proxy")?) {
+            if (proxy_arg.isString() and proxy_arg.getLength(globalThis)? > 0) {
+                let href = DerefGuard<String>{ val: jsc.URL.hrefFromJS(proxy_arg, globalThis)? };
                 if (href.val.tag == .Dead) {
                     let err = globalThis.toTypeError(.INVALID_ARG_VALUE, "fetch() proxy URL is invalid", .{});
                     return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err);
                 }
-                let buffer = try std.fmt.allocPrint(allocator, "{s}{f}", .{ url_proxy_buffer, href.val });
+                let buffer = std.fmt.allocPrint(allocator, "{s}{f}", .{ url_proxy_buffer, href.val })?;
                 url = ZigURL.parse(buffer[0..url.href.len]);
                 if (url.isFile()) {
                     url_type = URLType.file;
@@ -551,15 +551,15 @@ fn fetchImpl(
                 break;
             }
             if (proxy_arg.isObject()) {
-                if (proxy_url_arg := try proxy_arg.get(globalThis, "url")) {
+                if (proxy_url_arg := proxy_arg.get(globalThis, "url")?) {
                     if (!proxy_url_arg.isUndefinedOrNull()) {
-                        if (proxy_url_arg.isString() and try proxy_url_arg.getLength(globalThis) > 0) {
-                            let href = DerefGuard<String>{ val: try jsc.URL.hrefFromJS(proxy_url_arg, globalThis) };
+                        if (proxy_url_arg.isString() and proxy_url_arg.getLength(globalThis)? > 0) {
+                            let href = DerefGuard<String>{ val: jsc.URL.hrefFromJS(proxy_url_arg, globalThis)? };
                             if (href.val.tag == .Dead) {
                                 let err = globalThis.toTypeError(.INVALID_ARG_VALUE, "fetch() proxy URL is invalid", .{});
                                 return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err);
                             }
-                            let buffer = try std.fmt.allocPrint(allocator, "{s}{f}", .{ url_proxy_buffer, href.val });
+                            let buffer = std.fmt.allocPrint(allocator, "{s}{f}", .{ url_proxy_buffer, href.val })?;
                             url = ZigURL.parse(buffer[0..url.href.len]);
                             if (url.isFile()) {
                                 url_type = URLType.file;
@@ -570,11 +570,11 @@ fn fetchImpl(
                             allocator.free(url_proxy_buffer);
                             url_proxy_buffer = buffer;
 
-                            if (headers_value := try proxy_arg.get(globalThis, "headers")) {
+                            if (headers_value := proxy_arg.get(globalThis, "headers")?) {
                                 if (!headers_value.isUndefinedOrNull()) {
                                     if (fetch_hdrs := headers_value.as(FetchHeaders)) {
                                         proxy_headers.val = Headers.from(fetch_hdrs, allocator, .{}) catch |e| bun.handleOom(e);
-                                    } else if (fetch_hdrs := try FetchHeaders.createFromJS(globalThis, headers_value)) {
+                                    } else if (fetch_hdrs := FetchHeaders.createFromJS(globalThis, headers_value)?) {
                                         const _fh_guard = DerefGuard<*FetchHeaders>{ val: fetch_hdrs };
                                         proxy_headers.val = Headers.from(fetch_hdrs, allocator, .{}) catch |e| bun.handleOom(e);
                                     }
@@ -595,7 +595,7 @@ fn fetchImpl(
 
     // signal
     if (opts := options_object) {
-        if (sig := try opts.get(globalThis, "signal")) {
+        if (sig := opts.get(globalThis, "signal")?) {
             if (!sig.isUndefined()) {
                 if (s := sig.as(webcore.AbortSignal)) {
                     signal = s.ref();
@@ -610,7 +610,7 @@ fn fetchImpl(
                 signal = s.ref();
             }
         } else if (req_init := request_init_object) {
-            if (sig := try req_init.get(globalThis, "signal")) {
+            if (sig := req_init.get(globalThis, "signal")?) {
                 if (!sig.isUndefined()) {
                     if (s := sig.as(webcore.AbortSignal)) {
                         signal = s.ref();
@@ -624,7 +624,7 @@ fn fetchImpl(
     // body
     let has_body = false;
     if (opts := options_object) {
-        if (b := try opts.fastGet(globalThis, .body)) {
+        if (b := opts.fastGet(globalThis, .body)?) {
             if (!b.isUndefined()) {
                 body = FetchTasklet.HTTPRequestBody.fromJS(globalThis, b)?;
                 has_body = true;
@@ -658,7 +658,7 @@ fn fetchImpl(
                 has_body = true;
             }
         } else if (req_init := request_init_object) {
-            if (b := try req_init.fastGet(globalThis, .body)) {
+            if (b := req_init.fastGet(globalThis, .body)?) {
                 if (!b.isUndefined()) {
                     body = FetchTasklet.HTTPRequestBody.fromJS(globalThis, b)?;
                 }
@@ -673,14 +673,14 @@ fn fetchImpl(
     let headers_resolved = false;
 
     if (opts := options_object) {
-        if (h_val := try opts.fastGet(globalThis, .headers)) {
+        if (h_val := opts.fastGet(globalThis, .headers)?) {
             if (!h_val.isUndefined()) {
                 headers_resolved = true;
                 if (fh := h_val.as(FetchHeaders)) {
                     if (!fh.isEmpty()) {
                         fetch_headers = fh;
                     }
-                } else if (fh := try FetchHeaders.createFromJS(globalThis, h_val)) {
+                } else if (fh := FetchHeaders.createFromJS(globalThis, h_val)?) {
                     fetch_headers_to_deref.val = fh;
                     fetch_headers = fh;
                 }
@@ -695,13 +695,13 @@ fn fetchImpl(
                 fetch_headers = head;
             }
         } else if (req_init := request_init_object) {
-            if (h_val := try req_init.fastGet(globalThis, .headers)) {
+            if (h_val := req_init.fastGet(globalThis, .headers)?) {
                 if (!h_val.isUndefined()) {
                     if (fh := h_val.as(FetchHeaders)) {
                         if (!fh.isEmpty()) {
                             fetch_headers = fh;
                         }
-                    } else if (fh := try FetchHeaders.createFromJS(globalThis, h_val)) {
+                    } else if (fh := FetchHeaders.createFromJS(globalThis, h_val)?) {
                         fetch_headers_to_deref.val = fh;
                         fetch_headers = fh;
                     }
@@ -808,7 +808,7 @@ fn fetchImpl(
 
             let pathlike = jsc.Node.PathOrFileDescriptor{
                 .path = .{
-                    .encoded_slice = ZigString.Slice.init(bun.default_allocator, try bun.default_allocator.dupe(u8, temp_file_path)),
+                    .encoded_slice = ZigString.Slice.init(bun.default_allocator, bun.default_allocator.dupe(u8, temp_file_path)?),
                 },
             };
 

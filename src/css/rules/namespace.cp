@@ -26,7 +26,7 @@ pub struct NamespaceRule {
         }
 
         css.css_values.string.CSSStringFns.toCss(&_.url, dest)?;
-        try dest.writeChar(';');
+        dest.writeChar(';')?;
     }
 
     static fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator): This {

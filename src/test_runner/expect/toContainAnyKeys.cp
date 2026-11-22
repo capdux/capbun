@@ -33,7 +33,7 @@ pub fn toContainAnyKeys(
         while (i < count) : (i += 1) {
             const key = expected.getIndex(globalThis, i)?;
 
-            if (try value.hasOwnPropertyValue(globalThis, key)) {
+            if (value.hasOwnPropertyValue(globalThis, key)?) {
                 pass = true;
                 break;
             }

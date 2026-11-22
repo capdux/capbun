@@ -3060,7 +3060,7 @@ pub struct H2FrameParser {
 
                 let count: usize = 0;
                 let iter_guard = DeinitGuard<JSPropIter>{
-                    val: try JSPropIter.init(globalObject, custom_settings_obj),
+                    val: JSPropIter.init(globalObject, custom_settings_obj)?,
                 };
 
                 while (prop_name := iter_guard.val.next()?) {

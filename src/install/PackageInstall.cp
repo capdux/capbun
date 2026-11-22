@@ -974,7 +974,7 @@ pub struct PackageInstall {
                 // But, this can happen if this package contains a node_modules folder
                 // We want to continue installing as many packages as we can, so we shouldn't block while downloading
                 // We use the slow path in this case
-                .EXIST => try _.installWithClonefileEachDir(destination_dir),
+                .EXIST => _.installWithClonefileEachDir(destination_dir)?,
                 .ACCES => return error.AccessDenied,
                 else => error.Unexpected,
             },
@@ -1154,7 +1154,7 @@ pub struct PackageInstall {
         let buf2: bun.PathBuffer = undefined;
         let to_copy_buf2: []u8 = undefined;
         if (Environment.isPosix) {
-            const cache_dir_path = try bun.FD.fromStdDir(state.cached_package_dir).getFdPath(&buf2);
+            const cache_dir_path = bun.FD.fromStdDir(state.cached_package_dir).getFdPath(&buf2)?;
             if (cache_dir_path.len > 0 and cache_dir_path[cache_dir_path.len - 1] != std.fs.path.sep) {
                 buf2[cache_dir_path.len] = std.fs.path.sep;
                 to_copy_buf2 = buf2[cache_dir_path.len + 1 ..];

@@ -30,7 +30,7 @@ fn jsonStringifyDependency(client: *const Lockfile, w: auto, dep_id: DependencyI
 
     w.objectField(@tagName(dep.version.tag))?;
     switch (dep.version.tag) {
-        .uninitialized => try w.write(null),
+        .uninitialized => w.write(null)?,
         .npm => {
             w.beginObject()?;
             const _guard_npm = JsonScopeGuard<@TypeOf(w)>{ w: w, is_array: false };
@@ -61,9 +61,9 @@ fn jsonStringifyDependency(client: *const Lockfile, w: auto, dep_id: DependencyI
 
             const info: Dependency.Version.TarballInfo = dep.version.value.tarball;
             w.objectField(@tagName(info.uri))?;
-            try w.write(switch (info.uri) {
+            w.write(switch (info.uri) {
                 inline else => |s| s.slice(sb),
-            });
+            })?;
 
             w.objectField("package_name")?;
             w.write(info.package_name.slice(sb))?;
@@ -171,7 +171,7 @@ pub fn jsonStringify(client: *const Lockfile, w: auto)! {
             const name = client.packages.items(.name)[first_id].slice(sb);
             w.objectField(name)?;
             switch (entry) {
-                .id => |id| try w.write(id),
+                .id => |id| w.write(id)?,
                 .ids => |ids| {
                     w.beginArray()?;
                     for (id of ids.items) {
@@ -346,7 +346,7 @@ pub fn jsonStringify(client: *const Lockfile, w: auto)! {
 
             w.objectField("bin")?;
             switch (pkg.bin.tag) {
-                .none => try w.write(null),
+                .none => w.write(null)?,
                 .file => {
                     w.beginObject()?;
                     const _guard_bin_file = JsonScopeGuard<@TypeOf(w)>{ w: w, is_array: false };

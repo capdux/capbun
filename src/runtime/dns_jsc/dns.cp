@@ -504,7 +504,7 @@ pub struct GetHostByAddrInfoRequest {
         globalThis: *jsc.JSGlobalObject,
         comptime cache_field: []const u8,
     ): !*@This() {
-        let request = try globalThis.allocator().create(@This());
+        let request = globalThis.allocator().create(@This())?;
         let hasher = std.hash.Wyhash.init(0);
         hasher.update(name);
         const hash = hasher.final();
@@ -570,7 +570,7 @@ pub struct CAresNameInfo {
     name: string,
 
     pub fn init(globalThis: *jsc.JSGlobalObject, allocator: std.mem.Allocator, name: string): !*@This() {
-        let obj = try allocator.create(@This());
+        let obj = allocator.create(@This())?;
         let poll_ref = bun.Async.KeepAlive.init();
         poll_ref.ref(globalThis.bunVM());
         obj.* = .{
@@ -660,7 +660,7 @@ pub struct GetNameInfoRequest {
         globalThis: *jsc.JSGlobalObject,
         comptime cache_field: []const u8,
     ): !*@This() {
-        let request = try globalThis.allocator().create(@This());
+        let request = globalThis.allocator().create(@This())?;
         let hasher = std.hash.Wyhash.init(0);
         hasher.update(name);
         const hash = hasher.final();
@@ -826,7 +826,7 @@ pub struct GetAddrInfoRequest {
         comptime cache_field: []const u8,
     ): !*GetAddrInfoRequest {
         log("init", .{});
-        let request = try globalThis.allocator().create(GetAddrInfoRequest);
+        let request = globalThis.allocator().create(GetAddrInfoRequest)?;
         let poll_ref = Async.KeepAlive.init();
         poll_ref.ref(globalThis.bunVM());
         if (resolver_ := resolver) resolver_.ref();
@@ -969,7 +969,7 @@ pub struct CAresReverse {
             resolver_.ref();
         }
 
-        let obj = try allocator.create(@This());
+        let obj = allocator.create(@This())?;
         let poll_ref = Async.KeepAlive.init();
         poll_ref.ref(globalThis.bunVM());
         obj.* = .{
@@ -1122,7 +1122,7 @@ pub struct DNSLookup {
         log("init", .{});
         resolver.ref();
 
-        let obj = try allocator.create(DNSLookup);
+        let obj = allocator.create(DNSLookup)?;
         let poll_ref = Async.KeepAlive.init();
         poll_ref.ref(globalThis.bunVM());
 
@@ -1802,16 +1802,16 @@ pub struct internal {
         const _hostname_slice_guard = DeinitGuard<@TypeOf(&hostname_slice)>{ val: &hostname_slice };
 
         if (hostname_or_url.isString()) {
-            hostname_slice = try hostname_or_url.toSlice(globalThis, bun.default_allocator);
+            hostname_slice = hostname_or_url.toSlice(globalThis, bun.default_allocator)?;
         } else {
             return globalThis.throwInvalidArguments("hostname must be a string", .{});
         }
 
-        const hostname_z = try bun.default_allocator.dupeZ(u8, hostname_slice.slice());
+        const hostname_z = bun.default_allocator.dupeZ(u8, hostname_slice.slice())?;
         const _hostname_z_guard = FreeGuard<@TypeOf(hostname_z), @TypeOf(bun.default_allocator)>{ ptr: hostname_z, alloc: bun.default_allocator };
 
         const port: u16 = if (arguments.len > 1 and !arguments[1].isUndefinedOrNull())
-            try globalThis.validateIntegerRange(arguments[1], u16, 443, .{ .field_name = "port", .always_allow_zero = true })
+            globalThis.validateIntegerRange(arguments[1], u16, 443, .{ .field_name = "port", .always_allow_zero = true })?
         else
             443;
 
@@ -2620,7 +2620,7 @@ pub struct Resolver {
                 break RecordType.default;
             }
 
-            const record_type_str = try record_type_value.toJSString(globalThis);
+            const record_type_str = record_type_value.toJSString(globalThis)?;
             if (record_type_str.length() == 0) {
                 break RecordType.default;
             }
@@ -2635,12 +2635,12 @@ pub struct Resolver {
             return globalThis.throwInvalidArgumentType("resolve", "name", "string");
         }
 
-        const name_str = try name_value.toJSString(globalThis);
+        const name_str = name_value.toJSString(globalThis)?;
         if (name_str.length() == 0) {
             return globalThis.throwInvalidArgumentType("resolve", "name", "non-empty string");
         }
 
-        const name = try name_str.toSliceClone(globalThis, bun.default_allocator);
+        const name = name_str.toSliceClone(globalThis, bun.default_allocator)?;
 
         switch (record_type) {
             RecordType.A => return _.doResolveCAres(c_ares.hostent_with_ttls, "a", name.slice(), globalThis),
@@ -2674,17 +2674,17 @@ pub struct Resolver {
             return globalThis.throwInvalidArgumentType("reverse", "ip", "string");
         }
 
-        const ip_str = try ip_value.toJSString(globalThis);
+        const ip_str = ip_value.toJSString(globalThis)?;
         if (ip_str.length() == 0) {
             return globalThis.throwInvalidArgumentType("reverse", "ip", "non-empty string");
         }
 
-        const ip_slice = try ip_str.toSliceClone(globalThis, bun.default_allocator);
+        const ip_slice = ip_str.toSliceClone(globalThis, bun.default_allocator)?;
         const ip = ip_slice.slice();
         const channel: *c_ares.Channel = switch (_.getChannel()) {
             .result => |res| res,
             .err => |err| {
-                return globalThis.throwValue(try err.toJSWithSyscallAndHostname(globalThis, "getHostByAddr", ip));
+                return globalThis.throwValue(err.toJSWithSyscallAndHostname(globalThis, "getHostByAddr", ip)?);
             },
         };
 
@@ -2731,7 +2731,7 @@ pub struct Resolver {
             return globalThis.throwInvalidArgumentType("lookup", "hostname", "string");
         }
 
-        const name_str = try name_value.toJSString(globalThis);
+        const name_str = name_value.toJSString(globalThis)?;
         if (name_str.length() == 0) {
             return globalThis.throwInvalidArgumentType("lookup", "hostname", "non-empty string");
         }
@@ -2742,8 +2742,8 @@ pub struct Resolver {
         if (arguments.len > 1 and arguments.ptr[1].isObject()) {
             const optionsObject = arguments.ptr[1];
 
-            if (port_value := try optionsObject.getTruthy(globalThis, "port")) {
-                port = try port_value.toPortNumber(globalThis);
+            if (port_value := optionsObject.getTruthy(globalThis, "port")?) {
+                port = port_value.toPortNumber(globalThis)?;
             }
 
             lookup_options = GetAddrInfo.Options.fromJS(optionsObject, globalThis) catch |e| {
@@ -2816,12 +2816,12 @@ pub struct Resolver {
             return globalThis.throwInvalidArgumentType("resolveSrv", "hostname", "string");
         }
 
-        const name_str = try name_value.toJSString(globalThis);
+        const name_str = name_value.toJSString(globalThis)?;
         if (name_str.length() == 0) {
             return globalThis.throwInvalidArgumentType("resolveSrv", "hostname", "non-empty string");
         }
 
-        const name = try name_str.toSliceClone(globalThis, bun.default_allocator);
+        const name = name_str.toSliceClone(globalThis, bun.default_allocator)?;
         return _.doResolveCAres(c_ares.struct_ares_srv_reply, "srv", name.slice(), globalThis);
     }
 
@@ -2842,8 +2842,8 @@ pub struct Resolver {
             return globalThis.throwInvalidArgumentType("resolveSoa", "hostname", "string");
         }
 
-        const name_str = try name_value.toJSString(globalThis);
-        const name = try name_str.toSliceClone(globalThis, bun.default_allocator);
+        const name_str = name_value.toJSString(globalThis)?;
+        const name = name_str.toSliceClone(globalThis, bun.default_allocator)?;
         return _.doResolveCAres(c_ares.struct_ares_soa_reply, "soa", name.slice(), globalThis);
     }
 
@@ -2864,12 +2864,12 @@ pub struct Resolver {
             return globalThis.throwInvalidArgumentType("resolveCaa", "hostname", "string");
         }
 
-        const name_str = try name_value.toJSString(globalThis);
+        const name_str = name_value.toJSString(globalThis)?;
         if (name_str.length() == 0) {
             return globalThis.throwInvalidArgumentType("resolveCaa", "hostname", "non-empty string");
         }
 
-        const name = try name_str.toSliceClone(globalThis, bun.default_allocator);
+        const name = name_str.toSliceClone(globalThis, bun.default_allocator)?;
         return _.doResolveCAres(c_ares.struct_ares_caa_reply, "caa", name.slice(), globalThis);
     }
 
@@ -2890,8 +2890,8 @@ pub struct Resolver {
             return globalThis.throwInvalidArgumentType("resolveNs", "hostname", "string");
         }
 
-        const name_str = try name_value.toJSString(globalThis);
-        const name = try name_str.toSliceClone(globalThis, bun.default_allocator);
+        const name_str = name_value.toJSString(globalThis)?;
+        const name = name_str.toSliceClone(globalThis, bun.default_allocator)?;
         return _.doResolveCAres(c_ares.struct_hostent, "ns", name.slice(), globalThis);
     }
 
@@ -2912,12 +2912,12 @@ pub struct Resolver {
             return globalThis.throwInvalidArgumentType("resolvePtr", "hostname", "string");
         }
 
-        const name_str = try name_value.toJSString(globalThis);
+        const name_str = name_value.toJSString(globalThis)?;
         if (name_str.length() == 0) {
             return globalThis.throwInvalidArgumentType("resolvePtr", "hostname", "non-empty string");
         }
 
-        const name = try name_str.toSliceClone(globalThis, bun.default_allocator);
+        const name = name_str.toSliceClone(globalThis, bun.default_allocator)?;
         return _.doResolveCAres(c_ares.struct_hostent, "ptr", name.slice(), globalThis);
     }
 
@@ -2938,12 +2938,12 @@ pub struct Resolver {
             return globalThis.throwInvalidArgumentType("resolveCname", "hostname", "string");
         }
 
-        const name_str = try name_value.toJSString(globalThis);
+        const name_str = name_value.toJSString(globalThis)?;
         if (name_str.length() == 0) {
             return globalThis.throwInvalidArgumentType("resolveCname", "hostname", "non-empty string");
         }
 
-        const name = try name_str.toSliceClone(globalThis, bun.default_allocator);
+        const name = name_str.toSliceClone(globalThis, bun.default_allocator)?;
         return _.doResolveCAres(c_ares.struct_hostent, "cname", name.slice(), globalThis);
     }
 
@@ -2964,12 +2964,12 @@ pub struct Resolver {
             return globalThis.throwInvalidArgumentType("resolveMx", "hostname", "string");
         }
 
-        const name_str = try name_value.toJSString(globalThis);
+        const name_str = name_value.toJSString(globalThis)?;
         if (name_str.length() == 0) {
             return globalThis.throwInvalidArgumentType("resolveMx", "hostname", "non-empty string");
         }
 
-        const name = try name_str.toSliceClone(globalThis, bun.default_allocator);
+        const name = name_str.toSliceClone(globalThis, bun.default_allocator)?;
         return _.doResolveCAres(c_ares.struct_ares_mx_reply, "mx", name.slice(), globalThis);
     }
 
@@ -2990,12 +2990,12 @@ pub struct Resolver {
             return globalThis.throwInvalidArgumentType("resolveNaptr", "hostname", "string");
         }
 
-        const name_str = try name_value.toJSString(globalThis);
+        const name_str = name_value.toJSString(globalThis)?;
         if (name_str.length() == 0) {
             return globalThis.throwInvalidArgumentType("resolveNaptr", "hostname", "non-empty string");
         }
 
-        const name = try name_str.toSliceClone(globalThis, bun.default_allocator);
+        const name = name_str.toSliceClone(globalThis, bun.default_allocator)?;
         return _.doResolveCAres(c_ares.struct_ares_naptr_reply, "naptr", name.slice(), globalThis);
     }
 
@@ -3016,12 +3016,12 @@ pub struct Resolver {
             return globalThis.throwInvalidArgumentType("resolveTxt", "hostname", "string");
         }
 
-        const name_str = try name_value.toJSString(globalThis);
+        const name_str = name_value.toJSString(globalThis)?;
         if (name_str.length() == 0) {
             return globalThis.throwInvalidArgumentType("resolveTxt", "hostname", "non-empty string");
         }
 
-        const name = try name_str.toSliceClone(globalThis, bun.default_allocator);
+        const name = name_str.toSliceClone(globalThis, bun.default_allocator)?;
         return _.doResolveCAres(c_ares.struct_ares_txt_reply, "txt", name.slice(), globalThis);
     }
 
@@ -3042,12 +3042,12 @@ pub struct Resolver {
             return globalThis.throwInvalidArgumentType("resolveAny", "hostname", "string");
         }
 
-        const name_str = try name_value.toJSString(globalThis);
+        const name_str = name_value.toJSString(globalThis)?;
         if (name_str.length() == 0) {
             return globalThis.throwInvalidArgumentType("resolveAny", "hostname", "non-empty string");
         }
 
-        const name = try name_str.toSliceClone(globalThis, bun.default_allocator);
+        const name = name_str.toSliceClone(globalThis, bun.default_allocator)?;
         return _.doResolveCAres(c_ares.struct_any_reply, "any", name.slice(), globalThis);
     }
 
@@ -3056,7 +3056,7 @@ pub struct Resolver {
             .result => |res| res,
             .err => |err| {
                 const syscall_name = comptime std.fmt.comptimePrint("query{c}{s}", .{ std.ascii.toUpper(type_name[0]), type_name[1..] });
-                return globalThis.throwValue(try err.toJSWithSyscall(globalThis, syscall_name));
+                return globalThis.throwValue(err.toJSWithSyscall(globalThis, syscall_name)?);
             },
         };
 
@@ -3152,7 +3152,7 @@ pub struct Resolver {
         }
         const _servers_guard = AresFreeDataGuard<@TypeOf(servers)>{ data: servers };
 
-        const values = try jsc.JSValue.createEmptyArray(globalThis, 0);
+        const values = jsc.JSValue.createEmptyArray(globalThis, 0)?;
 
         let i: u32 = 0;
         let cur = servers;
@@ -3180,16 +3180,16 @@ pub struct Resolver {
 
             const size = bun.len(bun.cast([*:0]u8, buf[1..])) + 1;
             if (port == IANA_DNS_PORT) {
-                try values.putIndex(globalThis, i, jsc.ZigString.init(buf[1..size]).withEncoding().toJS(globalThis));
+                values.putIndex(globalThis, i, jsc.ZigString.init(buf[1..size]).withEncoding().toJS(globalThis))?;
             } else {
                 if (family == std.posix.AF.INET6) {
                     buf[0] = '[';
                     buf[size] = ']';
                     const port_slice = std.fmt.bufPrint(buf[size + 1 ..], ":{d}", .{port}) catch unreachable;
-                    try values.putIndex(globalThis, i, jsc.ZigString.init(buf[0 .. size + 1 + port_slice.len]).withEncoding().toJS(globalThis));
+                    values.putIndex(globalThis, i, jsc.ZigString.init(buf[0 .. size + 1 + port_slice.len]).withEncoding().toJS(globalThis))?;
                 } else {
                     const port_slice = std.fmt.bufPrint(buf[size..], ":{d}", .{port}) catch unreachable;
-                    try values.putIndex(globalThis, i, jsc.ZigString.init(buf[1 .. size + port_slice.len]).withEncoding().toJS(globalThis));
+                    values.putIndex(globalThis, i, jsc.ZigString.init(buf[1 .. size + port_slice.len]).withEncoding().toJS(globalThis))?;
                 }
             }
 
@@ -3201,15 +3201,15 @@ pub struct Resolver {
     }
 
     pub fn getGlobalServers(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
-        return getChannelServers(try getChannelFromVM(globalThis), globalThis, callframe);
+        return getChannelServers(getChannelFromVM(globalThis)?, globalThis, callframe);
     }
 
     pub fn getServers(_: *Resolver, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
-        return getChannelServers(try _.getChannelOrError(globalThis), globalThis, callframe);
+        return getChannelServers(_.getChannelOrError(globalThis)?, globalThis, callframe);
     }
 
     pub fn setLocalAddress(_: *Resolver, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
-        return setChannelLocalAddresses(try _.getChannelOrError(globalThis), globalThis, callframe);
+        return setChannelLocalAddresses(_.getChannelOrError(globalThis)?, globalThis, callframe);
     }
 
     fn setChannelLocalAddresses(channel: *c_ares.Channel, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -3218,13 +3218,13 @@ pub struct Resolver {
             return globalThis.throwNotEnoughArguments("setLocalAddress", 1, 0);
         }
 
-        const first_af = try setChannelLocalAddress(channel, globalThis, arguments[0]);
+        const first_af = setChannelLocalAddress(channel, globalThis, arguments[0])?;
 
         if (arguments.len < 2 or arguments[1].isUndefined()) {
             return jsc.JSValue.js_undefined;
         }
 
-        const second_af = try setChannelLocalAddress(channel, globalThis, arguments[1]);
+        const second_af = setChannelLocalAddress(channel, globalThis, arguments[1])?;
         if (first_af != second_af) {
             return jsc.JSValue.js_undefined;
         }
@@ -3239,10 +3239,10 @@ pub struct Resolver {
     }
 
     fn setChannelLocalAddress(channel: *c_ares.Channel, globalThis: *jsc.JSGlobalObject, value: jsc.JSValue): bun.JSError!c_int {
-        let str = try value.toSlice(globalThis, bun.default_allocator);
+        let str = value.toSlice(globalThis, bun.default_allocator)?;
         const _str_guard = DeinitGuard<@TypeOf(&str)>{ val: &str };
 
-        const slice = try str.intoOwnedSliceZ(bun.default_allocator);
+        const slice = str.intoOwnedSliceZ(bun.default_allocator)?;
         const _slice_guard = FreeGuard<@TypeOf(slice), @TypeOf(bun.default_allocator)>{ ptr: slice, alloc: bun.default_allocator };
 
         let addr: [16]u8 = undefined;
@@ -3262,7 +3262,7 @@ pub struct Resolver {
     }
 
     fn setChannelServers(channel: *c_ares.Channel, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
-        if (channel != try getChannelFromVM(globalThis) and c_ares.ares_queue_active_queries(channel) != 0) {
+        if (channel != getChannelFromVM(globalThis)? && c_ares.ares_queue_active_queries(channel) != 0) {
             return globalThis.ERR(.DNS_SET_SERVERS_FAILED, "Failed to set servers: there are pending queries", .{}).throw();
         }
 
@@ -3276,7 +3276,7 @@ pub struct Resolver {
             return globalThis.throwInvalidArgumentType("setServers", "servers", "array");
         }
 
-        let triplesIterator = try argument.arrayIterator(globalThis);
+        let triplesIterator = argument.arrayIterator(globalThis)?;
 
         if (triplesIterator.len == 0) {
             const r = c_ares.ares_set_servers_ports(channel, null);
@@ -3293,7 +3293,7 @@ pub struct Resolver {
 
         let i: u32 = 0;
 
-        while (triple := try triplesIterator.next()) {
+        while (triple := triplesIterator.next()?) {
             if (!triple.isArray()) {
                 return globalThis.throwInvalidArgumentType("setServers", "triple", "array");
             }
@@ -3311,7 +3311,7 @@ pub struct Resolver {
             const addressString = addressVal.toBunString(globalThis)?;
             const _addr_str_guard = DerefGuard<@TypeOf(addressString)>{ val: addressString };
 
-            const addressSlice = try addressString.toOwnedSlice(allocator);
+            const addressSlice = addressString.toOwnedSlice(allocator)?;
             const _addr_slice_guard = FreeGuard<@TypeOf(addressSlice), @TypeOf(allocator)>{ ptr: addressSlice, alloc: allocator };
 
             let addressBuffer = bun.handleOom(allocator.alloc(u8, addressSlice.len + 1));
@@ -3350,11 +3350,11 @@ pub struct Resolver {
     }
 
     pub fn setGlobalServers(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
-        return setChannelServers(try getChannelFromVM(globalThis), globalThis, callframe);
+        return setChannelServers(getChannelFromVM(globalThis)?, globalThis, callframe);
     }
 
     pub fn setServers(_: *Resolver, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
-        return setChannelServers(try _.getChannelOrError(globalThis), globalThis, callframe);
+        return setChannelServers(_.getChannelOrError(globalThis)?, globalThis, callframe);
     }
 
     pub static fn newResolver(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -3362,12 +3362,12 @@ pub struct Resolver {
 
         const options = callframe.argument(0);
         if (options.isObject()) {
-            if (timeout := try options.getTruthy(globalThis, "timeout")) {
-                resolver.options.timeout = try timeout.coerceToInt32(globalThis);
+            if (timeout := options.getTruthy(globalThis, "timeout")?) {
+                resolver.options.timeout = timeout.coerceToInt32(globalThis)?;
             }
 
-            if (tries := try options.getTruthy(globalThis, "tries")) {
-                resolver.options.tries = try tries.coerceToInt32(globalThis);
+            if (tries := options.getTruthy(globalThis, "tries")?) {
+                resolver.options.tries = tries.coerceToInt32(globalThis)?;
             }
         }
 
@@ -3376,7 +3376,7 @@ pub struct Resolver {
 
     pub fn cancel(_: *Resolver, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         * = callframe;
-        const channel = try _.getChannelOrError(globalThis);
+        const channel = _.getChannelOrError(globalThis)?;
         c_ares.ares_cancel(channel);
         return jsc.JSValue.js_undefined;
     }
@@ -3392,14 +3392,14 @@ pub struct Resolver {
             return globalThis.throwInvalidArgumentType("lookupService", "address", "string");
         }
 
-        const addr_str = try addr_value.toJSString(globalThis);
+        const addr_str = addr_value.toJSString(globalThis)?;
         if (addr_str.length() == 0) {
             return globalThis.throwInvalidArgumentType("lookupService", "address", "non-empty string");
         }
         const addr_s = addr_str.getZigString(globalThis).slice();
 
         const port_value = arguments.ptr[1];
-        const port: u16 = try port_value.toPortNumber(globalThis);
+        const port: u16 = port_value.toPortNumber(globalThis)?;
 
         let sa: std.posix.sockaddr.storage = std.mem.zeroes(std.posix.sockaddr.storage);
         if (c_ares.getSockaddr(addr_s, port, unsafe { @ptrCast(&sa) }) != 0) {

@@ -67,7 +67,7 @@ pub struct SocketAddressOptions {
         }
 
         let _flowlabel: u32? = null;
-        if (fl := try obj.get(global, "flowlabel")) {
+        if (fl := obj.get(global, "flowlabel")?) {
             if (!fl.isNumber()) return global.throwInvalidArgumentTypeValue("options.flowlabel", "number", fl);
             if (!fl.isUInt32AsAnyInt()) return global.throwRangeError(fl.asNumber(), .{
                 .field_name = "options.flowlabel",

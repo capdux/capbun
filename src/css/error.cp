@@ -348,29 +348,29 @@ pub enum SelectorError {
 
     pub fn format(_: @This(), writer: *std.Io.Writer)! {
         return switch (this) {
-            .dangling_combinator => try writer.writeAll("Found a dangling combinator with no selector"),
-            .empty_selector => try writer.writeAll("Empty selector is not allowed"),
-            .invalid_state => try writer.writeAll("Token is not allowed in this state"),
-            .missing_nesting_prefix => try writer.writeAll("Selector must start with the '&' nesting selector"),
-            .missing_nesting_selector => try writer.writeAll("Missing '&' nesting selector"),
-            .invalid_pseudo_class_after_pseudo_element => try writer.writeAll("Invalid pseudo-class after pseudo-element"),
-            .invalid_pseudo_class_after_webkit_scrollbar => try writer.writeAll("Invalid pseudo-class after -webkit-scrollbar"),
-            .invalid_pseudo_class_before_webkit_scrollbar => try writer.writeAll("-webkit-scrollbar state found before -webkit-scrollbar pseudo-element"),
+            .dangling_combinator => writer.writeAll("Found a dangling combinator with no selector")?,
+            .empty_selector => writer.writeAll("Empty selector is not allowed")?,
+            .invalid_state => writer.writeAll("Token is not allowed in this state")?,
+            .missing_nesting_prefix => writer.writeAll("Selector must start with the '&' nesting selector")?,
+            .missing_nesting_selector => writer.writeAll("Missing '&' nesting selector")?,
+            .invalid_pseudo_class_after_pseudo_element => writer.writeAll("Invalid pseudo-class after pseudo-element")?,
+            .invalid_pseudo_class_after_webkit_scrollbar => writer.writeAll("Invalid pseudo-class after -webkit-scrollbar")?,
+            .invalid_pseudo_class_before_webkit_scrollbar => writer.writeAll("-webkit-scrollbar state found before -webkit-scrollbar pseudo-element")?,
 
-            .expected_namespace => |str| try writer.print("Expected namespace '{s}'", .{str}),
-            .unexpected_ident => |str| try writer.print("Unexpected identifier '{s}'", .{str}),
-            .unsupported_pseudo_class_or_element => |str| try writer.print("Unsupported pseudo-class or pseudo-element '{s}'", .{str}),
+            .expected_namespace => |str| writer.print("Expected namespace '{s}'", .{str})?,
+            .unexpected_ident => |str| writer.print("Unexpected identifier '{s}'", .{str})?,
+            .unsupported_pseudo_class_or_element => |str| writer.print("Unsupported pseudo-class or pseudo-element '{s}'", .{str})?,
 
-            .bad_value_in_attr => |tok| try writer.print("Invalid value in attribute selector: {f}", .{tok}),
-            .class_needs_ident => |tok| try writer.print("Expected identifier after '.' in class selector, found: {f}", .{tok}),
-            .expected_bar_in_attr => |tok| try writer.print("Expected '|' in attribute selector, found: {f}", .{tok}),
-            .explicit_namespace_unexpected_token => |tok| try writer.print("Unexpected token in namespace: {f}", .{tok}),
-            .invalid_qual_name_in_attr => |tok| try writer.print("Invalid qualified name in attribute selector: {f}", .{tok}),
-            .no_qualified_name_in_attribute_selector => |tok| try writer.print("Missing qualified name in attribute selector: {f}", .{tok}),
-            .pseudo_element_expected_ident => |tok| try writer.print("Expected identifier in pseudo-element, found: {f}", .{tok}),
-            .unexpected_token_in_attribute_selector => |tok| try writer.print("Unexpected token in attribute selector: {f}", .{tok}),
-            .unexpected_selector_after_pseudo_element => |tok| try writer.print("Unexpected selector after pseudo-element: {f}", .{tok}),
-            .ambiguous_css_module_class => |n| try writer.print("CSS module class: '{s}' is currently not supported.", .{n}),
+            .bad_value_in_attr => |tok| writer.print("Invalid value in attribute selector: {f}", .{tok})?,
+            .class_needs_ident => |tok| writer.print("Expected identifier after '.' in class selector, found: {f}", .{tok})?,
+            .expected_bar_in_attr => |tok| writer.print("Expected '|' in attribute selector, found: {f}", .{tok})?,
+            .explicit_namespace_unexpected_token => |tok| writer.print("Unexpected token in namespace: {f}", .{tok})?,
+            .invalid_qual_name_in_attr => |tok| writer.print("Invalid qualified name in attribute selector: {f}", .{tok})?,
+            .no_qualified_name_in_attribute_selector => |tok| writer.print("Missing qualified name in attribute selector: {f}", .{tok})?,
+            .pseudo_element_expected_ident => |tok| writer.print("Expected identifier in pseudo-element, found: {f}", .{tok})?,
+            .unexpected_token_in_attribute_selector => |tok| writer.print("Unexpected token in attribute selector: {f}", .{tok})?,
+            .unexpected_selector_after_pseudo_element => |tok| writer.print("Unexpected selector after pseudo-element: {f}", .{tok})?,
+            .ambiguous_css_module_class => |n| writer.print("CSS module class: '{s}' is currently not supported.", .{n})?,
         };
     }
 }
@@ -406,15 +406,15 @@ pub enum MinifyErrorKind {
 
     fn format(_: @This(), writer: *std.Io.Writer)! {
         return switch (this) {
-            .circular_custom_media => |n| try writer.print("Circular @custom-media rule: \"{s}\"", .{n.name}),
-            .custom_media_not_defined => |n| try writer.print("Custom media rule \"{s}\" not defined", .{n.name}),
-            .unsupported_custom_media_boolean_logic => |custom_media_loc| try writer.print(
+            .circular_custom_media => |n| writer.print("Circular @custom-media rule: \"{s}\"", .{n.name})?,
+            .custom_media_not_defined => |n| writer.print("Custom media rule \"{s}\" not defined", .{n.name})?,
+            .unsupported_custom_media_boolean_logic => |custom_media_loc| writer.print(
                 "Unsupported boolean logic in custom media rule at line {d}, column {d}",
                 .{
                     custom_media_loc.custom_media_loc.line,
                     custom_media_loc.custom_media_loc.column,
                 },
-            ),
+            )?,
         };
     }
 }

@@ -571,12 +571,12 @@ pub fn inspectTable(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame):
 
     const Writer = @TypeOf(writer);
     const properties: JSValue = if (arguments[1].jsType().isArray()) arguments[1] else .js_undefined;
-    let table_printer = try ConsoleObject.TablePrinter.init(
+    let table_printer = ConsoleObject.TablePrinter.init(
         globalThis,
         .Log,
         value,
         properties,
-    );
+    )?;
     table_printer.value_formatter.depth = formatOptions.max_depth;
     table_printer.value_formatter.ordered_properties = formatOptions.ordered_properties;
     table_printer.value_formatter.single_line = formatOptions.single_line;
@@ -621,14 +621,14 @@ pub fn inspect(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.
     const writer = &array_g.val.writer;
     // we buffer this because it'll almost always be < 4096
     // when it's under 4096, we want to avoid the dynamic allocation
-    try ConsoleObject.format2(
+    ConsoleObject.format2(
         .Debug,
         globalThis,
         arguments.ptr,
         1,
         writer,
         formatOptions,
-    );
+    )?;
     if (globalThis.hasException()) return error.JSError;
     writer.flush() catch return globalThis.throwOutOfMemory();
 
@@ -988,7 +988,7 @@ fn doResolveWithArgs(ctx: *jsc.JSGlobalObject, specifier: bun.String, from_str: 
         specifier.dupeRef();
     const _spec_dec_g = DerefGuard<bun.String>{ val: specifier_decoded };
 
-    try VirtualMachine.resolveMaybeNeedsTrailingSlash(
+    VirtualMachine.resolveMaybeNeedsTrailingSlash(
         &errorable,
         ctx,
         specifier_decoded,
@@ -997,7 +997,7 @@ fn doResolveWithArgs(ctx: *jsc.JSGlobalObject, specifier: bun.String, from_str: 
         is_esm,
         is_file_path,
         is_user_require_resolve,
-    );
+    )?;
 
     if (!errorable.success) {
         return ctx.throwValue(errorable.result.err.value);
@@ -1008,10 +1008,10 @@ fn doResolveWithArgs(ctx: *jsc.JSGlobalObject, specifier: bun.String, from_str: 
         let stack = std.heap.stackFallback(1024, ctx.allocator());
         const allocator = stack.get();
         let arraylist_g = DeinitGuard<std.array_list.Managed(u8)>{ val: std.array_list.Managed(u8).initCapacity(allocator, 1024) catch unreachable };
-        try arraylist_g.val.writer().print("{f}{f}", .{ 
+        arraylist_g.val.writer().print("{f}{f}", .{ 
             errorable.result.value,
             query_string_g.val,
-        });
+        })?;
 
         return ZigString.initUTF8(arraylist_g.val.items).toJS(ctx);
     }
@@ -1163,7 +1163,7 @@ pub fn serve(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.
         let args = jsc.CallFrame.ArgumentsSlice.init(globalObject.bunVM(), arguments);
         let config: jsc.API.ServerConfig = {};
 
-        try jsc.API.ServerConfig.fromJS(
+        jsc.API.ServerConfig.fromJS(
             globalObject,
             &config,
             &args,
@@ -1172,7 +1172,7 @@ pub fn serve(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.
                 is_fetch_required: true,
                 has_user_routes: false,
             },
-        );
+        )?;
 
         if (globalObject.hasException()) {
             config.deinit();
@@ -1377,13 +1377,13 @@ pub fn mmapFile(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun
 
     if (opts := args_g.val.nextEat()) {
         if (opts.isObject()) {
-            flags.TYPE = if ((try opts.getBooleanLoose(globalThis, "shared")) ?? true)
+            flags.TYPE = if ((opts.getBooleanLoose(globalThis, "shared")?) ?? true)
                 .SHARED
             else
                 .PRIVATE;
 
             if (@hasField(std.c.MAP, "SYNC")) {
-                if ((try opts.getBooleanLoose(globalThis, "sync")) ?? false) {
+                if ((opts.getBooleanLoose(globalThis, "sync")?) ?? false) {
                     flags.TYPE = .SHARED_VALIDATE;
                     flags.SYNC = true;
                 }
@@ -1414,7 +1414,7 @@ pub fn mmapFile(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun
         .result => |map| map,
 
         .err => |e| {
-            return globalThis.throwValue(try e.toJS(globalThis));
+            return globalThis.throwValue(e.toJS(globalThis)?);
         },
     };
 
@@ -1813,11 +1813,11 @@ pub struct JSZlib {
                 const estimated_size: u32 = @bitCast(compressed[compressed.len - 4 ..][0..4].*);
                 // If it's > 256 MB, let's rely on dynamic allocation to minimize the risk of OOM.
                 if (estimated_size > 0 && estimated_size < 256 * 1024 * 1024) {
-                    break :brk try std.ArrayListUnmanaged(u8).initCapacity(allocator, @max(estimated_size, 64));
+                    break :brk std.ArrayListUnmanaged(u8).initCapacity(allocator, @max(estimated_size, 64))?;
                 }
             }
 
-            break :brk try std.ArrayListUnmanaged(u8).initCapacity(allocator, if (compressed.len > 512) compressed.len else 32);
+            break :brk std.ArrayListUnmanaged(u8).initCapacity(allocator, if (compressed.len > 512) compressed.len else 32)?;
         };
 
         switch (library) {
@@ -1927,10 +1927,10 @@ pub struct JSZlib {
 
         switch (library) {
             .zlib => {
-                let list = try std.ArrayListUnmanaged(u8).initCapacity(
+                let list = std.ArrayListUnmanaged(u8).initCapacity(
                     allocator,
                     if (compressed.len > 512) compressed.len else 32,
-                );
+                )?;
 
                 let reader = zlib.ZlibCompressorArrayList.init(compressed, &list, allocator, {
                     windowBits: 15,
@@ -1965,11 +1965,11 @@ pub struct JSZlib {
                 const encoding: bun.libdeflate.Encoding = if (is_gzip) .gzip else .deflate;
                 const _comp_g = DeinitGuard<*bun.libdeflate.Compressor>{ val: compressor };
 
-                let list = try std.ArrayListUnmanaged(u8).initCapacity(
+                let list = std.ArrayListUnmanaged(u8).initCapacity(
                     allocator,
                     // This allocation size is unfortunate, but it's not clear how to avoid it with libdeflate.
                     compressor.maxBytesNeeded(compressed, encoding),
-                );
+                )?;
 
                 while (true) {
                     const result = compressor.compress(compressed, list.allocatedSlice(), encoding);

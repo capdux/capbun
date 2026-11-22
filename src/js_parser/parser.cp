@@ -324,7 +324,7 @@ pub struct JSXTag {
 
         // Otherwise, this is an identifier
         // <Button>
-        let tag = p.newExpr(E.Identifier{ ref: try p.storeNameInRef(name) }, loc);
+        let tag = p.newExpr(E.Identifier{ ref: p.storeNameInRef(name)? }, loc);
 
         // Parse a member expression chain
         // <Button.Red>

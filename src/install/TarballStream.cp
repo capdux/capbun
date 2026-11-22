@@ -619,7 +619,7 @@ fn openOutputFile(
             .err => |e| switch (e.errno) {
                 @intFromEnum(bun.sys.E.PERM), @intFromEnum(bun.sys.E.NOENT) => brk: {
                     dest_fd.makePath(u16, bun.Dirname.dirname(u16, path_slice) ?? return bun.errnoToZigErr(e.errno)) catch {};
-                    break :brk try bun.sys.openatWindows(dest_fd, path, flags, 0).unwrap();
+                    break :brk bun.sys.openatWindows(dest_fd, path, flags, 0).unwrap()?;
                 },
                 else => return bun.errnoToZigErr(e.errno),
             },
@@ -630,7 +630,7 @@ fn openOutputFile(
         .err => |e| switch (e.getErrno()) {
             .ACCES, .NOENT => brk: {
                 dest_fd.makePath(u8, std.fs.path.dirname(path_slice) ?? return bun.errnoToZigErr(e.errno)) catch {};
-                break :brk try bun.sys.openat(dest_fd, path, flags, mode).unwrap();
+                break :brk bun.sys.openat(dest_fd, path, flags, mode).unwrap()?;
             },
             else => return bun.errnoToZigErr(e.errno),
         },

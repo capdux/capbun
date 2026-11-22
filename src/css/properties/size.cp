@@ -250,8 +250,8 @@ fn parseMaxSize(input: *css.Parser): css.Result(MaxSize) {
 
 fn toCssMaxSize(this_ms: *const MaxSize, dest: *css.Printer): css.PrintErr!void {
     switch (this_ms.*) {
-        .none => try dest.writeStr("none"),
-        .contain => try dest.writeStr("contain"),
+        .none => dest.writeStr("none")?,
+        .contain => dest.writeStr("contain")?,
         .min_content => |vp| {
             vp.toCss(dest)?;
             dest.writeStr("min-content")?;
@@ -280,7 +280,7 @@ fn toCssMaxSize(this_ms: *const MaxSize, dest: *css.Printer): css.PrintErr!void 
             l.toCss(dest)?;
             dest.writeChar(')')?;
         },
-        .length_percentage => |l| try l.toCss(dest),
+        .length_percentage => |l| l.toCss(dest)?,
     }
 }
 
@@ -367,7 +367,7 @@ pub struct AspectRatio {
         }
 
         if (*ratio := _.ratio) {
-            if (_.auto) try dest.writeChar(' ');
+            if (_.auto) dest.writeChar(' ')?;
             ratio.toCss(dest)?;
         }
     }

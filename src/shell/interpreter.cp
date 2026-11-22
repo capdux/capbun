@@ -964,7 +964,7 @@ pub struct Interpreter {
             debug("Tokens: {s}", .{str});
         }
 
-        out_parser.* = try bun.shell.Parser.new(arena_allocator, lex_result, jsobjs);
+        out_parser.* = bun.shell.Parser.new(arena_allocator, lex_result, jsobjs)?;
 
         const script_ast = out_parser.*.?.parse()?;
         return script_ast;

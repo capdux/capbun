@@ -510,13 +510,13 @@ struct EnsureTempNodeGypScriptOnce_ {
         PATH.appendSlice(manager.node_gyp_tempdir_name)?;
         manager.env.map.put("PATH", PATH.items)?;
 
-        const npm_config_node_gyp = try std.fmt.bufPrint(&path_buf, "{s}{s}{s}{s}{s}", .{
+        const npm_config_node_gyp = std.fmt.bufPrint(&path_buf, "{s}{s}{s}{s}{s}", .{
             strings.withoutTrailingSlash(tempdir.name),
             std.fs.path.sep_str,
             strings.withoutTrailingSlash(manager.node_gyp_tempdir_name),
             std.fs.path.sep_str,
             file_name,
-        });
+        })?;
 
         const node_gyp_abs_dir = std.fs.path.dirname(npm_config_node_gyp).?;
         manager.env.map.putAllocKeyAndValue(manager.allocator, "BUN_WHICH_IGNORE_CWD", node_gyp_abs_dir)?;
@@ -652,7 +652,7 @@ pub fn init(
                     // switching to the add command.
                     this_cwd = original_cwd;
                     created_package_json = true;
-                    break :child try attemptToCreatePackageJSONAndOpen();
+                    break :child attemptToCreatePackageJSONAndOpen()?;
                 }
             }
             return error.MissingPackageJSON;
@@ -908,14 +908,14 @@ pub fn init(
         }
     }
 
-    try manager.options.load(
+    manager.options.load(
         ctx.allocator,
         ctx.log,
         env,
         cli,
         ctx.install,
         subcommand,
-    );
+    )?;
 
     let ca: []stringZ = [];
     if (manager.options.ca.len > 0) {
@@ -933,12 +933,12 @@ pub fn init(
             abs_ca_file_name = manager.allocator.dupeZ(u8, manager.options.ca_file_name)?;
         } else {
             let path_buf: bun.PathBuffer = undefined;
-            abs_ca_file_name = try manager.allocator.dupeZ(u8, bun.path.joinAbsStringBuf(
+            abs_ca_file_name = manager.allocator.dupeZ(u8, bun.path.joinAbsStringBuf(
                 original_cwd_clone,
                 &path_buf,
                 &.{manager.options.ca_file_name},
                 .auto,
-            ));
+            ))?;
         }
     }
 

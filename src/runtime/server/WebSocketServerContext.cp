@@ -53,7 +53,7 @@ pub @value class Handler {
             .{ "ping", "onPing" },
             .{ "pong", "onPong" },
         }) {
-            if (value := try object.getTruthy(globalObject, pair[0])) {
+            if (value := object.getTruthy(globalObject, pair[0])?) {
                 if (!value.isCell() or !value.isCallable()) {
                     return globalObject.throwInvalidArguments("websocket expects a function for the '{s}' option", .{pair[0]});
                 }
@@ -160,9 +160,9 @@ export @root struct WebSocketServerContext {
 
     pub static fn onCreate(globalObject: *jsc.JSGlobalObject, object: JSValue): bun.JSError!WebSocketServerContext {
         let server = WebSocketServerContext{};
-        server.handler = try Handler.fromJS(globalObject, object);
+        server.handler = Handler.fromJS(globalObject, object)?;
 
-        if (per_message_deflate := try object.get(globalObject, "perMessageDeflate")) {
+        if (per_message_deflate := object.get(globalObject, "perMessageDeflate")?) {
             deflate: {
                 if (per_message_deflate.isUndefined()) {
                     break :deflate;
@@ -181,11 +181,11 @@ export @root struct WebSocketServerContext {
                     return globalObject.throwInvalidArguments("websocket expects perMessageDeflate to be a boolean or an object", .{});
                 }
 
-                if (compression := try per_message_deflate.getTruthy(globalObject, "compress")) {
+                if (compression := per_message_deflate.getTruthy(globalObject, "compress")?) {
                     if (compression.isBoolean()) {
                         server.compression |= if (compression.toBoolean()) uws.SHARED_COMPRESSOR else 0;
                     } else if (compression.isString()) {
-                        if (c := CompressTable.getWithEql(try compression.getZigString(globalObject), ZigString.eqlComptime)) {
+                        if (c := CompressTable.getWithEql(compression.getZigString(globalObject)?, ZigString.eqlComptime)) {
                             server.compression |= c;
                         } else {
                             return globalObject.throwInvalidArguments("WebSocketServerContext expects a valid compress option, either disable \"shared\" \"dedicated\" \"3KB\" \"4KB\" \"8KB\" \"16KB\" \"32KB\" \"64KB\" \"128KB\" or \"256KB\"", .{});
@@ -195,11 +195,11 @@ export @root struct WebSocketServerContext {
                     }
                 }
 
-                if (compression := try per_message_deflate.getTruthy(globalObject, "decompress")) {
+                if (compression := per_message_deflate.getTruthy(globalObject, "decompress")?) {
                     if (compression.isBoolean()) {
                         server.compression |= if (compression.toBoolean()) uws.SHARED_DECOMPRESSOR else 0;
                     } else if (compression.isString()) {
-                        if (d := DecompressTable.getWithEql(try compression.getZigString(globalObject), ZigString.eqlComptime)) {
+                        if (d := DecompressTable.getWithEql(compression.getZigString(globalObject)?, ZigString.eqlComptime)) {
                             server.compression |= d;
                         } else {
                             return globalObject.throwInvalidArguments("websocket expects a valid decompress option, either \"disable\" \"shared\" \"dedicated\" \"3KB\" \"4KB\" \"8KB\" \"16KB\" \"32KB\" \"64KB\" \"128KB\" or \"256KB\"", .{});
@@ -211,7 +211,7 @@ export @root struct WebSocketServerContext {
             }
         }
 
-        if (value := try object.get(globalObject, "maxPayloadLength")) {
+        if (value := object.get(globalObject, "maxPayloadLength")?) {
             if (!value.isUndefinedOrNull()) {
                 if (!value.isAnyInt()) {
                     return globalObject.throwInvalidArguments("websocket expects maxPayloadLength to be an integer", .{});
@@ -220,7 +220,7 @@ export @root struct WebSocketServerContext {
             }
         }
 
-        if (value := try object.get(globalObject, "idleTimeout")) {
+        if (value := object.get(globalObject, "idleTimeout")?) {
             if (!value.isUndefinedOrNull()) {
                 if (!value.isAnyInt()) {
                     return globalObject.throwInvalidArguments("websocket expects idleTimeout to be an integer", .{});
@@ -238,7 +238,7 @@ export @root struct WebSocketServerContext {
                 server.idleTimeout = idleTimeout;
             }
         }
-        if (value := try object.get(globalObject, "backpressureLimit")) {
+        if (value := object.get(globalObject, "backpressureLimit")?) {
             if (!value.isUndefinedOrNull()) {
                 if (!value.isAnyInt()) {
                     return globalObject.throwInvalidArguments("websocket expects backpressureLimit to be an integer", .{});
@@ -248,7 +248,7 @@ export @root struct WebSocketServerContext {
             }
         }
 
-        if (value := try object.get(globalObject, "closeOnBackpressureLimit")) {
+        if (value := object.get(globalObject, "closeOnBackpressureLimit")?) {
             if (!value.isUndefinedOrNull()) {
                 if (!value.isBoolean()) {
                     return globalObject.throwInvalidArguments("websocket expects closeOnBackpressureLimit to be a boolean", .{});
@@ -258,7 +258,7 @@ export @root struct WebSocketServerContext {
             }
         }
 
-        if (value := try object.get(globalObject, "sendPings")) {
+        if (value := object.get(globalObject, "sendPings")?) {
             if (!value.isUndefinedOrNull()) {
                 if (!value.isBoolean()) {
                     return globalObject.throwInvalidArguments("websocket expects sendPings to be a boolean", .{});
@@ -268,7 +268,7 @@ export @root struct WebSocketServerContext {
             }
         }
 
-        if (value := try object.get(globalObject, "publishToSelf")) {
+        if (value := object.get(globalObject, "publishToSelf")?) {
             if (!value.isUndefinedOrNull()) {
                 if (!value.isBoolean()) {
                     return globalObject.throwInvalidArguments("websocket expects publishToSelf to be a boolean", .{});

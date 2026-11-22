@@ -922,16 +922,16 @@ pub fn QueryFeature(comptime FeatureId: type): type {
         }
 
         pub fn toCss(this: *const This, dest: *Printer) PrintErr!void {
-            try dest.writeChar('(');
+            dest.writeChar('(')?;
 
             switch (this.*) {
                 .boolean => {
-                    try this.boolean.name.toCss(dest);
+                    this.boolean.name.toCss(dest)?;
                 },
                 .plain => {
-                    try this.plain.name.toCss(dest);
-                    try dest.delim(':', false);
-                    try this.plain.value.toCss(dest);
+                    this.plain.name.toCss(dest)?;
+                    dest.delim(':', false)?;
+                    this.plain.value.toCss(dest)?;
                 },
                 .range => {
                     // If range syntax is unsupported, use min/max prefix if possible.
@@ -944,20 +944,20 @@ pub fn QueryFeature(comptime FeatureId: type): type {
                             dest,
                         );
                     }
-                    try this.range.name.toCss(dest);
-                    try this.range.operator.toCss(dest);
-                    try this.range.value.toCss(dest);
+                    this.range.name.toCss(dest)?;
+                    this.range.operator.toCss(dest)?;
+                    this.range.value.toCss(dest)?;
                 },
                 .interval => |interval| {
                     if (dest.targets.shouldCompileSame(.media_interval_syntax)) {
-                        try writeMinMax(
+                        writeMinMax(
                             &interval.start_operator.opposite(),
                             FeatureId,
                             &interval.name,
                             &interval.start,
                             dest,
-                        );
-                        try dest.writeStr(" and (");
+                        )?;
+                        dest.writeStr(" and (")?;
                         return writeMinMax(
                             &interval.end_operator,
                             FeatureId,
@@ -967,11 +967,11 @@ pub fn QueryFeature(comptime FeatureId: type): type {
                         );
                     }
 
-                    try interval.start.toCss(dest);
-                    try interval.start_operator.toCss(dest);
-                    try interval.name.toCss(dest);
-                    try interval.end_operator.toCss(dest);
-                    try interval.end.toCss(dest);
+                    interval.start.toCss(dest)?;
+                    interval.start_operator.toCss(dest)?;
+                    interval.name.toCss(dest)?;
+                    interval.end_operator.toCss(dest)?;
+                    interval.end.toCss(dest)?;
                 },
             }
 
@@ -1479,11 +1479,11 @@ pub fn MediaFeatureName(comptime FeatureId: type): type {
             return switch (_) {
                 .standard => |v| v.toCssWithPrefix(prefix, dest),
                 .custom => |d| {
-                    try dest.writeStr(prefix);
+                    dest.writeStr(prefix)?;
                     return DashedIdentFns.toCss(d, dest);
                 },
                 .unknown => |v| {
-                    try dest.writeStr(prefix);
+                    dest.writeStr(prefix)?;
                     return IdentFns.toCss(v, dest);
                 },
             };

@@ -304,7 +304,7 @@ pub union(enum) CryptoHasher {
             return globalThis.throwInvalidArguments("algorithm must be a string", .{});
         }
 
-        const algorithm = try algorithm_name.getZigString(globalThis);
+        const algorithm = algorithm_name.getZigString(globalThis)?;
         if (algorithm.len == 0) {
             return globalThis.throwInvalidArguments("Invalid algorithm name", .{});
         }
@@ -324,7 +324,7 @@ pub union(enum) CryptoHasher {
 
         return CryptoHasher.new(brk: {
             if (key := hmac_key) {
-                const chosen_algorithm = try algorithm_name.toEnumFromMap(globalThis, "algorithm", EVP.Algorithm, EVP.Algorithm.map);
+                const chosen_algorithm = algorithm_name.toEnumFromMap(globalThis, "algorithm", EVP.Algorithm, EVP.Algorithm.map)?;
 
                 break :brk .{
                     .hmac = HMAC.init(chosen_algorithm, key.slice()) orelse {

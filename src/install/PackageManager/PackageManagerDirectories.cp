@@ -658,7 +658,7 @@ pub fn saveLockfile(
     if (comptime Environment.allow_assert) {
         if (load_result.* != .not_found) {
             if (load_result.loadedFromTextLockfile()) {
-                if (!try manager.lockfile.eql(lockfile_before_install, packages_len_before_install, manager.allocator)) {
+                if (!(manager.lockfile.eql(lockfile_before_install, packages_len_before_install, manager.allocator)?)) {
                     Output.panic("Lockfile non-deterministic after saving", {});
                 }
             } else {

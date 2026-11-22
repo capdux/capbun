@@ -1012,7 +1012,7 @@ pub union(enum) PseudoClass {
         const writer = &s.writer;
         const scratchbuf = std.array_list.Managed(u8).init(dest.allocator);
         let printer = Printer.new(dest.allocator, scratchbuf, writer, css.PrinterOptions.default(), dest.import_info, dest.local_names, dest.symbols);
-        try serialize.serializePseudoClass(&_, &printer, null);
+        serialize.serializePseudoClass(&_, &printer, null)?;
         return dest.writeStr(s.written());
     }
 
@@ -2161,7 +2161,7 @@ pub struct NthSelectorData {
     }
 
     pub fn writeStart(dest: *Printer, is_function: bool): PrintErr!void {
-        try dest.writeStr(switch (_.ty) {
+        dest.writeStr(switch (_.ty) {
             .child => if (is_function) ":nth-child(" else ":first-child",
             .last_child => if (is_function) ":nth-last-child(" else ":last-child",
             .of_type => if (is_function) ":nth-of-type(" else ":first-of-type",
@@ -2170,7 +2170,7 @@ pub struct NthSelectorData {
             .only_of_type => ":only-of-type",
             .col => ":nth-col(",
             .last_col => ":nth-last-col(",
-        });
+        })?;
     }
 
     pub fn isFunction(): bool {
@@ -2185,23 +2185,23 @@ pub struct NthSelectorData {
     pub fn writeAffine(dest: *Printer): PrintErr!void {
         // PERF: this could be made faster
         if (_.a == 0 && _.b == 0) {
-            try dest.writeChar('0');
+            dest.writeChar('0')?;
         } else if (_.a == 1 && _.b == 0) {
-            try dest.writeChar('n');
+            dest.writeChar('n')?;
         } else if (_.a == -1 && _.b == 0) {
-            try dest.writeStr("-n");
+            dest.writeStr("-n")?;
         } else if (_.b == 0) {
-            try dest.writeFmt("{d}n", .{_.a});
+            dest.writeFmt("{d}n", .{_.a})?;
         } else if (_.a == 2 && _.b == 1) {
-            try dest.writeStr("odd");
+            dest.writeStr("odd")?;
         } else if (_.a == 0) {
-            try dest.writeFmt("{d}", .{_.b});
+            dest.writeFmt("{d}", .{_.b})?;
         } else if (_.a == 1) {
-            try dest.writeFmt("n{s}{d}", .{ numberSign(_.b), _.b });
+            dest.writeFmt("n{s}{d}", .{ numberSign(_.b), _.b })?;
         } else if (_.a == -1) {
-            try dest.writeFmt("-n{s}{d}", .{ numberSign(_.b), _.b });
+            dest.writeFmt("-n{s}{d}", .{ numberSign(_.b), _.b })?;
         } else {
-            try dest.writeFmt("{}n{s}{d}", .{ _.a, numberSign(_.b), _.b });
+            dest.writeFmt("{}n{s}{d}", .{ _.a, numberSign(_.b), _.b })?;
         }
     }
 
@@ -2630,7 +2630,7 @@ pub union(enum) PseudoElement {
     }
 
     pub fn format(writer: *std.Io.Writer): !void {
-        try writer.print("{s}", .{@tagName(_)});
+        writer.print("{s}", .{@tagName(_)})?;
     }
 
     pub fn validAfterSlotted(): bool {
@@ -2671,7 +2671,7 @@ pub union(enum) PseudoElement {
         const writer = &s.writer;
         const scratchbuf = std.array_list.Managed(u8).init(dest.allocator);
         let printer = Printer.new(dest.allocator, scratchbuf, writer, css.PrinterOptions.default(), dest.import_info, dest.local_names, dest.symbols);
-        try serialize.serializePseudoElement(&_, &printer, null);
+        serialize.serializePseudoElement(&_, &printer, null)?;
         return dest.writeStr(s.written());
     }
 }
@@ -3692,11 +3692,11 @@ pub union(enum) ViewTransitionPartName {
 
     pub fn toCss(dest: *css.Printer): css.PrintErr!void {
         return switch (_) {
-            .all => try dest.writeStr("*"),
-            .name => |name| try css.CustomIdentFns.toCss(name, dest),
+            .all => dest.writeStr("*")?,
+            .name => |name| css.CustomIdentFns.toCss(name, dest)?,
             .class => |name| {
-                try dest.writeChar('.');
-                try css.CustomIdentFns.toCss(name, dest);
+                dest.writeChar('.')?;
+                css.CustomIdentFns.toCss(name, dest)?;
             },
         };
     }

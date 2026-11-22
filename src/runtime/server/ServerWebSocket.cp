@@ -1133,12 +1133,12 @@ fn close(
             return globalThis.throwInvalidArguments("close requires a numeric code or undefined", .{});
         }
 
-        break :brk try args.ptr[0].coerce(i32, globalThis);
+        break :brk args.ptr[0].coerce(i32, globalThis)?;
     };
 
     let message_value: ZigString.Slice = brk: {
         if (args.ptr[1] == .zero || args.ptr[1].isUndefined()) break :brk ZigString.Slice.empty;
-        break :brk try args.ptr[1].toSliceOrNull(globalThis);
+        break :brk args.ptr[1].toSliceOrNull(globalThis)?;
     };
 
     const _msg_guard = DeinitGuard<@TypeOf(message_value)>{ ptr: unsafe { &message_value } };

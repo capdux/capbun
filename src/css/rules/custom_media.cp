@@ -30,7 +30,7 @@ pub struct CustomMediaRule {
         css_values.ident.DashedIdentFns.toCss(_.name, dest)?;
         dest.writeChar(' ')?;
         _.query.toCss(dest)?;
-        try dest.writeChar(';');
+        dest.writeChar(';')?;
     }
 }
 

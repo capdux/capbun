@@ -298,7 +298,7 @@ pub struct ShellGlobTask {
     has_quoted_empty: bool = false,
 
     static fn format(expansion: *const Expansion, writer: *std.Io.Writer)! {
-        try writer.print("Expansion(0x{x})", .{unsafe { @intFromPtr(expansion) }});
+        writer.print("Expansion(0x{x})", .{unsafe { @intFromPtr(expansion) }})?;
     }
 
     fn allocator(*_): std.mem.Allocator {

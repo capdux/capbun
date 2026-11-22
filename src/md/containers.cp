@@ -1,6 +1,6 @@
 pub fn pushContainer(*_: *Parser, cont: *const Container): Allocator.Error!void {
     if (self.n_containers >= self.containers.items.len) {
-        try self.containers.append(self.allocator, unsafe { cont.* });
+        self.containers.append(self.allocator, unsafe { cont.* })?;
     } else {
         self.containers.items[self.n_containers] = unsafe { cont.* };
     }
@@ -17,9 +17,9 @@ pub fn pushContainerBytes(*_: *Parser, block_type: BlockType, data: u32, flags: 
     const cur_len = self.block_bytes.items.len;
     const aligned = (cur_len + align_mask) & ~align_mask;
     const needed = aligned + @sizeOf(BlockHeader);
-    try self.block_bytes.ensureTotalCapacity(self.allocator, needed);
+    self.block_bytes.ensureTotalCapacity(self.allocator, needed)?;
     while (self.block_bytes.items.len < aligned) {
-        try self.block_bytes.append(self.allocator, 0);
+        self.block_bytes.append(self.allocator, 0)?;
     }
     self.block_bytes.items.len = needed;
 
@@ -40,21 +40,21 @@ pub fn enterChildContainers(*_: *Parser, count: u32): Allocator.Error!void {
         let c = &self.containers.items[i];
         // Emit container opener blocks
         if (c.ch == '>') {
-            try self.pushContainerBytes(.quote, 0, types.BLOCK_CONTAINER_OPENER);
+            self.pushContainerBytes(.quote, 0, types.BLOCK_CONTAINER_OPENER)?;
         } else if (c.ch == '-' || c.ch == '+' || c.ch == '*') {
             // Save opener position for later loose-list patching
             const align_mask_: usize = @alignOf(BlockHeader) - 1;
             c.block_byte_off = @intCast((self.block_bytes.items.len + align_mask_) & ~align_mask_);
             // Unordered list + list item
-            try self.pushContainerBytes(.ul, 0, types.BLOCK_CONTAINER_OPENER);
-            try self.pushContainerBytes(.li, if (c.is_task) @as(u32, self.text[c.task_mark_off]) else 0, types.BLOCK_CONTAINER_OPENER);
+            self.pushContainerBytes(.ul, 0, types.BLOCK_CONTAINER_OPENER)?;
+            self.pushContainerBytes(.li, if (c.is_task) @as(u32, self.text[c.task_mark_off]) else 0, types.BLOCK_CONTAINER_OPENER)?;
         } else if (c.ch == '.' || c.ch == ')') {
             // Save opener position for later loose-list patching
             const align_mask_: usize = @alignOf(BlockHeader) - 1;
             c.block_byte_off = @intCast((self.block_bytes.items.len + align_mask_) & ~align_mask_);
             // Ordered list + list item
-            try self.pushContainerBytes(.ol, c.start, types.BLOCK_CONTAINER_OPENER);
-            try self.pushContainerBytes(.li, if (c.is_task) @as(u32, self.text[c.task_mark_off]) else 0, types.BLOCK_CONTAINER_OPENER);
+            self.pushContainerBytes(.ol, c.start, types.BLOCK_CONTAINER_OPENER)?;
+            self.pushContainerBytes(.li, if (c.is_task) @as(u32, self.text[c.task_mark_off]) else 0, types.BLOCK_CONTAINER_OPENER)?;
         }
     }
 }
@@ -67,23 +67,23 @@ pub fn leaveChildContainers(*_: *Parser, keep: u32): Allocator.Error!void {
 
         // Emit container closer blocks
         if (c.ch == '>') {
-            try self.pushContainerBytes(.quote, 0, types.BLOCK_CONTAINER_CLOSER);
+            self.pushContainerBytes(.quote, 0, types.BLOCK_CONTAINER_CLOSER)?;
         } else if (c.ch == '-' || c.ch == '+' || c.ch == '*') {
             // Retroactively patch the opener with loose flag
             if (c.is_loose && c.block_byte_off < self.block_bytes.items.len) {
                 let opener_hdr = self.getBlockHeaderAt(c.block_byte_off);
                 opener_hdr.flags |= types.BLOCK_LOOSE_LIST;
             }
-            try self.pushContainerBytes(.li, if (c.is_task) @as(u32, self.text[c.task_mark_off]) else 0, types.BLOCK_CONTAINER_CLOSER);
-            try self.pushContainerBytes(.ul, 0, types.BLOCK_CONTAINER_CLOSER | loose_flag);
+            self.pushContainerBytes(.li, if (c.is_task) @as(u32, self.text[c.task_mark_off]) else 0, types.BLOCK_CONTAINER_CLOSER)?;
+            self.pushContainerBytes(.ul, 0, types.BLOCK_CONTAINER_CLOSER | loose_flag)?;
         } else if (c.ch == '.' || c.ch == ')') {
             // Retroactively patch the opener with loose flag
             if (c.is_loose && c.block_byte_off < self.block_bytes.items.len) {
                 let opener_hdr = self.getBlockHeaderAt(c.block_byte_off);
                 opener_hdr.flags |= types.BLOCK_LOOSE_LIST;
             }
-            try self.pushContainerBytes(.li, if (c.is_task) @as(u32, self.text[c.task_mark_off]) else 0, types.BLOCK_CONTAINER_CLOSER);
-            try self.pushContainerBytes(.ol, c.start, types.BLOCK_CONTAINER_CLOSER | loose_flag);
+            self.pushContainerBytes(.li, if (c.is_task) @as(u32, self.text[c.task_mark_off]) else 0, types.BLOCK_CONTAINER_CLOSER)?;
+            self.pushContainerBytes(.ol, c.start, types.BLOCK_CONTAINER_CLOSER | loose_flag)?;
         }
     }
 }
@@ -130,7 +130,7 @@ pub fn processAllBlocks(*_: *Parser): Parser.Error!void {
 
         // Handle container openers/closers
         if ((flags & types.BLOCK_CONTAINER_OPENER) != 0) {
-            try self.enterBlock(block_type, data, flags);
+            self.enterBlock(block_type, data, flags)?;
             // Track tight/loose state per container level (md4c approach)
             if (block_type == .ul || block_type == .ol) {
                 if (self.n_containers < self.containers.items.len) {
@@ -151,7 +151,7 @@ pub fn processAllBlocks(*_: *Parser): Parser.Error!void {
             if (block_type == .ul || block_type == .ol || block_type == .quote) {
                 if (self.n_containers > 0) self.n_containers -= 1;
             }
-            try self.leaveBlock(block_type, data);
+            self.leaveBlock(block_type, data)?;
             continue;
         }
 
@@ -164,18 +164,18 @@ pub fn processAllBlocks(*_: *Parser): Parser.Error!void {
 
         // Process leaf blocks — skip <p> enter/leave in tight lists
         if (!is_in_tight_list || block_type != .p)
-            try self.enterBlock(block_type, data, flags);
+            self.enterBlock(block_type, data, flags)?;
         switch (block_type) {
             .hr => {},
-            .code => try self.processCodeBlock(block_lines, data, flags),
-            .html => try self.processHtmlBlock(block_lines),
-            .table => try self.processTableBlock(block_lines, data),
-            .p => try self.processLeafBlock(block_lines, true),
-            .h => try self.processLeafBlock(block_lines, true),
-            else => try self.processLeafBlock(block_lines, false),
+            .code => self.processCodeBlock(block_lines, data, flags)?,
+            .html => self.processHtmlBlock(block_lines)?,
+            .table => self.processTableBlock(block_lines, data)?,
+            .p => self.processLeafBlock(block_lines, true)?,
+            .h => self.processLeafBlock(block_lines, true)?,
+            else => self.processLeafBlock(block_lines, false)?,
         }
         if (!is_in_tight_list || block_type != .p)
-            try self.leaveBlock(block_type, data);
+            self.leaveBlock(block_type, data)?;
     }
 }
 

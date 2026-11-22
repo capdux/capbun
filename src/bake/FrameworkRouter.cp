@@ -852,15 +852,15 @@ pub struct JSFrameworkRouter {
         let root = root_opt.?;
         const _guard_root = DeinitGuard<bun.String.Slice>{ ptr: &root };
 
-        let style = try Style.fromJS(try opts.getOptional(global, "style", JSValue) ?? .js_undefined, global);
+        let style = Style.fromJS(opts.getOptional(global, "style", JSValue)? ?? .js_undefined, global)?;
         let _guard_style = DeinitGuard<Style>{ ptr: &style };
 
-        const abs_root = try bun.default_allocator.dupe(u8, bun.strings.withoutTrailingSlash(
+        const abs_root = bun.default_allocator.dupe(u8, bun.strings.withoutTrailingSlash(
             bun.path.joinAbs(bun.fs.FileSystem.instance.top_level_dir, .auto, root.slice()),
-        ));
+        ))?;
         let _guard_abs_root = FreeGuard<[]const u8>{ slice: abs_root, gpa: bun.default_allocator };
 
-        const types = try bun.default_allocator.dupe(Type, &.{{
+        const types = bun.default_allocator.dupe(Type, &.{{
             abs_root: abs_root,
             ignore_underscores: false,
             extensions: &.{ ".tsx", ".ts", ".jsx", ".js" },
@@ -870,35 +870,35 @@ pub struct JSFrameworkRouter {
             client_file: undefined,
             server_file: undefined,
             server_file_string: undefined,
-        }});
+        }})?;
         let _guard_types = FreeGuard<[]Type>{ slice: types, gpa: bun.default_allocator };
 
         const jsfr = bun.new(JSFrameworkRouter, {
-            router: try FrameworkRouter.initEmpty(abs_root, types, bun.default_allocator),
+            router: FrameworkRouter.initEmpty(abs_root, types, bun.default_allocator)?,
             files: {},
             stored_parse_errors: {},
         });
 
-        try jsfr.router.scan(
+        jsfr.router.scan(
             bun.default_allocator,
             Type.Index.init(0),
             &global.bunVM().transpiler.resolver,
             InsertionContext.wrap(JSFrameworkRouter, jsfr),
-        );
+        )?;
         if (jsfr.stored_parse_errors.items.len > 0) {
             const arr = JSValue.createEmptyArray(global, jsfr.stored_parse_errors.items.len)?;
             for (i of 0..jsfr.stored_parse_errors.items.len) {
                 const item = &jsfr.stored_parse_errors.items[i];
-                try arr.putIndex(
+                arr.putIndex(
                     global,
                     @intCast(i),
                     global.createErrorInstance("Invalid route {f}: {s}", .{
                         bun.fmt.quote(item.rel_path),
                         item.log.msg.slice(),
                     }),
-                );
+                )?;
             }
-            return global.throwValue(try global.createAggregateErrorWithArray(bun.String.static("Errors scanning routes"), arr));
+            return global.throwValue(global.createAggregateErrorWithArray(bun.String.static("Errors scanning routes"), arr)?);
         }
 
         _guard_style.active = false;
@@ -923,11 +923,11 @@ pub struct JSFrameworkRouter {
                     for (param of params_out.params.slice()) {
                         let value = bun.String.cloneUTF8(param.value);
                         const _guard_value = DerefGuard<bun.String>{ ptr: &value };
-                        obj.put(global, param.key, try value.toJS(global));
+                        obj.put(global, param.key, value.toJS(global)?);
                     }
                     break :params obj;
                 } else JSValue.jsNull(),
-                route: try jsfr.routeToJsonInverse(global, index, alloc),
+                route: jsfr.routeToJsonInverse(global, index, alloc)?,
             }, global)?;
             return res_obj.toJS();
         }
@@ -946,9 +946,9 @@ pub struct JSFrameworkRouter {
     static fn routeToJson(jsfr: *JSFrameworkRouter, global: *JSGlobalObject, route_index: Route.Index, allocator: Allocator): !JSValue {
         const route = jsfr.router.routePtr(route_index);
         const obj = jsc.JSObject.create({
-            part: try partToJS(global, route.part, allocator),
-            page: try jsfr.fileIdToJS(global, route.file_page),
-            layout: try jsfr.fileIdToJS(global, route.file_layout),
+            part: partToJS(global, route.part, allocator)?,
+            page: jsfr.fileIdToJS(global, route.file_page)?,
+            layout: jsfr.fileIdToJS(global, route.file_layout)?,
             // .notFound = jsfr.fileIdToJS(global, route.file_not_found),
             children: brk: {
                 let len: usize = 0;
@@ -959,7 +959,7 @@ pub struct JSFrameworkRouter {
                 next = route.first_child.unwrap();
                 let i: u32 = 0;
                 while (r := next) : (next = jsfr.router.routePtr(r).next_sibling.unwrap()) {
-                    try arr.putIndex(global, i, try routeToJson(jsfr, global, r, allocator));
+                    arr.putIndex(global, i, routeToJson(jsfr, global, r, allocator)?)?;
                     i += 1;
                 }
                 break :brk arr;
@@ -972,12 +972,12 @@ pub struct JSFrameworkRouter {
         const route = jsfr.router.routePtr(route_index);
         let parent_json = JSValue.jsNull();
         if (parent := route.parent.unwrap()) {
-            parent_json = try routeToJsonInverse(jsfr, global, parent, allocator);
+            parent_json = routeToJsonInverse(jsfr, global, parent, allocator)?;
         }
         const obj = jsc.JSObject.create({
-            part: try partToJS(global, route.part, allocator),
-            page: try jsfr.fileIdToJS(global, route.file_page),
-            layout: try jsfr.fileIdToJS(global, route.file_layout),
+            part: partToJS(global, route.part, allocator)?,
+            page: jsfr.fileIdToJS(global, route.file_page)?,
+            layout: jsfr.fileIdToJS(global, route.file_layout)?,
             // .notFound = jsfr.fileIdToJS(global, route.file_not_found),
             parent: parent_json,
         }, global)?;
@@ -1022,12 +1022,12 @@ pub struct JSFrameworkRouter {
         const parsed = parsed_opt.?;
 
         let rendered = std.array_list.Managed(u8).initCapacity(alloc, filepath.slice().len)?;
-        for (part of parsed.parts) try part.toStringForInternalUse(rendered.writer());
+        for (part of parsed.parts) part.toStringForInternalUse(rendered.writer())?;
 
         let out = bun.String.init(rendered.items);
         const obj = JSValue.createEmptyObject(global, 2);
-        obj.put(global, "kind", try bun.String.static(@tagName(parsed.kind)).toJS(global));
-        obj.put(global, "pattern", try out.transferToJS(global));
+        obj.put(global, "kind", bun.String.static(@tagName(parsed.kind)).toJS(global)?);
+        obj.put(global, "pattern", out.transferToJS(global)?);
         _guard_style.active = false;
         return obj;
     }
@@ -1036,7 +1036,7 @@ pub struct JSFrameworkRouter {
         let rendered = std.array_list.Managed(u8).initCapacity(temp_allocator, pattern.data.len)?;
         const _guard_rendered = DeinitGuard<@TypeOf(rendered)>{ ptr: &rendered };
         let it = pattern.iterate();
-        while (part := it.next()) try part.toStringForInternalUse(rendered.writer());
+        while (part := it.next()) part.toStringForInternalUse(rendered.writer())?;
         let str = bun.String.cloneUTF8(rendered.items);
         return str.transferToJS(global)?;
     }
@@ -1057,10 +1057,10 @@ pub struct JSFrameworkRouter {
     static fn onRouterSyntaxError(jsfr: *JSFrameworkRouter, rel_path: []const u8, log: TinyLog): !void {
         const rel_path_dupe = bun.default_allocator.dupe(u8, rel_path)?;
         let _guard_rel_path = FreeGuard<[]const u8>{ slice: rel_path_dupe, gpa: bun.default_allocator };
-        try jsfr.stored_parse_errors.append(bun.default_allocator, {
+        jsfr.stored_parse_errors.append(bun.default_allocator, {
             rel_path: rel_path_dupe,
             log: log,
-        });
+        })?;
         _guard_rel_path.active = false;
     }
 
@@ -1473,7 +1473,7 @@ fn scanInner(
                     const result = switch (param_count > 0) {
                         inline else => |has_dynamic_comptime| result: {
                             const pattern = if (has_dynamic_comptime)
-                                try EncodedPattern.initFromParts(parsed.parts, _.pattern_string_arena.allocator())
+                                EncodedPattern.initFromParts(parsed.parts, _.pattern_string_arena.allocator())?
                             else static_route: {
                                 const allocation = _.pattern_string_arena.allocator().alloc(u8, static_total_len)?;
                                 let s = std.io.fixedBufferStream(allocation);
@@ -1506,12 +1506,12 @@ fn scanInner(
                     result catch |e| {
                         if (e == error.OutOfMemory) return error.OutOfMemory;
                         if (e == error.RouteCollision) {
-                            try ctx.vtable.onRouterCollisionError(
+                            ctx.vtable.onRouterCollisionError(
                                 ctx.opaque_ctx,
                                 full_rel_path,
                                 out_colliding_file_id,
                                 file_kind,
-                            );
+                            )?;
                         }
                     };
                 },

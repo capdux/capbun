@@ -193,11 +193,11 @@ pub fn CssRuleList(comptime AtRule: type): type {
                             let last_rule = &rules.items[rules.items.len - 1].media;
                             if (last_rule.query.eql(&med.query)) {
                                 bun.handleOom(last_rule.rules.v.appendSlice(context.allocator, med.rules.v.items));
-                                * = try last_rule.minify(context, parent_is_unused);
+                                * = last_rule.minify(context, parent_is_unused)?;
                                 continue;
                             }
                         }
-                        if (try med.minify(context, parent_is_unused)) {
+                        if (med.minify(context, parent_is_unused)?) {
                             continue;
                         }
                     },
@@ -230,7 +230,7 @@ pub fn CssRuleList(comptime AtRule: type): type {
                         const SelectorList = css.selector.SelectorList;
                         const Component = css.selector.Component;
                         debug("Input style:\n  Selectors: {f}\n  Decls: {f}\n", .{ sty.selectors.debug(), sty.declarations.debug() });
-                        if (parent_is_unused || try sty.minify(context, parent_is_unused)) {
+                        if (parent_is_unused || sty.minify(context, parent_is_unused)?) {
                             continue;
                         }
 

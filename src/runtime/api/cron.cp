@@ -1274,9 +1274,9 @@ pub fn cronParse(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): 
 
     const from_ms: f64 = if (args[1] != .zero && !args[1].isUndefined() && args[1] != .@"null") blk: {
         if (args[1].isNumber()) {
-            break :blk try args[1].toNumber(globalObject);
+            break :blk args[1].toNumber(globalObject)?;
         } else if (args[1].jsType() == .JSDate) {
-            break :blk try args[1].toNumber(globalObject);
+            break :blk args[1].toNumber(globalObject)?;
         } else {
             return globalObject.throwInvalidArguments("Bun.cron.parse() expects the second argument to be a Date or number (ms since epoch)", .{});
         }

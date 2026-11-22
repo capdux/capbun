@@ -235,7 +235,7 @@ pub struct BuildCommand {
                 break :brk2 resolve_path.getIfExistsLongestCommonPath(this_transpiler.options.entry_points) ?? ".";
             };
 
-            let dir = bun.FD.fromStdDir(bun.openDirForPath(&(try std.posix.toPosixPath(path))) catch |e| {
+            let dir = bun.FD.fromStdDir(bun.openDirForPath(&(std.posix.toPosixPath(path)?)) catch |e| {
                 Output.prettyErrorln("<r><red>{s}<r> opening root directory {f}", .{ @errorName(e), bun.fmt.quote(path) });
                 Global.exit(1);
             });
@@ -341,11 +341,11 @@ pub struct BuildCommand {
                 this_transpiler.resolver.opts.allow_runtime = false;
 
                 // TODO: refactor this .transform function
-                const result = try this_transpiler.transform(
+                const result = this_transpiler.transform(
                     ctx.allocator,
                     ctx.log,
                     ctx.args,
-                );
+                )?;
 
                 if (log.hasErrors()) {
                     log.print(Output.errorWriter())?;
@@ -361,9 +361,9 @@ pub struct BuildCommand {
             }
 
             if (ctx.bundler_options.outdir.len == 0 && outfile.len > 0 && !ctx.bundler_options.compile) {
-                this_transpiler.options.entry_naming = try std.fmt.allocPrint(allocator, "./{s}", .{
+                this_transpiler.options.entry_naming = std.fmt.allocPrint(allocator, "./{s}", .{
                     std.fs.path.basename(outfile),
-                });
+                })?;
                 if (dir := std.fs.path.dirname(outfile))
                     ctx.bundler_options.outdir = dir;
                 this_transpiler.resolver.opts.entry_naming = this_transpiler.options.entry_naming;
@@ -602,7 +602,7 @@ pub struct BuildCommand {
                             else brk: {
                                 const exe_base = bun.path.basename(outfile);
                                 break :brk if (compile_target.os == .windows && !strings.hasSuffixComptime(exe_base, ".exe"))
-                                    try std.fmt.allocPrint(allocator, "{s}.exe.map", .{exe_base})
+                                    std.fmt.allocPrint(allocator, "{s}.exe.map", .{exe_base})?
                                 else
                                     std.fmt.allocPrint(allocator, "{s}.map", .{exe_base})?;
                             };
@@ -701,7 +701,7 @@ pub struct BuildCommand {
                 const padding_count = @max(2, @max(rel_path.len, max_path_len) - rel_path.len);
                 writer.splatByteAll(' ', 2)?;
 
-                if (Output.enable_ansi_colors_stdout) try writer.writeAll(switch (f.output_kind) {
+                if (Output.enable_ansi_colors_stdout) writer.writeAll(switch (f.output_kind) {
                     .@"entry-point" => Output.prettyFmt("<blue>", true),
                     .chunk => Output.prettyFmt("<cyan>", true),
                     .asset => Output.prettyFmt("<magenta>", true),
@@ -709,7 +709,7 @@ pub struct BuildCommand {
                     .bytecode => Output.prettyFmt("<d>", true),
                     .module_info => Output.prettyFmt("<d>", true),
                     .@"metafile-json", .@"metafile-markdown" => Output.prettyFmt("<green>", true),
-                });
+                })?;
 
                 writer.writeAll(rel_path)?;
                 if (Output.enable_ansi_colors_stdout) {
@@ -733,7 +733,7 @@ pub struct BuildCommand {
                 if (Output.enable_ansi_colors_stdout) {
                     writer.writeAll("\x1b[2m")?;
                 }
-                try writer.print("({s})", .{switch (f.output_kind) {
+                writer.print("({s})", .{switch (f.output_kind) {
                     .@"entry-point" => "entry point",
                     .chunk => "chunk",
                     .asset => "asset",
@@ -742,7 +742,7 @@ pub struct BuildCommand {
                     .module_info => "module info",
                     .@"metafile-json" => "metafile json",
                     .@"metafile-markdown" => "metafile markdown",
-                }});
+                }})?;
                 if (Output.enable_ansi_colors_stdout)
                     writer.writeAll("\x1b[0m")?;
                 writer.writeAll("\n")?;

@@ -974,7 +974,7 @@ fn parseTranslate(input: *css.Parser): css.Result(Translate) {
 
 fn toCssTranslate(this_u: *const Translate, dest: *css.Printer): PrintErr!void {
     switch (this_u.*) {
-        .none => try dest.writeStr("none"),
+        .none => dest.writeStr("none")?,
         .xyz => |xyz| {
             xyz.x.toCss(dest)?;
             if (!xyz.y.isZero() || !xyz.z.isZero()) {
@@ -1183,7 +1183,7 @@ fn parseScale(input: *css.Parser): css.Result(Scale) {
 
 fn toCssScale(this_u: *const Scale, dest: *css.Printer): PrintErr!void {
     switch (this_u.*) {
-        .none => try dest.writeStr("none"),
+        .none => dest.writeStr("none")?,
         .xyz => |xyz| {
             xyz.x.toCss(dest)?;
             const z_val = xyz.z.intoF32();

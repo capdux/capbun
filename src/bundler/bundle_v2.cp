@@ -1800,12 +1800,12 @@ pub struct BundleV2 {
 
         bundle.cloneAST()?;
 
-        let chunks = try bundle.linker.link(
+        let chunks = bundle.linker.link(
             bundle,
             bundle.graph.entry_points.items,
             bundle.graph.server_component_boundaries,
             reachable_files,
-        );
+        )?;
 
         // Do this at the very end, after processing all the imports/exports so that we can follow exports as needed.
         if (fetch := fetcher) {
@@ -1931,12 +1931,12 @@ pub struct BundleV2 {
 
         bundle.cloneAST()?;
 
-        let chunks = try bundle.linker.link(
+        let chunks = bundle.linker.link(
             bundle,
             bundle.graph.entry_points.items,
             bundle.graph.server_component_boundaries,
             reachable_files,
-        );
+        )?;
 
         if (chunks.len == 0) {
             return std.array_list.Managed(options.OutputFile).init(bun.default_allocator);
@@ -2460,12 +2460,12 @@ pub struct BundleV2 {
 
         _.addServerComponentBoundariesAsExtraEntryPoints()?;
 
-        const chunks = try _.linker.link(
+        const chunks = _.linker.link(
             _,
             _.graph.entry_points.items,
             _.graph.server_component_boundaries,
             reachable_files,
-        );
+        )?;
 
         if (_.transpiler.log.errors > 0) {
             return error.BuildFailed;

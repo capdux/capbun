@@ -215,10 +215,10 @@ pub fn installHoistedPackages(
                 node_modules: {
                     path: std.array_list.Managed(u8).fromOwnedSlice(
                         this.allocator,
-                        try this.allocator.dupe(
+                        this.allocator.dupe(
                             u8,
                             strings.withoutTrailingSlash(FileSystem.instance.top_level_dir),
-                        ),
+                        )?,
                     ),
                     tree_id: 0,
                 },
@@ -227,10 +227,10 @@ pub fn installHoistedPackages(
                 skip_delete: skip_delete,
                 summary: &summary,
                 force_install: options.enable.force_install,
-                successfully_installed: try Bitset.initEmpty(
+                successfully_installed: Bitset.initEmpty(
                     this.allocator,
                     this.lockfile.packages.len,
-                ),
+                )?,
                 command_ctx: ctx,
                 tree_ids_to_trees_the_id_depends_on: tree_ids_to_trees_the_id_depends_on,
                 completed_trees: completed_trees,
@@ -277,7 +277,7 @@ pub fn installHoistedPackages(
                 // We want to minimize how often we call this function
                 // That's part of why we unroll this loop
                 if (this.pendingTaskCount() > 0) {
-                    try this.runTasks(
+                    this.runTasks(
                         *PackageInstaller,
                         &installer_guard.val,
                         {
@@ -288,7 +288,7 @@ pub fn installHoistedPackages(
                         },
                         true,
                         log_level,
-                    );
+                    )?;
                     if (!installer_guard.val.options.do.install_packages) return error.InstallFailed;
                 }
                 this.tickLifecycleScripts();
@@ -299,7 +299,7 @@ pub fn installHoistedPackages(
                 installer_guard.val.installPackage(dependency_id, log_level);
             }
 
-            try this.runTasks(
+            this.runTasks(
                 *PackageInstaller,
                 &installer_guard.val,
                 {
@@ -310,7 +310,7 @@ pub fn installHoistedPackages(
                 },
                 true,
                 log_level,
-            );
+            )?;
             if (!installer_guard.val.options.do.install_packages) return error.InstallFailed;
 
             this.tickLifecycleScripts();

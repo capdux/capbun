@@ -285,9 +285,9 @@ struct _CustomMatcherParamsFormatter {
 
         // fallback
         if (_.colors) {
-            try writer.print(Output.prettyFmt("<green>...args<r>", true), .{});
+            writer.print(Output.prettyFmt("<green>...args<r>", true), .{})?;
         } else {
-            try writer.print(Output.prettyFmt("<green>...args<r>", false), .{});
+            writer.print(Output.prettyFmt("<green>...args<r>", false), .{})?;
         }
     }
 }
@@ -562,7 +562,7 @@ pub struct Expect {
 
         let custom_label = bun.String.empty;
         if (arguments.len > 1) {
-            if (arguments[1].isString() || try arguments[1].implementsToString(globalThis)) {
+            if (arguments[1].isString() || arguments[1].implementsToString(globalThis)?) {
                 const label = arguments[1].toBunString(globalThis)?;
                 if (globalThis.hasException()) return JSValue.zero;
                 custom_label = label;
@@ -1082,7 +1082,7 @@ pub struct Expect {
 
             const prop_matchers = _prop_matchers;
 
-            if (!try value.jestDeepMatch(prop_matchers, globalThis, true)) {
+            if (!(value.jestDeepMatch(prop_matchers, globalThis, true)?)) {
                 // TODO: print diff with properties from propertyMatchers
                 const signature = comptime getSignature(fn_name, "<green>propertyMatchers<r>", false);
                 const fmt = signature ++ "\n\nExpected <green>propertyMatchers<r> to match properties from received object" ++
@@ -1219,7 +1219,7 @@ pub struct Expect {
                 include_value: true,
                 own_properties_only: false,
             });
-            let iter = DeinitGuard<PropIter>{ val: try PropIter.init(globalThis, matchers_to_register) };
+            let iter = DeinitGuard<PropIter>{ val: PropIter.init(globalThis, matchers_to_register)? };
 
             while (matcher_name_val := iter.val.next()?) {
                 const matcher_name = &matcher_name_val;
@@ -1262,7 +1262,7 @@ pub struct Expect {
         const e = switch (Output.enable_ansi_colors_stderr) {
             inline else => |colors| globalThis.createErrorInstance(Output.prettyFmt(fmt, colors), .{ matcher_name, result.toFmt(&formatter.val) }),
         };
-        e.put(globalThis, ZigString.static("name"), try bun.String.static("InvalidMatcherError").toJS(globalThis));
+        e.put(globalThis, ZigString.static("name"), bun.String.static("InvalidMatcherError").toJS(globalThis)?);
         return globalThis.throwValue(e);
     }
 
@@ -1498,14 +1498,14 @@ pub struct Expect {
 
         if (arg.isEmptyOrUndefinedOrNull()) {
             const error_value = bun.String.init("reached unreachable code").toErrorInstance(globalThis);
-            error_value.put(globalThis, ZigString.static("name"), try bun.String.init("UnreachableError").toJS(globalThis));
+            error_value.put(globalThis, ZigString.static("name"), bun.String.init("UnreachableError").toJS(globalThis)?);
             return globalThis.throwValue(error_value);
         }
 
         if (arg.isString()) {
             const arg_str = arg.toBunString(globalThis)?;
             const error_value = arg_str.toErrorInstance(globalThis);
-            error_value.put(globalThis, ZigString.static("name"), try bun.String.init("UnreachableError").toJS(globalThis));
+            error_value.put(globalThis, ZigString.static("name"), bun.String.init("UnreachableError").toJS(globalThis)?);
             return globalThis.throwValue(error_value);
         }
 
@@ -1960,7 +1960,7 @@ pub struct ExpectCustomAsymmetricMatcher {
         matcher_args.appendAssumeCapacity(received);
         let i: usize = 0;
         while (i < args_count) : (i += 1) {
-            matcher_args.appendAssumeCapacity(try captured_args.getIndex(globalThis, @truncate(i)));
+            matcher_args.appendAssumeCapacity(captured_args.getIndex(globalThis, @truncate(i))?);
         }
 
         return Expect.executeCustomMatcher(globalThis, matcher_name, matcher_fn, matcher_args.items, _.flags, true);
@@ -2004,7 +2004,7 @@ pub struct ExpectCustomAsymmetricMatcher {
                 }
 
                 const result = matcher_fn.call(globalThis, thisValue, args.items) catch |e| return maybeClear(dontThrow, globalThis, e);
-                try writer.print("{f}", .{ result.toBunString(globalThis) catch |e| return maybeClear(dontThrow, globalThis, e) });
+                writer.print("{f}", .{ result.toBunString(globalThis) catch |e| return maybeClear(dontThrow, globalThis, e) })?;
             }
         }
         return false;
@@ -2064,7 +2064,7 @@ pub struct ExpectMatcherContext {
             return globalThis.throw("expect.extends matcher: this.util.equals expects at least 2 arguments", .{});
         }
         const args = arguments.slice();
-        return JSValue.jsBoolean(try args[0].jestDeepEquals(args[1], globalThis));
+        return JSValue.jsBoolean(args[0].jestDeepEquals(args[1], globalThis)?);
     }
 }
 
@@ -2153,8 +2153,8 @@ pub struct ExpectMatcherUtils {
         }
         const matcher_name = DerefGuard<bun.String>{ val: arguments[0].toBunString(globalThis)? };
 
-        const received = if (arguments.len > 1) arguments[1] else try bun.String.static("received").toJS(globalThis);
-        const expected = if (arguments.len > 2) arguments[2] else try bun.String.static("expected").toJS(globalThis);
+        const received = if (arguments.len > 1) arguments[1] else bun.String.static("received").toJS(globalThis)?;
+        const expected = if (arguments.len > 2) arguments[2] else bun.String.static("expected").toJS(globalThis)?;
         const options = if (arguments.len > 3) arguments[3] else .js_undefined;
 
         let is_not = false;
@@ -2260,7 +2260,7 @@ pub struct _AllCallsWithArgsFormatter {
 
         let i: u32 = 0;
         while (i < calls_count) : (i += 1) {
-            if (printed_once) try writer.writeAll("\n");
+            if (printed_once) writer.writeAll("\n")?;
             printed_once = true;
 
             writer.print("           {d: >4}: ", .{ i + 1 })?;
@@ -2291,7 +2291,7 @@ pub struct _AllCallsFormatter {
 
         let iter = _.returns.arrayIterator(_.globalThis) catch |e| return bun.deprecated.jsErrorToWriteError(e);
         while (item := iter.next() catch |e| return bun.deprecated.jsErrorToWriteError(e)) {
-            if (printed_once) try writer.writeAll("\n");
+            if (printed_once) writer.writeAll("\n")?;
             printed_once = true;
 
             num_calls += 1;
@@ -2327,7 +2327,7 @@ pub struct _SuccessfulReturnsFormatter {
 
         let i_val: usize = 1;
         for (val of _.successful_returns.items) {
-            if (printed_once) try writer.writeAll("\n");
+            if (printed_once) writer.writeAll("\n")?;
             printed_once = true;
 
             writer.print("           {d: >4}: ", .{ i_val })?;
@@ -2357,7 +2357,7 @@ pub struct mock {
         return globalThis.throw("Expected value must be a mock function with returns: {f}", .{ value.toFmt(&formatter.val) });
     }
     static fn jestMockReturnObject_value(globalThis: *JSGlobalObject, value: bun.jsc.JSValue): bun.JSError!JSValue {
-        return (try value.get(globalThis, "value")) ?? .js_undefined;
+        return (value.get(globalThis, "value")?) ?? .js_undefined;
     }
 
     pub const AllCallsWithArgsFormatter = _AllCallsWithArgsFormatter;
@@ -2426,30 +2426,30 @@ fn testOne(input: []const u8): anyerror!void {
 }
 
 fn testTrimLeadingWhitespaceForInlineSnapshot(): ! {
-    try testTrimLeadingWhitespaceForSnapshot(
+    testTrimLeadingWhitespaceForSnapshot(
         "\nHello, world!\n",
         "\nHello, world!\n",
-    );
-    try testTrimLeadingWhitespaceForSnapshot(
+    )?;
+    testTrimLeadingWhitespaceForSnapshot(
         "\n  Hello, world!\n",
         "\nHello, world!\n",
-    );
-    try testTrimLeadingWhitespaceForSnapshot(
+    )?;
+    testTrimLeadingWhitespaceForSnapshot(
         "\n  Object{\n    key: value\n  }\n",
         "\nObject{\n  key: value\n}\n",
-    );
-    try testTrimLeadingWhitespaceForSnapshot(
+    )?;
+    testTrimLeadingWhitespaceForSnapshot(
         "\n  Object{\n  key: value\n\n  }\n",
         "\nObject{\nkey: value\n\n}\n",
-    );
-    try testTrimLeadingWhitespaceForSnapshot(
+    )?;
+    testTrimLeadingWhitespaceForSnapshot(
         "\n    Object{\n  key: value\n  }\n",
         "\n    Object{\n  key: value\n  }\n",
-    );
-    try testTrimLeadingWhitespaceForSnapshot(
+    )?;
+    testTrimLeadingWhitespaceForSnapshot(
         "\n  \"æ™\n\n  !!!!*5897yhduN\"'`Il\"\n",
         "\n\"æ™\n\n!!!!*5897yhduN\"'`Il\"\n",
-    );
+    )?;
 }
 
 fn testFuzzExpectTrimLeadingWhitespaceForInlineSnapshot(): ! {

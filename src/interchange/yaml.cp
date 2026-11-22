@@ -1181,11 +1181,11 @@ struct ParserScalarResolverCtx<const enc: Encoding> {
                             const i_start = parser.pos;
                             parser.inc(1);
                             if (parser.remainStartsWith("nf")) {
-                                try ctx.resolve(
+                                ctx.resolve(
                                     { number: if (first_char == .negative) -inf else inf },
                                     i_start,
                                     "inf",
-                                );
+                                )?;
                                 parser.inc(2);
                                 return;
                             }
@@ -1196,20 +1196,20 @@ struct ParserScalarResolverCtx<const enc: Encoding> {
                             const i_start = parser.pos;
                             parser.inc(1);
                             if (parser.remainStartsWith("nf")) {
-                                try ctx.resolve(
+                                ctx.resolve(
                                     { number: if (first_char == .negative) -inf else inf },
                                     i_start,
                                     "Inf",
-                                );
+                                )?;
                                 parser.inc(2);
                                 return;
                             }
                             if (parser.remainStartsWith("NF")) {
-                                try ctx.resolve(
+                                ctx.resolve(
                                     { number: if (first_char == .negative) -inf else inf },
                                     i_start,
                                     "INF",
-                                );
+                                )?;
                                 parser.inc(2);
                                 return;
                             }
@@ -2406,10 +2406,10 @@ pub struct Parser<const enc: Encoding> {
                 switch (_.token.data) {
                     .collect_entry => {
                         const value: Expr = .init(E.Null, {}, _.token.start.loc());
-                        try props.append({
+                        props.append({
                             key: key,
                             value: value,
-                        });
+                        })?;
 
                         _.context.set(.flow_key)?;
                         defer _.context.unset(.flow_key);
@@ -2418,10 +2418,10 @@ pub struct Parser<const enc: Encoding> {
                     },
                     .mapping_end => {
                         const value: Expr = .init(E.Null, {}, _.token.start.loc());
-                        try props.append({
+                        props.append({
                             key: key,
                             value: value,
-                        });
+                        })?;
                         continue;
                     },
                     .mapping_value => {},
@@ -2436,10 +2436,10 @@ pub struct Parser<const enc: Encoding> {
                     _.token.data == .collect_entry)
                 {
                     const value: Expr = .init(E.Null, {}, _.token.start.loc());
-                    try props.append({
+                    props.append({
                         key: key,
                         value: value,
-                    });
+                    })?;
                 } else {
                     const value = _.parseNode({})?;
                     props.appendMaybeMerge(key, value)?;
@@ -2565,7 +2565,7 @@ pub struct Parser<const enc: Encoding> {
                             }
                         }
                     },
-                    else => try _.parseNode({}),
+                    else => _.parseNode({})?,
                 }?;
 
                 seq.append(item)?;
@@ -2673,10 +2673,10 @@ pub struct Parser<const enc: Encoding> {
                 => {
                     if (explicit_key) {
                         const value: Expr = .init(E.Null, {}, self.pos.loc());
-                        try props.append({
+                        props.append({
                             key: key,
                             value: value,
-                        });
+                        })?;
                         continue;
                     }
                     return error.UnexpectedToken;
@@ -2826,12 +2826,12 @@ pub struct Parser<const enc: Encoding> {
                         }
                     }
 
-                    const map = try _.parseBlockMapping(
+                    const map = _.parseBlockMapping(
                         copy,
                         alias_start,
                         alias_indent,
                         alias_line,
-                    );
+                    )?;
 
                     return map;
                 }
@@ -2866,12 +2866,12 @@ pub struct Parser<const enc: Encoding> {
                         _.anchors.put(key_anchor.slice(_.input), seq)?;
                     }
 
-                    const map = try _.parseBlockMapping(
+                    const map = _.parseBlockMapping(
                         seq,
                         sequence_start,
                         sequence_indent,
                         sequence_line,
-                    );
+                    )?;
 
                     if (mapping_anchor := implicit_key_anchors.mapping_anchor) {
                         _.anchors.put(mapping_anchor.slice(_.input), map)?;
@@ -2964,10 +2964,10 @@ pub struct Parser<const enc: Encoding> {
 
                 _.scan({})?;
 
-                const key = try _.parseNode({
+                const key = _.parseNode({
                     explicit_mapping_key: true,
                     current_mapping_indent: opts.current_mapping_indent ?? mapping_indent,
-                });
+                })?;
 
                 _.block_indents.pop();
 
@@ -3069,12 +3069,12 @@ pub struct Parser<const enc: Encoding> {
                         _.anchors.put(key_anchor.slice(_.input), implicit_key)?;
                     }
 
-                    const mapping = try _.parseBlockMapping(
+                    const mapping = _.parseBlockMapping(
                         implicit_key,
                         scalar_start,
                         scalar_indent,
                         scalar_line,
-                    );
+                    )?;
 
                     if (mapping_anchor := implicit_key_anchors.mapping_anchor) {
                         _.anchors.put(mapping_anchor.slice(_.input), mapping)?;
@@ -3884,8 +3884,8 @@ pub struct Parser<const enc: Encoding> {
                 _.newline();
                 _.inc(1);
                 switch (_.foldLines()) {
-                    0 => try text.append(' '),
-                    else => |lines| try text.appendNTimes('\n', lines),
+                    0 => text.append(' ')?,
+                    else => |lines| text.appendNTimes('\n', lines)?,
                 }
                 if (block_indent := _.block_indents.get()) {
                     if (_.line_indent.isLessThanOrEqual(block_indent)) {
@@ -3987,8 +3987,8 @@ pub struct Parser<const enc: Encoding> {
                 _.newline();
                 _.inc(1);
                 switch (_.foldLines()) {
-                    0 => try text.append(' '),
-                    else => |lines| try text.appendNTimes('\n', lines),
+                    0 => text.append(' ')?,
+                    else => |lines| text.appendNTimes('\n', lines)?,
                 }
 
                 if (block_indent := _.block_indents.get()) {
@@ -4053,46 +4053,46 @@ pub struct Parser<const enc: Encoding> {
                     },
 
                     // escaped whitespace
-                    ' ' => try text.append(' '),
-                    '\t' => try text.append('\t'),
+                    ' ' => text.append(' ')?,
+                    '\t' => text.append('\t')?,
 
-                    '0' => try text.append(0),
-                    'a' => try text.append(0x7),
-                    'b' => try text.append(0x8),
-                    't' => try text.append('\t'),
-                    'n' => try text.append('\n'),
-                    'v' => try text.append(0x0b),
-                    'f' => try text.append(0xc),
-                    'r' => try text.append(0xd),
-                    'e' => try text.append(0x1b),
-                    '"' => try text.append('"'),
-                    '/' => try text.append('/'),
-                    '\\' => try text.append('\\'),
+                    '0' => text.append(0)?,
+                    'a' => text.append(0x7)?,
+                    'b' => text.append(0x8)?,
+                    't' => text.append('\t')?,
+                    'n' => text.append('\n')?,
+                    'v' => text.append(0x0b)?,
+                    'f' => text.append(0xc)?,
+                    'r' => text.append(0xd)?,
+                    'e' => text.append(0x1b)?,
+                    '"' => text.append('"')?,
+                    '/' => text.append('/')?,
+                    '\\' => text.append('\\')?,
 
                     'N' => switch (enc) {
-                        .utf8 => try text.appendSlice(&.{ 0xc2, 0x85 }),
-                        .utf16 => try text.append(0x0085),
+                        .utf8 => text.appendSlice(&.{ 0xc2, 0x85 })?,
+                        .utf16 => text.append(0x0085)?,
                         .latin1 => return error.UnexpectedCharacter,
                     },
                     '_' => switch (enc) {
-                        .utf8 => try text.appendSlice(&.{ 0xc2, 0xa0 }),
-                        .utf16 => try text.append(0x00a0),
+                        .utf8 => text.appendSlice(&.{ 0xc2, 0xa0 })?,
+                        .utf16 => text.append(0x00a0)?,
                         .latin1 => return error.UnexpectedCharacter,
                     },
                     'L' => switch (enc) {
-                        .utf8 => try text.appendSlice(&.{ 0xe2, 0x80, 0xa8 }),
-                        .utf16 => try text.append(0x2028),
+                        .utf8 => text.appendSlice(&.{ 0xe2, 0x80, 0xa8 })?,
+                        .utf16 => text.append(0x2028)?,
                         .latin1 => return error.UnexpectedCharacter,
                     },
                     'P' => switch (enc) {
-                        .utf8 => try text.appendSlice(&.{ 0xe2, 0x80, 0xa9 }),
-                        .utf16 => try text.append(0x2029),
+                        .utf8 => text.appendSlice(&.{ 0xe2, 0x80, 0xa9 })?,
+                        .utf16 => text.append(0x2029)?,
                         .latin1 => return error.UnexpectedCharacter,
                     },
 
-                    'x' => try _.decodeHexCodePoint(.x, &text),
-                    'u' => try _.decodeHexCodePoint(.u, &text),
-                    'U' => try _.decodeHexCodePoint(.U, &text),
+                    'x' => _.decodeHexCodePoint(.x, &text)?,
+                    'u' => _.decodeHexCodePoint(.u, &text)?,
+                    'U' => _.decodeHexCodePoint(.U, &text)?,
 
                     else => return error.UnexpectedCharacter,
                 }

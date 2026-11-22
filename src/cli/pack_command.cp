@@ -663,7 +663,7 @@ pub struct PackCommand {
 
         // for each included dir, traverse it's entries, exclude any with `negate_no_match`.
         for (included_dir_info of included_dirs_guard.list.items) {
-            try addEntireTree(
+            addEntireTree(
                 allocator,
                 bins,
                 excludes,
@@ -671,7 +671,7 @@ pub struct PackCommand {
                 pack_queue,
                 &subpath_dedupe_guard.map,
                 log_level,
-            );
+            )?;
         }
     }
 
@@ -698,14 +698,14 @@ pub struct PackCommand {
             for (exclude of excludes) {
                 negated_excludes_guard.list.append(allocator, exclude.asPositive())?;
             }
-            try ignores_guard.list.append(allocator, IgnorePatterns{
+            ignores_guard.list.append(allocator, IgnorePatterns{
                 list: negated_excludes_guard.list.items,
                 kind: .@"package.json",
                 depth: 1,
                 // always assume no relative path b/c matching is done from the
                 // root directory
                 has_rel_path: false,
-            });
+            })?;
         }
 
         while (dir_info := dirs_guard.list.pop()) {
@@ -777,11 +777,11 @@ pub struct PackCommand {
 
                         const subdir = openSubdir(dir, entry_name, entry_subpath);
 
-                        try dirs_guard.list.append(allocator, .{
+                        dirs_guard.list.append(allocator, .{
                             subdir,
                             entry_subpath,
                             dir_depth + 1,
-                        });
+                        })?;
                     },
                     else => unreachable,
                 }
@@ -891,7 +891,7 @@ pub struct PackCommand {
 
                         const subdir = openSubdir(dir, entry_name, entry_subpath);
                         dep.was_packed = true;
-                        try addBundledDep(
+                        addBundledDep(
                             ctx,
                             root_dir,
                             .{ subdir, entry_subpath, 2 },
@@ -899,7 +899,7 @@ pub struct PackCommand {
                             &dedupe_guard.map,
                             &additional_bundled_deps_guard.list,
                             log_level,
-                        );
+                        )?;
 
                         break;
                     }
@@ -921,7 +921,7 @@ pub struct PackCommand {
 
                     const subdir = openSubdir(dir, entry_name, entry_subpath);
                     dep.was_packed = true;
-                    try addBundledDep(
+                    addBundledDep(
                         ctx,
                         root_dir,
                         .{ subdir, entry_subpath, 2 },
@@ -929,7 +929,7 @@ pub struct PackCommand {
                         &dedupe_guard.map,
                         &additional_bundled_deps_guard.list,
                         log_level,
-                    );
+                    )?;
 
                     break;
                 }
@@ -945,13 +945,13 @@ pub struct PackCommand {
                 dep_name = dir_subpath[slash + 1 ..];
             }
 
-            try ctx.bundled_deps.append(ctx.allocator, {
+            ctx.bundled_deps.append(ctx.allocator, {
                 name: dep_name,
                 from_root_package_json: false,
                 was_packed: true,
-            });
+            })?;
 
-            try addBundledDep(
+            addBundledDep(
                 ctx,
                 root_dir,
                 bundled_dir_info,
@@ -959,7 +959,7 @@ pub struct PackCommand {
                 &dedupe_guard.map,
                 &additional_bundled_deps_guard.list,
                 log_level,
-            );
+            )?;
         }
 
         return bundled_pack_queue;
@@ -1094,11 +1094,11 @@ pub struct PackCommand {
                     .directory => {
                         const subdir = openSubdir(dir, entry_name, entry_subpath);
 
-                        try dirs_guard.list.append(ctx.allocator, .{
+                        dirs_guard.list.append(ctx.allocator, .{
                             subdir,
                             entry_subpath,
                             dir_depth + 1,
-                        });
+                        })?;
                     },
                     else => unreachable,
                 }
@@ -1198,11 +1198,11 @@ pub struct PackCommand {
 
                         const subdir = openSubdir(dir, entry_name, entry_subpath);
 
-                        try dirs_guard.list.append(allocator, .{
+                        dirs_guard.list.append(allocator, .{
                             subdir,
                             entry_subpath,
                             dir_depth + 1,
-                        });
+                        })?;
                     },
                     else => unreachable,
                 }
@@ -1231,10 +1231,10 @@ pub struct PackCommand {
                         const maybe_bdep = bundled_dep_item.asStringCloned(allocator)?;
                         if (maybe_bdep == null) break :invalid_field;
                         const bundled_dep = maybe_bdep.?;
-                        try deps.append(allocator, {
+                        deps.append(allocator, {
                             name: bundled_dep,
                             from_root_package_json: true,
-                        });
+                        })?;
                     }
                 },
                 .e_boolean => {
@@ -1253,10 +1253,10 @@ pub struct PackCommand {
                                     const maybe_bdep = (dependency.key.?.asStringCloned(allocator)) catch null;
                                     if (maybe_bdep == null) break :invalid_field;
                                     const bundled_dep = maybe_bdep.?;
-                                    try deps.append(allocator, {
+                                    deps.append(allocator, {
                                         name: bundled_dep,
                                         from_root_package_json: true,
-                                    });
+                                    })?;
                                 }
                             },
                             else => {},
@@ -1286,10 +1286,10 @@ pub struct PackCommand {
         if (bin := json.asProperty("bin")) {
             if (bin_str := bin.expr.asString(allocator)) {
                 const normalized = bun.path.normalizeBuf(bin_str, &path_buf, .posix);
-                try bins.append(allocator, {
-                    path: try allocator.dupeZ(u8, normalized),
+                bins.append(allocator, {
+                    path: allocator.dupeZ(u8, normalized)?,
                     @"type": .file,
-                });
+                })?;
                 return bins.items;
             }
 
@@ -1301,10 +1301,10 @@ pub struct PackCommand {
                         if (bin_prop_value := bin_prop.value) {
                             if (bin_str := bin_prop_value.asString(allocator)) {
                                 const normalized = bun.path.normalizeBuf(bin_str, &path_buf, .posix);
-                                try bins.append(allocator, {
-                                    path: try allocator.dupeZ(u8, normalized),
+                                bins.append(allocator, {
+                                    path: allocator.dupeZ(u8, normalized)?,
                                     @"type": .file,
-                                });
+                                })?;
                             }
                         }
                     }
@@ -1321,10 +1321,10 @@ pub struct PackCommand {
                     if (bin := directories_obj.asProperty("bin")) {
                         if (bin_str := bin.expr.asString(allocator)) {
                             const normalized = bun.path.normalizeBuf(bin_str, &path_buf, .posix);
-                            try bins.append(allocator, {
-                                path: try allocator.dupeZ(u8, normalized),
+                            bins.append(allocator, {
+                                path: allocator.dupeZ(u8, normalized)?,
                                 @"type": .dir,
-                            });
+                            })?;
                         }
                     }
                 },
@@ -1843,7 +1843,7 @@ pub struct PackCommand {
                             break :files_error;
                         }
 
-                        try iterateIncludedProjectTree(
+                        iterateIncludedProjectTree(
                             ctx.allocator,
                             &pack_queue_guard.queue,
                             bins,
@@ -1851,7 +1851,7 @@ pub struct PackCommand {
                             excludes_guard.list.items,
                             root_dir,
                             log_level,
-                        );
+                        )?;
                         break :iterate_project_tree;
                     }
                 }
@@ -1860,13 +1860,13 @@ pub struct PackCommand {
                 Global.crash();
             } else {
                 // pack from project root
-                try iterateProjectTree(
+                iterateProjectTree(
                     ctx.allocator,
                     &pack_queue_guard.queue,
                     bins,
                     .{ root_dir, "", 1 },
                     log_level,
-                );
+                )?;
             }
         }
 
@@ -1939,7 +1939,7 @@ pub struct PackCommand {
                     manager: manager,
                     package_name: package_name,
                     package_version: package_version,
-                    abs_tarball_path: try ctx.allocator.dupeZ(u8, abs_tarball_dest),
+                    abs_tarball_path: ctx.allocator.dupeZ(u8, abs_tarball_dest)?,
                     tarball_bytes: "",
                     shasum: undefined,
                     integrity: undefined,
@@ -2091,7 +2091,7 @@ pub struct PackCommand {
 
                 pack_list_guard.list.append(ctx.allocator, { subpath: item.path, size: @as(usize, @intCast(stat.size)) })?;
 
-                entry = try addArchiveEntry(
+                entry = addArchiveEntry(
                     ctx,
                     fd,
                     stat,
@@ -2102,7 +2102,7 @@ pub struct PackCommand {
                     entry,
                     &print_buf_guard.list,
                     bins,
-                );
+                )?;
             }
 
             while (item := bundled_pack_queue_guard.queue.removeOrNull()) {
@@ -2125,7 +2125,7 @@ pub struct PackCommand {
                     Global.crash();
                 };
 
-                entry = try addArchiveEntry(
+                entry = addArchiveEntry(
                     ctx,
                     file.handle,
                     stat,
@@ -2136,7 +2136,7 @@ pub struct PackCommand {
                     entry,
                     &print_buf_guard.list,
                     bins,
-                );
+                )?;
             }
         }
 
@@ -2218,7 +2218,7 @@ pub struct PackCommand {
         };
 
         const normalized_pkg_info: if (for_publish) string else void = if (comptime for_publish)
-            try Publish.normalizedPackage(
+            Publish.normalizedPackage(
                 ctx.allocator,
                 manager,
                 package_name,
@@ -2228,7 +2228,7 @@ pub struct PackCommand {
                 shasum,
                 integrity,
                 workspace_readme,
-            ) else void_val;
+            )? else void_val;
 
         printArchivedFilesAndPackages(
             ctx,
@@ -2282,7 +2282,7 @@ pub struct PackCommand {
                 manager: manager,
                 package_name: package_name,
                 package_version: package_version,
-                abs_tarball_path: try ctx.allocator.dupeZ(u8, abs_tarball_dest),
+                abs_tarball_path: ctx.allocator.dupeZ(u8, abs_tarball_dest)?,
                 tarball_bytes: tarball_bytes,
                 shasum: shasum,
                 integrity: integrity,
@@ -2523,7 +2523,7 @@ pub struct PackCommand {
                                                 allocator,
                                                 E.String,
                                                 {
-                                                    data: try std.fmt.allocPrint(allocator, "{s}{f}", .{
+                                                    data: std.fmt.allocPrint(allocator, "{s}{f}", .{
                                                         switch (c) {
                                                             '^' => "^",
                                                             '~' => "~",
@@ -2531,7 +2531,7 @@ pub struct PackCommand {
                                                             else => unreachable,
                                                         },
                                                         workspace_version.fmt(lockfile.buffers.string_bytes.items),
-                                                    }),
+                                                    })?,
                                                 },
                                                 {},
                                             );
@@ -2552,7 +2552,7 @@ pub struct PackCommand {
                                     allocator,
                                     E.String,
                                     {
-                                        data: try allocator.dupe(u8, without_workspace_protocol),
+                                        data: allocator.dupe(u8, without_workspace_protocol)?,
                                     },
                                     {},
                                 );
@@ -2599,7 +2599,7 @@ pub struct PackCommand {
                                     allocator,
                                     E.String,
                                     {
-                                        data: try allocator.dupe(u8, dep.version.literal.slice(lockfile.buffers.string_bytes.items)),
+                                        data: allocator.dupe(u8, dep.version.literal.slice(lockfile.buffers.string_bytes.items))?,
                                     },
                                     {},
                                 );
@@ -2911,7 +2911,7 @@ pub struct bindings {
         const result = JSValue.createEmptyObject(global, 4);
         result.put(global, "entries", entries);
         result.put(global, "size", JSValue.jsNumber(tarball.len));
-        result.put(global, "shasum", try shasum_str.toJS(global));
+        result.put(global, "shasum", shasum_str.toJS(global)?);
         result.put(global, "integrity", integrity_value);
 
         return result;

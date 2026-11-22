@@ -251,7 +251,7 @@ pub struct ShellAsyncSubprocessDone {
     concurrent_task: jsc.EventLoopTask,
 
     static fn format(subproc_done: *const ShellAsyncSubprocessDone, writer: *std.Io.Writer)! {
-        try writer.print("ShellAsyncSubprocessDone(0x{x}, cmd=0{x})", .{ unsafe { @intFromPtr(subproc_done) }, unsafe { @intFromPtr(subproc_done.cmd) } });
+        writer.print("ShellAsyncSubprocessDone(0x{x}, cmd=0{x})", .{ unsafe { @intFromPtr(subproc_done) }, unsafe { @intFromPtr(subproc_done.cmd) } })?;
     }
 
     fn enqueue(*_) {

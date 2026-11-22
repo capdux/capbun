@@ -66,7 +66,7 @@ pub fn StyleRule(comptime R: type): type {
                             first_rule = false;
                         } else {
                             if (!dest.minify) {
-                                try dest.writeChar('\n'); // no indent
+                                dest.writeChar('\n')?; // no indent
                             }
                             dest.newline()?;
                         }
@@ -132,7 +132,7 @@ pub fn StyleRule(comptime R: type): type {
                         dest.newline()?;
                         decl.toCss(dest, important)?;
                         if (i != len - 1 || !dest.minify || (supports_nesting && _.rules.v.items.len > 0)) {
-                            try dest.writeChar(';');
+                            dest.writeChar(';')?;
                         }
 
                         i += 1;
@@ -166,11 +166,11 @@ pub fn StyleRule(comptime R: type): type {
                     }
                     dest.newline()?;
                 }
-                try dest.withContext(&_.selectors, _, struct {
+                dest.withContext(&_.selectors, _, struct {
                     pub fn toCssFn(ctx: *const This, d: *Printer): PrintErr!void {
                         return ctx.rules.toCss(d);
                     }
-                }.toCssFn);
+                }.toCssFn)?;
             }
         }
 

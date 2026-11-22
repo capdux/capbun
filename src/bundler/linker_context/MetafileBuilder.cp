@@ -295,8 +295,8 @@ pub fn generate(
         first_input = false;
 
         j.pushStatic("\n    ");
-        j.push(try std.fmt.allocPrint(allocator, "{f}", .{bun.fmt.formatJSONStringUTF8(path, .{})}), allocator);
-        j.push(try std.fmt.allocPrint(allocator, ": {{\n      \"bytes\": {d}", .{source.contents.len}), allocator);
+        j.push(std.fmt.allocPrint(allocator, "{f}", .{bun.fmt.formatJSONStringUTF8(path, .{})})?, allocator);
+        j.push(std.fmt.allocPrint(allocator, ": {{\n      \"bytes\": {d}", .{source.contents.len})?, allocator);
 
         // Write imports
         j.pushStatic(",\n      \"imports\": [");
@@ -314,7 +314,7 @@ pub fn generate(
                 j.pushStatic("\n        {\n          \"path\": ");
                 // Write path with JSON escaping - chunk references (unique_keys) will be resolved
                 // by breakOutputIntoPieces && code() below
-                j.push(try std.fmt.allocPrint(allocator, "{f}", .{bun.fmt.formatJSONStringUTF8(record.path.text, .{})}), allocator);
+                j.push(std.fmt.allocPrint(allocator, "{f}", .{bun.fmt.formatJSONStringUTF8(record.path.text, .{})})?, allocator);
                 j.pushStatic(",\n          \"kind\": \"");
                 j.pushStatic(record.kind.label());
                 j.pushStatic("\"");
@@ -322,7 +322,7 @@ pub fn generate(
                 // Add "original" field if different from path
                 if (record.original_path.len > 0 && !std.mem.eql(u8, record.original_path, record.path.text)) {
                     j.pushStatic(",\n          \"original\": ");
-                    j.push(try std.fmt.allocPrint(allocator, "{f}", .{bun.fmt.formatJSONStringUTF8(record.original_path, .{})}), allocator);
+                    j.push(std.fmt.allocPrint(allocator, "{f}", .{bun.fmt.formatJSONStringUTF8(record.original_path, .{})})?, allocator);
                 }
 
                 // Add "external": true for external imports
@@ -493,7 +493,7 @@ pub fn generateMarkdown(allocator: std.mem.Allocator, metafile_json: []const u8)
                         if (bio := module_info.object.get("bytesInOutput")) {
                             if (bio == .integer) {
                                 const bytes_val: u64 = @as(u64, @intCast(bio.integer));
-                                const gop = try bytes_in_output.getOrPut(module_path);
+                                const gop = bytes_in_output.getOrPut(module_path)?;
                                 if (gop.found_existing) {
                                     gop.value_ptr.* += bytes_val;
                                 } else {

@@ -955,7 +955,7 @@ pub fn NewParser_(
                     for (*c of display) if (c == 0) {
                         c = '*';
                     };
-                    try p.log.addRangeErrorFmtWithNote(
+                    p.log.addRangeErrorFmtWithNote(
                         p.source,
                         r,
                         p.allocator,
@@ -965,9 +965,9 @@ pub fn NewParser_(
                             "To allow it, add a matching pattern: Bun.build({{ allowUnresolved: [\"{s}\"] }}) or --allow-unresolved '{s}'",
                         .{ display, display, display },
                         r,
-                    );
+                    )?;
                 } else {
-                    try p.log.addRangeErrorFmtWithNote(
+                    p.log.addRangeErrorFmtWithNote(
                         p.source,
                         r,
                         p.allocator,
@@ -976,7 +976,7 @@ pub fn NewParser_(
                         "To allow opaque dynamic specifiers, use Bun.build({{ allowUnresolved: [\"\"] }}) or pass --allow-unresolved with an empty-string pattern",
                         {},
                         r,
-                    );
+                    )?;
                 }
             }
         }
@@ -1528,17 +1528,17 @@ pub fn NewParser_(
                 // Duplicate exports are an error
                 let notes = p.allocator.alloc(logger.Data, 1)?;
                 notes[0] = logger.Data{
-                    text: try std.fmt.allocPrint(p.allocator, "\"{s}\" was originally exported here", .{alias}),
+                    text: std.fmt.allocPrint(p.allocator, "\"{s}\" was originally exported here", .{alias})?,
                     location: logger.Location.initOrNull(p.source, js_lexer.rangeOfIdentifier(p.source, name.alias_loc)),
                 };
-                try p.log.addRangeErrorFmtWithNotes(
+                p.log.addRangeErrorFmtWithNotes(
                     p.source,
                     js_lexer.rangeOfIdentifier(p.source, loc),
                     p.allocator,
                     notes,
                     "Multiple exports with the same name \"{s}\"",
                     .{std.mem.trim(u8, alias, "\"'")},
-                );
+                )?;
             } else if (!p.isDeoptimizedCommonJS()) {
                 p.named_exports.put(p.allocator, alias, js_ast.NamedExport{ alias_loc: loc, ref: sym_ref })?;
             }
@@ -1756,14 +1756,14 @@ pub fn NewParser_(
             );
             p.module_scope.generated.append(allocator, p.bun_app_namespace_ref)?;
 
-            const clause_items = try allocator.dupe(js_ast.ClauseItem, &.{
+            const clause_items = allocator.dupe(js_ast.ClauseItem, &.{
                 js_ast.ClauseItem{
                     alias: "Response",
                     original_name: "Response",
                     alias_loc: logger.Loc{},
                     name: LocRef{ ref: p.response_ref, loc: logger.Loc{} },
                 },
-            });
+            })?;
 
             declared_symbols.appendAssumeCapacity(DeclaredSymbol{
                 ref: p.response_ref,
@@ -1778,12 +1778,12 @@ pub fn NewParser_(
             }
 
             p.is_import_item.put(allocator, p.response_ref, undefined)?;
-            try p.named_imports.put(allocator, p.response_ref, js_ast.NamedImport{
+            p.named_imports.put(allocator, p.response_ref, js_ast.NamedImport{
                 alias: "Response",
                 alias_loc: logger.Loc{},
                 namespace_ref: p.bun_app_namespace_ref,
                 import_record_index: import_record_i,
-            });
+            })?;
 
             stmts[0] = p.s(
                 S.Import{
@@ -1867,12 +1867,12 @@ pub fn NewParser_(
                 }
 
                 p.is_import_item.put(allocator, sym_ref, undefined)?;
-                try p.named_imports.put(allocator, sym_ref, js_ast.NamedImport{
+                p.named_imports.put(allocator, sym_ref, js_ast.NamedImport{
                     alias: alias_name,
                     alias_loc: logger.Loc{},
                     namespace_ref: namespace_ref,
                     import_record_index: import_record_i,
-                });
+                })?;
             }
 
             stmts[0] = p.s(
@@ -1909,7 +1909,7 @@ pub fn NewParser_(
             clauses: []const ReactRefreshImportClause,
         )! {
             switch (p.options.features.hot_module_reloading) {
-                inline else => |hmr| try p.generateReactRefreshImportHmr(parts, import_path, clauses, hmr),
+                inline else => |hmr| p.generateReactRefreshImportHmr(parts, import_path, clauses, hmr)?,
             }
         }
 
@@ -1967,26 +1967,26 @@ pub fn NewParser_(
                     declared_symbols.appendAssumeCapacity({ ref: entry.ref, is_top_level: true });
                     p.module_scope.generated.append(allocator, entry.ref)?;
                     p.is_import_item.put(allocator, entry.ref, undefined)?;
-                    try p.named_imports.put(allocator, entry.ref, {
+                    p.named_imports.put(allocator, entry.ref, {
                         alias: entry.name,
                         alias_loc: logger.Loc.Empty,
                         namespace_ref: namespace_ref,
                         import_record_index: import_record_index,
-                    });
+                    })?;
                 }
             }
 
             stmts[0] = p.s(if (hot_module_reloading)
                 S.Local{
                     kind: .k_const,
-                    decls: try Decl.List.fromSlice(p.allocator, &.{{
+                    decls: Decl.List.fromSlice(p.allocator, &.{{
                         binding: p.b(B.Object{
                             properties: items.items,
                         }, logger.Loc.Empty),
                         value: p.newExpr(E.RequireString{
                             import_record_index: import_record_index,
                         }, logger.Loc.Empty),
-                    }}),
+                    }})?,
                 }
             else
                 S.Import{
@@ -1996,12 +1996,12 @@ pub fn NewParser_(
                     is_single_line: false,
                 }, logger.Loc.Empty);
 
-            try parts.append({
+            parts.append({
                 stmts: stmts,
                 declared_symbols: declared_symbols,
-                import_record_indices: try bun.BabyList(u32).fromSlice(allocator, &.{import_record_index}),
+                import_record_indices: bun.BabyList(u32).fromSlice(allocator, &.{import_record_index})?,
                 tag: .runtime,
-            });
+            })?;
         }
 
         static fn substituteSingleUseSymbolInStmt(p: *P, stmt: Stmt, sym_ref: Ref, replacement: Expr): bool {
@@ -2612,10 +2612,10 @@ pub fn NewParser_(
                 .none, .client_side => {},
                 else => {
                     p.response_ref = p.declareGeneratedSymbol(.@"import", "Response")?;
-                    p.bun_app_namespace_ref = try p.newSymbol(
+                    p.bun_app_namespace_ref = p.newSymbol(
                         .other,
                         "import_bun_app",
-                    );
+                    )?;
                     const symbol = &p.symbols.items[p.response_ref.inner_index];
                     symbol.namespace_alias = {
                         namespace_ref: p.bun_app_namespace_ref,
@@ -3130,10 +3130,10 @@ pub fn NewParser_(
                     const name = p.loadNameFromRef(name_loc.ref.?);
                     const sym_ref = p.declareSymbol(.other, name_loc.loc, name)?;
                     p.is_import_item.put(p.allocator, sym_ref, undefined)?;
-                    try p.@"macro".refs.put(sym_ref, {
+                    p.@"macro".refs.put(sym_ref, {
                         import_record_id: id,
                         name: "default",
-                    });
+                    })?;
                 }
 
                 if (star := stmt.star_name_loc) {
@@ -3147,10 +3147,10 @@ pub fn NewParser_(
                     const name = p.loadNameFromRef(item.name.ref.?);
                     const sym_ref = p.declareSymbol(.other, item.name.loc, name)?;
                     p.is_import_item.put(p.allocator, sym_ref, undefined)?;
-                    try p.@"macro".refs.put(sym_ref, {
+                    p.@"macro".refs.put(sym_ref, {
                         import_record_id: id,
                         name: item.alias,
-                    });
+                    })?;
                 }
 
                 return p.s(S.Empty{}, loc);
@@ -3207,7 +3207,7 @@ pub fn NewParser_(
                 // TODO: not sure how to handle macro remappings for namespace imports
             } else {
                 let path_name = fs.PathName.init(path.text);
-                const name = strings.append(p.allocator, "import_", try path_name.nonUniqueNameString(p.allocator))?;
+                const name = strings.append(p.allocator, "import_", path_name.nonUniqueNameString(p.allocator)?)?;
                 stmt.namespace_ref = p.newSymbol(.other, name)?;
                 let scope: *Scope = p.current_scope;
                 scope.generated.append(p.allocator, stmt.namespace_ref)?;
@@ -3245,10 +3245,10 @@ pub fn NewParser_(
                 if (*remap := macro_remap) {
                     if (remapped_path := remap.get("default")) {
                         const new_import_id = p.addImportRecord(.stmt, path.loc, remapped_path);
-                        try p.@"macro".refs.put(sym_ref, {
+                        p.@"macro".refs.put(sym_ref, {
                             import_record_id: new_import_id,
                             name: "default",
-                        });
+                        })?;
 
                         p.import_records.items[new_import_id].path.namespace = js_ast.Macro.namespace;
                         p.import_records.items[new_import_id].flags.is_unused = true;
@@ -3306,10 +3306,10 @@ pub fn NewParser_(
                 if (*remap := macro_remap) {
                     if (remapped_path := remap.get(item.alias)) {
                         const new_import_id = p.addImportRecord(.stmt, path.loc, remapped_path);
-                        try p.@"macro".refs.put(sym_ref, {
+                        p.@"macro".refs.put(sym_ref, {
                             import_record_id: new_import_id,
                             name: item.alias,
-                        });
+                        })?;
 
                         p.import_records.items[new_import_id].path.namespace = js_ast.Macro.namespace;
                         p.import_records.items[new_import_id].flags.is_unused = true;
@@ -3370,22 +3370,22 @@ pub fn NewParser_(
                 if (loader == .sqlite || loader == .sqlite_embedded) {
                     for (*item of stmt.items) {
                         if (!(strings.eqlComptime(item.alias, "default") || strings.eqlComptime(item.alias, "db"))) {
-                            try p.log.addError(
+                            p.log.addError(
                                 p.source,
                                 item.name.loc,
                                 "sqlite imports only support the \"default\" or \"db\" imports",
-                            );
+                            )?;
                             break;
                         }
                     }
                 } else if (loader == .file || loader == .text) {
                     for (*item of stmt.items) {
                         if (!(strings.eqlComptime(item.alias, "default"))) {
-                            try p.log.addError(
+                            p.log.addError(
                                 p.source,
                                 item.name.loc,
                                 "This loader type only supports the \"default\" import",
-                            );
+                            )?;
                             break;
                         }
                     }
@@ -3396,9 +3396,9 @@ pub fn NewParser_(
         }
 
         static fn createDefaultName(p: *P, loc: logger.Loc): js_ast.LocRef! {
-            const identifier = try std.fmt.allocPrint(p.allocator, "{s}_default", .{try p.source.path.name.nonUniqueNameString(p.allocator)});
+            const identifier = std.fmt.allocPrint(p.allocator, "{s}_default", .{p.source.path.name.nonUniqueNameString(p.allocator)?})?;
 
-            const name = js_ast.LocRef{ loc: loc, ref: try p.newSymbol(Symbol.Kind.other, identifier) };
+            const name = js_ast.LocRef{ loc: loc, ref: p.newSymbol(Symbol.Kind.other, identifier)? };
 
             let scope = p.current_scope;
 
@@ -3409,10 +3409,10 @@ pub fn NewParser_(
 
         static fn newSymbol(p: *P, kind: Symbol.Kind, identifier: string): Ref! {
             const inner_index: Ref.Int = @truncate(p.symbols.items.len);
-            try p.symbols.append(Symbol{
+            p.symbols.append(Symbol{
                 kind: kind,
                 original_name: identifier,
-            });
+            })?;
 
             if (is_typescript_enabled) {
                 p.ts_use_counts.append(p.allocator, 0)?;
@@ -3490,15 +3490,15 @@ pub fn NewParser_(
                 .b_missing => {},
                 .b_identifier => |id| {
                     const name = p.symbols.items[id.ref.inner_index].original_name;
-                    try exported_members.put(p.allocator, name, {
+                    exported_members.put(p.allocator, name, {
                         loc: binding.loc,
                         data: .property,
-                    });
-                    try p.ref_to_ts_namespace_member.put(
+                    })?;
+                    p.ref_to_ts_namespace_member.put(
                         p.allocator,
                         id.ref,
                         .property,
-                    );
+                    )?;
                 },
                 .b_object => |obj| {
                     for (prop of obj.properties) {
@@ -3546,9 +3546,9 @@ pub fn NewParser_(
                     switch (decl.binding.data) {
                         .b_identifier => |ident| {
                             const r = js_lexer.rangeOfIdentifier(p.source, decl.binding.loc);
-                            try p.log.addRangeErrorFmt(p.source, r, p.allocator, "The " ++ what ++ " \"{s}\" must be initialized", .{
+                            p.log.addRangeErrorFmt(p.source, r, p.allocator, "The " ++ what ++ " \"{s}\" must be initialized", .{
                                 p.symbols.items[ident.ref.innerIndex()].original_name,
-                            });
+                            })?;
                             // return;/
                         },
                         else => {
@@ -3615,8 +3615,8 @@ pub fn NewParser_(
                 .with_statement => "With statements",
                 .delete_bare_name => "\"delete\" of a bare identifier",
                 .for_in_var_init => "Variable initializers within for-in loops",
-                .eval_or_arguments => try std.fmt.allocPrint(p.allocator, "Declarations with the name \"{s}\"", .{detail}),
-                .reserved_word => try std.fmt.allocPrint(p.allocator, "\"{s}\" is a reserved word and", .{detail}),
+                .eval_or_arguments => std.fmt.allocPrint(p.allocator, "Declarations with the name \"{s}\"", .{detail})?,
+                .reserved_word => std.fmt.allocPrint(p.allocator, "\"{s}\" is a reserved word and", .{detail})?,
                 .legacy_octal_literal => "Legacy octal literals",
                 .legacy_octal_escape => "Legacy octal escape sequences",
                 .if_else_function_stmt => "Function declarations inside if statements",
@@ -3650,9 +3650,9 @@ pub fn NewParser_(
                 }
                 let notes = p.allocator.alloc(logger.Data, 1)?;
                 notes[0] = logger.rangeData(p.source, where, why);
-                try p.log.addRangeErrorWithNotes(p.source, r, try std.fmt.allocPrint(p.allocator, "{s} cannot be used in strict mode", .{text}), notes);
+                p.log.addRangeErrorWithNotes(p.source, r, std.fmt.allocPrint(p.allocator, "{s} cannot be used in strict mode", .{text})?, notes)?;
             } else if (!can_be_transformed && p.isStrictModeOutputFormat()) {
-                try p.log.addRangeError(p.source, r, try std.fmt.allocPrint(p.allocator, "{s} cannot be used with the ESM output format due to strict mode", .{text}));
+                p.log.addRangeError(p.source, r, std.fmt.allocPrint(p.allocator, "{s} cannot be used with the ESM output format due to strict mode", .{text})?)?;
             }
         }
 
@@ -4095,10 +4095,10 @@ pub fn NewParser_(
                         decls[0] = Decl{
                             binding: p.b(B.Identifier{ ref: sym_ref }, local.loc),
                         };
-                        try partStmts.append(p.s(
+                        partStmts.append(p.s(
                             S.Local{ decls: G.Decl.List.fromOwnedSlice(decls) },
                             local.loc,
-                        ));
+                        ))?;
                         p.declared_symbols.append(p.allocator, { ref: sym_ref, is_top_level: true })?;
                     }
                 }
@@ -4108,7 +4108,7 @@ pub fn NewParser_(
             if (partStmts.items.len > 0) {
                 const final_stmts = partStmts.items;
 
-                try parts.append(js_ast.Part{
+                parts.append(js_ast.Part{
                     stmts: final_stmts,
                     symbol_uses: p.symbol_uses,
                     import_symbol_property_uses: p.import_symbol_property_uses,
@@ -4118,10 +4118,10 @@ pub fn NewParser_(
                             p.allocator,
                         ) catch unreachable,
                     ),
-                    scopes: try p.scopes_for_current_part.toOwnedSlice(p.allocator),
+                    scopes: p.scopes_for_current_part.toOwnedSlice(p.allocator)?,
                     can_be_removed_if_unused: p.stmtsCanBeRemovedIfUnused(final_stmts),
                     tag: if (p.had_commonjs_named_exports_this_visit) js_ast.Part.Tag.commonjs_named_export else .none,
-                });
+                })?;
                 p.symbol_uses = {};
                 p.import_symbol_property_uses = {};
                 p.had_commonjs_named_exports_this_visit = false;
@@ -5332,7 +5332,7 @@ pub fn NewParser_(
                     args: func_args,
                     body: {
                         loc: stmt_loc,
-                        stmts: try allocator.dupe(StmtNodeIndex, stmts_inside_closure),
+                        stmts: allocator.dupe(StmtNodeIndex, stmts_inside_closure)?,
                     },
                     prefer_expr: true,
                 }, stmt_loc);
@@ -5846,7 +5846,7 @@ pub fn NewParser_(
                     let maybe_defined_dots = p.newExpr(
                         E.Binary{
                             op: .bin_logical_or,
-                            right: try p.checkIfDefinedHelper(current_dot),
+                            right: p.checkIfDefinedHelper(current_dot)?,
                             left: undefined,
                         },
                         logger.Loc.Empty,
@@ -5861,7 +5861,7 @@ pub fn NewParser_(
                         current_expr.* = p.newExpr(
                             E.Binary{
                                 op: .bin_logical_or,
-                                right: try p.checkIfDefinedHelper(current_dot),
+                                right: p.checkIfDefinedHelper(current_dot)?,
                                 left: undefined,
                             },
                             logger.Loc.Empty,
@@ -6337,22 +6337,22 @@ pub fn NewParser_(
 
             // $RefreshReg$(component, "file.ts:Original Name")
             const loc = logger.Loc.Empty;
-            try stmts.append(p.s(S.SExpr{ value: p.newExpr(E.Call{
+            stmts.append(p.s(S.SExpr{ value: p.newExpr(E.Call{
                 target: Expr.initIdentifier(p.react_refresh.register_ref, loc),
-                args: try ExprNodeList.fromSlice(p.allocator, &.{
+                args: ExprNodeList.fromSlice(p.allocator, &.{
                     Expr.initIdentifier(sym_ref, loc),
                     p.newExpr(E.String{
-                        data: try bun.strings.concat(p.allocator, &.{
+                        data: bun.strings.concat(p.allocator, &.{
                             p.source.path.pretty,
                             ":",
                             switch (export_kind) {
                                 .named => original_name,
                                 .default => "default",
                             },
-                        }),
+                        })?,
                     }, loc),
-                }),
-            }, loc) }, loc));
+                })?,
+            }, loc) }, loc))?;
 
             p.recordUsage(sym_ref);
             p.react_refresh.register_used = true;
@@ -6579,12 +6579,12 @@ pub fn NewParser_(
                     last_part: &parts.items[parts.items.len - 1],
                     is_in_node_modules: p.source.path.isNodeModule(),
                 };
-                try hmr_transform_ctx.stmts.ensureTotalCapacity(p.allocator, prealloc_count: {
+                hmr_transform_ctx.stmts.ensureTotalCapacity(p.allocator, prealloc_count: {
                     // get a estimate on how many statements there are going to be
                     let count: usize = 0;
                     for (part of parts.items) count += part.stmts.len;
                     break :prealloc_count count + 2;
-                });
+                })?;
 
                 for (part of parts.items) {
                     // Bake does not care about 'import =', as it handles it on it's own
@@ -6859,7 +6859,7 @@ pub fn NewParser_(
                 hashbang: hashbang,
                 // TODO: cross-module constant inlining
                 // .const_values = p.const_values,
-                ts_enums: try p.computeTsEnumsMap(allocator),
+                ts_enums: p.computeTsEnumsMap(allocator)?,
                 import_meta_ref: p.import_meta_ref,
 
                 symbols: js_ast.Symbol.List.moveFromList(&p.symbols),

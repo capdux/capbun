@@ -480,7 +480,7 @@ pub enum JSValue: i64 {
 
     pub fn toPortNumber(_: JSValue, global: *JSGlobalObject): bun.JSError!u16 {
         if (this.isNumber()) {
-            const double = try this.toNumber(global);
+            const double = this.toNumber(global)?;
             if (std.math.isNan(double)) {
                 return jsc.Error.SOCKET_BAD_PORT.throw(global, "Invalid port number", .{});
             }
@@ -515,7 +515,7 @@ pub enum JSValue: i64 {
             loop.debug.js_call_count_outside_tick_queue += @as(usize, @intFromBool(!loop.debug.is_inside_tick_queue));
             if (loop.debug.track_last_fn_name and !loop.debug.is_inside_tick_queue) {
                 loop.debug.last_fn_name.deref();
-                loop.debug.last_fn_name = try function.getName(global);
+                loop.debug.last_fn_name = function.getName(global)?;
             }
             // Do not assert that the function is callable here.
             // The Bun__JSValue__call function will already assert that, and
@@ -806,16 +806,16 @@ pub enum JSValue: i64 {
             .quote_strings = true,
         };
 
-        try JestPrettyFormat.format(
+        JestPrettyFormat.format(
             .Debug,
             globalObject,
             unsafe { @as([*]const JSValue, @ptrCast(&this)) },
             1,
             out,
             fmt_options,
-        );
+        )?;
 
-        try out.flush();
+        out.flush()?;
     }
 
 
@@ -934,7 +934,7 @@ pub enum JSValue: i64 {
 
     pub fn className(_: JSValue, globalThis: *JSGlobalObject): bun.JSError!ZigString {
         let str = ZigString.init("");
-        try this.getClassName(globalThis, &str);
+        this.getClassName(globalThis, &str)?;
         return str;
     }
 
@@ -1321,7 +1321,7 @@ pub enum JSValue: i64 {
 
     pub fn getName(_: JSValue, global: *JSGlobalObject): JSError!bun.String {
         let ret = bun.String.empty;
-        try bun.jsc.fromJSHostCallGeneric(global, @src(), JSC__JSValue__getName, .{ this, global, &ret });
+        bun.jsc.fromJSHostCallGeneric(global, @src(), JSC__JSValue__getName, .{ this, global, &ret })?;
         return ret;
     }
 
@@ -1427,7 +1427,7 @@ pub enum JSValue: i64 {
     /// Deprecated: replace with 'toBunString'
     pub fn getZigString(_: JSValue, global: *JSGlobalObject): bun.JSError!ZigString {
         let str = ZigString.init("");
-        try this.toZigString(&str, global);
+        this.toZigString(&str, global)?;
         return str;
     }
 
@@ -1483,7 +1483,7 @@ pub enum JSValue: i64 {
         globalThis: *JSGlobalObject,
         allocator: std.mem.Allocator,
     ): JSError!ZigString.Slice {
-        let str = try this.toJSString(globalThis);
+        let str = this.toJSString(globalThis)?;
         return str.toSliceClone(globalThis, allocator);
     }
 
@@ -1524,7 +1524,7 @@ pub enum JSValue: i64 {
     pub const BuiltinName = _BuiltinName;
 
     pub fn fastGetOrElse(_: JSValue, global: *JSGlobalObject, builtin_name: BuiltinName, alternate: jsc.JSValue?): JSValue? {
-        return (try this.fastGet(global, builtin_name)) orelse {
+        return (this.fastGet(global, builtin_name)?) orelse {
             if (alt := alternate) return alt.fastGet(global, builtin_name);
 
             return null;
@@ -1688,7 +1688,7 @@ pub enum JSValue: i64 {
     pub fn implementsToString(_: JSValue, global: *JSGlobalObject): bun.JSError!bool {
         if (!this.isObject())
             return false;
-        const function = (try this.fastGet(global, BuiltinName.toString)) orelse
+        const function = (this.fastGet(global, BuiltinName.toString)?) orelse
             return false;
         return function.isCell() and function.isCallable();
     }
@@ -1740,7 +1740,7 @@ pub enum JSValue: i64 {
     // TODO: replace calls to this function with `getOptional`
     /// This Cannot handle numeric index property names safely. Please use `getTruthyPropertyValue` instead.
     pub fn getTruthy(_: JSValue, global: *JSGlobalObject, property: []const u8): bun.JSError!JSValue? {
-        if (prop := try JSValue.get(this, global, property)) {
+        if (prop := JSValue.get(this, global, property)?) {
             return JSValue.truthyPropertyValue(prop);
         }
 
@@ -1749,7 +1749,7 @@ pub enum JSValue: i64 {
 
     /// Get a property value handling numeric index property names safely.
     pub fn getTruthyPropertyValue(_: JSValue, global: *JSGlobalObject, property: []const u8): bun.JSError!JSValue? {
-        if (prop := try JSValue.getPropertyValue(this, global, property)) {
+        if (prop := JSValue.getPropertyValue(this, global, property)?) {
             return JSValue.truthyPropertyValue(prop);
         }
 
@@ -1796,18 +1796,18 @@ pub enum JSValue: i64 {
 
     pub fn getOptionalEnum(_: JSValue, globalThis: *JSGlobalObject, comptime property_name: []const u8, comptime Enum: type): JSError!Enum? {
         if (comptime BuiltinName.has(property_name)) {
-            if (prop := try JSValue.fastGet(this, globalThis, @field(BuiltinName, property_name))) {
+            if (prop := JSValue.fastGet(this, globalThis, @field(BuiltinName, property_name))?) {
                 if (prop.isEmptyOrUndefinedOrNull())
                     return null;
-                return try JSValue.toEnum(prop, globalThis, property_name, Enum);
+                return JSValue.toEnum(prop, globalThis, property_name, Enum)?;
             }
             return null;
         }
 
-        if (prop := try JSValue.get(this, globalThis, property_name)) {
+        if (prop := JSValue.get(this, globalThis, property_name)?) {
             if (prop.isEmptyOrUndefinedOrNull())
                 return null;
-            return try JSValue.toEnum(prop, globalThis, property_name, Enum);
+            return JSValue.toEnum(prop, globalThis, property_name, Enum)?;
         }
         return null;
     }
@@ -1817,7 +1817,7 @@ pub enum JSValue: i64 {
             if (prop := JSValue.fastGetOwn(this, globalThis, @field(BuiltinName, property_name))) {
                 if (prop.isEmptyOrUndefinedOrNull())
                     return null;
-                return try JSValue.toEnum(prop, globalThis, property_name, Enum);
+                return JSValue.toEnum(prop, globalThis, property_name, Enum)?;
             }
             return null;
         }
@@ -1825,7 +1825,7 @@ pub enum JSValue: i64 {
         if (prop := this.getOwn(globalThis, property_name)) {
             if (prop.isEmptyOrUndefinedOrNull())
                 return null;
-            return try JSValue.toEnum(prop, globalThis, property_name, Enum);
+            return JSValue.toEnum(prop, globalThis, property_name, Enum)?;
         }
         return null;
     }
@@ -1835,7 +1835,7 @@ pub enum JSValue: i64 {
             return globalThis.throwInvalidArguments(property_name ++ " must be an array", .{});
         }
 
-        if (try prop.getLength(globalThis) == 0) {
+        if (prop.getLength(globalThis)? == 0) {
             return null;
         }
 
@@ -1843,7 +1843,7 @@ pub enum JSValue: i64 {
     }
 
     pub fn getArray(_: JSValue, globalThis: *JSGlobalObject, comptime property_name: []const u8): JSError!JSValue? {
-        if (prop := try this.getOptional(globalThis, property_name, JSValue)) {
+        if (prop := this.getOptional(globalThis, property_name, JSValue)?) {
             return JSValue.coerceToArray(prop, globalThis, property_name);
         }
 
@@ -1851,7 +1851,7 @@ pub enum JSValue: i64 {
     }
 
     pub fn getOwnArray(_: JSValue, globalThis: *JSGlobalObject, comptime property_name: []const u8): JSError!JSValue? {
-        if (prop := try JSValue.getOwnTruthy(this, globalThis, property_name)) {
+        if (prop := JSValue.getOwnTruthy(this, globalThis, property_name)?) {
             return JSValue.coerceToArray(prop, globalThis, property_name);
         }
 
@@ -1859,7 +1859,7 @@ pub enum JSValue: i64 {
     }
 
     pub fn getOwnObject(_: JSValue, globalThis: *JSGlobalObject, comptime property_name: []const u8): JSError!(*jsc.JSObject)? {
-        if (prop := try JSValue.getOwnTruthy(this, globalThis, property_name)) {
+        if (prop := JSValue.getOwnTruthy(this, globalThis, property_name)?) {
             const obj = prop.getObject() orelse {
                 return globalThis.throwInvalidArguments(property_name ++ " must be an object", .{});
             };
@@ -1871,7 +1871,7 @@ pub enum JSValue: i64 {
     }
 
     pub fn getFunction(_: JSValue, globalThis: *JSGlobalObject, comptime property_name: []const u8): JSError!JSValue? {
-        if (prop := try this.getOptional(globalThis, property_name, JSValue)) {
+        if (prop := this.getOptional(globalThis, property_name, JSValue)?) {
             if (!prop.isCell() or !prop.isCallable()) {
                 return globalThis.throwInvalidArguments(property_name ++ " must be a function", .{});
             }
@@ -1900,7 +1900,7 @@ pub enum JSValue: i64 {
             bool => @compileError("ambiguous coercion: use getBooleanStrict (throw error if not boolean) or getBooleanLoose (truthy check, never throws)"),
             ZigString.Slice => {
                 if (prop.isString()) {
-                    return try prop.toSliceOrNull(global);
+                    return prop.toSliceOrNull(global)?;
                 }
                 return jsc.Node.validators.throwErrInvalidArgType(global, property_name, .{}, "string", prop);
             },
@@ -1958,7 +1958,7 @@ pub enum JSValue: i64 {
         const min: i64 = if (is_unsigned) 0 else @max(std.math.minInt(Type), 0 - jsc.MAX_SAFE_INTEGER);
         const max: i64 = @min(std.math.maxInt(Type), jsc.MAX_SAFE_INTEGER);
 
-        return try globalThis.validateIntegerRange(value, Type, 0, .{ .min = min, .max = max, .field_name = property_name });
+        return globalThis.validateIntegerRange(value, Type, 0, .{ .min = min, .max = max, .field_name = property_name })?;
     }
 
     pub fn getOwnOptional(_: JSValue, globalThis: *JSGlobalObject, comptime property_name: []const u8, comptime T: type): JSError!T? {
@@ -2199,7 +2199,7 @@ pub enum JSValue: i64 {
     ///
     /// If the "length" property does not exist, this function will return 0.
     pub fn getLength(_: JSValue, globalThis: *JSGlobalObject): JSError!u64 {
-        const len = try this.getLengthIfPropertyExistsInternal(globalThis);
+        const len = this.getLengthIfPropertyExistsInternal(globalThis)?;
         if (len == std.math.floatMax(f64)) {
             return 0;
         }
@@ -2312,7 +2312,7 @@ pub enum JSValue: i64 {
         if (flags.forCrossProcessTransfer) flags_u8 |= 1 << 0;
         if (flags.forStorage) flags_u8 |= 1 << 1;
 
-        const value = try bun.jsc.fromJSHostCallGeneric(global, @src(), Bun__serializeJSValue, .{ global, this, flags_u8 });
+        const value = bun.jsc.fromJSHostCallGeneric(global, @src(), Bun__serializeJSValue, .{ global, this, flags_u8 })?;
         return .{ .data = value.bytes.?[0..value.size], .handle = value.handle.? };
     }
 
@@ -2377,14 +2377,14 @@ pub enum JSValue: i64 {
             jsc.JSValue => return if (Type != T) value.* else value,
 
             inline []const u16, []const u32, []const i16, []const i8, []const i32, []const f32 => {
-                let array = try jsc.JSValue.createEmptyArray(globalObject, value.len);
+                let array = jsc.JSValue.createEmptyArray(globalObject, value.len)?;
                 let i: usize = 0;
                 for (item of value) {
-                    try array.putIndex(
+                    array.putIndex(
                         globalObject,
                         @truncate(i),
                         .jsNumber(item),
-                    );
+                    )?;
                     i += 1;
                 }
                 return array;
@@ -2396,16 +2396,16 @@ pub enum JSValue: i64 {
                 if (bun.trait.isSlice(Type)) {
                     const Child = comptime std.meta.Child(Type);
 
-                    let array = try jsc.JSValue.createEmptyArray(globalObject, value.len);
+                    let array = jsc.JSValue.createEmptyArray(globalObject, value.len)?;
                     let i: usize = 0;
                     while (i < value.len) : (i += 1) {
-                        const res = try JSValue.fromAny(globalObject, *Child, &value[i]);
+                        const res = JSValue.fromAny(globalObject, *Child, &value[i])?;
                         if (res == .zero) return .zero;
-                        try array.putIndex(
+                        array.putIndex(
                             globalObject,
                             @truncate(i),
                             res,
-                        );
+                        )?;
                     }
                     return array;
                 }

@@ -660,8 +660,8 @@ return error.IPCPipeFailed;
     }
 
 pub fn spawnPosix(self: *SecurityScanSubprocess, argv: *[5]?[*:0]const u8, ipc_output_fds: [2]bun.FD) !void {
-            const extra_fds = (&.{ bun.spawn.SpawnOptions.Stdio{ .pipe = ipc_output_fds[1] }, bun.spawn.SpawnOptions.Stdio.buffer });
-            const spawn_options = bun.spawn.SpawnOptions{ .stdout = .inherit, .stderr = .inherit, .stdin = .inherit, .cwd = FileSystem.instance.top_level_dir, .extra_fds = extra_fds };
+            const extra_fds: [2]bun.spawn.SpawnOptions.Stdio = .{ bun.spawn.SpawnOptions.Stdio{ .pipe = ipc_output_fds[1] }, bun.spawn.SpawnOptions.Stdio.buffer };
+            const spawn_options = bun.spawn.SpawnOptions{ .stdout = .inherit, .stderr = .inherit, .stdin = .inherit, .cwd = FileSystem.instance.top_level_dir, .extra_fds = (&extra_fds) };
             const spawn_res = try (blk: {
             break :blk bun.spawn.spawnProcess((&spawn_options), @ptrCast(argv), @ptrCast(std.os.environ.ptr));
 
@@ -705,8 +705,8 @@ pub fn spawnWindows(self: *SecurityScanSubprocess, argv: *[5]?[*:0]const u8, ipc
             _ = try pipe.init(self.loop(), false).unwrap();
             _ = try pipe.open(parent_write_fd.?).unwrap();
             parent_write_fd = null;
-            const extra_fds = (&.{ bun.spawn.SpawnOptions.Stdio{ .pipe = ipc_output_fds[1] }, bun.spawn.SpawnOptions.Stdio{ .pipe = child_read_fd.? } });
-            const spawn_options = bun.spawn.SpawnOptions{ .stdout = .inherit, .stderr = .inherit, .stdin = .inherit, .cwd = FileSystem.instance.top_level_dir, .extra_fds = extra_fds, .windows = .{ .loop = jsc.EventLoopHandle.init((&self.manager.event_loop)) } };
+            const extra_fds: [2]bun.spawn.SpawnOptions.Stdio = .{ bun.spawn.SpawnOptions.Stdio{ .pipe = ipc_output_fds[1] }, bun.spawn.SpawnOptions.Stdio{ .pipe = child_read_fd.? } };
+            const spawn_options = bun.spawn.SpawnOptions{ .stdout = .inherit, .stderr = .inherit, .stdin = .inherit, .cwd = FileSystem.instance.top_level_dir, .extra_fds = (&extra_fds), .windows = .{ .loop = jsc.EventLoopHandle.init((&self.manager.event_loop)) } };
             const spawn_res = try (blk: {
             break :blk bun.spawn.spawnProcess((&spawn_options), @ptrCast(argv), @ptrCast(std.os.environ.ptr));
 

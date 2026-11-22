@@ -779,7 +779,7 @@ pub struct InitCommand {
         }
 
         write_package_json: {
-            let fd = bun.FD.fromStdFile(package_json_file ?? try std.fs.cwd().createFileZ("package.json", {}));
+            let fd = bun.FD.fromStdFile(package_json_file ?? std.fs.cwd().createFileZ("package.json", {})?);
             let fd_guard = CloseGuard<bun.FD>{ ptr: unsafe { &fd } };
             let buffer_writer = JSPrinter.BufferWriter.init(bun.default_allocator);
             buffer_writer.append_newline = true;

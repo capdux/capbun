@@ -238,11 +238,11 @@ struct TestAnalyzer {
                                     length: str.data.len,
                                 };
                                 _.string_buffer.appendSlice(str.data)?;
-                                try _.items.append(api.TestResponseItem{
+                                _.items.append(api.TestResponseItem{
                                     byte_offset: expr.loc.start,
                                     kind: if (call.target.isRef(parser.jest.describe)) api.TestKind.describe_fn else .test_fn,
                                     label: ptr,
-                                });
+                                })?;
                             },
                             .e_dot => {},
                             else => {},
@@ -263,11 +263,11 @@ struct TestAnalyzer {
                                         length: str.data.len,
                                     };
                                     _.string_buffer.appendSlice(str.data)?;
-                                    try _.items.append(api.TestResponseItem{
+                                    _.items.append(api.TestResponseItem{
                                         byte_offset: expr.loc.start,
                                         kind: if (target.isRef(parser.jest.describe)) api.TestKind.describe_fn else .test_fn,
                                         label: ptr,
-                                    });
+                                    })?;
                                 },
                                 .e_dot => {},
                                 else => {},

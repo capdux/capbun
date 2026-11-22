@@ -686,7 +686,7 @@ struct JSONBuilder {
             const pkg_name = pkg_names[pkg_id];
             const pkg_res = pkg_resolutions[pkg_id];
 
-            if (!first) try writer.writeAll(",\n");
+            if (!first) writer.writeAll(",\n")?;
 
             if (dep_id == invalid_dependency_id) {
                 writer.print(
@@ -861,7 +861,7 @@ pub struct SecurityScanSubprocess {
     /// parent by spawn's to_close_at_end list (process.zig:1460). The parent's
     /// end comes back via spawned.extra_pipes.
     fn spawnPosix(*_, argv: *[5][*:0]const u8?, ipc_output_fds: [2]bun.FD)! {
-        const extra_fds = &[
+        const extra_fds: [2]bun.spawn.SpawnOptions.Stdio = [
             bun.spawn.SpawnOptions.Stdio{ pipe: ipc_output_fds[1] },
             bun.spawn.SpawnOptions.Stdio.buffer,
         ];
@@ -915,7 +915,7 @@ pub struct SecurityScanSubprocess {
         pipe.open(parent_write_fd.?).unwrap()?;
         parent_write_fd = null; // pipe owns it now
 
-        const extra_fds = &[
+        const extra_fds: [2]bun.spawn.SpawnOptions.Stdio = [
             bun.spawn.SpawnOptions.Stdio{ pipe: ipc_output_fds[1] },
             bun.spawn.SpawnOptions.Stdio{ pipe: child_read_fd.? },
         ];

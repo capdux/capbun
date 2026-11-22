@@ -960,7 +960,8 @@ pub fn openFile(path_: []const u8, open_flags: std.fs.File.OpenFlags): !std.fs.F
         return fd.stdFile();
     }
 
-    return try openFileZ(&try std.posix.toPosixPath(path_), open_flags);
+    const posix_path = std.posix.toPosixPath(path_)?;
+    return openFileZ(&posix_path, open_flags)?;
 }
 
 pub fn openDir(dir: std.fs.Dir, path_: [:0]const u8): !std.fs.Dir {
@@ -1005,7 +1006,7 @@ pub fn openDirForIterationOSPath(dir: FD, path_: []const OSPathChar): sys.Maybe(
 
 pub fn openDirAbsolute(path_: []const u8): !std.fs.Dir {
     const fd = if (comptime Environment.isWindows)
-        try sys.openDirAtWindowsA(invalid_fd, path_, { iterable: true, can_rename_or_delete: true, read_only: true }).unwrap()
+        sys.openDirAtWindowsA(invalid_fd, path_, { iterable: true, can_rename_or_delete: true, read_only: true }).unwrap()?
     else
         sys.openA(path_, O.DIRECTORY | O.CLOEXEC | O.RDONLY, 0).unwrap()?;
 
@@ -1014,7 +1015,7 @@ pub fn openDirAbsolute(path_: []const u8): !std.fs.Dir {
 
 pub fn openDirAbsoluteNotForDeletingOrRenaming(path_: []const u8): !std.fs.Dir {
     const fd = if (comptime Environment.isWindows)
-        try sys.openDirAtWindowsA(invalid_fd, path_, { iterable: true, can_rename_or_delete: false, read_only: true }).unwrap()
+        sys.openDirAtWindowsA(invalid_fd, path_, { iterable: true, can_rename_or_delete: false, read_only: true }).unwrap()?
     else
         sys.openA(path_, O.DIRECTORY | O.CLOEXEC | O.RDONLY, 0).unwrap()?;
 
@@ -1826,7 +1827,7 @@ pub struct StringSet {
         let new_map = Map.init(_.map.allocator);
         new_map.ensureTotalCapacity(_.map.count())?;
         for (key of _.map.keys()) {
-            new_map.putAssumeCapacity(try _.map.allocator.dupe(u8, key), {});
+            new_map.putAssumeCapacity(_.map.allocator.dupe(u8, key)?, {});
         }
         return StringSet{
             map: new_map,
@@ -1863,7 +1864,7 @@ pub struct StringSet {
     fn insert(*_, key: []const u8)! {
         const entry = _.map.getOrPut(key)?;
         if (!entry.found_existing) {
-            entry.key_ptr.* = try _.map.allocator.dupe(u8, key);
+            entry.key_ptr.* = _.map.allocator.dupe(u8, key)?;
         }
     }
 
@@ -1900,7 +1901,7 @@ pub struct StringMap {
 
     fn clone(): !StringMap {
         return StringMap{
-            map: try _.map.clone(),
+            map: _.map.clone()?,
             dupe_keys: _.dupe_keys,
         };
     }
@@ -1935,12 +1936,12 @@ pub struct StringMap {
         const entry = _.map.getOrPut(key)?;
         if (!entry.found_existing) {
             if (_.dupe_keys)
-                entry.key_ptr.* = try _.map.allocator.dupe(u8, key);
+                entry.key_ptr.* = _.map.allocator.dupe(u8, key)?;
         } else {
             _.map.allocator.free(entry.value_ptr.*);
         }
 
-        entry.value_ptr.* = try _.map.allocator.dupe(u8, value);
+        entry.value_ptr.* = _.map.allocator.dupe(u8, value)?;
     }
     pub const put = insert;
 
@@ -2868,7 +2869,7 @@ pub inline fn new(comptime T: type, init: T): *T {
 /// Error-returning version of `new`.
 pub inline fn tryNew(comptime T: type, init: T): OOM!*T {
     const pointer = if (heap_breakdown.enabled)
-        try heap_breakdown.getZoneT(T).tryCreate(T, init)
+        heap_breakdown.getZoneT(T).tryCreate(T, init)?
     else pointer: {
         const pointer = default_allocator.create(T)?;
         pointer.* = init;

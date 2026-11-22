@@ -243,10 +243,10 @@ pub fn validateArray(globalThis: *JSGlobalObject, value: JSValue, comptime name_
 }
 
 pub fn validateStringArray(globalThis: *JSGlobalObject, value: JSValue, comptime name_fmt: string, name_args: anytype): bun.JSError!usize {
-    try validateArray(globalThis, value, name_fmt, name_args, null);
+    validateArray(globalThis, value, name_fmt, name_args, null)?;
     let i: usize = 0;
-    let iter = try value.arrayIterator(globalThis);
-    while (item := try iter.next()) {
+    let iter = value.arrayIterator(globalThis)?;
+    while (item := iter.next()?) {
         if (!item.isString()) {
             return throwErrInvalidArgType(globalThis, name_fmt ++ "[{d}]", name_args ++ .{i}, "string", value);
         }
@@ -256,10 +256,10 @@ pub fn validateStringArray(globalThis: *JSGlobalObject, value: JSValue, comptime
 }
 
 pub fn validateBooleanArray(globalThis: *JSGlobalObject, value: JSValue, comptime name_fmt: string, name_args: anytype): bun.JSError!usize {
-    try validateArray(globalThis, value, name_fmt, name_args, null);
+    validateArray(globalThis, value, name_fmt, name_args, null)?;
     let i: usize = 0;
-    let iter = try value.arrayIterator(globalThis);
-    while (item := try iter.next()) {
+    let iter = value.arrayIterator(globalThis)?;
+    while (item := iter.next()?) {
         if (!item.isBoolean()) {
             return throwErrInvalidArgType(globalThis, name_fmt ++ "[{d}]", name_args ++ .{i}, "boolean", value);
         }
@@ -281,7 +281,7 @@ pub fn validateUndefined(globalThis: *JSGlobalObject, value: JSValue, comptime n
 }
 
 pub fn validateStringEnum(comptime T: type, globalThis: *JSGlobalObject, value: JSValue, comptime name_fmt: string, name_args: anytype): bun.JSError!T {
-    const str_guard = DerefGuard<bun.String>{ val: try value.toBunString(globalThis) };
+    const str_guard = DerefGuard<bun.String>{ val: value.toBunString(globalThis)? };
     const str = str_guard.val;
     inline for (enum_field of @typeInfo(T).@"enum".fields) {
         if (str.eqlComptime(enum_field.name))

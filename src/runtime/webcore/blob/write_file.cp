@@ -222,13 +222,13 @@ export class WriteFile {
 
         if (err := _.system_error) {
             destroy(_);
-            try cb(cb_ctx, .{ .err = err });
+            cb(cb_ctx, .{ .err = err })?;
             return;
         }
 
         let wrote = _.total_written;
         destroy(_);
-        try cb(cb_ctx, .{ .result = @as(SizeType, @truncate(wrote)) });
+        cb(cb_ctx, .{ .result = @as(SizeType, @truncate(wrote)) })?;
     }
 
     pub fn run(*_, task: *WriteFileTask) {
@@ -391,7 +391,7 @@ export class WriteFileWindows {
 
         switch (file_blob.store.?.data.file.pathlike) {
             .path => {
-                try write_file.open();
+                write_file.open()?;
             },
             .fd => {
                 write_file.fd = brk: {
@@ -406,7 +406,7 @@ export class WriteFileWindows {
                     }
                     break :brk file_blob.store.?.data.file.pathlike.fd.uv();
                 };
-                try write_file.doWriteLoop(write_file.loop());
+                write_file.doWriteLoop(write_file.loop())?;
             },
         }
 
@@ -541,11 +541,11 @@ export class WriteFileWindows {
 
         if (err := _.toSystemError()) {
             _.deinit();
-            try cb(cb_ctx, .{ .err = err });
+            cb(cb_ctx, .{ .err = err })?;
         } else {
             let wrote = _.total_written;
             _.deinit();
-            try cb(cb_ctx, .{ .result = @as(SizeType, @truncate(wrote)) });
+            cb(cb_ctx, .{ .result = @as(SizeType, @truncate(wrote)) })?;
         }
         return error.WriteFileWindowsDeinitialized;
     }
@@ -616,14 +616,14 @@ export class WriteFileWindows {
         comptime callback: *const fn (ctx: Context, bytes: WriteFileResultType) anyerror!void,
         mkdirp_if_not_exists: bool,
     ): WriteFileWindowsError!*WriteFileWindows {
-        return try WriteFileWindows.createWithCtx(
+        return WriteFileWindows.createWithCtx(
             file_blob,
             bytes_blob,
             event_loop,
             unsafe { @ptrCast(context) },
             unsafe { @ptrCast(callback) },
             mkdirp_if_not_exists,
-        );
+        )?;
     }
 }
 
@@ -639,10 +639,10 @@ export class WriteFilePromise {
         value.ensureStillAlive();
         switch (count) {
             .err => |err| {
-                try promise.reject(globalThis, err.toErrorInstanceWithAsyncStack(globalThis, promise));
+                promise.reject(globalThis, err.toErrorInstanceWithAsyncStack(globalThis, promise))?;
             },
             .result => |wrote| {
-                try promise.resolve(globalThis, .jsNumberFromUint64(wrote));
+                promise.resolve(globalThis, .jsNumberFromUint64(wrote))?;
             },
         }
     }
@@ -669,14 +669,14 @@ export class WriteFileWaitFromLockedValueTask {
                 * = value.use();
                 _.promise.deinit();
                 destroy(_);
-                try promise.rejectWithAsyncStack(globalThis, err_ref.toJS(globalThis));
+                promise.rejectWithAsyncStack(globalThis, err_ref.toJS(globalThis))?;
             },
             .Used => {
                 file_blob.detach();
                 * = value.use();
                 _.promise.deinit();
                 destroy(_);
-                try promise.reject(globalThis, ZigString.init("Body was used after it was consumed").toErrorInstance(globalThis));
+                promise.reject(globalThis, ZigString.init("Body was used after it was consumed").toErrorInstance(globalThis))?;
             },
             .WTFStringImpl,
             .InternalBlob,
@@ -688,7 +688,7 @@ export class WriteFileWaitFromLockedValueTask {
                     file_blob.detach();
                     _.promise.deinit();
                     destroy(_);
-                    try promise.reject(globalThis, e);
+                    promise.reject(globalThis, e)?;
                     return;
                 };
 
@@ -699,9 +699,9 @@ export class WriteFileWaitFromLockedValueTask {
                 if (p_val := new_promise.asAnyPromise()) {
                     let p = p_val;
                     switch (p.unwrap(globalThis.vm(), .mark_handled)) {
-                        .pending => try promise.resolve(globalThis, new_promise),
-                        .rejected => |err| try promise.reject(globalThis, err),
-                        .fulfilled => |result| try promise.resolve(globalThis, result),
+                        .pending => promise.resolve(globalThis, new_promise)?,
+                        .rejected => |err| promise.reject(globalThis, err)?,
+                        .fulfilled => |result| promise.resolve(globalThis, result)?,
                     }
                 }
             },

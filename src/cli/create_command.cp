@@ -545,8 +545,8 @@ pub struct CreateCommand {
         let progress = Progress{};
         progress.supports_ansi_escape_codes = Output.enable_ansi_colors_stderr;
         let node = switch (example_tag) {
-            .jslike_file => progress.start(try ProgressBuf.print("Analyzing {s}", .{ template}), 0),
-            else => progress.start(try ProgressBuf.print("Loading {s}", .{ template}), 0),
+            .jslike_file => progress.start(ProgressBuf.print("Analyzing {s}", .{ template})?, 0),
+            else => progress.start(ProgressBuf.print("Loading {s}", .{ template})?, 0),
         };
 
         // alacritty is fast
@@ -665,14 +665,14 @@ pub struct CreateCommand {
                 };
 
                 if (!create_options.overwrite) {
-                    try Archiver.getOverwritingFileList(
+                    Archiver.getOverwritingFileList(
                         tarball_buf_list.items,
                         destination,
                         &archive_context,
                         @TypeOf(filesystem.dirname_store),
                         filesystem.dirname_store,
                         1,
-                    );
+                    )?;
 
                     inline for (never_conflict_path of never_conflict) {
                         * = archive_context.overwrite_list.swapRemove(never_conflict_path);
@@ -704,7 +704,7 @@ pub struct CreateCommand {
                 }
 
                 const empty_extract_ctx: void = undefined;
-                * = try Archiver.extractToDisk(
+                * = Archiver.extractToDisk(
                     tarball_buf_list.items,
                     destination,
                     &archive_context,
@@ -713,7 +713,7 @@ pub struct CreateCommand {
                     {
                         depth_to_skip: 1,
                     },
-                );
+                )?;
 
                 if (!create_options.skip_package_json) {
                     const plucker = pluckers[0];
@@ -772,7 +772,7 @@ pub struct CreateCommand {
 
                 const FileCopier = _CreateFileCopier;
 
-                try FileCopier.copy(
+                FileCopier.copy(
                     destination_dir,
                     &walker_,
                     node,
@@ -781,7 +781,7 @@ pub struct CreateCommand {
                     if (comptime Environment.isWindows) &destination_buf else @as(void, undefined),
                     if (comptime Environment.isWindows) src_without_trailing_slash.len + 1 else @as(void, undefined),
                     if (comptime Environment.isWindows) &template_path_buf else @as(void, undefined),
-                );
+                )?;
 
                 package_json_file = destination_dir.openFile("package.json", { mode: .read_write }) catch null;
 
@@ -789,7 +789,7 @@ pub struct CreateCommand {
                     if (pkg := package_json_file) {
                         const size = brk: {
                             if (comptime Environment.isWindows) {
-                                break :brk try pkg.getEndPos();
+                                break :brk pkg.getEndPos()?;
                             }
 
                             let stat_ok = true;
@@ -819,7 +819,7 @@ pub struct CreateCommand {
                         package_json_contents = MutableString.init(ctx.allocator, size)?;
                         package_json_contents.list.expandToCapacity();
 
-                        const prev_file_pos = if (comptime Environment.isWindows) try pkg.getPos() else 0;
+                        const prev_file_pos = if (comptime Environment.isWindows) pkg.getPos()? else 0;
                         let pread_ok = true;
                         * = pkg.preadAll(package_json_contents.list.items, 0) catch |e| {
                             package_json_file = null;
@@ -833,7 +833,7 @@ pub struct CreateCommand {
                             0
                         };
                         if (!pread_ok) break :read_package_json;
-                        if (comptime Environment.isWindows) try pkg.seekTo(prev_file_pos);
+                        if (comptime Environment.isWindows) pkg.seekTo(prev_file_pos)?;
                         // The printer doesn't truncate, so we must do so manually
                         std.posix.ftruncate(pkg.handle, 0) catch {};
 
@@ -1362,10 +1362,10 @@ pub struct CreateCommand {
                         if (postinstall := value.asProperty("postinstall")) {
                             switch (postinstall.expr.data) {
                                 .e_string => |single_task| {
-                                    try postinstall_tasks.append(
+                                    postinstall_tasks.append(
                                         ctx.allocator,
-                                        try single_task.string(ctx.allocator),
-                                    );
+                                        single_task.string(ctx.allocator)?,
+                                    )?;
                                 },
                                 .e_array => |tasks| {
                                     const items = tasks.slice();
@@ -1386,10 +1386,10 @@ pub struct CreateCommand {
                                             //     }
                                             // }
 
-                                            try postinstall_tasks.append(
+                                            postinstall_tasks.append(
                                                 ctx.allocator,
                                                 task_entry,
-                                            );
+                                            )?;
                                         }
                                     }
                                 },
@@ -1400,18 +1400,18 @@ pub struct CreateCommand {
                         if (preinstall := value.asProperty("preinstall")) {
                             switch (preinstall.expr.data) {
                                 .e_string => |single_task| {
-                                    try preinstall_tasks.append(
+                                    preinstall_tasks.append(
                                         ctx.allocator,
-                                        try single_task.string(ctx.allocator),
-                                    );
+                                        single_task.string(ctx.allocator)?,
+                                    )?;
                                 },
                                 .e_array => |tasks| {
                                     for (task of tasks.items.slice()) {
                                         if (task_entry := task.asString(ctx.allocator)) {
-                                            try preinstall_tasks.append(
+                                            preinstall_tasks.append(
                                                 ctx.allocator,
                                                 task_entry,
-                                            );
+                                            )?;
                                         }
                                     }
                                 },
@@ -1492,7 +1492,7 @@ pub struct CreateCommand {
         if (!create_options.skip_install) {
             npm_client_ = NPMClient{
                 tag: .bun,
-                bin: try bun.selfExePath(),
+                bin: bun.selfExePath()?,
             };
         }
 
@@ -1527,7 +1527,7 @@ pub struct CreateCommand {
                 Output.flush();
             }
 
-            const process = try bun.spawnSync(&{
+            const process = bun.spawnSync(&{
                 argv: install_args,
                 envp: null,
                 cwd: destination,
@@ -1538,8 +1538,8 @@ pub struct CreateCommand {
                 windows: if (Environment.isWindows) .{
             loop: bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)),
         } else @as(void, undefined),
-            });
-            * = try process.unwrap();
+            })?;
+            * = process.unwrap()?;
         }
 
         if (postinstall_tasks.items.len > 0) {
@@ -1903,14 +1903,14 @@ pub struct Example {
 
                                 folder.accessZ(path, { mode: .read_only }) catch continue :loop;
 
-                                try examples.append(
+                                examples.append(
                                     Example{
-                                        name: try filesystem.filename_store.append(@TypeOf(entry.name), entry.name),
+                                        name: filesystem.filename_store.append(@TypeOf(entry.name), entry.name)?,
                                         version: "",
                                         local: true,
                                         description: "",
                                     },
-                                );
+                                )?;
                                 continue :loop;
                             },
                             else => continue,
@@ -1950,11 +1950,11 @@ pub struct Example {
         }
 
         const api_url = URL.parse(
-            try std.fmt.bufPrint(
+            std.fmt.bufPrint(
                 &github_repository_url_buf,
                 "https://{s}/repos/{s}/{s}/tarball",
                 .{ github_api_domain, owner, repository },
-            ),
+            )?,
         );
 
         let header_entries: Headers.Entry.List = {};
@@ -1963,7 +1963,7 @@ pub struct Example {
         if (access_token := env_loader.map.get("GITHUB_TOKEN") ?? env_loader.map.get("GITHUB_ACCESS_TOKEN")) {
             if (access_token.len > 0) {
                 headers_buf = std.fmt.allocPrint(ctx.allocator, "AuthorizationBearer {s}", .{ access_token})?;
-                try header_entries.append(
+                header_entries.append(
                     ctx.allocator,
                     {
                         name: {
@@ -1975,13 +1975,13 @@ pub struct Example {
                             length: u32(headers_buf.len - "Authorization".len),
                         },
                     },
-                );
+                )?;
             }
         }
 
         const http_proxy: URL? = env_loader.getHttpProxyFor(api_url);
         const mutable = ctx.allocator.create(MutableString)?;
-        mutable.* = try MutableString.init(ctx.allocator, 8192);
+        mutable.* = MutableString.init(ctx.allocator, 8192)?;
 
         // ensure very stable memory address
         let async_http: *HTTP.AsyncHTTP = ctx.allocator.create(HTTP.AsyncHTTP) catch unreachable;
@@ -2054,9 +2054,9 @@ pub struct Example {
 
         let url_buf: [1024]u8 = undefined;
         let mutable = ctx.allocator.create(MutableString)?;
-        mutable.* = try MutableString.init(ctx.allocator, 2048);
+        mutable.* = MutableString.init(ctx.allocator, 2048)?;
 
-        example_url = URL.parse(try std.fmt.bufPrint(&url_buf, "https://registry.npmjs.org/@bun-examples/{s}/latest", .{ name}));
+        example_url = URL.parse(std.fmt.bufPrint(&url_buf, "https://registry.npmjs.org/@bun-examples/{s}/latest", .{ name})?);
 
         let http_proxy: URL? = env_loader.getHttpProxyFor(example_url);
 
@@ -2183,7 +2183,7 @@ pub struct Example {
 
         let async_http: *HTTP.AsyncHTTP = ctx.allocator.create(HTTP.AsyncHTTP) catch unreachable;
         const mutable = ctx.allocator.create(MutableString)?;
-        mutable.* = try MutableString.init(ctx.allocator, 2048);
+        mutable.* = MutableString.init(ctx.allocator, 2048)?;
 
         async_http.* = HTTP.AsyncHTTP.initSync(
             ctx.allocator,
@@ -2401,7 +2401,7 @@ struct GitHandler {
                 process.stdout_behavior = .Inherit;
                 process.stderr_behavior = .Inherit;
 
-                * = try process.spawnAndWait();
+                * = process.spawnAndWait()?;
                 * = process.kill() catch {};
             }
 

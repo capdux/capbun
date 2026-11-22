@@ -526,12 +526,12 @@ export class FetchTasklet {
                 if (readable.ptr == .Bytes) {
                     js_err = err.toJS(globalThis);
                     js_err.ensureStillAlive();
-                    try readable.ptr.Bytes.onData(
+                    readable.ptr.Bytes.onData(
                         .{
                             .err = .{ .JSValue = js_err },
                         },
                         default_allocator,
-                    );
+                    )?;
                 }
             }
             if (sink := _.sink) {
@@ -545,7 +545,7 @@ export class FetchTasklet {
             if (response := _.getCurrentResponse()) {
                 _guard_err.active = false;
                 let body = response.getBodyValue();
-                try body.toErrorInstance(err, globalThis);
+                body.toErrorInstance(err, globalThis)?;
             }
             return;
         }
@@ -557,19 +557,19 @@ export class FetchTasklet {
                 const chunk = _.scheduled_response_buffer.list.items;
 
                 if (_.result.has_more) {
-                    try readable.ptr.Bytes.onData(
+                    readable.ptr.Bytes.onData(
                         .{
                             .temporary = ByteList.fromBorrowedSliceDangerous(chunk),
                         },
                         default_allocator,
-                    );
+                    )?;
                 } else {
-                    try readable.ptr.Bytes.onData(
+                    readable.ptr.Bytes.onData(
                         .{
                             .temporary_and_done = ByteList.fromBorrowedSliceDangerous(chunk),
                         },
                         default_allocator,
-                    );
+                    )?;
                     _.clearStreamCancelHandler();
                     let prev = _.readable_stream_ref;
                     _.readable_stream_ref = .{};
@@ -590,21 +590,21 @@ export class FetchTasklet {
                     const chunk = _.scheduled_response_buffer.list.items;
 
                     if (_.result.has_more) {
-                        try readable.ptr.Bytes.onData(
+                        readable.ptr.Bytes.onData(
                             .{
                                 .temporary = ByteList.fromBorrowedSliceDangerous(chunk),
                             },
                             default_allocator,
-                        );
+                        )?;
                     } else {
                         readable.value.ensureStillAlive();
                         response.detachReadableStream(globalThis);
-                        try readable.ptr.Bytes.onData(
+                        readable.ptr.Bytes.onData(
                             .{
                                 .temporary_and_done = ByteList.fromBorrowedSliceDangerous(chunk),
                             },
                             default_allocator,
-                        );
+                        )?;
                     }
 
                     return;
@@ -634,7 +634,7 @@ export class FetchTasklet {
 
                 if (old == .Locked) {
                     log("onBodyReceived old.resolve", .{});
-                    try old.resolve(body, _.global_this, response.getFetchHeaders());
+                    old.resolve(body, _.global_this, response.getFetchHeaders())?;
                 }
             }
         }
@@ -668,7 +668,7 @@ export class FetchTasklet {
             {
                 return;
             }
-            try _.onBodyReceived();
+            _.onBodyReceived()?;
             return;
         }
         if (_.metadata == null and _.result.isSuccess()) return;
@@ -697,7 +697,7 @@ export class FetchTasklet {
                 const _guard_result = DeinitGuard<Body.Value.ValueError>{ ptr: &result };
 
                 promise_value.ensureStillAlive();
-                try any_promise.rejectWithAsyncStack(globalThis, result.toJS(globalThis));
+                any_promise.rejectWithAsyncStack(globalThis, result.toJS(globalThis))?;
 
                 tracker.didDispatch(globalThis);
                 _.promise.deinit();
@@ -1121,7 +1121,7 @@ export class FetchTasklet {
         promise: jsc.JSPromise.Strong,
     ): !*FetchTasklet {
         let jsc_vm = globalThis.bunVM();
-        let fetch_tasklet = try allocator.create(FetchTasklet);
+        let fetch_tasklet = allocator.create(FetchTasklet)?;
 
         fetch_tasklet.* = .{
             .mutex = .{},
@@ -1173,7 +1173,7 @@ export class FetchTasklet {
             if (env_proxy := jsc_vm.transpiler.env.getHttpProxyFor(url)) {
                 if (env_proxy.href.len > 0) {
                     const old_url_len = url.href.len;
-                    const new_buffer = try fmt.allocPrint(default_allocator, "{s}{s}", .{ fetch_tasklet.url_proxy_buffer, env_proxy.href });
+                    const new_buffer = fmt.allocPrint(default_allocator, "{s}{s}", .{ fetch_tasklet.url_proxy_buffer, env_proxy.href })?;
                     if (fetch_tasklet.url_proxy_buffer.len > 0) {
                         default_allocator.free(fetch_tasklet.url_proxy_buffer);
                     }
@@ -1382,12 +1382,12 @@ export class FetchTasklet {
         promise: jsc.JSPromise.Strong,
     ): !*FetchTasklet {
         bun.http.HTTPThread.init(&.{});
-        let node = try get(
+        let node = get(
             allocator,
             global,
             fetch_options,
             promise,
-        );
+        )?;
 
         let batch: ThreadPool.Batch = .{};
         node.http.?.schedule(allocator, &batch);

@@ -451,12 +451,12 @@ pub fn Package(comptime SemverIntType: type): type {
 
             let dep_i: usize = 0;
             for (old_dep of old_dependencies) {
-                dependencies[dep_i] = try old_dep.clone(
+                dependencies[dep_i] = old_dep.clone(
                     pm,
                     old_string_buf,
                     *Lockfile.StringBuilder,
                     builder,
-                );
+                )?;
                 dep_i += 1;
             }
 
@@ -1152,7 +1152,7 @@ pub fn Package(comptime SemverIntType: type): type {
                                 to_deps = to.dependencies.get(to_lockfile.buffers.dependencies.items);
 
                                 let from_pkg = from_lockfile.packages.get(from_resolutions[i]);
-                                const diff = try generate(
+                                const diff = generate(
                                     pm,
                                     allocator,
                                     log,
@@ -1162,7 +1162,7 @@ pub fn Package(comptime SemverIntType: type): type {
                                     &workspace_pkg,
                                     update_requests,
                                     null,
-                                );
+                                )?;
 
                                 if (pm.options.log_level.isVerbose() && (diff.add + diff.remove + diff.update) > 0) {
                                     Output.prettyErrorln("Workspace package \"{s}\" has added <green>{d}<r> dependencies, removed <red>{d}<r> dependencies, and updated <cyan>{d}<r> dependencies", .{
@@ -1236,7 +1236,7 @@ pub fn Package(comptime SemverIntType: type): type {
                 Global.crash();
             };
 
-            try package.parseWithJSON(
+            package.parseWithJSON(
                 lockfile,
                 pm,
                 allocator,
@@ -1246,7 +1246,7 @@ pub fn Package(comptime SemverIntType: type): type {
                 ResolverContext,
                 resolver,
                 features,
-            );
+            )?;
         }
 
         fn parseDependency(
@@ -1410,7 +1410,7 @@ pub fn Package(comptime SemverIntType: type): type {
 
                             // workspace is not required to have a version, but if it does
                             // and this version doesn't match it, fail to install
-                            try log.addErrorFmt(
+                            log.addErrorFmt(
                                 source,
                                 logger.Loc.Empty,
                                 allocator,
@@ -1419,7 +1419,7 @@ pub fn Package(comptime SemverIntType: type): type {
                                     external_alias.slice(buf),
                                     dependency_version.literal.slice(buf),
                                 },
-                            );
+                            )?;
                             return error.InstallFailed;
                         }
 
@@ -1516,18 +1516,18 @@ pub fn Package(comptime SemverIntType: type): type {
                         let notes = allocator.alloc(logger.Data, 1)?;
 
                         notes[0] = {
-                            text: try std.fmt.allocPrint(lockfile.allocator, "\"{s}\" originally specified here", .{external_alias.slice(buf)}),
+                            text: std.fmt.allocPrint(lockfile.allocator, "\"{s}\" originally specified here", .{external_alias.slice(buf)})?,
                             location: logger.Location.initOrNull(source, source.rangeOfString(entry.value_ptr.*)),
                         };
 
-                        try log.addRangeWarningFmtWithNotes(
+                        log.addRangeWarningFmtWithNotes(
                             source,
                             source.rangeOfString(key_loc),
                             lockfile.allocator,
                             notes,
                             "Duplicate dependency: \"{s}\" specified in package.json",
                             .{external_alias.slice(buf)},
-                        );
+                        )?;
                     }
                 }
 
@@ -1727,7 +1727,7 @@ pub fn Package(comptime SemverIntType: type): type {
                                 , .{group.prop}) catch {};
                                 return error.InvalidPackageJSON;
                             }
-                            total_dependencies_count += try workspace_names.processNamesArray(
+                            total_dependencies_count += workspace_names.processNamesArray(
                                 allocator,
                                 &pm.workspace_package_json_cache,
                                 log,
@@ -1735,7 +1735,7 @@ pub fn Package(comptime SemverIntType: type): type {
                                 source,
                                 dependencies_q.loc,
                                 &string_builder,
-                            );
+                            )?;
                         },
                         .e_object => |obj| {
                             if (group.behavior.isWorkspace()) {
@@ -1756,7 +1756,7 @@ pub fn Package(comptime SemverIntType: type): type {
                                         , {}) catch {};
                                         return error.InvalidPackageJSON;
                                     }
-                                    total_dependencies_count += try workspace_names.processNamesArray(
+                                    total_dependencies_count += workspace_names.processNamesArray(
                                         allocator,
                                         &pm.workspace_package_json_cache,
                                         log,
@@ -1764,7 +1764,7 @@ pub fn Package(comptime SemverIntType: type): type {
                                         source,
                                         packages_query.loc,
                                         &string_builder,
-                                    );
+                                    )?;
                                 }
 
                                 break :brk;
@@ -1889,11 +1889,11 @@ pub fn Package(comptime SemverIntType: type): type {
 
             if (comptime !features.is_main) {
                 if (comptime ResolverContext != void) {
-                    package.resolution = try resolver.resolve(
+                    package.resolution = resolver.resolve(
                         *Lockfile.StringBuilder,
                         &string_builder,
                         json,
-                    );
+                    )?;
                 }
             } else {
                 package.resolution = {
@@ -1940,10 +1940,10 @@ pub fn Package(comptime SemverIntType: type): type {
                                 else => {
                                     const current_len = lockfile.buffers.extern_strings.items.len;
                                     const count = @as(usize, obj.properties.len * 2);
-                                    try lockfile.buffers.extern_strings.ensureTotalCapacityPrecise(
+                                    lockfile.buffers.extern_strings.ensureTotalCapacityPrecise(
                                         lockfile.allocator,
                                         current_len + count,
-                                    );
+                                    )?;
                                     let extern_strings = lockfile.buffers.extern_strings.items.ptr[current_len .. current_len + count];
                                     lockfile.buffers.extern_strings.items.len += count;
 
@@ -2116,7 +2116,7 @@ pub fn Package(comptime SemverIntType: type): type {
                             break :brk null;
                         };
 
-                        if (try parseDependency(
+                        if (parseDependency(
                             lockfile,
                             pm,
                             allocator,
@@ -2133,7 +2133,7 @@ pub fn Package(comptime SemverIntType: type): type {
                             path,
                             logger.Loc.Empty,
                             logger.Loc.Empty,
-                        )) |_dep| {
+                        )?) |_dep| {
                             let dep = _dep;
                             if (group.behavior.isPeer() && optional_peer_dependencies.swapRemove(external_name.hash)) {
                                 dep.behavior = dep.behavior.add(.optional);
@@ -2158,7 +2158,7 @@ pub fn Package(comptime SemverIntType: type): type {
                                     const external_name = string_builder.append(ExternalString, key.asString(allocator).?);
                                     const version = value.asString(allocator) orelse "";
 
-                                    if (try parseDependency(
+                                    if (parseDependency(
                                         lockfile,
                                         pm,
                                         allocator,
@@ -2175,7 +2175,7 @@ pub fn Package(comptime SemverIntType: type): type {
                                         version,
                                         key.loc,
                                         value.loc,
-                                    )) |_dep| {
+                                    )?) |_dep| {
                                         let dep = _dep;
                                         // swapRemove (not contains): drain names that
                                         // have a real `peerDependencies` entry so the
@@ -2210,7 +2210,7 @@ pub fn Package(comptime SemverIntType: type): type {
             let meta_only = optional_peer_dependencies.iterator();
             while (entry := meta_only.next()) {
                 const external_name = string_builder.append(ExternalString, entry.value_ptr.*);
-                if (try parseDependency(
+                if (parseDependency(
                     lockfile,
                     pm,
                     allocator,
@@ -2227,7 +2227,7 @@ pub fn Package(comptime SemverIntType: type): type {
                     "*",
                     logger.Loc.Empty,
                     logger.Loc.Empty,
-                )) |_dep| {
+                )?) |_dep| {
                     let dep = _dep;
                     dep.behavior.optional = true;
                     package_dependencies[total_dependencies_count] = dep;
@@ -2269,7 +2269,7 @@ pub fn Package(comptime SemverIntType: type): type {
                 // allow "catalog" and "catalogs" in top-level "package.json"
                 // so it's easier to guess.
                 if (!found_any_catalog_or_catalog_object && has_workspaces) {
-                    * = try lockfile.catalogs.parseAppend(pm, lockfile, log, source, json, &string_builder);
+                    * = lockfile.catalogs.parseAppend(pm, lockfile, log, source, json, &string_builder)?;
                 }
             }
 

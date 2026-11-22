@@ -87,7 +87,7 @@ fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
     }
     return val >> shift;
 }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const helpers = @import("./helpers.zig");
 pub const parser_mod = @import("./parser.zig");
@@ -246,7 +246,10 @@ pub fn analyzeLine(p: *Parser, off_start: u32, p_end: *u32, pivot_line: *const L
                         const align_mask_: usize = (@alignOf(BlockHeader) - 1);
                         const top_off = (((p.block_bytes.items.len - @sizeOf(BlockHeader)) + align_mask_) & (~align_mask_));
                         if (((top_off + @sizeOf(BlockHeader)) <= p.block_bytes.items.len)) {
-                            const top_hdr: *const BlockHeader = @ptrCast(@alignCast((p.block_bytes.items.ptr + (p.block_bytes.items.len - @sizeOf(BlockHeader)))));
+                            const top_hdr: *const BlockHeader = (blk: {
+                            break :blk @ptrCast(@alignCast((p.block_bytes.items.ptr + (p.block_bytes.items.len - @sizeOf(BlockHeader)))));
+
+});
                             if ((top_hdr.block_type == .li)) {
                                 p.last_list_item_starts_with_two_blank_lines = true;
                             }
@@ -257,7 +260,10 @@ pub fn analyzeLine(p: *Parser, off_start: u32, p_end: *u32, pivot_line: *const L
             } else {
                 if (p.last_list_item_starts_with_two_blank_lines) {
                     if (((((((n_parents > 0) and (n_parents == p.n_containers)) and (p.containers.items[@as(usize, @intCast((n_parents - 1)))].ch != 62)) and ((n_brothers + n_children) == 0)) and (p.current_block == null)) and (p.block_bytes.items.len > @sizeOf(BlockHeader)))) {
-                        const top_hdr: *const BlockHeader = @ptrCast(@alignCast((p.block_bytes.items.ptr + (p.block_bytes.items.len - @sizeOf(BlockHeader)))));
+                        const top_hdr: *const BlockHeader = (blk: {
+                        break :blk @ptrCast(@alignCast((p.block_bytes.items.ptr + (p.block_bytes.items.len - @sizeOf(BlockHeader)))));
+
+});
                         if ((top_hdr.block_type == .li)) {
                             n_parents = (n_parents - 1);
                             line.indent = total_indent;
@@ -776,7 +782,10 @@ pub fn consumeRefDefsFromCurrentBlock(p: *Parser) void {
 }
 
 pub fn getBlockHeaderAt(p: *Parser, off: usize) *BlockHeader {
-        return @ptrCast(@alignCast((p.block_bytes.items.ptr + off)));
+        return (blk: {
+        break :blk @ptrCast(@alignCast((p.block_bytes.items.ptr + off)));
+
+});
 }
 
 pub fn getBlockAt(p: *Parser, off: usize) *BlockHeader {

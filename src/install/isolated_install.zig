@@ -87,7 +87,7 @@ fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
     }
     return val >> shift;
 }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .array and @typeInfo(@typeInfo(__T).pointer.child).array.child == u8)) { return val[0..]; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 pub const InstallState_ = enum {
@@ -104,7 +104,7 @@ pub const InstallState_ = enum {
 pub const WyhashWriter_ = struct {
     hasher: *std.hash.Wyhash,
 
-pub fn writer(self: *WyhashWriter_) std.io.GenericWriter(*@This(),E,write) {
+pub fn writer(self: *WyhashWriter_) std.io.GenericWriter(*@This(), E, write) {
             return .{ .context = self };
     }
 
@@ -149,7 +149,7 @@ pub const EarlyDedupeKey_ = struct {
 pub const DedupeInfo_ = struct {
     entry_id: Store.Entry.Id,
     dep_id: DependencyID,
-    peers: Store.OrderedArraySet(Store.Node.TransitivePeer,Store.Node.TransitivePeer.OrderedArraySetCtx),
+    peers: Store.OrderedArraySet(Store.Node.TransitivePeer, Store.Node.TransitivePeer.OrderedArraySetCtx),
 };
 
 pub const QueuedEntry_ = struct {
@@ -197,7 +197,7 @@ pub fn __cp_deinit(self: *DepIdListGuard_) void {
 };
 
 pub const PeerNameIdxGuard_ = struct {
-    map: *std.AutoArrayHashMapUnmanaged(PackageNameHash,void),
+    map: *std.AutoArrayHashMapUnmanaged(PackageNameHash, void),
     allocator: std.mem.Allocator,
     __cp_dropped: bool = false,
 
@@ -255,7 +255,7 @@ pub fn __cp_deinit(self: *BitSetGuard_) void {
 };
 
 pub const EarlyDedupeGuard_ = struct {
-    map: *std.AutoHashMap(EarlyDedupeKey_,Store.Node.Id),
+    map: *std.AutoHashMap(EarlyDedupeKey_, Store.Node.Id),
     __cp_dropped: bool = false,
 
 pub fn __cp_deinit(self: *EarlyDedupeGuard_) void {
@@ -294,7 +294,7 @@ pub fn __cp_deinit(self: *ManagedNodeIdListGuard_) void {
 };
 
 pub const DedupeMapGuard_ = struct {
-    map: *std.AutoHashMapUnmanaged(PackageID,std.ArrayListUnmanaged(DedupeInfo_)),
+    map: *std.AutoHashMapUnmanaged(PackageID, std.ArrayListUnmanaged(DedupeInfo_)),
     allocator: std.mem.Allocator,
     __cp_dropped: bool = false,
 
@@ -321,7 +321,7 @@ pub fn __cp_deinit(self: *ManagedU8ListGuard_) void {
 };
 
 pub const EntryQueueGuard_ = struct {
-    fifo: *bun.LinearFifo(QueuedEntry_,.Dynamic),
+    fifo: *bun.LinearFifo(QueuedEntry_, .Dynamic),
     __cp_dropped: bool = false,
 
 pub fn __cp_deinit(self: *EntryQueueGuard_) void {
@@ -347,7 +347,7 @@ pub fn __cp_deinit(self: *StringSetGuard_) void {
 };
 
 pub const TrustedUpdateGuard_ = struct {
-    map: *std.AutoArrayHashMapUnmanaged(install.TruncatedPackageNameHash,void),
+    map: *std.AutoArrayHashMapUnmanaged(install.TruncatedPackageNameHash, void),
     allocator: std.mem.Allocator,
     __cp_dropped: bool = false,
 
@@ -439,7 +439,7 @@ pub fn __cp_deinit(self: *TarjanWorkGuard_) void {
 };
 
 pub const U64SetGuard_ = struct {
-    map: *std.AutoArrayHashMapUnmanaged(u64,void),
+    map: *std.AutoArrayHashMapUnmanaged(u64, void),
     allocator: std.mem.Allocator,
     __cp_dropped: bool = false,
 
@@ -519,7 +519,7 @@ pub fn __cp_deinit(self: *AutoRelPathResetGuard_) void {
 };
 
 pub const SeenEntryIdsGuard_ = struct {
-    map: *std.AutoHashMapUnmanaged(Store.Entry.Id,void),
+    map: *std.AutoHashMapUnmanaged(Store.Entry.Id, void),
     allocator: std.mem.Allocator,
     __cp_dropped: bool = false,
 
@@ -533,7 +533,7 @@ pub fn __cp_deinit(self: *SeenEntryIdsGuard_) void {
 };
 
 pub const SeenWorkspaceIdsGuard_ = struct {
-    map: *std.AutoHashMapUnmanaged(PackageID,void),
+    map: *std.AutoHashMapUnmanaged(PackageID, void),
     allocator: std.mem.Allocator,
     __cp_dropped: bool = false,
 
@@ -679,7 +679,7 @@ pub fn installIsolatedPackages(manager: *PackageManager, command_ctx: Command.Co
         _ = &_dep_ids_sort_buf_guard;
         var ___dep_ids_sort_buf_guard_moved = false; _ = &___dep_ids_sort_buf_guard_moved;
         defer if (!___dep_ids_sort_buf_guard_moved) { ___dep_ids_sort_buf_guard_moved = true; const __T = @TypeOf(_dep_ids_sort_buf_guard); if (@typeInfo(__T) == .optional) { if (_dep_ids_sort_buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _dep_ids_sort_buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _dep_ids_sort_buf_guard; _drop_val.__cp_deinit(); } };
-        var peer_name_idx: std.AutoArrayHashMapUnmanaged(PackageNameHash,void) = .empty;
+        var peer_name_idx: std.AutoArrayHashMapUnmanaged(PackageNameHash, void) = .empty;
         _ = &peer_name_idx;
         var _peer_name_idx_guard = PeerNameIdxGuard_{ .map = (&peer_name_idx), .allocator = lockfile.allocator };
         _ = &_peer_name_idx_guard;
@@ -804,7 +804,7 @@ pub fn installIsolatedPackages(manager: *PackageManager, command_ctx: Command.Co
             }
         }
         const EarlyDedupeKey = EarlyDedupeKey_;
-        var early_dedupe: std.AutoHashMap(EarlyDedupeKey,Store.Node.Id) = .init(lockfile.allocator);
+        var early_dedupe: std.AutoHashMap(EarlyDedupeKey, Store.Node.Id) = .init(lockfile.allocator);
         _ = &early_dedupe;
         var _early_dedupe_guard = EarlyDedupeGuard_{ .map = (&early_dedupe) };
         _ = &_early_dedupe_guard;
@@ -1115,7 +1115,7 @@ pub fn installIsolatedPackages(manager: *PackageManager, command_ctx: Command.Co
             _ = Output.prettyErrorln("Resolved peers [{f}]", .{ bun.fmt.fmtDurationOneDecimal(full_tree_end) });
         }
         const DedupeInfo = DedupeInfo_;
-        var dedupe: std.AutoHashMapUnmanaged(PackageID,std.ArrayListUnmanaged(DedupeInfo)) = .empty;
+        var dedupe: std.AutoHashMapUnmanaged(PackageID, std.ArrayListUnmanaged(DedupeInfo)) = .empty;
         _ = &dedupe;
         var _dedupe_guard = DedupeMapGuard_{ .map = (&dedupe), .allocator = lockfile.allocator };
         _ = &_dedupe_guard;
@@ -1135,7 +1135,7 @@ pub fn installIsolatedPackages(manager: *PackageManager, command_ctx: Command.Co
         var store: Store.Entry.List = .empty;
         _ = &store;
         const QueuedEntry = QueuedEntry_;
-        var entry_queue: bun.LinearFifo(QueuedEntry,.Dynamic) = .init(lockfile.allocator);
+        var entry_queue: bun.LinearFifo(QueuedEntry, .Dynamic) = .init(lockfile.allocator);
         _ = &entry_queue;
         var _entry_queue_guard = EntryQueueGuard_{ .fifo = (&entry_queue) };
         _ = &_entry_queue_guard;
@@ -1460,7 +1460,7 @@ _ = try stack.append(manager.allocator, .{ .id = dep.entry_id, .dep_idx = 0, .ha
             _ = &_work_guard;
             var ___work_guard_moved = false; _ = &___work_guard_moved;
             defer if (!___work_guard_moved) { ___work_guard_moved = true; const __T = @TypeOf(_work_guard); if (@typeInfo(__T) == .optional) { if (_work_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _work_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _work_guard; _drop_val.__cp_deinit(); } };
-            var scc_ext: std.AutoArrayHashMapUnmanaged(u64,void) = .empty;
+            var scc_ext: std.AutoArrayHashMapUnmanaged(u64, void) = .empty;
             _ = &scc_ext;
             var _scc_ext_guard = U64SetGuard_{ .map = (&scc_ext), .allocator = manager.allocator };
             _ = &_scc_ext_guard;
@@ -1847,7 +1847,7 @@ _ = try stack.append(manager.allocator, .{ .id = dep.entry_id, .dep_idx = 0, .ha
             const pkg_names = pkgs.items(.name);
             const pkg_name_hashes = pkgs.items(.name_hash);
             const pkg_resolutions = pkgs.items(.resolution);
-            var seen_entry_ids: std.AutoHashMapUnmanaged(Store.Entry.Id,void) = .empty;
+            var seen_entry_ids: std.AutoHashMapUnmanaged(Store.Entry.Id, void) = .empty;
             _ = &seen_entry_ids;
             var _seen_entry_ids_guard = SeenEntryIdsGuard_{ .map = (&seen_entry_ids), .allocator = lockfile.allocator };
             _ = &_seen_entry_ids_guard;
@@ -1855,7 +1855,7 @@ _ = try stack.append(manager.allocator, .{ .id = dep.entry_id, .dep_idx = 0, .ha
             defer if (!___seen_entry_ids_guard_moved) { ___seen_entry_ids_guard_moved = true; const __T = @TypeOf(_seen_entry_ids_guard); if (@typeInfo(__T) == .optional) { if (_seen_entry_ids_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _seen_entry_ids_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _seen_entry_ids_guard; _drop_val.__cp_deinit(); } };
             const seen_cap: u32 = @intCast(store.entries.len);
             _ = try seen_entry_ids.ensureTotalCapacity(lockfile.allocator, seen_cap);
-            var seen_workspace_ids: std.AutoHashMapUnmanaged(PackageID,void) = .empty;
+            var seen_workspace_ids: std.AutoHashMapUnmanaged(PackageID, void) = .empty;
             _ = &seen_workspace_ids;
             var _seen_ws_ids_guard = SeenWorkspaceIdsGuard_{ .map = (&seen_workspace_ids), .allocator = lockfile.allocator };
             _ = &_seen_ws_ids_guard;

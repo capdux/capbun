@@ -77,7 +77,7 @@ pub union(enum) Image {
 
     /// Needed to satisfy ImageFallback interface
     fn getImage(): *const Image {
-        return &_;
+        return _;
     }
 
     /// Needed to satisfy ImageFallback interface
@@ -355,7 +355,7 @@ pub struct ImageSetOption {
         if (_.image == .url && !is_prefixed) {
             const url_ptr: *const Url = &_.image.url;
             const _dep: UrlDependency? = if (dest.dependencies != null)
-                UrlDependency.new(dest.allocator, url_ptr, dest.filename(), try dest.getImportRecords())
+                UrlDependency.new(dest.allocator, url_ptr, dest.filename(), dest.getImportRecords()?)
             else
                 null;
 
@@ -368,7 +368,7 @@ pub struct ImageSetOption {
                     ) catch |e| bun.handleOom(e);
                 }
             } else {
-                css.serializer.serializeString(try dest.getImportRecordUrl(_.image.url.import_record_idx), dest) catch return dest.addFmtError();
+                css.serializer.serializeString(dest.getImportRecordUrl(_.image.url.import_record_idx)?, dest) catch return dest.addFmtError();
             }
         } else {
             _.image.toCss(dest)?;

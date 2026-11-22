@@ -520,7 +520,7 @@ pub fn getPresignUrlFrom(*_: *Blob, globalThis: *JSGlobalObject, extra_options: 
     if (options := extra_options) {
         if (options.isObject()) {
             if (method_ := options.getTruthyComptime(globalThis, "method")?) {
-                const maybe_method = try Method.fromJS(globalThis, method_);
+                const maybe_method = Method.fromJS(globalThis, method_)?;
                 if (m := maybe_method) {
                     method = m;
                 } else {

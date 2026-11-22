@@ -1943,7 +1943,7 @@ pub fn fetchWithoutOnLoadPlugins(
     // so we only want to reset the arena once its done freeing it.
     let _arena_guard = ResetArenaGuard{ vm: jsc_vm, active: true };
 
-    const resolved = try ModuleLoader.transpileSourceCode(
+    const resolved = ModuleLoader.transpileSourceCode(
         jsc_vm,
         lr.specifier,
         referrer_clone.slice(),
@@ -1957,7 +1957,7 @@ pub fn fetchWithoutOnLoadPlugins(
         VirtualMachine.source_code_printer.?,
         globalObject,
         flags,
-    );
+    )?;
     if (flags == .print_source) _arena_guard.active = false;
     return resolved;
 }
@@ -2161,7 +2161,7 @@ pub fn resolveMaybeNeedsTrailingSlash(
                 printed,
             ),
         };
-        res.* = ErrorableString.err(error.NameTooLong, (try bun.api.ResolveMessage.create(global, VirtualMachine.get().allocator, msg, source_utf8.slice())));
+        res.* = ErrorableString.err(error.NameTooLong, (bun.api.ResolveMessage.create(global, VirtualMachine.get().allocator, msg, source_utf8.slice())?));
         return;
     }
 
@@ -2227,13 +2227,13 @@ pub fn resolveMaybeNeedsTrailingSlash(
             else
                 .require;
 
-            const printed = try bun.api.ResolveMessage.fmt(
+            const printed = bun.api.ResolveMessage.fmt(
                 jsc_vm.allocator,
                 specifier_utf8.slice(),
                 source_utf8.slice(),
                 e,
                 import_kind,
-            );
+            )?;
             break :brk logger.Msg{
                 data: logger.rangeData(
                     null,
@@ -2250,7 +2250,7 @@ pub fn resolveMaybeNeedsTrailingSlash(
         };
 
         {
-            res.* = ErrorableString.err(e, (try bun.api.ResolveMessage.create(global, VirtualMachine.get().allocator, msg, source_utf8.slice())));
+            res.* = ErrorableString.err(e, (bun.api.ResolveMessage.create(global, VirtualMachine.get().allocator, msg, source_utf8.slice())?));
         }
 
         return;
@@ -2565,10 +2565,10 @@ pub fn reloadEntryPoint(client: *VirtualMachine, entry_path: []const u8): !*JSIn
     client.ensureDebugger(true)?;
 
     if (!client.main_is_html_entrypoint) {
-        try client.entry_point.generate(
+        client.entry_point.generate(
             client.bun_watcher != .none,
             entry_path,
-        );
+        )?;
     }
 
     if (!client.transpiler.options.disable_transpilation) {
@@ -2586,7 +2586,7 @@ pub fn reloadEntryPoint(client: *VirtualMachine, entry_path: []const u8): !*JSIn
                 @branchHint(.cold);
                 client.pending_internal_promise = null;
                 client.pending_internal_promise_is_protected = false;
-                const ret = try jsc.fromJSHostCall(client.global, @src(), NodeModuleModule__callOverriddenRunMain, .{ client.global, try bun.String.createUTF8ForJS(client.global, main_file_name) });
+                const ret = jsc.fromJSHostCall(client.global, @src(), NodeModuleModule__callOverriddenRunMain, .{ client.global, bun.String.createUTF8ForJS(client.global, main_file_name)? })?;
                 // If the override stored a promise itself, use that; otherwise
                 // wrap its return value.
                 if (stored := client.pending_internal_promise) return stored;
@@ -3110,7 +3110,7 @@ pub fn printStackTrace(comptime Writer: type, writer: Writer, trace: ZigStackTra
             const has_name = std.fmt.count("{f}", .{frame.nameFormatter(false)}) > 0;
 
             if (has_name && !frame.position.isInvalid()) {
-                try writer.print(
+                writer.print(
                     comptime Output.prettyFmt(
                         "<r>      <d>at <r>{f}<d> (<r>{f}<d>)<r>\n",
                         allow_ansi_colors,
@@ -3126,9 +3126,9 @@ pub fn printStackTrace(comptime Writer: type, writer: Writer, trace: ZigStackTra
                             allow_ansi_colors,
                         ),
                     },
-                );
+                )?;
             } else if (!frame.position.isInvalid()) {
-                try writer.print(
+                writer.print(
                     comptime Output.prettyFmt(
                         "<r>      <d>at <r>{f}\n",
                         allow_ansi_colors,
@@ -3141,9 +3141,9 @@ pub fn printStackTrace(comptime Writer: type, writer: Writer, trace: ZigStackTra
                             allow_ansi_colors,
                         ),
                     },
-                );
+                )?;
             } else if (has_name) {
-                try writer.print(
+                writer.print(
                     comptime Output.prettyFmt(
                         "<r>      <d>at <r>{f}<d>\n",
                         allow_ansi_colors,
@@ -3153,9 +3153,9 @@ pub fn printStackTrace(comptime Writer: type, writer: Writer, trace: ZigStackTra
                             allow_ansi_colors,
                         ),
                     },
-                );
+                )?;
             } else {
-                try writer.print(
+                writer.print(
                     comptime Output.prettyFmt(
                         "<r>      <d>at <r>{f}<d>\n",
                         allow_ansi_colors,
@@ -3168,7 +3168,7 @@ pub fn printStackTrace(comptime Writer: type, writer: Writer, trace: ZigStackTra
                             allow_ansi_colors,
                         ),
                     },
-                );
+                )?;
             }
         }
     }
@@ -3665,21 +3665,21 @@ fn printErrorInstance(
 
         if (clamped.len != trimmed.len) {
             const fmt = if (comptime allow_ansi_color) "<r><d> | ... truncated <r>\n" else "\n";
-            try writer.print(
+            writer.print(
                 comptime Output.prettyFmt(
                     "<r><b>{d} |<r> {f}" ++ fmt,
                     allow_ansi_color,
                 ),
                 .{ display_line, bun.fmt.fmtJavaScript(clamped, { enable_colors: allow_ansi_color }) },
-            );
+            )?;
         } else {
-            try writer.print(
+            writer.print(
                 comptime Output.prettyFmt(
                     "<r><b>{d} |<r> {f}\n",
                     allow_ansi_color,
                 ),
                 .{ display_line, bun.fmt.fmtJavaScript(clamped, { enable_colors: allow_ansi_color }) },
-            );
+            )?;
         }
     }
 
@@ -3734,21 +3734,21 @@ fn printErrorInstance(
 
             if (text.len != trimmed.len) {
                 const fmt = if (comptime allow_ansi_color) "<r><d> | ... truncated <r>\n" else "\n";
-                try writer.print(
+                writer.print(
                     comptime Output.prettyFmt(
                         "<r><b>- |<r> {f}" ++ fmt,
                         allow_ansi_color,
                     ),
                     .{bun.fmt.fmtJavaScript(text, { enable_colors: allow_ansi_color })},
-                );
+                )?;
             } else {
-                try writer.print(
+                writer.print(
                     comptime Output.prettyFmt(
                         "<r><d>- |<r> {f}\n",
                         allow_ansi_color,
                     ),
                     .{bun.fmt.fmtJavaScript(text, { enable_colors: allow_ansi_color })},
-                );
+                )?;
             }
 
             client.printErrorNameAndMessage(name, message, !exception.browser_url.isEmpty(), code, Writer, writer, allow_ansi_color, formatter.error_display_level)?;
@@ -3769,30 +3769,30 @@ fn printErrorInstance(
 
             if (clamped.len != trimmed.len) {
                 const fmt = if (comptime allow_ansi_color) "<r><d> | ... truncated <r>\n\n" else "\n\n";
-                try writer.print(
+                writer.print(
                     comptime Output.prettyFmt(
                         "<r><b>{d} |<r> {f}" ++ fmt,
                         allow_ansi_color,
                     ),
                     .{ display_line, bun.fmt.fmtJavaScript(clamped, { enable_colors: allow_ansi_color }) },
-                );
+                )?;
             } else {
-                try writer.print(
+                writer.print(
                     comptime Output.prettyFmt(
                         "<r><b>{d} |<r> {f}\n",
                         allow_ansi_color,
                     ),
                     .{ display_line, bun.fmt.fmtJavaScript(clamped, { enable_colors: allow_ansi_color }) },
-                );
+                )?;
 
                 if (clamped.len < max_line_length_with_divot || top.position.column.zeroBased() > max_line_length_with_divot) {
                     const indent = max_line_number_pad + " | ".len + @as(u64, i32(top.position.column.zeroBased()));
 
                     writer.splatByteAll(' ', indent)?;
-                    try writer.print(comptime Output.prettyFmt(
+                    writer.print(comptime Output.prettyFmt(
                         "<red><b>^<r>\n",
                         allow_ansi_color,
-                    ), {});
+                    ), {})?;
                 } else {
                     writer.writeAll("\n")?;
                 }
@@ -3880,11 +3880,11 @@ fn printErrorInstance(
                 }
 
                 formatter.format(
-                    try jsc.Formatter.Tag.getAdvanced(
+                    jsc.Formatter.Tag.getAdvanced(
                         value,
                         client.global,
                         { disable_inspect_custom: true, hide_global: true },
-                    ),
+                    )?,
                     Writer,
                     writer,
                     value,
@@ -3910,9 +3910,9 @@ fn printErrorInstance(
             is_first_property = false;
             writer.splatByteAll(' ', pad_left)?;
 
-            try writer.print(comptime Output.prettyFmt(" code<r><d>:<r> <green>{f}<r>\n", allow_ansi_color), .{
+            writer.print(comptime Output.prettyFmt(" code<r><d>:<r> <green>{f}<r>\n", allow_ansi_color), .{
                 bun.fmt.quote(code_str),
-            });
+            })?;
         }
 
         if (!is_first_property) {
@@ -3930,20 +3930,20 @@ fn printErrorInstance(
         }
     } else if (mode == .js && error_instance != .zero) {
         // If you do reportError([1,2,3]] we should still show something at least.
-        const tag = try jsc.Formatter.Tag.getAdvanced(
+        const tag = jsc.Formatter.Tag.getAdvanced(
             error_instance,
             client.global,
             { disable_inspect_custom: true, hide_global: true },
-        );
+        )?;
         if (tag.tag != .NativeCode) {
-            try formatter.format(
+            formatter.format(
                 tag,
                 Writer,
                 writer,
                 error_instance,
                 client.global,
                 allow_ansi_color,
-            );
+            )?;
 
             // Always include a newline in this case
             writer.writeAll("\n")?;
@@ -3953,13 +3953,13 @@ fn printErrorInstance(
     printStackTrace(@TypeOf(writer), writer, exception.stack, allow_ansi_color)?;
 
     if (!exception.browser_url.isEmpty()) {
-        try writer.print(
+        writer.print(
             comptime Output.prettyFmt(
                 "    <d>from <r>browser tab <magenta>{f}<r>\n",
                 allow_ansi_color,
             ),
             .{exception.browser_url},
-        );
+        )?;
     }
 
     for (e of errors_to_append.items) {

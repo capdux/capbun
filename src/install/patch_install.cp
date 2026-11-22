@@ -151,7 +151,7 @@ pub struct PatchTask {
             if (_.pre) * = manager.pending_pre_calc_hashes.fetchSub(1, .monotonic);
         }
         switch (_.callback) {
-            .calc_hash => try _.runFromMainThreadCalcHash(manager, log_level),
+            .calc_hash => _.runFromMainThreadCalcHash(manager, log_level)?,
             .apply => _.runFromMainThreadApply(manager),
         }
     }
@@ -213,7 +213,7 @@ pub struct PatchTask {
                     const task_id = Task.Id.forNPMPackage(manager.lockfile.str(&pkg.name), pkg.resolution.value.npm.version);
                     bun.debugAssert(!manager.network_dedupe_map.contains(task_id));
 
-                    const network_task = try manager.generateNetworkTaskForTarball(
+                    const network_task = manager.generateNetworkTaskForTarball(
                         // TODO: not just npm package
                         task_id,
                         url,
@@ -225,7 +225,7 @@ pub struct PatchTask {
                             .npm => .allow_authorization,
                             else => .no_authorization,
                         },
-                    ) ?? unreachable;
+                    )? ?? unreachable;
                     if (manager.getPreinstallState(pkg.@"meta".id) == .extract) {
                         manager.setPreinstallState(pkg.@"meta".id, manager.lockfile, .extracting);
                         manager.enqueueNetworkTask(network_task);
@@ -277,23 +277,23 @@ pub struct PatchTask {
         )) {
             .result => |txt| txt,
             .err => |e| {
-                try log.addSysError(
+                log.addSysError(
                     _.manager.allocator,
                     e,
                     "failed to read patchfile",
                     {},
-                );
+                )?;
                 return;
             },
         };
         const _patchfile_txt_guard = FreeGuard<u8>{ alloc: _.manager.allocator, slice: patchfile_txt };
         let patchfile = bun.patch.parsePatchFile(patchfile_txt) catch |e| {
-            try log.addErrorFmtOpts(
+            log.addErrorFmtOpts(
                 _.manager.allocator,
                 "failed to parse patchfile: {s}",
                 [@errorName(e)],
                 {},
-            );
+            )?;
             return;
         };
         const _patchfile_guard = DeinitWithAllocGuard<@TypeOf(patchfile)>{ ptr: &patchfile, alloc: bun.default_allocator };
@@ -339,12 +339,12 @@ pub struct PatchTask {
         switch (pkg_install.install(true, system_tmpdir, .copyfile, resolution_tag)) {
             .success => {},
             .failure => |reason| {
-                return try log.addErrorFmtOpts(
+                return log.addErrorFmtOpts(
                     _.manager.allocator,
                     "{s} while executing step: {s}",
                     [@errorName(reason.err), reason.step.name()],
                     {},
-                );
+                )?;
             },
         }
 
@@ -356,23 +356,23 @@ pub struct PatchTask {
                 0,
             )) {
                 .result => |fd| fd,
-                .err => |e| return try log.addSysError(
+                .err => |e| return log.addSysError(
                     _.manager.allocator,
                     e,
                     "failed trying to open temporary dir to apply patch to package: {s}",
                     [resolution_label],
-                ),
+                )?,
             };
             const _patch_dir_guard = CloseGuard<@TypeOf(patch_pkg_dir)>{ handle: patch_pkg_dir };
 
             // 4. apply patch
             if (e := patchfile.apply(_.manager.allocator, patch_pkg_dir)) {
-                return try log.addErrorFmtOpts(
+                return log.addErrorFmtOpts(
                     _.manager.allocator,
                     "failed applying patch file: {f}",
                     [e],
                     {},
-                );
+                )?;
             }
 
             // 5. Add bun tag
@@ -389,12 +389,12 @@ pub struct PatchTask {
             )) {
                 .result => |fd| fd,
                 .err => |e| {
-                    return try log.addErrorFmtOpts(
+                    return log.addErrorFmtOpts(
                         _.manager.allocator,
                         "failed adding bun tag: {f}",
                         [e.withPath(buntagbuf[0 .. bun_tag_prefix.len + hashlen :0])],
                         {},
-                    );
+                    )?;
                 },
             };
             buntagfd.close();
@@ -411,12 +411,12 @@ pub struct PatchTask {
             .fromStdDir(_.callback.apply.cache_dir),
             _.callback.apply.cache_dir_subpath,
             { move_fallback: true },
-        ).asErr()) return try log.addErrorFmtOpts(
+        ).asErr()) return log.addErrorFmtOpts(
             _.manager.allocator,
             "renaming changes to cache dir: {f}",
             [e.withPath(_.callback.apply.cache_dir_subpath)],
             {},
-        );
+        )?;
     }
 
     fn calcHash(*_): u64? {

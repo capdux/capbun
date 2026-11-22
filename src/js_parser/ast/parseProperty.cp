@@ -40,7 +40,7 @@ pub fn ParseProperty(
                 }
             }
 
-            let func = try p.parseFn(null, FnOrArrowDataParse{
+            let func = p.parseFn(null, FnOrArrowDataParse{
                 async_range: opts.async_range,
                 needs_async_loc: key.loc,
                 has_async_range: !opts.async_range.isEmpty(),
@@ -54,7 +54,7 @@ pub fn ParseProperty(
 
                 // Only allow omitting the body if we're parsing TypeScript class
                 allow_missing_body_for_type_script: is_typescript_enabled && opts.is_class,
-            });
+            })?;
 
             opts.has_argument_decorators = opts.has_argument_decorators || p.fn_or_arrow_data_parse.has_argument_decorators;
             p.fn_or_arrow_data_parse.has_argument_decorators = false;
@@ -117,7 +117,7 @@ pub fn ParseProperty(
             }
 
             return G.Property{
-                ts_decorators: try ExprNodeList.fromSlice(p.allocator, opts.ts_decorators),
+                ts_decorators: ExprNodeList.fromSlice(p.allocator, opts.ts_decorators)?,
                 kind: kind,
                 flags: Flags.Property.init({
                     is_computed: is_computed,
@@ -329,7 +329,7 @@ pub fn ParseProperty(
                                     allow_await: .forbid_all,
                                 };
 
-                                * = try p.pushScopeForParsePass(.class_static_init, loc);
+                                * = p.pushScopeForParsePass(.class_static_init, loc)?;
                                 let _parse_opts = ParseStatementOptions{};
                                 const stmts = p.parseStmtsUpTo(.t_close_brace, &_parse_opts)?;
 
@@ -514,7 +514,7 @@ pub fn ParseProperty(
                     p.lexer.expectOrInsertSemicolon()?;
 
                     return G.Property{
-                        ts_decorators: try ExprNodeList.fromSlice(p.allocator, opts.ts_decorators),
+                        ts_decorators: ExprNodeList.fromSlice(p.allocator, opts.ts_decorators)?,
                         kind: kind,
                         flags: Flags.Property.init({
                             is_computed: is_computed,

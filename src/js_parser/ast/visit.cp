@@ -34,20 +34,20 @@ pub fn Visit(
             if (fn_body_loc := opts.fn_body_loc) {
                 // Capture "this"
                 if (sym_ref := p.fn_only_data_visit.this_capture_ref) {
-                    try p.temp_refs_to_declare.append(p.allocator, TempRef{
+                    p.temp_refs_to_declare.append(p.allocator, TempRef{
                         @"ref": sym_ref,
                         value: p.newExpr(E.This{}, fn_body_loc),
-                    });
+                    })?;
                 }
             }
         }
 
         static fn recordDeclaredSymbol(p: *P, sym_ref: Ref): anyerror!void {
             bun.assert(ref.isSymbol());
-            try p.declared_symbols.append(p.allocator, DeclaredSymbol{
+            p.declared_symbols.append(p.allocator, DeclaredSymbol{
                 @"ref": sym_ref,
                 is_top_level: p.current_scope == p.module_scope,
-            });
+            })?;
         }
 
         static fn visitFunc(p: *P, _func: G.Fn, open_parens_loc: logger.Loc): G.Fn {

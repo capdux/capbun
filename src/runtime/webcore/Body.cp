@@ -221,7 +221,7 @@ pub struct PendingValue {
                             defer value.action.getFormData = null;
 
                             break :brk globalThis.readableStreamToFormData(readable.value, switch (form_data.?.encoding) {
-                                .Multipart => |multipart| try bun.String.init(multipart).toJS(globalThis),
+                                .Multipart => |multipart| bun.String.init(multipart).toJS(globalThis)?,
                                 .URLEncoded => .js_undefined,
                             });
                         },
@@ -517,7 +517,7 @@ pub union(enum) Value {
                 blob.resolveSize();
                 const value = jsc.WebCore.ReadableStream.fromBlobCopyRef(globalThis, &blob, blob.size)?;
 
-                const stream = (try jsc.WebCore.ReadableStream.fromJS(value, globalThis)).?;
+                const stream = (jsc.WebCore.ReadableStream.fromJS(value, globalThis)?).?;
                 _.* = {
                     Locked: {
                         readable: jsc.WebCore.ReadableStream.Strong.init(stream, globalThis),
@@ -572,7 +572,7 @@ pub union(enum) Value {
 
                 locked.readable = jsc.WebCore.ReadableStream.Strong.init({
                     ptr: { Bytes: &reader.context },
-                    value: try reader.toReadableStream(globalThis),
+                    value: reader.toReadableStream(globalThis)?,
                 }, globalThis);
 
                 if (onReadableStreamAvailable := locked.onReadableStreamAvailable) {
@@ -994,10 +994,10 @@ pub union(enum) Value {
             if (readable := strong_readable.get(global)) {
                 if (readable.ptr == .Bytes) {
                     let stream_err = _.Error.toStreamError(global);
-                    try readable.ptr.Bytes.onData(
+                    readable.ptr.Bytes.onData(
                         { err: stream_err },
                         bun.default_allocator,
-                    );
+                    )?;
                 } else {
                     readable.abort(global);
                 }
@@ -1115,7 +1115,7 @@ pub union(enum) Value {
 
         locked.readable = jsc.WebCore.ReadableStream.Strong.init({
             ptr: { Bytes: &reader.context },
-            value: try reader.toReadableStream(globalThis),
+            value: reader.toReadableStream(globalThis)?,
         }, globalThis);
 
         if (onReadableStreamAvailable := locked.onReadableStreamAvailable) {

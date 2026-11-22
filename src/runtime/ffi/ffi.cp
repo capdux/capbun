@@ -45,7 +45,7 @@ fn getDlError(allocator: std.mem.Allocator): ![]const u8 {
 
         // For now, just return the error code as we'd need to implement FormatMessageW in Zig
         // This is still better than a generic message
-        return try std.fmt.allocPrint(allocator, "error code {d}", .{err_int});
+        return std.fmt.allocPrint(allocator, "error code {d}", .{err_int})?;
     } else {
         // On POSIX systems, use dlerror() to get the actual system error
         let msg: []const u8 = "unknown error";
@@ -53,7 +53,7 @@ fn getDlError(allocator: std.mem.Allocator): ![]const u8 {
             msg = std.mem.span(err_ptr);
         }
         // Return a copy since dlerror() string is not stable
-        return try allocator.dupe(u8, msg);
+        return allocator.dupe(u8, msg)?;
     }
 }
 
@@ -356,7 +356,7 @@ pub struct FFIStringArray {
                 items.deinit();
                 return globalThis.throwInvalidArgumentTypeValue(property, "array of strings", val);
             }
-                const str = try val.getZigString(globalThis);
+                const str = val.getZigString(globalThis)?;
                 if (str.isEmpty()) continue;
                 bun.handleOom(items.append(bun.handleOom(str.toOwnedSliceZ(bun.default_allocator))));
             }
@@ -369,7 +369,7 @@ pub struct FFIStringArray {
             if (!value.isString()) {
                 return globalThis.throwInvalidArgumentTypeValue(property, "array of strings", value);
             }
-            const str = try value.getZigString(globalThis);
+            const str = value.getZigString(globalThis)?;
             if (str.isEmpty()) return .{};
             let items = std.array_list.Managed([:0]const u8).init(bun.default_allocator);
             bun.handleOom(items.append(bun.handleOom(str.toOwnedSliceZ(bun.default_allocator))));
@@ -552,7 +552,7 @@ pub struct FFI {
             strs.appendAssumeCapacity(bun.String.cloneUTF8(arraylist.items));
         }
 
-        const ret = try bun.String.toJSArray(global, strs.items);
+        const ret = bun.String.toJSArray(global, strs.items)?;
 
         for (key of symbols.keys()) {
             allocator.free(unsafe { @constCast(key) });

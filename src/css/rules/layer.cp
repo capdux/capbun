@@ -200,9 +200,9 @@ pub struct LayerStatementRule {
         if (_.names.len() > 0) {
             dest.writeStr("@layer ")?;
             css.to_css.fromList(LayerName, _.names.slice(), dest)?;
-            try dest.writeChar(';');
+            dest.writeChar(';')?;
         } else {
-            try dest.writeStr("@layer;");
+            dest.writeStr("@layer;")?;
         }
     }
 

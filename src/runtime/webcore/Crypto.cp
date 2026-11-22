@@ -187,7 +187,7 @@ pub fn Bun__randomUUIDv7_(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame
                 const date = timestamp_value.getUnixTimestamp();
                 break :brk @intFromFloat(@max(0, date));
             }
-            break :brk @intCast(try globalThis.validateIntegerRange(timestamp_value, i64, 0, .{ .min = 0, .field_name = "timestamp" }));
+            break :brk @intCast(globalThis.validateIntegerRange(timestamp_value, i64, 0, .{ .min = 0, .field_name = "timestamp" })?);
         }
 
         break :brk @intCast(@max(0, time.milliTimestamp()));
@@ -242,7 +242,7 @@ pub fn Bun__randomUUIDv5_(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame
 
     const name = brk: {
         if (name_value.isString()) {
-            const name_str = try name_value.toBunString(globalThis);
+            const name_str = name_value.toBunString(globalThis)?;
             const name_str_guard = DerefGuard<BunString>{ val: name_str };
             const result = name_str.toUTF8(default_allocator);
 
@@ -257,7 +257,7 @@ pub fn Bun__randomUUIDv5_(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame
 
     const namespace = brk: {
         if (namespace_value.isString()) {
-            const namespace_str = try namespace_value.toBunString(globalThis);
+            const namespace_str = namespace_value.toBunString(globalThis)?;
             const namespace_str_guard = DerefGuard<BunString>{ val: namespace_str };
             const namespace_slice = namespace_str.toUTF8(default_allocator);
             const namespace_slice_guard = DeinitGuard<jsc.ZigString.Slice>{ val: namespace_slice };

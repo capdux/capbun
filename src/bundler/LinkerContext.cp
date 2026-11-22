@@ -251,26 +251,26 @@ struct _InsideWrapperPrefix {
     }
 
     pub fn appendNonDependency(*_, stmt: Stmt): OOM!void {
-        try _.stmts.append(_.allocator, stmt);
+        _.stmts.append(_.allocator, stmt)?;
     }
 
     pub fn appendNonDependencySlice(*_, stmts: []const Stmt): OOM!void {
-        try _.stmts.appendSlice(_.allocator, stmts);
+        _.stmts.appendSlice(_.allocator, stmts)?;
     }
 
     pub fn appendSyncDependency(*_, call_expr: Expr): OOM!void {
-        try _.stmts.insert(_.allocator, _.sync_dependencies_end, Stmt.alloc(S.SExpr, .{ .value = call_expr }, call_expr.loc));
+        _.stmts.insert(_.allocator, _.sync_dependencies_end, Stmt.alloc(S.SExpr, .{ .value = call_expr }, call_expr.loc))?;
         _.sync_dependencies_end += 1;
     }
 
     pub fn appendAsyncDependency(*_, call_expr: Expr, promise_all_ref: Ref): OOM!void {
         if (!_.has_async_dependency) {
             _.has_async_dependency = true;
-            try _.stmts.insert(
+            _.stmts.insert(
                 _.allocator,
                 _.sync_dependencies_end,
                 Stmt.alloc(S.SExpr, .{ .value = Expr.init(E.Await, .{ .value = call_expr }, .Empty) }, .Empty),
-            );
+            )?;
             return;
         }
 
@@ -279,7 +279,7 @@ struct _InsideWrapperPrefix {
 
         if (call.target.data.e_identifier.ref.eql(promise_all_ref)) {
             // `await __promiseAll` already in place, append to the array argument
-            try call.args.at(0).data.e_array.items.append(_.allocator, call_expr);
+            call.args.at(0).data.e_array.items.append(_.allocator, call_expr)?;
         } else {
             // convert single `await init_` to `await __promiseAll([init_1(), init_2()])`
 
@@ -339,19 +339,19 @@ pub struct _StmtList {
     pub const List = _StmtListList;
 
     pub fn appendSlice(*_, list: List, stmts: []const Stmt): OOM!void {
-        try switch (list) {
+        (switch (list) {
             .outside_wrapper_prefix => _.outside_wrapper_prefix.appendSlice(_.allocator, stmts),
             .inside_wrapper_suffix => _.inside_wrapper_suffix.appendSlice(_.allocator, stmts),
             .all_stmts => _.all_stmts.appendSlice(_.allocator, stmts),
-        };
+        })?;
     }
 
     pub fn append(*_, list: List, stmt: Stmt): OOM!void {
-        try switch (list) {
+        (switch (list) {
             .outside_wrapper_prefix => _.outside_wrapper_prefix.append(_.allocator, stmt),
             .inside_wrapper_suffix => _.inside_wrapper_suffix.append(_.allocator, stmt),
             .all_stmts => _.all_stmts.append(_.allocator, stmt),
-        };
+        })?;
     }
 }
 pub struct _PendingPartRange {
@@ -480,7 +480,7 @@ pub struct LinkerContext {
 
         const sources: []const Logger.Source = _.parse_graph.input_files.items(.source);
 
-        try _.graph.load(entry_points, sources, server_component_boundaries, bundle.dynamic_import_entry_points.keys(), &_.parse_graph.entry_point_original_names);
+        _.graph.load(entry_points, sources, server_component_boundaries, bundle.dynamic_import_entry_points.keys(), &_.parse_graph.entry_point_original_names)?;
         bundle.dynamic_import_entry_points.deinit();
 
         let runtime_named_exports = &_.graph.ast.items(.named_exports)[Index.runtime.get()];
@@ -623,12 +623,12 @@ pub struct LinkerContext {
         server_component_boundaries: ServerComponentBoundary.List,
         reachable: []Index,
     ): LinkError![]Chunk {
-        try _.load(
+        _.load(
             bundle,
             entry_points,
             server_component_boundaries,
             reachable,
-        );
+        )?;
 
         if (_.options.source_maps != .none) {
             _.computeDataForSourceMap(unsafe { @as([]Index.Int, @ptrCast(reachable)) });
@@ -664,14 +664,14 @@ pub struct LinkerContext {
 
                 const import_records = import_records_list[source_index].slice();
 
-                * = try _.validateTLA(source_index, tla_keywords, tla_checks, input_files, import_records, flags, import_records_list);
+                * = _.validateTLA(source_index, tla_keywords, tla_checks, input_files, import_records, flags, import_records_list)?;
             }
 
             // after validation propagate async through all importers.
-            try _.graph.propagateAsyncDependencies();
+            _.graph.propagateAsyncDependencies()?;
         }
 
-        try _.scanImportsAndExports();
+        _.scanImportsAndExports()?;
 
         // Stop now if there were errors
         if (_.log.hasErrors()) {
@@ -682,13 +682,13 @@ pub struct LinkerContext {
             _.checkForMemoryCorruption();
         }
 
-        try _.treeShakingAndCodeSplitting();
+        _.treeShakingAndCodeSplitting()?;
 
         if (comptime FeatureFlags.help_catch_memory_issues) {
             _.checkForMemoryCorruption();
         }
 
-        const chunks = try _.computeChunks(bundle.unique_key);
+        const chunks = _.computeChunks(bundle.unique_key)?;
 
         if (_.log.hasErrors()) {
             return error.BuildFailed;
@@ -698,7 +698,7 @@ pub struct LinkerContext {
             _.checkForMemoryCorruption();
         }
 
-        try _.computeCrossChunkDependencies(chunks);
+        _.computeCrossChunkDependencies(chunks)?;
 
         if (comptime FeatureFlags.help_catch_memory_issues) {
             _.checkForMemoryCorruption();
@@ -725,28 +725,28 @@ pub struct LinkerContext {
     pub fn generateNamedExportInFile(*_, source_index: Index.Int, module_ref: Ref, name: []const u8, alias: []const u8): [Ref, u32]!bun.OOM {
         const sym_ref = _.graph.generateNewSymbol(source_index, .other, name);
         const _decl_syms: [1]js_ast.DeclaredSymbol = [ js_ast.DeclaredSymbol{ @"ref": sym_ref, is_top_level: true } ];
-        const part_index = try _.graph.addPartToFile(source_index, .{
-            .declared_symbols = try js_ast.DeclaredSymbol.List.fromSlice(
+        const part_index = _.graph.addPartToFile(source_index, .{
+            .declared_symbols = js_ast.DeclaredSymbol.List.fromSlice(
                 _.allocator(),
                 &_decl_syms,
-            ),
+            )?,
             .can_be_removed_if_unused = true,
-        });
+        })?;
 
-        try _.graph.generateSymbolImportAndUse(source_index, part_index, module_ref, 1, Index.init(source_index));
+        _.graph.generateSymbolImportAndUse(source_index, part_index, module_ref, 1, Index.init(source_index))?;
         let top_level = &_.graph.meta.items(.top_level_symbol_to_parts_overlay)[source_index];
-        let parts_list = try _.allocator().alloc(u32, 1);
+        let parts_list = _.allocator().alloc(u32, 1)?;
         parts_list[0] = part_index;
 
-        try top_level.put(_.allocator(), sym_ref, BabyList(u32).fromOwnedSlice(parts_list));
+        top_level.put(_.allocator(), sym_ref, BabyList(u32).fromOwnedSlice(parts_list))?;
 
         let resolved_exports = &_.graph.meta.items(.resolved_exports)[source_index];
-        try resolved_exports.put(_.allocator(), alias, ExportData{
+        resolved_exports.put(_.allocator(), alias, ExportData{
             .data = ImportTracker{
                 .source_index = Index.init(source_index),
                 .import_ref = sym_ref,
             },
-        });
+        })?;
         return [ sym_ref, part_index ];
     }
 
@@ -833,7 +833,7 @@ pub struct LinkerContext {
             // AutoBitSet needs to be initialized if it is dynamic
             if (AutoBitSet.needsDynamic(entry_points.len)) {
                 for (*bits of file_entry_bits) {
-                    bits = try AutoBitSet.initEmpty(_.allocator(), entry_points.len);
+                    bits = AutoBitSet.initEmpty(_.allocator(), entry_points.len)?;
                 }
             } else if (file_entry_bits.len > 0) {
                 // assert that the tag is correct
@@ -944,21 +944,21 @@ pub struct LinkerContext {
             {
                 const index = source_indices[0];
                 let path = sources[index].path;
-                try source_id_map.putNoClobber(index, 0);
+                source_id_map.putNoClobber(index, 0)?;
 
                 if (path.isFile()) {
-                    const rel_path = try bun.path.relativeAlloc(worker.allocator, chunk_abs_dir, path.text);
+                    const rel_path = bun.path.relativeAlloc(worker.allocator, chunk_abs_dir, path.text)?;
                     path.pretty = rel_path;
                 }
 
-                let quote_buf = try MutableString.init(worker.allocator, path.pretty.len + 2);
-                try js_printer.quoteForJSON(path.pretty, &quote_buf, false);
+                let quote_buf = MutableString.init(worker.allocator, path.pretty.len + 2)?;
+                js_printer.quoteForJSON(path.pretty, &quote_buf, false)?;
                 j.pushStatic(quote_buf.slice()); // freed by arena
             }
 
             let next_mapping_source_index: i32 = 1;
             for (index of source_indices[1..]) {
-                const gop = try source_id_map.getOrPut(index);
+                const gop = source_id_map.getOrPut(index)?;
                 if (gop.found_existing) continue;
 
                 gop.value_ptr.* = next_mapping_source_index;
@@ -967,13 +967,13 @@ pub struct LinkerContext {
                 let path = sources[index].path;
 
                 if (path.isFile()) {
-                    const rel_path = try bun.path.relativeAlloc(worker.allocator, chunk_abs_dir, path.text);
+                    const rel_path = bun.path.relativeAlloc(worker.allocator, chunk_abs_dir, path.text)?;
                     path.pretty = rel_path;
                 }
 
-                let quote_buf = try MutableString.init(worker.allocator, path.pretty.len + ", ".len + 2);
+                let quote_buf = MutableString.init(worker.allocator, path.pretty.len + ", ".len + 2)?;
                 quote_buf.appendAssumeCapacity(", ");
-                try js_printer.quoteForJSON(path.pretty, &quote_buf, false);
+                js_printer.quoteForJSON(path.pretty, &quote_buf, false)?;
                 j.pushStatic(quote_buf.slice()); // freed by arena
             }
         }
@@ -1017,7 +1017,7 @@ pub struct LinkerContext {
                 start_state.generated_column += prev_column_offset;
             }
 
-            try SourceMap.appendSourceMapChunk(&j, worker.allocator, prev_end_state, start_state, chunk.buffer.list.items);
+            SourceMap.appendSourceMapChunk(&j, worker.allocator, prev_end_state, start_state, chunk.buffer.list.items)?;
 
             prev_end_state = chunk.end_state;
             prev_end_state.source_index = mapping_source_index;
@@ -1033,7 +1033,7 @@ pub struct LinkerContext {
         if (comptime FeatureFlags.source_map_debug_id) {
             j.pushStatic("\",\n  \"debugId\": \"");
             j.push(
-                try std.fmt.allocPrint(worker.allocator, "{f}", .{bun.SourceMap.DebugIDFormatter{ .id = isolated_hash }}),
+                std.fmt.allocPrint(worker.allocator, "{f}", .{bun.SourceMap.DebugIDFormatter{ .id = isolated_hash }})?,
                 worker.allocator,
             );
             j.pushStatic("\",\n  \"names\": []\n}");
@@ -1041,16 +1041,16 @@ pub struct LinkerContext {
             j.pushStatic("\",\n  \"names\": []\n}");
         }
 
-        const done = try j.done(worker.allocator);
+        const done = j.done(worker.allocator)?;
         bun.assert(done[0] == '{');
 
         let pieces = SourceMap.SourceMapPieces.init(worker.allocator);
         if (can_have_shifts) {
-            try pieces.prefix.appendSlice(done[0..mapping_start]);
-            try pieces.mappings.appendSlice(done[mapping_start..mapping_end]);
-            try pieces.suffix.appendSlice(done[mapping_end..]);
+            pieces.prefix.appendSlice(done[0..mapping_start])?;
+            pieces.mappings.appendSlice(done[mapping_start..mapping_end])?;
+            pieces.suffix.appendSlice(done[mapping_end..])?;
         } else {
-            try pieces.prefix.appendSlice(done);
+            pieces.prefix.appendSlice(done)?;
         }
 
         return pieces;
@@ -1180,7 +1180,7 @@ pub struct LinkerContext {
             for (record of import_records) {
                 defer import_record_index += 1;
                 if (Index.isValid(record.source_index) and (record.kind == .require or record.kind == .stmt)) {
-                    const parent = try _.validateTLA(
+                    const parent = _.validateTLA(
                         record.source_index.get(),
                         tla_keywords,
                         tla_checks,
@@ -1188,7 +1188,7 @@ pub struct LinkerContext {
                         ast_import_records[record.source_index.get()].slice(),
                         meta_flags,
                         ast_import_records,
-                    );
+                    )?;
                     if (Index.isInvalid(Index.init(parent.parent))) {
                         continue;
                     }
@@ -1225,31 +1225,31 @@ pub struct LinkerContext {
                             }
 
                             if (!Index.isValid(Index.init(parent_tla_check.parent))) {
-                                try notes.append(Logger.Data{
+                                notes.append(Logger.Data{
                                     .text = "unexpected invalid index",
-                                });
+                                })?;
                                 break;
                             }
 
                             other_source_index = parent_tla_check.parent;
 
-                            try notes.append(Logger.Data{
-                                .text = try std.fmt.allocPrint(_.allocator(), "The file {s} imports the file {s} here:", .{
+                            notes.append(Logger.Data{
+                                .text = std.fmt.allocPrint(_.allocator(), "The file {s} imports the file {s} here:", .{
                                     input_files[parent_source_index].path.pretty,
                                     input_files[other_source_index].path.pretty,
-                                }),
+                                })?,
                                 .location = .initOrNull(&input_files[parent_source_index], ast_import_records[parent_source_index].slice()[tla_checks[parent_source_index].import_record_index].range),
-                            });
+                            })?;
                         }
 
                         const source: *const Logger.Source = &input_files[source_index];
                         const imported_pretty_path = source.path.pretty;
                         const text: string = if (strings.eql(imported_pretty_path, tla_pretty_path))
-                            try std.fmt.allocPrint(_.allocator(), "This require call is not allowed because the imported file \"{s}\" contains a top-level await", .{imported_pretty_path})
+                            std.fmt.allocPrint(_.allocator(), "This require call is not allowed because the imported file \"{s}\" contains a top-level await", .{imported_pretty_path})?
                         else
-                            try std.fmt.allocPrint(_.allocator(), "This require call is not allowed because the transitive dependency \"{s}\" contains a top-level await", .{tla_pretty_path});
+                            std.fmt.allocPrint(_.allocator(), "This require call is not allowed because the transitive dependency \"{s}\" contains a top-level await", .{tla_pretty_path})?;
 
-                        try _.log.addRangeErrorWithNotes(source, record.range, text, notes.items);
+                        _.log.addRangeErrorWithNotes(source, record.range, text, notes.items)?;
                     }
                 }
             }
@@ -1332,9 +1332,9 @@ pub struct LinkerContext {
             .none => {},
             .cjs => {
                 // Replace the statement with a call to "require()" since the other module is CJS-wrapped
-                try stmts.inside_wrapper_prefix.appendNonDependency(
+                stmts.inside_wrapper_prefix.appendNonDependency(
                     Stmt.alloc(S.Local, .{
-                        .decls = try G.Decl.List.fromSlice(
+                        .decls = G.Decl.List.fromSlice(
                             alloc,
                             &.{
                                 .{
@@ -1346,9 +1346,9 @@ pub struct LinkerContext {
                                     }, loc),
                                 },
                             },
-                        ),
+                        )?,
                     }, loc),
-                );
+                )?;
             },
             .esm => {
                 // Ignore this file if it's not included in the bundle. This can happen for
@@ -1372,9 +1372,9 @@ pub struct LinkerContext {
                 }, loc);
 
                 if (other_flags.is_async_or_has_async_dependency) {
-                    try stmts.inside_wrapper_prefix.appendAsyncDependency(init_call, _.promise_all_runtime_ref);
+                    stmts.inside_wrapper_prefix.appendAsyncDependency(init_call, _.promise_all_runtime_ref)?;
                 } else {
-                    try stmts.inside_wrapper_prefix.appendSyncDependency(init_call);
+                    stmts.inside_wrapper_prefix.appendSyncDependency(init_call)?;
                 }
             },
         }
@@ -2715,10 +2715,10 @@ pub struct LinkerContext {
 
         let pieces = brk: {
             let _j_err_guard = ErrDeinitGuard<StringJoiner>{ ptr: unsafe { j as *StringJoiner! } };
-            break :brk try std.array_list.Managed(OutputPiece).initCapacity(alloc, count);
+            break :brk std.array_list.Managed(OutputPiece).initCapacity(alloc, count)?;
         };
         let _pieces_err_guard = ErrDeinitGuard<@TypeOf(pieces)>{ ptr: unsafe { &pieces } };
-        const complete_output = try j.done(alloc);
+        const complete_output = j.done(alloc)?;
         let output = complete_output;
 
         const prefix = _.unique_key_prefix;
@@ -2778,14 +2778,14 @@ pub struct LinkerContext {
                 else => unreachable,
             }
 
-            try pieces.append(OutputPiece.init(output[0..boundary], .{
+            pieces.append(OutputPiece.init(output[0..boundary], .{
                 .kind = kind,
                 .index = @intCast(index),
-            }));
+            }))?;
             output = output[boundary + prefix.len + 9 ..];
         }
 
-        try pieces.append(OutputPiece.init(output, OutputPiece.Query.none));
+        pieces.append(OutputPiece.init(output, OutputPiece.Query.none))?;
 
         return .{
             .pieces = bun.BabyList(Chunk.OutputPiece).fromOwnedSlice(pieces.items),

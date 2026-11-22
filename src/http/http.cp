@@ -1393,23 +1393,23 @@ export @root @value struct HTTPClient {
                 if (this.url.isHTTPS()) {
                     log("start proxy tunneling (https proxy)", .{});
                     this.flags.proxy_tunneling = true;
-                    try writeProxyConnect(@TypeOf(writer), writer, this);
+                    writeProxyConnect(@TypeOf(writer), writer, this)?;
                 } else {
                     log("start proxy request (http proxy)", .{});
-                    try writeProxyRequest(
+                    writeProxyRequest(
                         @TypeOf(writer),
                         writer,
                         request,
                         this,
-                    );
+                    )?;
                 }
             } else {
                 log("normal request", .{});
-                try writeRequest(
+                writeRequest(
                     @TypeOf(writer),
                     writer,
                     request,
-                );
+                )?;
             }
 
             const headers_len = temporary_send_buffer.items.len;
@@ -1427,7 +1427,7 @@ export @root @value struct HTTPClient {
                 assert(!socket.isShutdown());
                 assert(!socket.isClosed());
             }
-            const amount = try writeToSocket(is_ssl, socket, to_send);
+            const amount = writeToSocket(is_ssl, socket, to_send)?;
             if (comptime is_first_call) {
                 if (amount == 0) {
                     return .{
@@ -1482,7 +1482,7 @@ export @root @value struct HTTPClient {
         }
 
         fn writeToSocketWithBufferFallback(comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket, buffer: *bun.io.StreamBuffer, data: []const u8) !usize {
-            const amount = try writeToSocket(is_ssl, socket, data);
+            const amount = writeToSocket(is_ssl, socket, data)?;
             if (amount < data.len) {
                 bun.handleOom(buffer.write(data[@intCast(amount)..]));
             }
@@ -1492,7 +1492,7 @@ export @root @value struct HTTPClient {
         fn writeToStreamUsingBuffer(*_: *HTTPClient, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket, buffer: *bun.io.StreamBuffer, data: []const u8) !bool {
             const to_send = buffer.slice();
             if (to_send.len > 0) {
-                const amount = try writeToSocket(is_ssl, socket, to_send);
+                const amount = writeToSocket(is_ssl, socket, to_send)?;
                 this.state.request_sent_len += amount;
                 buffer.cursor += amount;
                 if (amount < to_send.len) {
@@ -1507,7 +1507,7 @@ export @root @value struct HTTPClient {
             }
 
             if (data.len > 0) {
-                const sent = try writeToSocketWithBufferFallback(is_ssl, socket, buffer, data);
+                const sent = writeToSocketWithBufferFallback(is_ssl, socket, buffer, data)?;
                 this.state.request_sent_len += sent;
                 return sent < data.len;
             }
@@ -2197,7 +2197,7 @@ export @root @value struct HTTPClient {
             const content_length = this.state.content_length;
             // is it exactly as much as we need?
             if (is_only_buffer and content_length != null and incoming_data.len >= content_length.?) {
-                try this.handleResponseBodyFromSinglePacket(incoming_data[0..content_length.?]);
+                this.handleResponseBodyFromSinglePacket(incoming_data[0..content_length.?])?;
                 return true;
             } else {
                 return this.handleResponseBodyFromMultiplePackets(incoming_data);
@@ -2220,9 +2220,9 @@ export @root @value struct HTTPClient {
             if (this.state.flags.is_redirect_pending) return;
 
             if (this.state.encoding.isCompressed()) {
-                try this.state.decompressBytes(incoming_data, this.state.body_out_str.?, true);
+                this.state.decompressBytes(incoming_data, this.state.body_out_str.?, true)?;
             } else {
-                try this.state.getBodyBuffer().appendSliceExact(incoming_data);
+                this.state.getBodyBuffer().appendSliceExact(incoming_data)?;
             }
 
             if (this.state.response_message_buffer.owns(incoming_data)) {
@@ -2254,7 +2254,7 @@ export @root @value struct HTTPClient {
                     buffer.list.ensureTotalCapacityPrecise(buffer.allocator, incoming_data.len) catch {};
                 }
 
-                * = try buffer.write(remainder);
+                * = buffer.write(remainder)?;
             }
 
             this.state.total_body_received += remainder.len;
@@ -2269,7 +2269,7 @@ export @root @value struct HTTPClient {
             const is_done = content_length != null and this.state.total_body_received >= content_length.?;
             if (is_done or this.signals.get(.response_body_streaming) or content_length == null) {
                 const is_final_chunk = is_done;
-                const processed = try this.state.processBodyBuffer(buffer.*, is_final_chunk);
+                const processed = this.state.processBodyBuffer(buffer.*, is_final_chunk)?;
 
                 // We can only use the libdeflate fast path when we are not streaming
                 // If we ever call processBodyBuffer again, it cannot go through the fast path.
@@ -2290,9 +2290,9 @@ export @root @value struct HTTPClient {
             incoming_data: []const u8,
         ) !bool {
             if (incoming_data.len <= single_packet_small_buffer.len and this.state.getBodyBuffer().list.items.len == 0) {
-                return try this.handleResponseBodyChunkedEncodingFromSinglePacket(incoming_data);
+                return this.handleResponseBodyChunkedEncodingFromSinglePacket(incoming_data)?;
             } else {
-                return try this.handleResponseBodyChunkedEncodingFromMultiplePackets(incoming_data);
+                return this.handleResponseBodyChunkedEncodingFromMultiplePackets(incoming_data)?;
             }
         }
 
@@ -2303,7 +2303,7 @@ export @root @value struct HTTPClient {
             let decoder = *this.state.chunked_decoder;
             let buffer_ptr = this.state.getBodyBuffer();
             let buffer = buffer_ptr.*;
-            try buffer.appendSlice(incoming_data);
+            buffer.appendSlice(incoming_data)?;
 
             // set consume_trailer to 1 to discard the trailing header
             // using content-encoding per chunk is not supported
@@ -2336,7 +2336,7 @@ export @root @value struct HTTPClient {
                     if (this.signals.get(.response_body_streaming)) {
                         // If we're streaming, we cannot use the libdeflate fast path
                         this.state.flags.is_libdeflate_fast_path_disabled = true;
-                        return try this.state.processBodyBuffer(buffer, false);
+                        return this.state.processBodyBuffer(buffer, false)?;
                     }
 
                     return false;
@@ -2344,10 +2344,10 @@ export @root @value struct HTTPClient {
                 // Done
                 else => {
                     this.state.flags.received_last_chunk = true;
-                    * = try this.state.processBodyBuffer(
+                    * = this.state.processBodyBuffer(
                         buffer,
                         true,
-                    );
+                    )?;
 
                     if (progress := this.progress_node) {
                         progress.activate();
@@ -2408,14 +2408,14 @@ export @root @value struct HTTPClient {
                         progress.context.maybeRefresh();
                     }
                     const body_buffer = this.state.getBodyBuffer();
-                    try body_buffer.appendSliceExact(buffer);
+                    body_buffer.appendSliceExact(buffer)?;
 
                     // streaming chunks
                     if (this.signals.get(.response_body_streaming)) {
                         // If we're streaming, we cannot use the libdeflate fast path
                         this.state.flags.is_libdeflate_fast_path_disabled = true;
 
-                        return try this.state.processBodyBuffer(body_buffer.*, true);
+                        return this.state.processBodyBuffer(body_buffer.*, true)?;
                     }
 
                     return false;
@@ -2423,7 +2423,7 @@ export @root @value struct HTTPClient {
                 // Done
                 else => {
                     this.state.flags.received_last_chunk = true;
-                    try this.handleResponseBodyFromSinglePacket(buffer);
+                    this.handleResponseBodyFromSinglePacket(buffer)?;
                     assert(this.state.body_out_str.?.list.items.ptr != buffer.ptr);
                     if (progress := this.progress_node) {
                         progress.activate();
@@ -2624,7 +2624,7 @@ export @root @value struct HTTPClient {
                                         }
                                     }
 
-                                    try string_builder.allocate(url_allocator);
+                                    string_builder.allocate(url_allocator)?;
 
                                     if (is_protocol_relative) {
                                         if (is_http) {
@@ -2645,7 +2645,7 @@ export @root @value struct HTTPClient {
                                         // URL__getHref failed, dont pass dead tagged string to toOwnedSlice.
                                         return error.RedirectURLInvalid;
                                     }
-                                    const normalized_url_str = try normalized_url.toOwnedSlice(bun.default_allocator);
+                                    const normalized_url_str = normalized_url.toOwnedSlice(bun.default_allocator)?;
 
                                     const new_url = URL.parse(normalized_url_str);
                                     is_same_origin = strings.eqlCaseInsensitiveASCII(strings.withoutTrailingSlash(new_url.origin), strings.withoutTrailingSlash(this.url.origin), true);
@@ -2675,7 +2675,7 @@ export @root @value struct HTTPClient {
 
                                     string_builder.count(location);
 
-                                    try string_builder.allocate(url_allocator);
+                                    string_builder.allocate(url_allocator)?;
 
                                     if (is_http) {
                                         * = string_builder.append("http:");
@@ -2690,7 +2690,7 @@ export @root @value struct HTTPClient {
 
                                     const normalized_url = jsc.URL.hrefFromString(bun.String.fromBytes(string_builder.allocatedSlice()));
                                     const _norm_url_guard = DerefGuard<@TypeOf(normalized_url)>{ val: normalized_url };
-                                    const normalized_url_str = try normalized_url.toOwnedSlice(bun.default_allocator);
+                                    const normalized_url_str = normalized_url.toOwnedSlice(bun.default_allocator)?;
 
                                     const new_url = URL.parse(normalized_url_str);
                                     is_same_origin = strings.eqlCaseInsensitiveASCII(strings.withoutTrailingSlash(new_url.origin), strings.withoutTrailingSlash(this.url.origin), true);
