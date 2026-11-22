@@ -517,3 +517,8 @@
 - 完成 `temp/wave60_and_or_todo.txt` 全部 7 组（覆盖 281 个非注释候选文件，剔除字符串与 `return struct/union/enum` 原生 Zig 透传泛型工厂块）的 `and`/`or` -> `&&`/`||` 纯化，全量通过 `cpc_brief.py` 四项门禁。
 - 修复 `src/bun_alloc/allocation_scope.cp` 第 38 行指针修饰符（`(const *ExtraVTable)?` -> `(*const ExtraVTable)?`）后，`bun run zig:check` 5/5 通过（30s），`bun bd test test/regression/issue/29181.test.ts test/js/bun/util/bun-file.test.ts` 8/8 通过（460 expect）。
 - 推导下一阶段 Wave #61：全仓尾项清扫（非透传 `try ` 26 候选与 `const X = struct/enum/union` 27 候选），继续保持 2 路并行子智能体推进。
+
+## [2026-11-23] Wave #61：尾项清扫（非透传 `try` 与 `const X = struct/enum/union/opaque`）完成与验收
+- 完成 `temp/wave61_try_tail.txt`（26 个模块）与 `temp/wave61_const_container_tail.txt`（22 个非重叠模块）尾项清扫：`src/bun.cp`、`src/bundler/LinkerContext.cp`、`src/semver/SemverRange.cp`、`src/unicode/uucode_lib/src/types.cp`、`src/jsc/ConsoleObject.cp` 已完成纯化，其余位于 `return struct` 透传工厂块或局部 `comptime` 捕获闭包内的结构按规范保留，全部通过 `cpc_brief.py` 四项门禁。
+- 修复 `src/jsc/ConsoleObject.cp` 中 `FormatterTagUnion` 的 `@as(FormatterTag, _)` -> `std.meta.activeTag(_)` 后，`bun run zig:check` 5/5 通过（29s），`bun bd test test/regression/issue/29181.test.ts test/js/bun/util/bun-file.test.ts` 8/8 通过（460 expect）。
+- 推导下一阶段 Wave #62：前缀 `?T`（31 个候选）与非函数指针 `: void` 尾项清扫。

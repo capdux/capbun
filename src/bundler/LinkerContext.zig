@@ -400,10 +400,10 @@ pub fn appendAsyncDependency(self: *_InsideWrapperPrefix, call_expr: Expr, promi
                 _ = try call.args.at(0).data.e_array.items.append(self.allocator, call_expr);
             } else {
                 const promise_all = Expr.init(E.Identifier, .{ .ref = promise_all_ref }, .Empty);
-                var items: BabyList(Expr) = try .initCapacity(self.allocator, 2);
+                var items: BabyList(Expr) = try BabyList(Expr).initCapacity(self.allocator, 2);
                 _ = &items;
                 _ = items.appendSliceAssumeCapacity((&.{ first_dep_call_expr, call_expr }));
-                var args: BabyList(Expr) = try .initCapacity(self.allocator, 1);
+                var args: BabyList(Expr) = try BabyList(Expr).initCapacity(self.allocator, 1);
                 _ = &args;
                 _ = args.appendAssumeCapacity(Expr.init(E.Array, .{ .items = items }, .Empty));
                 const promise_all_call = Expr.init(E.Call, .{ .target = promise_all, .args = args }, .Empty);

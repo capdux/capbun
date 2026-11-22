@@ -119,6 +119,15 @@ pub const MessageType = enum(u32) {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
+pub const TablePrinterRowKeyType = enum {
+    str,
+    num,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const ErrorDisplayLevelColon = enum {
     include_colon,
     exclude_colon,
@@ -518,6 +527,31 @@ pub fn callback(_: *jsc.VM, _: *JSGlobalObject, ctx: *TablePrinterFirstPassConte
     }
 };
 
+pub const TablePrinterColumn = struct {
+    name: String,
+    width: u32 = 1,
+};
+
+pub const TablePrinterRowKey = union(TablePrinterRowKeyType) {
+    str: String,
+    num: u32,
+};
+
+pub const TablePrinterVisibleCharacterCounter = struct {
+    width: *usize = undefined,
+
+pub fn write(self: TablePrinterVisibleCharacterCounter, bytes: []const u8) WriteError!usize {
+            self.width.* = (self.width.* + strings.visible.width.exclude_ansi_colors.utf8(bytes));
+            return bytes.len;
+    }
+
+pub fn writeAll(self: TablePrinterVisibleCharacterCounter, bytes: []const u8) WriteError!void {
+            self.width.* = (self.width.* + strings.width.exclude_ansi_colors.utf8(bytes));
+    }
+    const WriteError = error{};
+    const Writer = std.Io.GenericWriter(TablePrinterVisibleCharacterCounter, TablePrinterVisibleCharacterCounter.WriteError, TablePrinterVisibleCharacterCounter.write);
+};
+
 pub const TablePrinter = struct {
     globalObject: *JSGlobalObject,
     level: MessageLevel,
@@ -843,37 +877,10 @@ pub fn printTable(self: *TablePrinter, comptime Writer: type, writer: *std.Io.Wr
                 _ = try writer.writeAll("┘\n");
             }
     }
-    const Column = struct {
-        name: String,
-        width: u32 = 1,
-    };
-    const RowKey = union(@This().Type) {
-        str: String,
-        num: u32,
-        pub const Type = enum {
-            str,
-            num,
-            pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
-            pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
-            pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
-            pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
-        };
-    };
+    const Column = TablePrinterColumn;
+    const RowKey = TablePrinterRowKey;
+    const VisibleCharacterCounter = TablePrinterVisibleCharacterCounter;
     const PADDING = 1;
-    const VisibleCharacterCounter = struct {
-        width: *usize = undefined,
-    
-    pub fn write(self: @This(), bytes: []const u8) WriteError!usize {
-                self.width.* = (self.width.* + strings.visible.width.exclude_ansi_colors.utf8(bytes));
-                return bytes.len;
-        }
-    
-    pub fn writeAll(self: @This(), bytes: []const u8) WriteError!void {
-                self.width.* = (self.width.* + strings.width.exclude_ansi_colors.utf8(bytes));
-        }
-        pub const WriteError = error{};
-        pub const Writer = std.Io.GenericWriter(VisibleCharacterCounter, VisibleCharacterCounter.WriteError, VisibleCharacterCounter.write);
-    };
 };
 
 pub const ErrorDisplayLevelFormatter = struct {
@@ -1018,6 +1025,69 @@ pub fn format(self: ConsoleZigFormatter, writer: *std.Io.Writer) std.Io.Writer.E
             _ = (blk_catch_6: { break :blk_catch_6 ((self.formatter.format(tag, @TypeOf(writer), writer, self.value, self.formatter.globalThis, false)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); });
     }
     pub const WriteError = error{UhOh};
+};
+
+pub const FormatterTagUnion = union(FormatterTag) {
+    StringPossiblyFormatted: void,
+    String: void,
+    Undefined: void,
+    Double: void,
+    Integer: void,
+    Null: void,
+    Boolean: void,
+    Array: void,
+    Object: void,
+    Function: void,
+    Class: void,
+    Error: void,
+    TypedArray: void,
+    Map: void,
+    MapIterator: void,
+    SetIterator: void,
+    Set: void,
+    BigInt: void,
+    Symbol: void,
+    CustomFormattedObject: CustomFormattedObject,
+    GlobalObject: void,
+    Private: void,
+    Promise: void,
+    JSON: void,
+    toJSON: void,
+    NativeCode: void,
+    JSX: void,
+    Event: void,
+    GetterSetter: void,
+    CustomGetterSetter: void,
+    Proxy: void,
+    RevokedProxy: void,
+
+pub fn isPrimitive(self: FormatterTagUnion) bool {
+            return std.meta.activeTag(self).isPrimitive();
+    }
+
+pub fn tag(self: FormatterTagUnion) FormatterTag {
+            return std.meta.activeTag(self);
+    }
+};
+
+pub const FormatterTagResult = struct {
+    tag: FormatterTagUnion,
+    cell: JSValue.JSType = JSValue.JSType.Cell,
+};
+
+pub const FormatterTagOptions = packed struct {
+    hide_global: bool = false,
+    disable_inspect_custom: bool = false,
+};
+
+pub const FormatterVisited = struct {
+    pub const Map = std.AutoHashMap(JSValue, void);
+    pub const Pool = ObjectPool(Map, (struct {
+    
+    pub fn init(allocator: std.mem.Allocator) anyerror!Map {
+                return Map.init(allocator);
+        }
+    }).init, true, 16);
 };
 
 pub const Formatter = struct {
@@ -2858,15 +2928,7 @@ self.custom_formatted_object = result.tag.CustomFormattedObject;
 }
     }
     pub const ZigFormatter = ConsoleZigFormatter;
-    pub const Visited = struct {
-        pub const Map = std.AutoHashMap(JSValue, void);
-        pub const Pool = ObjectPool(Map, (struct {
-        
-        pub fn init(allocator: std.mem.Allocator) anyerror!Map {
-                    return Map.init(allocator);
-            }
-        }).init, true, 16);
-    };
+    pub const Visited = FormatterVisited;
     pub const Tag = FormatterTag;
     const CellType = jsc.C.CellType;
     const PercentTag = FormatterPercentTag;
@@ -2943,57 +3005,8 @@ pub const FormatterTag = enum {
         };
     }
 
-    const Result = struct {
-        tag: union(FormatterTag) {
-            StringPossiblyFormatted: void,
-            String: void,
-            Undefined: void,
-            Double: void,
-            Integer: void,
-            Null: void,
-            Boolean: void,
-            Array: void,
-            Object: void,
-            Function: void,
-            Class: void,
-            Error: void,
-            TypedArray: void,
-            Map: void,
-            MapIterator: void,
-            SetIterator: void,
-            Set: void,
-            BigInt: void,
-            Symbol: void,
-            CustomFormattedObject: CustomFormattedObject,
-            GlobalObject: void,
-            Private: void,
-            Promise: void,
-            JSON: void,
-            toJSON: void,
-            NativeCode: void,
-            JSX: void,
-            Event: void,
-            GetterSetter: void,
-            CustomGetterSetter: void,
-            Proxy: void,
-            RevokedProxy: void,
-
-            pub fn isPrimitive(this: @This()) bool {
-                return @as(FormatterTag, this).isPrimitive();
-            }
-
-            pub fn tag(this: @This()) FormatterTag {
-                return @as(FormatterTag, this);
-            }
-        },
-        cell: JSValue.JSType = JSValue.JSType.Cell,
-    };
-
-    pub const Options = packed struct {
-        hide_global: bool = false,
-        disable_inspect_custom: bool = false,
-    };
-
+    pub const Result = FormatterTagResult;
+    pub const Options = FormatterTagOptions;
     pub const get = getFormatterTag;
     pub const getAdvanced = getAdvancedFormatterTag;
 };

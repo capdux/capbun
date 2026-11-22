@@ -1512,20 +1512,20 @@ pub fn sliceFieldInit(
 ): Allocator.Error!void {
     const F = @FieldType(@typeInfo(@TypeOf(data)).pointer.child, field);
     if (F.T == u21) {
-        @field(data, field) = try .initFor(
+        @field(data, field) = F.initFor(
             allocator,
             @field(backing, field),
             &@field(tracking, field),
             d,
             cp,
-        );
+        )?;
     } else {
-        @field(data, field) = try .init(
+        @field(data, field) = F.init(
             allocator,
             @field(backing, field),
             &@field(tracking, field),
             d,
-        );
+        )?;
     }
 }
 

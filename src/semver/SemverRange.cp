@@ -15,6 +15,28 @@ export enum Op: u8 {
     gte = 6,
 }
 
+export struct ComparatorFormatter {
+    buffer: []const u8,
+    comparator: *const Comparator,
+
+    export fn format(writer: *std.Io.Writer)! {
+        if (_.comparator.op == Op.unset) {
+            return;
+        }
+
+        switch (_.comparator.op) {
+            .unset => unreachable,
+            .eql => writer.writeAll("==")?,
+            .lt => writer.writeAll("<")?,
+            .lte => writer.writeAll("<=")?,
+            .gt => writer.writeAll(">")?,
+            .gte => writer.writeAll(">=")?,
+        }
+
+        writer.print("{f}", .{_.comparator.version.fmt(_.buffer)})?;
+    }
+}
+
 export struct Comparator {
     op: Op = .unset,
     version: Version = .{},
@@ -23,27 +45,7 @@ export struct Comparator {
         return lhs.op == rhs.op && lhs.version.eql(rhs.version);
     }
 
-    export const Formatter = struct {
-        buffer: []const u8,
-        comparator: *const Comparator,
-
-        pub fn format(this: @This(), writer: *std.Io.Writer) !void {
-            if (this.comparator.op == Op.unset) {
-                return;
-            }
-
-            switch (this.comparator.op) {
-                .unset => unreachable,
-                .eql => try writer.writeAll("=="),
-                .lt => try writer.writeAll("<"),
-                .lte => try writer.writeAll("<="),
-                .gt => try writer.writeAll(">"),
-                .gte => try writer.writeAll(">="),
-            }
-
-            try writer.print("{f}", .{this.comparator.version.fmt(this.buffer)});
-        }
-    };
+    export const Formatter = ComparatorFormatter;
 
     export fn fmt(_: *const Comparator, buf: []const u8): @This().Formatter {
         return .{ .buffer = buf, .comparator = this };
@@ -71,6 +73,23 @@ export struct Comparator {
                 else => false,
             },
         };
+    }
+}
+
+export struct RangeFormatter {
+    buffer: []const u8,
+    range: *const Range,
+
+    export fn format(writer: *std.Io.Writer)! {
+        if (_.range.left.op == Op.unset && _.range.right.op == Op.unset) {
+            return;
+        }
+
+        if (_.range.right.op == .unset) {
+            writer.print("{f}", .{_.range.left.fmt(_.buffer)})?;
+        } else {
+            writer.print("{f} {f}", .{ _.range.left.fmt(_.buffer), _.range.right.fmt(_.buffer) })?;
+        }
     }
 }
 
@@ -165,22 +184,7 @@ export @root struct Range {
         return lhs.left.eql(rhs.left) && lhs.right.eql(rhs.right);
     }
 
-    export const Formatter = struct {
-        buffer: []const u8,
-        range: *const Range,
-
-        pub fn format(this: @This(), writer: *std.Io.Writer) !void {
-            if (this.range.left.op == Op.unset && this.range.right.op == Op.unset) {
-                return;
-            }
-
-            if (this.range.right.op == .unset) {
-                try writer.print("{f}", .{this.range.left.fmt(this.buffer)});
-            } else {
-                try writer.print("{f} {f}", .{ this.range.left.fmt(this.buffer), this.range.right.fmt(this.buffer) });
-            }
-        }
-    };
+    export const Formatter = RangeFormatter;
 
     export fn fmt(_: *const Range, buf: []const u8): @This().Formatter {
         return .{ .buffer = buf, .range = this };

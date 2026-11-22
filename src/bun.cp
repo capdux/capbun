@@ -2522,11 +2522,11 @@ pub struct MakePath {
 
         while (true) {
             const sub_path_w = if (comptime T == u16)
-                try w.wToPrefixedFileW(dir.fd,
+                w.wToPrefixedFileW(dir.fd,
                     // TODO: report this bug
                     // they always copy it
                     // it doesn't need to be [:0]const u16
-                    unsafe { @ptrCast(component.path) })
+                    unsafe { @ptrCast(component.path) })?
             else
                 w.sliceToPrefixedFileW(dir.fd, component.path)?;
             let result = makeOpenDirAccessMaskW(dir, sub_path_w.span().ptr, access_mask, {

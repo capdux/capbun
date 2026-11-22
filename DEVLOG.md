@@ -1670,3 +1670,7 @@
 ### [2026-11-23] Wave #60 技术要点（`and`/`or` -> `&&`/`||`）
 - 纯化 `and`/`or` 时需严格跳过字符串字面量（`"..."`）、多行字符串（`\\...`）、注释及 `return struct/union/enum { ... }` 透传泛型工厂块。
 - CP 指针修饰符中 `const *T` 表示 `*const *T`（双层指针），单层只读指针必须写为 `*const T`（修复 `allocation_scope.cp` 中 `ExtraVTable` 指针定义）。
+
+### [2026-11-23] Wave #61 技术要点（尾项清扫）
+- 在 `union(EnumTag)` 方法中获取当前激活枚举标签时，使用 `std.meta.activeTag(_)` 替代 `@as(EnumTag, _)`，避免 `cpc` 将 `@as(EnumType, _)` 误展开为 `@enumFromInt(self)`。
+- 捕获外层 `comptime` 局部参数的闭包/包装结构体（如 `Wrapper`、`Holder`、`S`）以及 `return struct { ... }` 原生 Zig 透传泛型工厂块内部写法按规范保留原样。

@@ -2130,3 +2130,6 @@
 
 ### [2026-11-23] Wave #60（布尔关键字 `and`/`or` -> `&&`/`||` 纯化）
 - 完成 7 组共 117 个候选 `src/**/*.cp` 模块（含 50 个全量初筛及 67 个非注释/非字符串代码文件）的 `and`/`or` -> `&&`/`||` 纯化及对应 `.zig` 重编译生成，通过 `bun run zig:check`（5/5）及 `bun bd test`（8/8）。
+
+### [2026-11-23] Wave #61（尾项清扫：非透传 `try` 与 `const X = struct/enum/union/opaque`）
+- 完成 48 个候选 `src/**/*.cp` 模块的 `try` 与 `const X = struct/enum/union/opaque` 尾项清扫及 `ConsoleObject.cp` 嵌套容器顶层提升，通过 `bun run zig:check`（5/5）及 `bun bd test`（8/8）。

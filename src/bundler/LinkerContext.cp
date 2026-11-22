@@ -285,10 +285,10 @@ struct _InsideWrapperPrefix {
 
             const promise_all = Expr.init(E.Identifier, .{ .ref = promise_all_ref }, .Empty);
 
-            let items: BabyList(Expr) = try .initCapacity(_.allocator, 2);
+            let items: BabyList(Expr) = BabyList(Expr).initCapacity(_.allocator, 2)?;
             items.appendSliceAssumeCapacity(&.{ first_dep_call_expr, call_expr });
 
-            let args: BabyList(Expr) = try .initCapacity(_.allocator, 1);
+            let args: BabyList(Expr) = BabyList(Expr).initCapacity(_.allocator, 1)?;
             args.appendAssumeCapacity(Expr.init(E.Array, .{ .items = items }, .Empty));
 
             const promise_all_call = Expr.init(E.Call, .{ .target = promise_all, .args = args }, .Empty);

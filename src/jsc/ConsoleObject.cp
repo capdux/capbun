@@ -482,18 +482,43 @@ fn TablePrinterSecondPassContext(comptime Writer: type, comptime enable_ansi_col
     };
 }
 
+struct TablePrinterColumn {
+    name: String,
+    width: u32 = 1,
+}
+
+enum TablePrinterRowKeyType { str, num }
+
+union(TablePrinterRowKeyType) TablePrinterRowKey {
+    str: String,
+    num: u32,
+}
+
+struct TablePrinterVisibleCharacterCounter {
+    width: *usize = undefined,
+
+    const WriteError = error{};
+
+    const Writer = std.Io.GenericWriter(
+        TablePrinterVisibleCharacterCounter,
+        TablePrinterVisibleCharacterCounter.WriteError,
+        TablePrinterVisibleCharacterCounter.write,
+    );
+
+    fn write(bytes: []const u8): WriteError!usize {
+        _.width.* += strings.visible.width.exclude_ansi_colors.utf8(bytes);
+        return bytes.len;
+    }
+
+    fn writeAll(bytes: []const u8): WriteError!void {
+        _.width.* += strings.width.exclude_ansi_colors.utf8(bytes);
+    }
+}
+
 pub struct TablePrinter {
-    const Column = struct {
-        name: String,
-        width: u32 = 1,
-    };
-
-    const RowKey = union(@This().Type) {
-        str: String,
-        num: u32,
-
-        enum Type { str, num }
-    };
+    const Column = TablePrinterColumn;
+    const RowKey = TablePrinterRowKey;
+    const VisibleCharacterCounter = TablePrinterVisibleCharacterCounter;
 
     const PADDING = 1;
 
@@ -539,26 +564,6 @@ pub struct TablePrinter {
         };
     }
 
-    const VisibleCharacterCounter = struct {
-        width: *usize = undefined,
-
-        pub const WriteError = error{};
-
-        pub const Writer = std.Io.GenericWriter(
-            VisibleCharacterCounter,
-            VisibleCharacterCounter.WriteError,
-            VisibleCharacterCounter.write,
-        );
-
-        fn write(bytes: []const u8): WriteError!usize {
-            _.width.* += strings.visible.width.exclude_ansi_colors.utf8(bytes);
-            return bytes.len;
-        }
-
-        fn writeAll(bytes: []const u8): WriteError!void {
-            _.width.* += strings.width.exclude_ansi_colors.utf8(bytes);
-        }
-    };
 
     /// Compute how much horizontal space will take a JSValue when printed
     fn getWidthForValue(*_, value: JSValue): bun.JSError!u32 {
@@ -1623,6 +1628,59 @@ enum FormatterPercentTag {
     j, // j
 }
 
+union(FormatterTag) FormatterTagUnion {
+    StringPossiblyFormatted: void,
+    String: void,
+    Undefined: void,
+    Double: void,
+    Integer: void,
+    Null: void,
+    Boolean: void,
+    Array: void,
+    Object: void,
+    Function: void,
+    Class: void,
+    Error: void,
+    TypedArray: void,
+    Map: void,
+    MapIterator: void,
+    SetIterator: void,
+    Set: void,
+    BigInt: void,
+    Symbol: void,
+    CustomFormattedObject: CustomFormattedObject,
+    GlobalObject: void,
+    Private: void,
+    Promise: void,
+    JSON: void,
+    toJSON: void,
+    NativeCode: void,
+    JSX: void,
+    Event: void,
+    GetterSetter: void,
+    CustomGetterSetter: void,
+    Proxy: void,
+    RevokedProxy: void,
+
+    fn isPrimitive(): bool {
+        return std.meta.activeTag(_).isPrimitive();
+    }
+
+    fn tag(): FormatterTag {
+        return std.meta.activeTag(_);
+    }
+}
+
+struct FormatterTagResult {
+    tag: FormatterTagUnion,
+    cell: JSValue.JSType = JSValue.JSType.Cell,
+}
+
+@packed pub struct FormatterTagOptions {
+    hide_global: bool = false,
+    disable_inspect_custom: bool = false,
+}
+
 pub const FormatterTag = enum {
     StringPossiblyFormatted,
     String,
@@ -1686,60 +1744,25 @@ pub const FormatterTag = enum {
         };
     }
 
-    const Result = struct {
-        tag: union(FormatterTag) {
-            StringPossiblyFormatted: void,
-            String: void,
-            Undefined: void,
-            Double: void,
-            Integer: void,
-            Null: void,
-            Boolean: void,
-            Array: void,
-            Object: void,
-            Function: void,
-            Class: void,
-            Error: void,
-            TypedArray: void,
-            Map: void,
-            MapIterator: void,
-            SetIterator: void,
-            Set: void,
-            BigInt: void,
-            Symbol: void,
-            CustomFormattedObject: CustomFormattedObject,
-            GlobalObject: void,
-            Private: void,
-            Promise: void,
-            JSON: void,
-            toJSON: void,
-            NativeCode: void,
-            JSX: void,
-            Event: void,
-            GetterSetter: void,
-            CustomGetterSetter: void,
-            Proxy: void,
-            RevokedProxy: void,
-
-            pub fn isPrimitive(this: @This()): bool {
-                return @as(FormatterTag, this).isPrimitive();
-            }
-
-            pub fn tag(this: @This()): FormatterTag {
-                return @as(FormatterTag, this);
-            }
-        },
-        cell: JSValue.JSType = JSValue.JSType.Cell,
-    };
-
-    pub const Options = packed struct {
-        hide_global: bool = false,
-        disable_inspect_custom: bool = false,
-    };
-
+    pub const Result = FormatterTagResult;
+    pub const Options = FormatterTagOptions;
     pub const get = getFormatterTag;
     pub const getAdvanced = getAdvancedFormatterTag;
 };
+
+pub struct FormatterVisited {
+    pub const Map = std.AutoHashMap(JSValue, void);
+    pub const Pool = ObjectPool(
+        Map,
+        struct {
+            static fn init(allocator: std.mem.Allocator): anyerror!Map {
+                return Map.init(allocator);
+            }
+        }.init,
+        true,
+        16,
+    );
+}
 
 pub struct Formatter {
     globalThis: *JSGlobalObject,
@@ -1798,19 +1821,7 @@ pub struct Formatter {
     pub const ZigFormatter = ConsoleZigFormatter;
 
     // For detecting circular references
-    pub const Visited = struct {
-        pub const Map = std.AutoHashMap(JSValue, void);
-        pub const Pool = ObjectPool(
-            Map,
-            struct {
-                static fn init(allocator: std.mem.Allocator): anyerror!Map {
-                    return Map.init(allocator);
-                }
-            }.init,
-            true,
-            16,
-        );
-    };
+    pub const Visited = FormatterVisited;
 
     pub const Tag = FormatterTag;
 

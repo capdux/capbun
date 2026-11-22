@@ -75,6 +75,38 @@ pub const Op = enum(u8) {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
+pub const ComparatorFormatter = struct {
+    buffer: []const u8,
+    comparator: *const Comparator,
+
+pub fn format(self: ComparatorFormatter, writer: *std.Io.Writer) !void {
+            if ((self.comparator.op == Op.unset)) {
+                return;
+            }
+            switch (self.comparator.op) {
+.unset => {
+_ = unreachable;
+},
+.eql => {
+_ = try writer.writeAll("==");
+},
+.lt => {
+_ = try writer.writeAll("<");
+},
+.lte => {
+_ = try writer.writeAll("<=");
+},
+.gt => {
+_ = try writer.writeAll(">");
+},
+.gte => {
+_ = try writer.writeAll(">=");
+},
+}
+            _ = try writer.print("{f}", .{ self.comparator.version.fmt(self.buffer) });
+    }
+};
+
 pub const Comparator = struct {
     op: Op = .unset,
     version: Version = .{},
@@ -104,37 +136,23 @@ else => false,
 }),
 });
     }
-    pub const Formatter = struct {
-        buffer: []const u8,
-        comparator: *const Comparator,
-    
-    pub fn format(self: @This(), writer: *std.Io.Writer) !void {
-                if ((self.comparator.op == Op.unset)) {
-                    return;
-                }
-                switch (self.comparator.op) {
-    .unset => {
-    _ = unreachable;
-    },
-    .eql => {
-    _ = try writer.writeAll("==");
-    },
-    .lt => {
-    _ = try writer.writeAll("<");
-    },
-    .lte => {
-    _ = try writer.writeAll("<=");
-    },
-    .gt => {
-    _ = try writer.writeAll(">");
-    },
-    .gte => {
-    _ = try writer.writeAll(">=");
-    },
+    pub const Formatter = ComparatorFormatter;
+};
+
+pub const RangeFormatter = struct {
+    buffer: []const u8,
+    range: *const Range,
+
+pub fn format(self: RangeFormatter, writer: *std.Io.Writer) !void {
+            if (((self.range.left.op == Op.unset) and (self.range.right.op == Op.unset))) {
+                return;
+            }
+            if ((self.range.right.op == .unset)) {
+                _ = try writer.print("{f}", .{ self.range.left.fmt(self.buffer) });
+            } else {
+                _ = try writer.print("{f} {f}", .{ self.range.left.fmt(self.buffer), self.range.right.fmt(self.buffer) });
+            }
     }
-                _ = try writer.print("{f}", .{ self.comparator.version.fmt(self.buffer) });
-        }
-    };
 };
 
 pub const Range = @This();
@@ -227,21 +245,7 @@ pub fn satisfiesPre(range: Range, version: Version, range_buf: []const u8, versi
         }
         return true;
 }
-pub const Formatter = struct {
-    buffer: []const u8,
-    range: *const Range,
-
-pub fn format(self: @This(), writer: *std.Io.Writer) !void {
-            if (((self.range.left.op == Op.unset) and (self.range.right.op == Op.unset))) {
-                return;
-            }
-            if ((self.range.right.op == .unset)) {
-                _ = try writer.print("{f}", .{ self.range.left.fmt(self.buffer) });
-            } else {
-                _ = try writer.print("{f} {f}", .{ self.range.left.fmt(self.buffer), self.range.right.fmt(self.buffer) });
-            }
-    }
-};
+pub const Formatter = RangeFormatter;
 const Environment = bun.Environment;
 const assert = bun.assert;
 const Query = bun.Semver.Query;
